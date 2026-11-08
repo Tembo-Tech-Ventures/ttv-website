@@ -96,7 +96,7 @@ test.describe("authenticated talent foundation", () => {
   test("admin/profiles stub renders", async ({ page }) => {
     await page.goto("/admin/profiles");
     await expect(
-      page.getByRole("heading", { name: /profiles/i }),
+      page.getByRole("heading", { level: 1, name: "Profiles" }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-profiles"),

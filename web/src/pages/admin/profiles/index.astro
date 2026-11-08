@@ -1,288 +1,229 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Badge from "@/components/common/Badge.astro";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { sortProfilesForQueue } from "@/lib/talent/admin-review";
-import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import {
-  applyAdminProfileAction,
-  parseAdminProfileAction,
-  parseAdminProfileVersion,
-  parseModerationFlags,
-  splitModerationReviewLists,
-} from "@/lib/talent/profile-moderation";
+  Button,
+  ButtonLink,
+  Card,
+  DataCell,
+  DataList,
+  DataListItem,
+  DataRow,
+  DataTable,
+  EmptyState,
+  Notice,
+  PageHeader,
+  Pager,
+  PillNav,
+  StatusChip,
+  linkClass,
+  statusTone,
+} from "@/components/platform/ui";
+import { lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
+import {
+  PROFILES_PATH,
+  PROFILE_DONE,
+  PROFILE_STATUSES,
+  moderateProfile,
+  parseProfileStatus,
+  profileActionLabel,
+  profileActionsFor,
+  profileReviewReasons,
+  readProfilesPage,
+  type ProfileStatus,
+} from "@/lib/admin/profiles";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDate } from "@/lib/display-date";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { parseAdminProfileAction, parseAdminProfileVersion } from "@/lib/talent/profile-moderation";
 
+/*
+ * Builder profiles: first the ones the content check left for a person, each
+ * with only the actions that would change it; then every profile, a page at a
+ * time, filtered by status through links so the filter has an address.
+ */
 const db = drizzle(env.DB, { schema });
+// Forms post back to this address, filter and page included, never with a #fragment.
+const here = `${Astro.url.pathname}${Astro.url.search}`;
 let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const profileId = formData.get("profileId");
   const action = parseAdminProfileAction(formData.get("_action"));
-  const expectedVersion = parseAdminProfileVersion(
-    formData.get("contentVersion"),
-  );
-  if (typeof profileId !== "string" || !action || expectedVersion === null) {
-    actionError = "Invalid profile moderation request.";
+  const expectedVersion = parseAdminProfileVersion(formData.get("contentVersion"));
+  if (typeof profileId !== "string" || !profileId || !action || expectedVersion === null) {
+    actionError = "Choose one of the publishing actions on this page.";
     Astro.response.status = 400;
   } else {
-    const current = await db.query.studentProfile.findFirst({
-      where: eq(schema.studentProfile.id, profileId),
-      columns: {
-        status: true,
-        publishedAt: true,
-        contentVersion: true,
-        publicName: true,
-        publicAvatarUrl: true,
-      },
-      with: { user: { columns: { name: true, image: true } } },
-    });
-    if (current) {
-      const updated = await applyAdminProfileAction(
-        db,
-        profileId,
-        current,
-        action,
-        expectedVersion,
-      );
-      if (!updated) {
-        actionError =
-          "This profile changed while the action was running. Reload and try again.";
-        Astro.response.status = 409;
-      }
+    const result = await moderateProfile(db, { profileId, action, expectedVersion }).catch(() => "unavailable" as const);
+    if (result === "done") return redirectWithFlash(Astro, here, { tone: "success", title: PROFILE_DONE[action] });
+    if (result === "missing") return redirectWithFlash(Astro, here, { tone: "info", title: "That profile no longer exists" });
+    if (result === "unavailable") {
+      actionError = "The database didn't answer, so nothing changed. Try again in a moment.";
+      Astro.response.status = 503;
+    } else {
+      actionError = "The builder changed this profile while you were looking at it. Check it below before acting again.";
+      Astro.response.status = 409;
     }
-    if (!actionError) return Astro.redirect("/admin/profiles#moderation");
   }
 }
 
-const statusFilter = Astro.url.searchParams.get("status");
-const statuses = ["DRAFT", "PUBLISHED", "SUSPENDED"] as const;
+const statusFilter = parseProfileStatus(Astro.url.searchParams.get("status"));
+const page = parsePage(Astro.url.searchParams.get("page"));
+const flash = takeFlash(Astro);
+const [{ rows, total, review }, spaces] = await Promise.all([
+  readProfilesPage(db, { status: statusFilter, page }),
+  resolveSpacePage(Astro.locals, "adminProfiles"),
+]);
 
-const allProfiles = await db.query.studentProfile.findMany({
-  with: { user: true },
-});
-
-const filtered = statusFilter
-  ? allProfiles.filter((p) => p.status === statusFilter)
-  : allProfiles;
-
-const profiles = sortProfilesForQueue(filtered);
-const moderationLists = splitModerationReviewLists(allProfiles);
+const lastPage = lastPageOf(total);
+const statusLabel = (status: ProfileStatus) => statusTone("profile", status).label;
+const filterName = statusFilter ? statusLabel(statusFilter).toLowerCase() : null;
+const filters = [
+  { label: "All", href: PROFILES_PATH, current: !statusFilter },
+  ...PROFILE_STATUSES.map((status) => ({
+    label: statusLabel(status),
+    href: `${PROFILES_PATH}?status=${status}`,
+    current: statusFilter === status,
+  })),
+];
 const reviewSections = [
   {
     id: "held",
-    title: "Held by check",
-    description:
-      "These profiles are not public unless an older public version was already live.",
-    empty: "No profiles are held by the content check.",
-    profiles: moderationLists.held,
+    title: "Held by the content check",
+    description: "Not public, unless an earlier version was already live. Publish it, hide it, or clear the flag to leave it as it is.",
+    empty: "Nothing is held by the content check.",
+    profiles: review.held,
   },
   {
     id: "unavailable",
-    title: "Published, needs a look (check unavailable)",
-    description:
-      "These profiles published automatically because the content check could not complete.",
-    empty: "No published profiles are waiting after an unavailable check.",
-    profiles: moderationLists.unavailable,
+    title: "Published while the check was unavailable",
+    description: "These went live without a check. Read each one, then clear the flag or unpublish it.",
+    empty: "Nothing published without a check.",
+    profiles: review.unavailable,
   },
 ];
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminProfiles");
+const caption = filterName ? `Profiles, ${filterName}` : "Profiles";
+const title = page === 1 ? caption : `${caption}, page ${page}`;
 ---
 
-<AdminLayout title="Profiles" spaces={spaces}>
-  <div class="space-y-6">
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Profiles</PageTitle>
+<AdminLayout title={title} titlePrefix={actionError ? "Error: " : undefined} spaces={spaces}>
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Profiles">Builders' public profiles. Open one to read all of it, publish it or hide it.</PageHeader>
 
-    {actionError && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
-        {actionError}
-      </p>
-    )}
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
 
-    <div id="moderation" class="grid gap-4 xl:grid-cols-2">
-      {reviewSections.map((section) => (
-        <section
-          aria-labelledby={`moderation-${section.id}`}
-          class="rounded-lg border border-teal/20 bg-dark/30 p-4"
-        >
-          <h3 id={`moderation-${section.id}`} class="font-semibold text-white">
-            {section.title}
-          </h3>
-          <p class="mt-1 text-sm text-ink-secondary">{section.description}</p>
-          {section.profiles.length === 0 ? (
-            <p class="mt-4 text-sm text-ink-muted">{section.empty}</p>
-          ) : (
-            <ul class="mt-4 space-y-3">
-              {section.profiles.map((profile) => {
-                const flags = parseModerationFlags(profile.moderationFlags);
-                return (
-                  <li class="rounded-md border border-teal/15 bg-dark/50 p-3">
-                    <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                      <div>
-                        <a
-                          href={`/admin/profiles/${profile.id}`}
-                          class="font-medium text-white hover:text-primary"
-                        >
-                          {profile.user?.name ?? profile.handle}
-                        </a>
-                        <p class="font-mono text-xs text-ink-muted">
-                          /talent/{profile.handle}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={profile.status.toLowerCase() as "draft" | "published" | "suspended"}
-                      />
-                    </div>
-                    {flags.length > 0 ? (
-                      <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-secondary">
-                        {flags.map((flag) => (
-                          <li>{PROFILE_MODERATION_MESSAGES[flag]}</li>
-                        ))}
-                      </ul>
-                    ) : profile.moderationOutcome === "error" ? (
-                      <p class="mt-3 text-sm text-ink-secondary">
-                        The content check was unavailable, so this profile published automatically.
-                      </p>
-                    ) : (
-                      <p class="mt-3 text-sm text-ink-secondary">
-                        This profile was held by the content check.
-                      </p>
-                    )}
-                    <div class="mt-3 flex flex-wrap gap-2">
-                      {(["publish", "unpublish", "clear_flag"] as const).map((action) => (
-                        <form method="POST">
-                          <input type="hidden" name="profileId" value={profile.id} />
-                          <input type="hidden" name="_action" value={action} />
-                          <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-                          <button
-                            type="submit"
-                            class:list={[
-                              "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                              action === "unpublish"
-                                ? "border-red-400/30 text-red-200 hover:bg-red-500/10"
-                                : "border-teal/30 text-white hover:bg-teal/20",
-                            ]}
-                          >
-                            {action === "clear_flag"
-                              ? "Clear flag"
-                              : action === "unpublish"
-                                ? "Unpublish"
-                                : "Publish"}
-                          </button>
-                        </form>
-                      ))}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      ))}
-    </div>
-
-    <div class="flex flex-wrap gap-2">
-      <a
-        href="/admin/profiles"
-        class:list={[
-          "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-          !statusFilter
-            ? "bg-primary text-dark"
-            : "bg-teal/20 text-ink-secondary hover:text-white",
-        ]}
-      >
-        All
-      </a>
-      {statuses.map((s) => (
-        <a
-          href={`/admin/profiles?status=${s}`}
-          class:list={[
-            "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-            statusFilter === s
-              ? "bg-primary text-dark"
-              : "bg-teal/20 text-ink-secondary hover:text-white",
-          ]}
-        >
-          {s.toLowerCase().replace("_", " ")}
-        </a>
-      ))}
-    </div>
-
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Owner</th>
-            <th class="px-4 py-3 font-medium">Handle</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Updated</th>
-            <th class="px-4 py-3 font-medium">Published</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {profiles.length === 0 ? (
-            <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
-                {statusFilter
-                  ? `No ${statusFilter.toLowerCase().replace("_", " ")} profiles found.`
-                  : "No profiles yet. Profiles appear here when builders create them."}
-              </td>
-            </tr>
-          ) : (
-            profiles.map((profile) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3">
-                  <div>{profile.user?.name ?? "Unknown"}</div>
-                  <div class="text-xs text-ink-muted">
-                    {profile.user?.email ?? "—"}
+    {
+      reviewSections.map((section) => (
+        <Card as="section" aria-labelledby={`review-${section.id}`} className="flex flex-col gap-4">
+          <div class="flex flex-col gap-1">
+            <h2 id={`review-${section.id}`} class="text-lg text-ink-primary">
+              {section.title}
+            </h2>
+            <p class="max-w-prose text-sm text-ink-secondary">{section.description}</p>
+          </div>
+          <DataList label={section.title} isEmpty={section.profiles.length === 0}>
+            {section.profiles.map((profile) => (
+              <DataListItem title={profile.user?.name ?? profile.handle} href={`${PROFILES_PATH}/${profile.id}`} meta={`/talent/${profile.handle}`}>
+                <Fragment slot="status">
+                  <StatusChip domain="profile" status={profile.status} />
+                </Fragment>
+                <ul class="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-ink-secondary">
+                  {profileReviewReasons(profile).map((reason) => (
+                    <li>{reason}</li>
+                  ))}
+                </ul>
+                <Fragment slot="actions">
+                  <div class="flex flex-wrap gap-2">
+                    {profileActionsFor(profile).map((action) => (
+                      <form method="POST" action={here}>
+                        <input type="hidden" name="profileId" value={profile.id} />
+                        <input type="hidden" name="_action" value={action} />
+                        <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+                        <Button type="submit" size="sm" variant="quiet">
+                          {profileActionLabel(action, profile.status)}
+                          <span class="sr-only"> {profile.user?.name ?? profile.handle}</span>
+                        </Button>
+                      </form>
+                    ))}
                   </div>
-                </td>
-                <td class="px-4 py-3 font-mono text-sm">
-                  {profile.handle}
-                </td>
-                <td class="px-4 py-3">
-                  <Badge
-                    variant={
-                      profile.status.toLowerCase() as
-                        | "draft"
-                        | "published"
-                        | "suspended"
-                    }
-                  />
-                </td>
-                <td class="px-4 py-3">
-                  {profile.updatedAt
-                    ? new Date(profile.updatedAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  {profile.publishedAt
-                    ? new Date(profile.publishedAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/profiles/${profile.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
+                </Fragment>
+              </DataListItem>
+            ))}
+            <Fragment slot="empty">
+              <EmptyState title={section.empty} headingLevel={3} />
+            </Fragment>
+          </DataList>
+        </Card>
+      ))
+    }
+
+    <section aria-labelledby="all-profiles" class="flex flex-col gap-4">
+      <h2 id="all-profiles" class="text-lg text-ink-primary">All profiles</h2>
+      <PillNav label="Profile status" items={filters} />
+
+      <DataTable
+        caption={page === 1 ? caption : `${caption}, page ${page} of ${lastPage}`}
+        columns={[{ label: "Builder" }, { label: "Handle" }, { label: "Status" }, { label: "Updated" }, { label: "Published", align: "end" }]}
+        isEmpty={rows.length === 0}
+      >
+        {
+          rows.map((profile) => (
+            <DataRow>
+              <DataCell label="Builder" primary>
+                <span class="flex min-w-0 flex-col">
+                  <a href={`${PROFILES_PATH}/${profile.id}`} class={linkClass()}>
+                    {profile.user?.name ?? profile.handle}
                   </a>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+                  {profile.user?.email && <span class="text-sm font-normal text-ink-secondary">{profile.user.email}</span>}
+                </span>
+              </DataCell>
+              <DataCell label="Handle">/talent/{profile.handle}</DataCell>
+              <DataCell label="Status">
+                <StatusChip domain="profile" status={profile.status} />
+              </DataCell>
+              <DataCell label="Updated">{profile.updatedAt ? formatMomentDate(profile.updatedAt) : "Not recorded"}</DataCell>
+              <DataCell label="Published" align="end">
+                {profile.publishedAt ? formatMomentDate(profile.publishedAt) : "Never"}
+              </DataCell>
+            </DataRow>
+          ))
+        }
+        <Fragment slot="empty">
+          {
+            page > 1 && total > 0 ? (
+              <EmptyState title="No profiles on this page" headingLevel={3}>
+                The list has {lastPage} {lastPage === 1 ? "page" : "pages"}.
+                <Fragment slot="action">
+                  <ButtonLink href={pageHref(Astro.url, 1)}>Back to the first page</ButtonLink>
+                </Fragment>
+              </EmptyState>
+            ) : filterName ? (
+              <EmptyState title={`No ${filterName} profiles`} headingLevel={3}>
+                Profiles move here when a builder or an administrator changes them.
+                <Fragment slot="action">
+                  <ButtonLink href={PROFILES_PATH}>See every profile</ButtonLink>
+                </Fragment>
+              </EmptyState>
+            ) : (
+              <EmptyState title="No profiles yet" headingLevel={3}>
+                Profiles appear here when builders create them.
+              </EmptyState>
+            )
+          }
+        </Fragment>
+      </DataTable>
+
+      <Pager
+        previousHref={page > 1 && rows.length > 0 ? pageHref(Astro.url, page - 1) : null}
+        nextHref={page < lastPage ? pageHref(Astro.url, page + 1) : null}
+        summary={pageSummary(page, rows.length, total)}
+        label="Profile pages"
+      />
+    </section>
   </div>
 </AdminLayout>

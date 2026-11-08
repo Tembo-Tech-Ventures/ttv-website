@@ -131,7 +131,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users", retired: true },
   { path: "/admin/applications", heading: "Applications", current: "Applications", retired: true },
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application from Wanjiku Mwangi", current: "Applications", retired: true },
-  { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
+  { path: "/admin/profiles", heading: "Profiles", current: "Profiles", retired: true },
   { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Achieng Otieno", current: "Profiles", retired: true },
   { path: "/admin/feedback", heading: "Feedback", current: "Feedback", retired: true },
   { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback", retired: true },
@@ -279,6 +279,27 @@ test.describe("every admin page", () => {
     expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await table.getByRole("link", { name: "Cohort 05", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/programs\/ttv-local-persona-cohort-05$/);
+  });
+
+  test("profiles: the status filter is a link with an address, and each builder's name opens their profile", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/profiles");
+    await expect(page.getByRole("heading", { level: 2, name: "Held by the content check" })).toBeVisible();
+    const table = page.getByRole("table", { name: "Profiles" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Builder", "Handle", "Status", "Updated", "Published"]);
+
+    const filters = page.getByRole("navigation", { name: "Profile status" });
+    await filters.getByRole("link", { name: "Draft", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/profiles\?status=DRAFT$/);
+    await expect(filters.getByRole("link", { name: "Draft", exact: true })).toHaveAttribute("aria-current", "page");
+    const drafts = page.getByRole("table", { name: "Profiles, draft" });
+    for (const status of await drafts.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Draft");
+    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+
+    await filters.getByRole("link", { name: "Published", exact: true }).click();
+    await page.getByRole("table", { name: "Profiles, published" }).getByRole("link", { name: "Achieng Otieno" }).click();
+    await expect(page).toHaveURL(/\/admin\/profiles\/ttv-local-persona-profile-alumna$/);
   });
 
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
