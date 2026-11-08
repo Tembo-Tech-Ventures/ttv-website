@@ -202,7 +202,6 @@ const externalLink = linkClass();
                     rows={6}
                     error={refused?.form === "save" ? refused.json : undefined}
                     hint="The whole key file, as downloaded."
-                    className="font-mono"
                   />
                   <TextField
                     label="Impersonated user"
@@ -256,7 +255,6 @@ const externalLink = linkClass();
                             rows={4}
                             error={refused?.form === "replace" ? refused.json : undefined}
                             hint="The whole replacement key file."
-                            className="font-mono"
                           />
                           <TextField label="Impersonated user" name="impersonatedUser" id="replace-impersonated-user" type="email" optional defaultValue={keptUser("replace")} />
                           <div>
