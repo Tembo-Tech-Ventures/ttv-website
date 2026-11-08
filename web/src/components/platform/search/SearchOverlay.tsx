@@ -4,7 +4,7 @@ import type { Me } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { createAnnouncer } from "@/lib/platform/client/announcer";
 import { createSearchStore, SEARCH_GROUPS, useSearch, type SearchItem } from "@/lib/platform/client/search";
-import { Avatar, Button, cx, FOCUS_RING, Pill, SpaceGlyph } from "@/components/platform/ui";
+import { Avatar, Button, ButtonLink, Pill, SpaceGlyph } from "@/components/platform/ui";
 import { onShellOverlay } from "@/components/platform/shell/overlays";
 import MaskedText from "@/components/channels/MaskedText";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
@@ -87,7 +87,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
       return (
         <>
           <Tile>
-            <PiFolderSimple className="size-[1.375rem]" />
+            <PiFolderSimple className="size-6" />
           </Tile>
           <span className="search-option__body">
             <span className="search-option__title">
@@ -113,7 +113,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
       return (
         <>
           <Tile>
-            <PiVideoCamera className="size-[1.375rem]" />
+            <PiVideoCamera className="size-6" />
           </Tile>
           <span className="search-option__body">
             <span className="search-option__title">
@@ -132,7 +132,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
       return (
         <>
           <Tile>
-            <PiChatCircleText className="size-[1.375rem]" />
+            <PiChatCircleText className="size-6" />
           </Tile>
           <span className="search-option__body">
             <span className="search-option__title">{author.name}</span>
@@ -163,10 +163,9 @@ function RecentSearches({ store, recent, onPick }: { store: Store; recent: reado
       <ul className="search-recent__list">
         {recent.map((query) => (
           <li key={query}>
-            <button type="button" onClick={() => onPick(query)} className={cx("search-recent__item", FOCUS_RING)}>
-              <PiMagnifyingGlass aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
+            <Button variant="ghost" icon={<PiMagnifyingGlass className="size-4 text-ink-muted" />} onClick={() => onPick(query)} className="search-recent__item">
               <span className="truncate">{query}</span>
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -182,9 +181,9 @@ function ProblemNote({ store, state }: { store: Store; state: State }) {
       <p>{problem.message}</p>
       <span className="flex shrink-0 gap-2">
         {problem.signIn && (
-          <a href={signInHref()} className={cx("search-overlay__sign-in", FOCUS_RING)}>
+          <ButtonLink href={signInHref()} variant="primary" size="sm">
             Sign in again
-          </a>
+          </ButtonLink>
         )}
         {problem.retry && (
           <Button size="sm" onClick={() => store.retry()}>
@@ -426,10 +425,9 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
                 onKeyDown={onKeyDown}
                 className="search-overlay__input"
               />
-              <button
-                type="button"
+              <Button
                 onClick={dialog.hide}
-                className={cx("search-overlay__close", FOCUS_RING)}
+                className="search-overlay__close"
                 aria-label="Close search, Esc"
                 aria-keyshortcuts="Escape"
               >
@@ -438,7 +436,7 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
                   Esc
                 </span>
                 <PiX aria-hidden="true" className="search-overlay__x size-5" />
-              </button>
+              </Button>
             </div>
 
             <fieldset className="search-scopes">
@@ -472,16 +470,16 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
           <footer className="search-overlay__footer">
             <p className="search-overlay__hint">↑ ↓ to move · Enter to open</p>
             {canAsk && query && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                icon={<PiSparkle className="size-4" />}
                 onClick={askTembo}
                 data-ask-tembo
                 aria-label={`Ask Tembo about “${query}”. Opens Ask Tembo with this question ready to send.`}
-                className={cx("search-overlay__ask", FOCUS_RING)}
+                className="search-overlay__ask"
               >
-                <PiSparkle aria-hidden="true" className="size-4 shrink-0" />
                 <span className="truncate">Ask Tembo about “{query}”</span>
-              </button>
+              </Button>
             )}
           </footer>
         </div>

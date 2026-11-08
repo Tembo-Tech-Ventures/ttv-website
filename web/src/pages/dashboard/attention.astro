@@ -45,5 +45,5 @@ const cohortLabel = me.spaces.includes("cohort")
 
 <SpacesLayout me={me} space={space} outsideSpaces title="Attention" overlays={["search", "attention"]}>
   <AttentionPage client:load me={me} initialList={initialList} />
-  <PlatformOverlays slot="overlays" client:load me={me} attention={false} cohortLabel={cohortLabel} />
+  <PlatformOverlays slot="overlays" client:idle me={me} attention={false} cohortLabel={cohortLabel} />
 </SpacesLayout>

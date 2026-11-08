@@ -113,7 +113,7 @@ if (context) {
       ) : (
         <slot />
       )}
-      <PlatformOverlays slot="overlays" client:load me={context.me} cohortLabel={cohortLabel} />
+      <PlatformOverlays slot="overlays" client:idle me={context.me} cohortLabel={cohortLabel} />
     </SpacesLayout>
   ) : (
     <DashboardLayout title={titlePrefix + legacyTitle} journey={suppliedJourney} canDiscover={canDiscover}>

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import type { AttentionList, MarkAttentionRead, Me } from "@/lib/platform/contracts";
 import { createAttentionStore, type AttentionState, type AttentionStore } from "@/lib/platform/client/attention";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
-import { createAnnouncer } from "@/lib/platform/client/announcer";
+import { createAttentionAnnouncer, type Announcer } from "./attention-announcer";
 import { onAttentionRefresh, publishAttentionCounts } from "@/components/platform/shell/overlays";
 import { unreadTotal } from "./attention-display";
 
-export type Announcer = ReturnType<typeof createAnnouncer>;
+export type { Announcer } from "./attention-announcer";
 
 export interface AttentionOwner {
   store: AttentionStore;
@@ -19,7 +19,10 @@ export interface AttentionOwner {
  * attention page), so counts are polled once and nothing is announced twice.
  * It starts from the counts `Me` was rendered with, so the first poll waits 30s.
  */
-export function useAttentionOwner(me: Me, options: { initialList?: AttentionList; api?: ApiClient } = {}): AttentionOwner {
+export function useAttentionOwner(
+  me: Me,
+  options: { initialList?: AttentionList; api?: ApiClient; announcer?: Announcer } = {},
+): AttentionOwner {
   const [owner] = useState<AttentionOwner>(() => ({
     store: createAttentionStore({
       enabled: me.flags.spaces === true,
@@ -27,10 +30,13 @@ export function useAttentionOwner(me: Me, options: { initialList?: AttentionList
       initialList: options.initialList,
       initialCounts: { count: unreadTotal(me.unreadCounts, me.spaces), unreadCounts: me.unreadCounts },
     }),
-    announcer: createAnnouncer({ throttleMs: 750, dedupeMs: 4_000 }),
+    announcer: options.announcer ?? createAttentionAnnouncer(),
   }));
 
-  useEffect(() => () => owner.announcer.dispose(), [owner]);
+  // An announcer handed in belongs to whoever created it (the overlays island, whose live region is
+  // in the page before the store loads); one made here is this owner's to dispose.
+  const ownsAnnouncer = options.announcer === undefined;
+  useEffect(() => () => { if (ownsAnnouncer) owner.announcer.dispose(); }, [owner, ownsAnnouncer]);
 
   /* The bell and the tabs show what the store knows, as soon as it knows it. */
   useEffect(() => {

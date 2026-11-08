@@ -145,21 +145,8 @@
 }
 
 .search-overlay__close {
-  display: inline-grid;
-  place-items: center;
+  /* The kit's quiet button, sized by the key's name; the Esc or × swap is below. */
   min-width: 2.75rem;
-  height: 2.5rem;
-  padding: 0 0.875rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-ink-primary) 6%, transparent);
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--color-ink-secondary);
-}
-
-.search-overlay__close:hover {
-  color: var(--color-ink-primary);
 }
 
 .search-overlay__x {
@@ -167,10 +154,6 @@
 }
 
 @media (pointer: coarse) {
-  .search-overlay__close {
-    height: 2.75rem;
-  }
-
   .search-overlay__esc {
     display: none;
   }
@@ -220,24 +203,6 @@
 
 .search-overlay__problem > p {
   flex: 1 1 14rem;
-}
-
-.search-overlay__sign-in {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--color-primary);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-dark);
-}
-
-@media (pointer: coarse) {
-  .search-overlay__sign-in {
-    min-height: 2.75rem;
-  }
 }
 
 .search-group + .search-group {
@@ -346,21 +311,9 @@
 }
 
 .search-recent__item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  /* A row of the list: the kit's ghost button, full width, its words at the start. */
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0 0.75rem;
-  border-radius: 0.75rem;
-  font-size: 0.9375rem;
-  color: var(--color-ink-secondary);
-  text-align: left;
-}
-
-.search-recent__item:hover {
-  background: color-mix(in srgb, var(--color-ink-primary) 6%, transparent);
-  color: var(--color-ink-primary);
+  justify-content: flex-start;
 }
 
 .search-overlay__footer {
@@ -387,25 +340,8 @@
 }
 
 .search-overlay__ask {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  /* The kit's ghost button, at the footer's end; a long question truncates inside it. */
   max-width: 100%;
-  min-height: 2.5rem;
   margin-left: auto;
-  padding: 0 0.75rem;
-  border-radius: 0.75rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-peach-ink);
 }
 
-.search-overlay__ask:hover {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-}
-
-@media (pointer: coarse) {
-  .search-overlay__ask {
-    min-height: 2.75rem;
-  }
-}
