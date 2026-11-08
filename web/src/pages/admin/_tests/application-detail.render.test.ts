@@ -148,6 +148,13 @@ describe("an application on the style guide", () => {
     expect(store.mutate).not.toHaveBeenCalled();
   });
 
+  it("says a database failure in the same Notice with a 503, rather than an error page", async () => {
+    store.mutate.mockRejectedValue(new Error("D1 down"));
+    const { status, body } = await visit({ form: { expectedStatus: "PENDING", status: "APPROVED" } });
+    expect(status).toBe(503);
+    expect(body).toMatch(/data-notice="danger"[\s\S]*?The database didn(?:&#39;|&#x27;)t answer, so nothing changed\. Try again in a moment\./);
+  });
+
   it("keeps a rejected completion date in its field", async () => {
     store.find.mockImplementation(async (query: { columns?: unknown }) => (query.columns ? { status: "APPROVED" } : application("APPROVED")));
     const { status, body } = await visit({ form: { expectedStatus: "APPROVED", status: "COMPLETED", completionDate: "2999-01-01" } });

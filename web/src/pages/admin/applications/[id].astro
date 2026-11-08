@@ -98,18 +98,23 @@ if (Astro.request.method === "POST") {
 
     return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: ACTIONS[transition.status].done });
   } catch (error) {
-    if (!(error instanceof ProgramApplicationError)) throw error;
-    actionCode = error.code;
-    // The library's messages name stored values ("from PENDING to APPROVED"); say them as the page does.
-    actionError =
-      error.code === "STALE_TRANSITION"
-        ? "Someone changed this application while you were looking at it. Check its status below before changing it again."
-        : error.code === "INVALID_TRANSITION" && isProgramApplicationStatus(target) && isProgramApplicationStatus(current.status)
-          ? `An application that is ${label(current.status).toLowerCase()} can't be changed to ${label(target).toLowerCase()}.`
-          : error.code === "INVALID_STATUS"
-            ? "Choose one of the changes below."
-            : error.message;
-    Astro.response.status = 400;
+    if (!(error instanceof ProgramApplicationError)) {
+      // Anything else is the database or the attention write failing: say so, and keep the page.
+      actionError = "The database didn't answer, so nothing changed. Try again in a moment.";
+      Astro.response.status = 503;
+    } else {
+      actionCode = error.code;
+      // The library's messages name stored values ("from PENDING to APPROVED"); say them as the page does.
+      actionError =
+        error.code === "STALE_TRANSITION"
+          ? "Someone changed this application while you were looking at it. Check its status below before changing it again."
+          : error.code === "INVALID_TRANSITION" && isProgramApplicationStatus(target) && isProgramApplicationStatus(current.status)
+            ? `An application that is ${label(current.status).toLowerCase()} can't be changed to ${label(target).toLowerCase()}.`
+            : error.code === "INVALID_STATUS"
+              ? "Choose one of the changes below."
+              : error.message;
+      Astro.response.status = 400;
+    }
   }
 }
 
