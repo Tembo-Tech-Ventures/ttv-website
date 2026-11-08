@@ -59,10 +59,13 @@ export function buttonClass({ variant = "quiet", size = "md", disabled = false, 
   return cx(BUTTON_BASE, BUTTON_SIZES[size], disabled ? BUTTON_DISABLED : BUTTON_VARIANTS[variant], FOCUS_RING, className);
 }
 
-/** A pill: a filter toggle, or one link in a row of them. Pressed and current pills are ink. */
+/**
+ * A pill: a filter toggle, or one link in a row of them. Pressed and current pills are ink. On a
+ * touch screen even a one-word pill ("All") is a 44px square at least.
+ */
 export function pillClass(selected: boolean, className?: string): string {
   return cx(
-    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-semibold whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
+    "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-semibold whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11",
     selected ? "bg-ink-primary text-dark" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
     FOCUS_RING,
     className,

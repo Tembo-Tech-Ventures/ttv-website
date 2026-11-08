@@ -65,6 +65,8 @@ describe("Pill", () => {
     const [on, off] = [...root.querySelectorAll("button")];
     expect([on.getAttribute("aria-pressed"), off.getAttribute("aria-pressed")]).toEqual(["true", "false"]);
     expect([on.className, off.className]).toEqual([pillClass(true), pillClass(false)]);
+    // A one-word pill is still a 44px target on a touch screen, across as well as down.
+    expect(pillClass(false)).toContain("pointer-coarse:min-h-11 pointer-coarse:min-w-11");
     expect(off.textContent).toBe("Requests2");
   });
 

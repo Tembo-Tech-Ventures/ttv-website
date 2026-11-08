@@ -1,9 +1,9 @@
 ---
+import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import { Card, Chip, EmptyState, FOCUS_RING, PillNav, type ChipTone } from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { FEEDBACK_KIND_LABELS, FeedbackValidationError } from "@/lib/feedback/model";
 import { listThemes } from "@/lib/feedback/theme-store";
@@ -15,69 +15,72 @@ import {
   THEME_AGREEMENT_WINDOW_DAYS,
   assessTheme,
   parseThemeStatusFilter,
+  type FeedbackThemeStatus,
 } from "@/lib/feedback/themes";
 
+const THEMES_PATH = "/admin/feedback/themes";
 const requested = Astro.url.searchParams.get("status") ?? "open";
 let statuses;
 try {
   statuses = parseThemeStatusFilter(requested);
 } catch (error) {
   if (!(error instanceof FeedbackValidationError)) throw error;
-  return Astro.redirect("/admin/feedback/themes");
+  return Astro.redirect(THEMES_PATH, 303);
 }
 const now = new Date();
-const themes = await listThemes(env.DB, { statuses, now });
+// The themes and the Admin space are independent reads: one round trip, not two.
+const [themes, spaces] = await Promise.all([
+  listThemes(env.DB, { statuses, now }),
+  resolveSpacePage(Astro.locals, "adminFeedback"),
+]);
 const tabs = [
   { value: "open", label: "Open" },
-  ...FEEDBACK_THEME_STATUSES.map((status) => ({
-    value: status,
-    label: FEEDBACK_THEME_STATUS_LABELS[status],
-  })),
+  ...FEEDBACK_THEME_STATUSES.map((status) => ({ value: status, label: FEEDBACK_THEME_STATUS_LABELS[status] })),
   { value: "all", label: "All" },
 ];
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
+const all = requested === "all";
+
+// TODO(K2): StatusChip and statusTone("theme") replace this map once lane K's detail parts merge.
+// Peach is a theme waiting on the owner's yes; a shipped one is a success; the rest are facts.
+const THEME_TONES: Record<FeedbackThemeStatus, ChipTone> = {
+  COLLECTING: "neutral",
+  PROPOSED: "peach",
+  PLANNED: "neutral",
+  IN_PROGRESS: "neutral",
+  SHIPPED: "success",
+  DECLINED: "neutral",
+  DORMANT: "neutral",
+};
+const students = (count: number) => `${count} ${count === 1 ? "student" : "students"}`;
 ---
 
 <AdminLayout title="Feedback themes" spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/feedback" class="text-sm text-primary hover:underline">
-      &larr; Back to Feedback
+    <a href="/admin/feedback" class:list={["inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline", FOCUS_RING]}>
+      <PiArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+      Back to Feedback
     </a>
-    <header>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Themes</PageTitle>
-      <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
-        One problem or wish that several students raised. Ideas and confusing
-        spots are put forward once {THEME_AGREEMENT_STUDENTS} students raise them
-        within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug needs one report. Titles
-        and summaries may be published, so they never identify a student.
+    <header class="space-y-2">
+      <PageTitle spaces>Themes</PageTitle>
+      <p class="max-w-2xl text-sm leading-relaxed text-ink-secondary">
+        One problem or wish that several students raised. Ideas and confusing spots are put forward
+        once {THEME_AGREEMENT_STUDENTS} students raise them within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug
+        needs one report. Titles and summaries may be published, so they never identify a student.
       </p>
     </header>
 
-    <nav aria-label="Filter by status" class="flex flex-wrap gap-2">
-      {
-        tabs.map((tab) => (
-          <a
-            href={`/admin/feedback/themes?status=${tab.value}`}
-            aria-current={requested === tab.value ? "page" : undefined}
-            class:list={[
-              "rounded-full border px-3 py-1 text-sm transition-colors",
-              requested === tab.value
-                ? "border-primary bg-primary/15 text-ink-primary"
-                : "border-rule text-ink-secondary hover:text-ink-primary",
-            ]}
-          >
-            {tab.label}
-          </a>
-        ))
-      }
-    </nav>
+    <PillNav
+      label="Filter by status"
+      items={tabs.map((tab) => ({ label: tab.label, href: `${THEMES_PATH}?status=${tab.value}`, current: requested === tab.value }))}
+    />
 
     {
       themes.length === 0 ? (
-        <Card>
-          <p class="text-sm text-ink-secondary">No themes here yet.</p>
-        </Card>
+        <EmptyState title={all ? "No themes yet" : "No themes in this view"} headingLevel={2}>
+          {all
+            ? "The weekly feedback triage gathers notes that share one problem or wish into a theme. Themes appear here."
+            : "Themes with this status appear here. All shows every theme."}
+        </EmptyState>
       ) : (
         <ul class="space-y-3" data-testid="admin-theme-list">
           {themes.map((theme) => {
@@ -92,27 +95,24 @@ const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
               now
             );
             return (
-              <li>
-                <a
-                  href={themeAdminPath(theme.id)}
-                  class="block rounded-lg border border-teal/20 bg-dark/80 p-4 transition-colors hover:border-primary/60"
-                >
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <FeedbackStatusPill theme={theme.status} />
-                    <span class="font-medium text-ink-primary">{theme.title}</span>
-                    {assessment.readyToPropose && (
-                      <span class="rounded-full border border-primary/40 px-2 py-0.5 text-xs text-primary">
-                        Ready to propose
-                      </span>
-                    )}
-                  </div>
-                  <p class="mt-2 text-xs text-ink-muted">
-                    {FEEDBACK_KIND_LABELS[theme.kind]} · {theme.stats.students} student
-                    {theme.stats.students === 1 ? "" : "s"} ({theme.stats.recentStudents} in{" "}
-                    {THEME_AGREEMENT_WINDOW_DAYS} days) · {assessment.reason}
-                  </p>
-                </a>
-              </li>
+              <Card as="li" className="relative transition-colors hover:border-ink-primary/30 motion-reduce:transition-none">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <Chip tone={THEME_TONES[theme.status]}>{FEEDBACK_THEME_STATUS_LABELS[theme.status]}</Chip>
+                  <h2 class="min-w-0 font-body text-base font-bold text-ink-primary">
+                    {/* The title is the row's link; it stretches over the card, so the whole card opens the theme. */}
+                    <a
+                      href={themeAdminPath(theme.id)}
+                      class:list={["rounded-sm after:absolute after:inset-0 after:rounded-[1.125rem] hover:underline", FOCUS_RING]}
+                    >
+                      {theme.title}
+                    </a>
+                  </h2>
+                  {assessment.readyToPropose && <Chip tone="peach">Ready to propose</Chip>}
+                </div>
+                <p class="mt-2 text-xs text-ink-muted">
+                  {FEEDBACK_KIND_LABELS[theme.kind]} · {students(theme.stats.students)} ({theme.stats.recentStudents} in {THEME_AGREEMENT_WINDOW_DAYS} days) · {assessment.reason}
+                </p>
+              </Card>
             );
           })}
         </ul>
