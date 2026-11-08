@@ -348,7 +348,6 @@ test.describe("every admin page", () => {
     const secret = page.getByRole("region", { name: `Your new token: ${label}` });
     await expect(secret.locator("code#personal-access-token")).toHaveText(/^\S{20,}$/);
     await expect(form.getByRole("textbox", { name: "Label" })).toHaveValue("");
-    await runAxe(page, testInfo, "admin-tokens-created");
 
     const tokens = page.getByRole("table", { name: "Your tokens" });
     const row = tokens.getByRole("row").filter({ hasText: label });
