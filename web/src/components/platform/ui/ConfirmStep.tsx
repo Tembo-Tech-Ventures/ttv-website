@@ -15,8 +15,8 @@ type ConfirmStepProps = {
   cancelHref: string;
   /** Where the form posts; the page itself when left out. */
   action?: string;
-  /** Hidden fields the POST handler needs: the intent and the row's id. */
-  fields?: Readonly<Record<string, string>>;
+  /** Hidden fields the POST handler needs: the intent and the row's id; a list repeats the name, for a selection. */
+  fields?: Readonly<Record<string, string | readonly string[]>>;
   id?: string;
   /** Off only where the step is shown as an example, as the style guide does. */
   focusOnLoad?: boolean;
@@ -32,7 +32,7 @@ type ConfirmStepProps = {
  * would fall below 4.5:1. The POST handler still checks who may do this: the
  * step only asks.
  */
-const NO_FIELDS: Readonly<Record<string, string>> = {};
+const NO_FIELDS: Readonly<Record<string, string | readonly string[]>> = {};
 
 export default function ConfirmStep({
   title,
@@ -51,9 +51,9 @@ export default function ConfirmStep({
         {children}
       </Notice>
       <form method="post" action={action} className="flex flex-wrap gap-2">
-        {Object.entries(fields).map(([name, value]) => (
-          <input key={name} type="hidden" name={name} value={value} />
-        ))}
+        {Object.entries(fields).flatMap(([name, value]) =>
+          (typeof value === "string" ? [value] : value).map((one) => <input key={`${name}=${one}`} type="hidden" name={name} value={one} />),
+        )}
         <Button variant="danger" type="submit">
           {confirmLabel}
         </Button>

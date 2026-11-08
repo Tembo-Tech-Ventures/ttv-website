@@ -1,98 +1,122 @@
 ---
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
-import type { CohortMentorModel } from "./cohort-mentors";
+import {
+  Button,
+  ButtonLink,
+  ConfirmStep,
+  DataCell,
+  DataRow,
+  DataTable,
+  EmptyState,
+  Notice,
+  SelectField,
+  confirmHref,
+  linkClass,
+  withoutConfirm,
+} from "@/components/platform/ui";
+import type { CohortMentorModel, CohortPerson } from "./cohort-mentors";
 
 /**
  * The cohort's mentors on /admin/programs/[id] (U-2.4): who mentors this cohort, a way to add
- * someone, and a way to take it away. Plain form posts to the page, like the staff list above it.
- * Only shown while `channels` is on for the administrator: cohort mentors exist for the channels.
+ * someone, and a way to take it away, which asks first at ?confirm=. Plain form posts to the page,
+ * like the staff list above it. Only shown while `channels` is on for the administrator: cohort
+ * mentors exist for the channels.
  */
 interface Props {
   model: CohortMentorModel;
+  /** The cohort's page, which every form posts to. */
+  page: string;
+  url: URL;
+  /** The confirm step the page is showing, if any (`remove-<roleId>`). */
+  asking: string | null;
+  /** Why the last mentor change was refused. */
+  error?: string;
+  /** The person chosen in a refused add, kept. */
+  keptUserId?: string;
 }
 
-const { model } = Astro.props;
+const { model, page, url, asking, error, keptUserId } = Astro.props;
 const noCandidates = model.approvedCandidates.length === 0 && model.otherCandidates.length === 0 && model.rosterCandidates.length === 0;
+const askingMentor = model.mentors.find((mentor) => asking === `remove-${mentor.roleId}`);
+const option = (person: CohortPerson) => ({ value: person.id, label: `${person.name} (${person.email})` });
 ---
 
-<Card>
-  <section aria-labelledby="cohort-mentors-heading" data-cohort-mentors>
-    <h3 id="cohort-mentors-heading" class="text-lg font-semibold text-white">Mentors</h3>
-    <p class="mt-1 max-w-3xl text-sm text-ink-secondary">
-      Mentors you add join this cohort. They can watch its session recordings, read and post in its channels, and hide a
-      message there for an admin to review. Removing someone ends this at once. Mentor access across the community
-      still comes from an access request.
-    </p>
+<section id="cohort-mentors" aria-labelledby="cohort-mentors-heading" class="flex max-w-3xl flex-col gap-5" data-cohort-mentors>
+  <h2 id="cohort-mentors-heading" class="m-0 text-2xl">Mentors</h2>
+  <p class="m-0 max-w-prose text-ink-secondary">
+    Mentors you add join this cohort. They can watch its session recordings, read and post in its channels, and hide a message
+    there for an admin to review. Removing someone ends this at once. Mentor access across the community still comes from an
+    access request.
+  </p>
+  {error && <Notice tone="danger" focusOnLoad title="The mentors didn't change">{error}</Notice>}
 
-    {model.mentors.length > 0 ? (
-      <ul class="mt-4 divide-y divide-teal/10 rounded-lg border border-teal/20" aria-label="Cohort mentors">
-        {model.mentors.map((mentor) => (
-          <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-cohort-mentor={mentor.userId}>
-            <div class="min-w-0">
-              <a href={`/admin/users/${encodeURIComponent(mentor.userId)}`} class="font-medium text-white hover:text-primary hover:underline">
-                {mentor.name}
-              </a>
-              <p class="truncate text-xs text-ink-muted">
-                {mentor.email ?? "No email available"}
-                {mentor.approvedMentor ? " · Community mentor" : " · Mentors this cohort only"}
-              </p>
-            </div>
-            <form method="POST" onsubmit={`return confirm(${JSON.stringify(`Remove ${mentor.name} as a mentor of this cohort?`)})`}>
-              <input type="hidden" name="action" value="remove-role" />
-              <input type="hidden" name="roleId" value={mentor.roleId} />
-              <input type="hidden" name="roleKind" value="MENTOR" />
-              <Button type="submit" variant="danger" class="min-h-11" aria-label={`Remove ${mentor.name} as a mentor`}>
-                Remove
-              </Button>
-            </form>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p class="mt-4 text-ink-muted" data-cohort-mentors-empty>No mentors yet.</p>
-    )}
+  <DataTable caption="Cohort mentors" columns={[{ label: "Mentor" }, { label: "Access" }, { label: "Actions", hidden: true }]} isEmpty={model.mentors.length === 0}>
+    {
+      model.mentors.map((mentor) => (
+        <DataRow data-cohort-mentor={mentor.userId} current={askingMentor?.roleId === mentor.roleId}>
+          <DataCell label="Mentor" primary>
+            <span class="flex min-w-0 flex-col">
+              <a href={`/admin/users/${encodeURIComponent(mentor.userId)}`} class={linkClass()}>{mentor.name}</a>
+              <span class="text-[0.8125rem] font-normal break-all text-ink-secondary">{mentor.email ?? "No email"}</span>
+            </span>
+          </DataCell>
+          <DataCell label="Access">{mentor.approvedMentor ? "Community mentor" : "This cohort only"}</DataCell>
+          <DataCell label="" align="end">
+            <ButtonLink variant="danger" size="sm" href={`${confirmHref(url, `remove-${mentor.roleId}`)}#cohort-mentors`}>
+              Remove<span class="sr-only"> {mentor.name} as a mentor</span>
+            </ButtonLink>
+          </DataCell>
+        </DataRow>
+      ))
+    }
+    <Fragment slot="empty">
+      <EmptyState title="No mentors yet" headingLevel={3}>
+        Add someone below. They join this cohort's channels and recordings at once.
+      </EmptyState>
+    </Fragment>
+  </DataTable>
 
-    {noCandidates ? (
-      <p class="mt-4 text-sm text-ink-muted">Everyone who has signed in already mentors this cohort.</p>
+  {
+    askingMentor && (
+      <ConfirmStep
+        title={`Remove ${askingMentor.name} as a mentor of this cohort?`}
+        confirmLabel="Remove as a mentor"
+        cancelHref={`${withoutConfirm(url)}#cohort-mentors`}
+        action={`${page}#cohort-mentors`}
+        fields={{ action: "remove-role", roleId: askingMentor.roleId, roleKind: "MENTOR" }}
+      >
+        They lose this cohort's channels and recordings at once. Their community mentor access, if they have it, stays.
+      </ConfirmStep>
+    )
+  }
+
+  {
+    noCandidates ? (
+      <p class="m-0 text-sm text-ink-secondary">Everyone who has signed in already mentors this cohort.</p>
     ) : (
-      <form method="POST" class="mt-4 flex flex-wrap items-end gap-3">
+      <form method="POST" action={`${page}#cohort-mentors`} class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="action" value="add-role" />
         <input type="hidden" name="roleName" value="MENTOR" />
-        <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto">
-          <label for="mentorUserId" class="text-sm font-medium text-white/90">Person</label>
-          <select
-            id="mentorUserId"
-            name="userId"
-            required
-            aria-describedby={model.rosterCandidates.length > 0 ? "mentorUserId-roster" : undefined}
-            class="form-control min-h-11 w-full min-w-0"
-          >
-            <option value="">Select a person…</option>
-            {model.approvedCandidates.length > 0 && (
-              <optgroup label="Community mentors">
-                {model.approvedCandidates.map((person) => <option value={person.id}>{person.name} ({person.email})</option>)}
-              </optgroup>
-            )}
-            {model.otherCandidates.length > 0 && (
-              <optgroup label="Everyone else">
-                {model.otherCandidates.map((person) => <option value={person.id}>{person.name} ({person.email})</option>)}
-              </optgroup>
-            )}
-            {model.rosterCandidates.length > 0 && (
-              <optgroup label="On this cohort's roster">
-                {model.rosterCandidates.map((person) => <option value={person.id}>{person.name} ({person.email}) · on this cohort's roster</option>)}
-              </optgroup>
-            )}
-          </select>
-          {model.rosterCandidates.length > 0 && (
-            <p id="mentorUserId-roster" class="max-w-md text-xs text-ink-secondary" data-cohort-mentors-roster-note>
-              People who applied to or study in this cohort are listed last. As a mentor they could hide their classmates' messages.
-            </p>
-          )}
+        <SelectField
+          id="mentorUserId"
+          name="userId"
+          label="Person"
+          placeholder="Choose a person"
+          hint={model.rosterCandidates.length > 0 ? "People who applied to or study in this cohort are listed last. As a mentor they could hide their classmates' messages." : undefined}
+          options={[
+            { group: "Community mentors", options: model.approvedCandidates.map(option) },
+            { group: "Everyone else", options: model.otherCandidates.map(option) },
+            {
+              group: "On this cohort's roster",
+              options: model.rosterCandidates.map((person) => ({ ...option(person), label: `${person.name} (${person.email}) · on this cohort's roster` })),
+            },
+          ]}
+          defaultValue={keptUserId}
+          required
+        />
+        <div>
+          <Button type="submit" size="lg">Add mentor</Button>
         </div>
-        <Button type="submit" class="min-h-11">Add mentor</Button>
       </form>
-    )}
-  </section>
-</Card>
+    )
+  }
+</section>

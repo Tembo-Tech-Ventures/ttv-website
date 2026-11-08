@@ -71,8 +71,10 @@ const failing = (uses: Use[]) => uses
   .filter(({ ratio }) => ratio < AA);
 
 describe("admin buttons with white words on a solid colour", () => {
-  it("are found, so this test reads the pages it means to", () => {
-    expect(adminUses().some(({ where }) => where.startsWith("src/pages/admin/programs/[id].astro"))).toBe(true);
+  it("are looked for in every admin page, so this test reads the pages it means to", () => {
+    // Pages leave this list as they move to the kit, whose buttons are proven in contrast.test.ts;
+    // the class:list case below proves the detector itself.
+    expect(files(ADMIN_PAGES).length).toBeGreaterThan(25);
   });
 
   it("are caught when white and the background sit in different class:list entries", () => {

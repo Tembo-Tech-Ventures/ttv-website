@@ -96,6 +96,7 @@ const PAGES = {
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
+  "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin profile": { path: () => "/admin/profiles/profile", page: () => import("@/pages/admin/profiles/[id].astro"), user: ADMIN, id: "profile" },
@@ -203,6 +204,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 5 before the style-guide rollout: the person, their pending requests and the space were read in turn.
   "admin user": { d1: 15, depth: 2 },
   "admin cohorts": { d1: 14, depth: 2 },
+  // Depth 7 before the style-guide rollout: the flag, the curricula, the cohort, every user, every role and
+  // the space were read in turn; now together, with community mentors found in SQL.
+  "admin cohort": { d1: 17, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count for each status (which
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },
