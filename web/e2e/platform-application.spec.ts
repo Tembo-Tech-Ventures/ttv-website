@@ -201,7 +201,7 @@ test.describe("a member whose application carries questions", () => {
         await signIn(admin, baseURL!, staff);
         const adminPage = await admin.newPage();
         expect((await adminPage.goto(`/admin/applications/${APPLICANT_APPLICATION}`))?.status()).toBe(200);
-        await expect(adminPage.getByRole("heading", { name: "Application Data" })).toBeVisible();
+        await expect(adminPage.getByRole("heading", { name: "Answers", exact: true })).toBeVisible();
         await expect(adminPage.locator("main")).toContainText(idea);
         await expect(adminPage.locator("form[data-application-answers-form]")).toHaveCount(0);
       } finally {
@@ -233,13 +233,13 @@ test.describe("a member whose application the team reviews while she edits it", 
       await signIn(admin, baseURL!, staff);
       const adminPage = await admin.newPage();
       expect((await adminPage.goto(`/admin/applications/${REVIEWEE_APPLICATION}`))?.status()).toBe(200);
-      // The admin page asks "Change application status to APPROVED?" first.
-      adminPage.once("dialog", (dialog) => void dialog.accept());
+      // Accepting can still change (to declined or completed), so it posts at once, with no dialog.
       const [approval] = await Promise.all([
         adminPage.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().includes(REVIEWEE_APPLICATION)),
-        adminPage.locator("form:has(input[name='status'][value='APPROVED']) button[type='submit']").click(),
+        adminPage.getByRole("button", { name: "Accept", exact: true }).click(),
       ]);
-      expect(approval.status(), "staff approval redirects back to the application").toBe(302);
+      expect(approval.status(), "staff approval redirects back to the application").toBe(303);
+      await expect(adminPage.getByRole("status").filter({ hasText: "Application accepted" })).toBeVisible();
       await adminPage.waitForURL(new RegExp(`/admin/applications/${REVIEWEE_APPLICATION}$`));
       await expect(adminPage.locator("form:has(input[name='status'][value='APPROVED'])")).toHaveCount(0);
     } finally {

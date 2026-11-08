@@ -1,48 +1,85 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  Card,
+  ConfirmStep,
+  DescriptionItem,
+  DescriptionList,
+  Notice,
+  PageHeader,
+  StatusChip,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  linkClass,
+  statusTone,
+  withoutConfirm,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { applyApplicationMutationWithAttention } from "@/lib/attention/mutations";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { formatCalendarDate, formatMomentDate } from "@/lib/display-date";
 import {
-  APPLICATION_COMPLETION_CONFIRMATION,
   ProgramApplicationError,
   buildApplicationTransitionStatement,
   formatDateInputValue,
   getAvailableApplicationTransitions,
+  isProgramApplicationStatus,
+  parseCompletionDate,
   planApplicationTransition,
-  toProgramApplicationBadgeVariant,
+  type ProgramApplicationStatus,
 } from "@/lib/admin/program-application";
+import { formatAnswer, parseApplicationAnswers, plainLabel, summaryQuestions } from "@/lib/student/application-answers";
 
+const LIST_PATH = "/admin/applications";
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
-const defaultCompletionDate = formatDateInputValue();
+const today = formatDateInputValue();
 
-if (!id) return Astro.redirect("/admin/applications");
+if (!id) return Astro.redirect(LIST_PATH);
+
+/** What each change says on its button, and once it is done. */
+const ACTIONS: Record<ProgramApplicationStatus, { label: string; done: string }> = {
+  PENDING: { label: "Back to review", done: "Application back in review" }, // No change leads here.
+  APPROVED: { label: "Accept", done: "Application accepted" },
+  REJECTED: { label: "Decline", done: "Application declined" },
+  AUDIT: { label: "Move to audit", done: "Application moved to audit" },
+  COMPLETED: { label: "Mark completed", done: "Application marked completed" },
+};
+// Declining and completing are final: nothing moves an application on from either, and completing
+// unlocks a certificate at once. They ask first, on the page itself. The others can still change.
+const CONFIRMED = { decline: "REJECTED", complete: "COMPLETED" } as const satisfies Record<string, ProgramApplicationStatus>;
+const label = (status: ProgramApplicationStatus) => statusTone("application", status).label;
 
 let actionError: string | undefined;
+let actionCode: string | undefined;
+let postedDate: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
+  const target = formData.get("status");
+  postedDate = typeof formData.get("completionDate") === "string" ? String(formData.get("completionDate")) : undefined;
   const current = await db.query.programApplication.findFirst({
     where: eq(schema.programApplication.id, id),
     columns: { status: true },
   });
 
   if (!current) {
-    return Astro.redirect("/admin/applications?notice=missing");
+    return Astro.redirect(`${LIST_PATH}?notice=missing`, 303);
   }
 
   try {
     const transition = planApplicationTransition({
       expectedStatus: formData.get("expectedStatus"),
       currentStatus: current.status,
-      targetStatus: formData.get("status"),
+      targetStatus: target,
       completionDate: formData.get("completionDate"),
     });
     const statement = buildApplicationTransitionStatement({
@@ -56,188 +93,213 @@ if (Astro.request.method === "POST") {
       status: transition.status,
       staleCode: "STALE_TRANSITION",
       staleMessage:
-        "This application changed while you were updating it. Refresh the page before trying again.",
+        "This application changed while you were updating it. Check its status below before changing it again.",
     });
 
-    return Astro.redirect(`/admin/applications/${id}`);
+    return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: ACTIONS[transition.status].done });
   } catch (error) {
-    if (error instanceof ProgramApplicationError) {
-      actionError = error.message;
-      Astro.response.status = 400;
+    if (!(error instanceof ProgramApplicationError)) {
+      // Anything else is the database or the attention write failing: say so, and keep the page.
+      actionError = "The database didn't answer, so nothing changed. Try again in a moment.";
+      Astro.response.status = 503;
     } else {
-      throw error;
+      actionCode = error.code;
+      // The library's messages name stored values ("from PENDING to APPROVED"); say them as the page does.
+      actionError =
+        error.code === "STALE_TRANSITION"
+          ? "Someone changed this application while you were looking at it. Check its status below before changing it again."
+          : error.code === "INVALID_TRANSITION" && isProgramApplicationStatus(target) && isProgramApplicationStatus(current.status)
+            ? `An application that is ${label(current.status).toLowerCase()} can't be changed to ${label(target).toLowerCase()}.`
+            : error.code === "INVALID_STATUS"
+              ? "Choose one of the changes below."
+              : error.message;
+      Astro.response.status = 400;
     }
   }
 }
 
-const application = await db.query.programApplication.findFirst({
-  where: eq(schema.programApplication.id, id),
-  with: { user: true, program: true },
-});
+// The application and the Admin space are independent reads: one round trip, not two.
+const [application, spaces] = await Promise.all([
+  db.query.programApplication.findFirst({
+    where: eq(schema.programApplication.id, id),
+    with: { user: true, program: true },
+  }),
+  resolveSpacePage(Astro.locals, "adminApplications"),
+]);
 
-if (!application) return Astro.redirect("/admin/applications");
+if (!application) return Astro.redirect(LIST_PATH);
 
-// Parse application JSON without trusting its shape.
-let appData: Record<string, unknown> = {};
-try {
-  const parsed: unknown = JSON.parse(application.application);
-  appData =
-    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : { value: parsed };
-} catch {
-  appData = { raw: application.application };
-}
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const status = application.status;
+const name = application.user?.name ?? "Unknown applicant";
+const answers = parseApplicationAnswers(application.application);
+const questions = answers.kind === "questions" ? summaryQuestions(answers.questions) : [];
+const available = getAvailableApplicationTransitions(status);
+const offers = (target: ProgramApplicationStatus) => available.some((candidate) => candidate === target);
 
-const availableStatuses = getAvailableApplicationTransitions(
-  application.status
+// A final change waits at ?confirm=: the step names it before the POST does it.
+const asking = confirmingAction(
+  Astro.url,
+  (Object.keys(CONFIRMED) as (keyof typeof CONFIRMED)[]).filter((action) => offers(CONFIRMED[action])),
 );
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminApplications");
+// Completing takes its date from the step's address; a date that can't be used stays in the field with its error.
+const askedDate = Astro.url.searchParams.get("completionDate") ?? today;
+let dateError: string | undefined;
+let confirmedDate: Date | undefined;
+if (asking === "complete") {
+  try {
+    confirmedDate = parseCompletionDate(askedDate);
+  } catch (error) {
+    if (!(error instanceof ProgramApplicationError)) throw error;
+    dateError = error.message;
+  }
+}
+if (actionCode === "INVALID_COMPLETION_DATE") dateError = actionError;
+const completionValue = postedDate ?? askedDate;
+const confirmComplete = asking === "complete" && confirmedDate;
+const confirmDecline = asking === "decline";
+const fields = (target: ProgramApplicationStatus) => ({ expectedStatus: status, status: target });
 ---
 
-<AdminLayout title="Application Detail" spaces={spaces}>
+<AdminLayout title={`Application from ${name}`} titlePrefix={actionError ? "Error: " : ""} spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/applications" class="text-sm text-primary hover:underline">
-      &larr; Back to Applications
-    </a>
+    <BackLink href={LIST_PATH}>Applications</BackLink>
 
+    <PageHeader title={`Application from ${name}`}>
+      <span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusChip domain="application" status={status} />
+        <span>{application.program?.name ?? "No cohort"} · applied {formatMomentDate(application.createdAt)}</span>
+      </span>
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
+      <Notice tone="danger" focusOnLoad id="application-failure" title="The status didn't change">
         {actionError}
-      </p>
+      </Notice>
     )}
 
-    <div class="flex items-center gap-3">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Application</PageTitle>
-      <Badge variant={toProgramApplicationBadgeVariant(application.status)} />
-    </div>
-
-    <div class="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Applicant</h3>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Name</dt>
-            <dd class="text-white">{application.user?.name ?? "Unknown"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Email</dt>
-            <dd class="text-white">{application.user?.email ?? "—"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">User</dt>
-            <dd>
-              <a
-                href={`/admin/users/${application.userId}`}
-                class="text-primary hover:underline"
-              >
-                View Profile
-              </a>
-            </dd>
-          </div>
-        </dl>
-      </Card>
-
-      <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Cohort</h3>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Cohort</dt>
-            <dd class="text-white">{application.program?.name ?? "—"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Applied</dt>
-            <dd class="text-white">
-              {application.createdAt
-                ? new Date(application.createdAt).toLocaleDateString()
-                : "—"}
-            </dd>
-          </div>
-          {application.completedAt && (
-            <div class="flex justify-between">
-              <dt class="text-ink-secondary">Completed</dt>
-              <dd class="text-white">
-                {new Date(application.completedAt).toLocaleDateString()}
-              </dd>
-            </div>
-          )}
-          {application.status === "COMPLETED" && application.completedAt && (
-            <div class="flex justify-between">
-              <dt class="text-ink-secondary">Certificate</dt>
-              <dd>
-                <a
-                  href={`/certificate/${application.id}`}
-                  class="text-primary hover:underline"
-                >
-                  View certificate
-                </a>
-              </dd>
-            </div>
-          )}
-        </dl>
-      </Card>
-    </div>
-
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Application Data</h3>
-      <dl class="space-y-3 text-sm">
-        {Object.entries(appData).map(([key, value]) => (
-          <div>
-            <dt class="font-medium capitalize text-ink-secondary">
-              {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}
-            </dt>
-            <dd class="mt-0.5 text-white">
-              {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <div class="grid gap-4">
+        <h2 class="text-lg text-ink-primary">Details</h2>
+        <DescriptionList>
+          <DescriptionItem term="Applicant">
+            <a href={`/admin/users/${application.userId}`} class={linkClass()}>{name}</a>
+          </DescriptionItem>
+          <DescriptionItem term="Email">{application.user?.email ?? "Not recorded"}</DescriptionItem>
+          <DescriptionItem term="Cohort">
+            {application.program ? (
+              <a href={`/admin/programs/${application.program.id}`} class={linkClass()}>{application.program.name}</a>
+            ) : (
+              "No cohort"
+            )}
+          </DescriptionItem>
+          <DescriptionItem term="Applied">{formatMomentDate(application.createdAt)}</DescriptionItem>
+          {application.completedAt && (
+            <DescriptionItem term="Completed">{formatCalendarDate(application.completedAt)}</DescriptionItem>
+          )}
+          {status === "COMPLETED" && application.completedAt && (
+            <DescriptionItem term="Certificate">
+              <a href={`/certificate/${application.id}`} class={linkClass()}>View certificate</a>
+            </DescriptionItem>
+          )}
+        </DescriptionList>
+      </div>
     </Card>
 
-    {availableStatuses.length > 0 && (
+    <Card>
+      <div class="grid gap-4" data-application-answers>
+        <h2 class="text-lg text-ink-primary">Answers</h2>
+        {questions.length > 0 ? (
+          <DescriptionList>
+            {questions.map((question) => {
+              const answer = formatAnswer(question);
+              return (
+                <DescriptionItem term={plainLabel(question.label)}>
+                  <span class:list={["whitespace-pre-line", !answer && "text-ink-muted"]}>{answer ?? "Not answered"}</span>
+                </DescriptionItem>
+              );
+            })}
+          </DescriptionList>
+        ) : answers.kind === "details" && answers.details.length > 0 ? (
+          <DescriptionList>
+            {answers.details.map((detail) => (
+              <DescriptionItem term={detail.label}>
+                <span class="whitespace-pre-line">{detail.value}</span>
+              </DescriptionItem>
+            ))}
+          </DescriptionList>
+        ) : (
+          <p class="text-sm text-ink-secondary">
+            {answers.kind === "enrollment"
+              ? "An admin added them to the cohort directly, so nothing was asked."
+              : "No answers were recorded with this application."}
+          </p>
+        )}
+        {answers.kind === "details" && answers.hidden && (
+          <p class="text-sm text-ink-muted">Some details recorded with this application can't be shown here.</p>
+        )}
+      </div>
+    </Card>
+
+    {available.length > 0 && (
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Change Status</h3>
-        <div class="flex flex-wrap gap-2">
-          {availableStatuses.map((status) => (
-            <form method="POST" class="flex flex-wrap items-end gap-2">
-              <input type="hidden" name="expectedStatus" value={application.status} />
-              <input type="hidden" name="status" value={status} />
-              {status === "COMPLETED" && (
-                <label class="flex flex-col gap-1 text-xs font-medium text-white/70">
-                  Completion date
-                  <input
+        <div class="grid gap-4" data-status-actions>
+          <h2 class="text-lg text-ink-primary">Change status</h2>
+          {confirmDecline ? (
+            <ConfirmStep
+              title={`Decline ${name}'s application?`}
+              confirmLabel="Decline application"
+              cancelHref={withoutConfirm(Astro.url)}
+              action={Astro.url.pathname}
+              fields={fields("REJECTED")}
+            >
+              They see “Declined” on their application, and nothing moves it on from there.
+            </ConfirmStep>
+          ) : confirmComplete ? (
+            <ConfirmStep
+              title={`Mark ${name} completed on ${formatCalendarDate(confirmedDate!)}?`}
+              confirmLabel="Mark completed"
+              cancelHref={Astro.url.pathname}
+              action={Astro.url.pathname}
+              fields={{ ...fields("COMPLETED"), completionDate: askedDate }}
+            >
+              Their certificate and builder portfolio unlock at once. This can't be undone.
+            </ConfirmStep>
+          ) : (
+            <>
+              <p class="text-sm text-ink-secondary">
+                It's {label(status).toLowerCase()} now. They see each change on their application page.
+              </p>
+              <div class="flex flex-wrap items-end gap-3">
+                {(["APPROVED", "AUDIT"] as const).filter(offers).map((target) => (
+                  <form method="POST" action={Astro.url.pathname}>
+                    <input type="hidden" name="expectedStatus" value={status} />
+                    <input type="hidden" name="status" value={target} />
+                    <Button type="submit" variant="quiet">{ACTIONS[target].label}</Button>
+                  </form>
+                ))}
+                {offers("REJECTED") && (
+                  <ButtonLink variant="quiet" href={confirmHref(Astro.url, "decline")}>{ACTIONS.REJECTED.label}</ButtonLink>
+                )}
+              </div>
+              {offers("COMPLETED") && (
+                <form method="GET" action={Astro.url.pathname} class="flex flex-wrap items-end gap-3" data-complete-form>
+                  <input type="hidden" name="confirm" value="complete" />
+                  <TextField
                     type="date"
                     name="completionDate"
-                    value={defaultCompletionDate}
-                    max={defaultCompletionDate}
+                    label="Completion date"
+                    max={today}
                     required
-                    class="rounded-md border border-teal bg-dark/70 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    defaultValue={completionValue}
+                    error={dateError}
                   />
-                </label>
+                  <Button type="submit" variant="quiet">{ACTIONS.COMPLETED.label}</Button>
+                </form>
               )}
-              <button
-                type="submit"
-                class:list={[
-                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                  status === "APPROVED" && "bg-green-700 text-white hover:bg-green-800",
-                  status === "REJECTED" && "bg-red-600 text-white hover:bg-red-700",
-                  status === "AUDIT" && "bg-blue-600 text-white hover:bg-blue-700",
-                  status === "COMPLETED" && "bg-purple-600 text-white hover:bg-purple-700",
-                ]}
-                onclick={`return confirm(${JSON.stringify(
-                  status === "COMPLETED"
-                    ? APPLICATION_COMPLETION_CONFIRMATION
-                    : `Change application status to ${status}?`
-                )})`}
-              >
-                {status === "COMPLETED" ? "Mark Completed" : status.charAt(0) + status.slice(1).toLowerCase()}
-              </button>
-            </form>
-          ))}
+            </>
+          )}
         </div>
       </Card>
     )}
