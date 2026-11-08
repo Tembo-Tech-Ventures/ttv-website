@@ -14,6 +14,9 @@ const EVIDENCE_DIR = "test-results/evidence/platform-discover";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
 const PATH = "/dashboard/discover";
+// Lookup lists saved community profiles only: locally the seeded alumna, on a preview the staging
+// persona otherMember (Fictional Brian Otieno), the one persona with a saved profile.
+const MEMBER = PREVIEW ? "Brian" : "Achieng";
 
 const main = (page: Page) => page.locator("#spaces-main");
 const evidence = (name: string) => `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
@@ -60,10 +63,10 @@ test.describe("without JavaScript", () => {
     await signedIn(page, baseURL);
     await open(page, PATH, { script: false });
     await main(page).getByRole("link", { name: "Find someone you know" }).click();
-    await main(page).getByLabel("Name to look up").fill("Achieng");
+    await main(page).getByLabel("Name to look up").fill(MEMBER);
     await main(page).getByRole("button", { name: "Look up person" }).click();
-    await expect(page).toHaveURL(/lookup=1&scout=results&query=Achieng/);
-    const person = main(page).locator("[data-person]").filter({ hasText: "Achieng" }).first();
+    await expect(page).toHaveURL(new RegExp(`lookup=1&scout=results&query=${MEMBER}`));
+    const person = main(page).locator("[data-person]").filter({ hasText: MEMBER }).first();
     await expect(person).toBeVisible();
     await page.screenshot({ path: evidence("lookup-results") });
 
