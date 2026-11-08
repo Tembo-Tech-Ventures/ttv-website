@@ -84,7 +84,8 @@ if (rowError && !list.items.some((request) => request.id === rowError?.id)) {
   rowError = undefined;
 }
 
-const notice = !failure && decided ? decisionNotice(decided) : null;
+// Only after a decision that went through: never beside a refusal, on the page or under a row.
+const notice = !failure && !rowError && decided ? decisionNotice(decided) : null;
 
 const tabs = [
   { state: "PENDING", label: "Pending", href: ACCESS_REQUESTS_PATH, count: list.pendingCount },
@@ -92,6 +93,13 @@ const tabs = [
 ] as const;
 const current = tabs.find((tab) => tab.state === state) ?? tabs[0];
 const PAGER_LINK = "inline-flex min-h-11 items-center rounded-sm font-semibold text-peach-ink hover:underline";
+// The row forms post back to this list (its tab and page), without `decided`: a refused decision must
+// not also show the notice of the one before it, and two notices would both take focus.
+const formAction = (() => {
+  const url = new URL(Astro.url);
+  url.searchParams.delete("decided");
+  return `${url.pathname}${url.search}`;
+})();
 const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" : "&"}cursor=${encodeURIComponent(list.nextCursor)}` : null;
 ---
 
@@ -130,6 +138,7 @@ const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" :
         {list.items.map((request) => (
           <AccessRequestCard
             request={request}
+            action={formAction}
             error={rowError?.id === request.id ? rowError.message : undefined}
             draftMessage={rowError?.id === request.id ? rowError.draft : undefined}
           />
