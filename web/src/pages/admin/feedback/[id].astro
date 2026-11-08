@@ -1,9 +1,11 @@
 ---
+import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import {
+  Button, Card, Checkbox, Chip, FOCUS_RING, Notice, SelectField, TextAreaField, TextField, type ChipTone,
+} from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { getFeedback, updateFeedback } from "@/lib/feedback/store";
 import {
@@ -18,43 +20,70 @@ import {
   MAX_FEEDBACK_ADMIN_NOTE_LENGTH,
   MAX_FEEDBACK_RESPONSE_LENGTH,
   feedbackPagePath,
+  type FeedbackStatus,
 } from "@/lib/feedback/model";
 import { formatBytes } from "@/components/feedback/feedback-client";
 import { listThemes } from "@/lib/feedback/theme-store";
 import { OPEN_FEEDBACK_THEME_STATUSES } from "@/lib/feedback/themes";
 import { themeAdminPath } from "@/lib/feedback/theme-api";
 
+const FEEDBACK_PATH = "/admin/feedback";
 const id = Astro.params.id ?? "";
 let actionError = "";
 let saved = Astro.url.searchParams.get("saved") === "1";
+/** What the admin typed, kept when a save is refused so nothing they wrote is lost (patterns.md, Forms). */
+let posted: Record<"status" | "themeId" | "response" | "resolutionUrl" | "adminNote", string> & { sensitive: boolean } | null = null;
 
 if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const text = (name: string) => {
+    const value = form.get(name);
+    return typeof value === "string" ? value : "";
+  };
   try {
-    const update = feedbackUpdateFromForm(await Astro.request.formData());
+    const update = feedbackUpdateFromForm(form);
     const result = await updateFeedback(env.DB, id, update.patch, {
       actorId: Astro.locals.user!.id,
     });
-    if (result.outcome === "not-found") return Astro.redirect("/admin/feedback");
+    if (result.outcome === "not-found") return Astro.redirect(FEEDBACK_PATH, 303);
     if (result.outcome === "invalid") throw new FeedbackValidationError(result.message);
-    return Astro.redirect(`/admin/feedback/${encodeURIComponent(id)}?saved=1`);
+    return Astro.redirect(`${FEEDBACK_PATH}/${encodeURIComponent(id)}?saved=1`, 303);
   } catch (error) {
     if (!(error instanceof FeedbackValidationError)) throw error;
     actionError = error.message;
     saved = false;
+    posted = {
+      status: text("status"), themeId: text("themeId"), response: text("response"),
+      resolutionUrl: text("resolutionUrl"), adminNote: text("adminNote"), sensitive: form.has("sensitive"),
+    };
     Astro.response.status = 400;
   }
 }
 
-const feedback = await getFeedback(env.DB, id);
-if (!feedback) return Astro.redirect("/admin/feedback");
+// The note, the open themes and the Admin space are independent reads: one round trip, not three.
+const [feedback, openThemes, spaces] = await Promise.all([
+  getFeedback(env.DB, id),
+  listThemes(env.DB, { statuses: OPEN_FEEDBACK_THEME_STATUSES }),
+  resolveSpacePage(Astro.locals, "adminFeedback"),
+]);
+if (!feedback) return Astro.redirect(FEEDBACK_PATH, 303);
 
 const { context } = feedback;
-const openThemes = await listThemes(env.DB, { statuses: OPEN_FEEDBACK_THEME_STATUSES });
 // Keep a closed theme selectable so saving the form never detaches it silently.
 const themeOptions =
   feedback.theme && !openThemes.some((theme) => theme.id === feedback.theme?.id)
     ? [{ id: feedback.theme.id, title: `${feedback.theme.title} (closed)` }, ...openThemes]
     : openThemes;
+const values = posted ?? {
+  status: feedback.status,
+  themeId: feedback.theme?.id ?? "",
+  response: feedback.response ?? "",
+  resolutionUrl: feedback.resolutionUrl ?? "",
+  adminNote: feedback.adminNote ?? "",
+  sensitive: feedback.sensitive,
+};
+// TODO(K2): StatusChip and statusTone("feedback") replace this map once lane K's detail parts merge.
+const NOTE_TONES: Record<FeedbackStatus, ChipTone> = { NEW: "peach", IN_PROGRESS: "neutral", RESOLVED: "success", DECLINED: "neutral" };
 const formatDateTime = (date: Date) =>
   `${date.toLocaleString("en-GB", {
     day: "numeric",
@@ -87,247 +116,163 @@ const facts = [
       : "—",
   ],
 ] as const;
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
+const SECTION = "mb-3 font-body text-lg font-bold text-ink-primary";
+const TEXT_LINK = `rounded-sm text-peach-ink hover:underline ${FOCUS_RING}`;
 ---
 
 <AdminLayout title="Feedback" spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/feedback" class="text-sm text-primary hover:underline">
-      &larr; Back to Feedback
+    <a href={FEEDBACK_PATH} class:list={["inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold", TEXT_LINK]}>
+      <PiArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+      Back to Feedback
     </a>
 
-    {
-      actionError && (
-        <p
-          role="alert"
-          class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-        >
-          {actionError}
-        </p>
-      )
-    }
-    {
-      saved && (
-        <p
-          role="status"
-          class="rounded-md border border-green-400/40 bg-green-500/15 px-4 py-3 text-sm text-green-100"
-        >
-          Saved. The student sees the status and reply on their feedback page.
-        </p>
-      )
-    }
+    {actionError && (
+      <Notice tone="danger" focusOnLoad id="feedback-failure" title="This feedback wasn't saved">
+        {actionError} Everything you wrote is kept below.
+      </Notice>
+    )}
+    {saved && (
+      <Notice tone="success" id="feedback-saved">Saved. The student sees the status and reply on their feedback page.</Notice>
+    )}
 
-    <div class="flex flex-wrap items-center gap-3">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">
-        Feedback from {feedback.user.name}
-      </PageTitle>
-      <FeedbackStatusPill note={feedback.status} />
-      <span class="text-sm font-medium text-ink-primary">{FEEDBACK_KIND_LABELS[feedback.kind]}</span>
-      {
-        feedback.sensitive && (
-          <span class="rounded-full border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 text-xs font-medium text-rose-200">
-            Sensitive
-          </span>
-        )
-      }
-      <a
-        href={feedback.pageUrl}
-        class="truncate text-sm text-primary hover:underline"
-        target="_blank"
-        rel="noopener">{feedbackPagePath(feedback.pageUrl)}</a
-      >
-    </div>
+    <header class="space-y-3">
+      <PageTitle spaces>Feedback from {feedback.user.name}</PageTitle>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <Chip tone={NOTE_TONES[feedback.status]}>{FEEDBACK_ADMIN_STATUS_LABELS[feedback.status]}</Chip>
+        <span class="text-sm font-medium text-ink-primary">{FEEDBACK_KIND_LABELS[feedback.kind]}</span>
+        {feedback.sensitive && <Chip tone="warning">Sensitive</Chip>}
+        <a href={feedback.pageUrl} class:list={["inline-flex min-h-11 max-w-full items-center truncate text-sm", TEXT_LINK]} target="_blank" rel="noopener">
+          <span class="truncate">{feedbackPagePath(feedback.pageUrl)}</span><span class="sr-only"> (opens in a new tab)</span>
+        </a>
+      </div>
+    </header>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div class="min-w-0 space-y-6">
-        <Card>
-          <h3 class="mb-3 text-lg font-semibold text-white">What they said</h3>
+        <Card as="section" aria-labelledby="feedback-message">
+          <h2 id="feedback-message" class={SECTION}>What they said</h2>
           {/* Expression on the tag's own line: pre-wrap would show indentation. */}
-          <p class="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-primary">{feedback.message || "(No text. See the screenshots.)"}</p>
+          <p class="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-primary">{feedback.message || "No text. See the screenshots."}</p>
         </Card>
 
-        {
-          feedback.attachments.length > 0 && (
-            <Card>
-              <h3 class="mb-3 text-lg font-semibold text-white">Screenshots</h3>
-              <ul class="space-y-4">
-                {feedback.attachments.map((attachment, index) => (
-                  <li>
-                    <a
-                      href={feedbackAttachmentPath(attachment.id)}
-                      target="_blank"
-                      rel="noopener"
-                      class="block overflow-hidden rounded-md border border-rule hover:border-primary"
-                    >
-                      <img
-                        src={feedbackAttachmentPath(attachment.id)}
-                        alt={`Screenshot ${index + 1} from ${feedback.user.name}`}
-                        loading="lazy"
-                        class="w-full"
-                      />
-                    </a>
-                    <p class="mt-1 text-xs text-ink-muted">
-                      {attachment.source === "CAPTURE"
-                        ? "Captured in the browser (a redraw of the page, not a pixel-exact screenshot)"
-                        : "Uploaded by the student"}
-                      {` · ${formatBytes(attachment.size)}`}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )
-        }
+        {feedback.attachments.length > 0 && (
+          <Card as="section" aria-labelledby="feedback-screenshots">
+            <h2 id="feedback-screenshots" class={SECTION}>Screenshots</h2>
+            <ul class="space-y-4">
+              {feedback.attachments.map((attachment, index) => (
+                <li>
+                  <a
+                    href={feedbackAttachmentPath(attachment.id)}
+                    target="_blank"
+                    rel="noopener"
+                    class:list={["block overflow-hidden rounded-lg border border-hairline transition-colors hover:border-ink-primary/40 motion-reduce:transition-none", FOCUS_RING]}
+                  >
+                    <img
+                      src={feedbackAttachmentPath(attachment.id)}
+                      alt={`Screenshot ${index + 1} from ${feedback.user.name}`}
+                      loading="lazy"
+                      class="w-full"
+                    />
+                  </a>
+                  <p class="mt-1 text-xs text-ink-muted">
+                    {attachment.source === "CAPTURE"
+                      ? "Captured in the browser (a redraw of the page, not a pixel-exact screenshot)"
+                      : "Uploaded by the student"}
+                    {` · ${formatBytes(attachment.size)}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
-        {
-          context.errors.length > 0 && (
-            <Card>
-              <h3 class="mb-3 text-lg font-semibold text-white">
-                Errors the page logged
-              </h3>
-              <ol class="space-y-2 font-mono text-xs text-ink-secondary">
-                {context.errors.map((clientError) => (
-                  <li class="break-words rounded border border-rule bg-dark/60 p-2">
-                    <span class="text-ink-primary">{clientError.message}</span>
-                    {clientError.source && (
-                      <span class="block text-ink-muted">{clientError.source}</span>
-                    )}
-                    {clientError.at && (
-                      <span class="block text-ink-muted">{clientError.at}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </Card>
-          )
-        }
+        {context.errors.length > 0 && (
+          <Card as="section" aria-labelledby="feedback-errors">
+            <h2 id="feedback-errors" class={SECTION}>Errors the page logged</h2>
+            <ol class="space-y-2 font-mono text-xs text-ink-secondary">
+              {context.errors.map((clientError) => (
+                <li class="break-words rounded-lg border border-hairline bg-ground/50 p-2">
+                  <span class="text-ink-primary">{clientError.message}</span>
+                  {clientError.source && <span class="block text-ink-muted">{clientError.source}</span>}
+                  {clientError.at && <span class="block text-ink-muted">{clientError.at}</span>}
+                </li>
+              ))}
+            </ol>
+          </Card>
+        )}
       </div>
 
       <div class="min-w-0 space-y-6">
-        <Card>
-          <h3 class="mb-4 text-lg font-semibold text-white">Respond</h3>
+        <Card as="section" aria-labelledby="feedback-respond">
+          <h2 id="feedback-respond" class={SECTION}>Respond</h2>
           <form method="POST" class="space-y-4">
-            <div>
-              <label for="status" class="mb-1 block text-sm text-ink-secondary"
-                >Status</label
-              >
-              <select
-                id="status"
-                name="status"
-                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
-              >
-                {
-                  FEEDBACK_STATUSES.map((status) => (
-                    <option value={status} selected={status === feedback.status}>
-                      {FEEDBACK_ADMIN_STATUS_LABELS[status]}
-                    </option>
-                  ))
-                }
-              </select>
-            </div>
-            <div>
-              <label for="themeId" class="mb-1 block text-sm text-ink-secondary"
-                >Theme</label
-              >
-              <select
-                id="themeId"
+            <SelectField
+              name="status"
+              label="Status"
+              defaultValue={values.status}
+              options={FEEDBACK_STATUSES.map((status) => ({ value: status, label: FEEDBACK_ADMIN_STATUS_LABELS[status] }))}
+            />
+            <div class="space-y-1">
+              <SelectField
                 name="themeId"
-                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
-              >
-                <option value="">Not on a theme</option>
-                {
-                  themeOptions.map((theme) => (
-                    <option value={theme.id} selected={theme.id === feedback.theme?.id}>
-                      {theme.title}
-                    </option>
-                  ))
-                }
-              </select>
-              {
-                feedback.theme && (
-                  <a
-                    href={themeAdminPath(feedback.theme.id)}
-                    class="mt-1 inline-block text-xs text-primary hover:underline"
-                  >
-                    Open theme
-                  </a>
-                )
-              }
-            </div>
-            <label class="flex items-start gap-2 text-sm text-ink-secondary">
-              <input
-                type="checkbox"
-                name="sensitive"
-                checked={feedback.sensitive}
-                class="mt-0.5"
+                label="Theme"
+                defaultValue={values.themeId}
+                placeholder="Not on a theme"
+                options={themeOptions.map((theme) => ({ value: theme.id, label: theme.title }))}
               />
-              <span>
-                Sensitive: personal or wellbeing content. Keeps it off themes and out
-                of anything public.
-              </span>
-            </label>
-            <div>
-              <label for="response" class="mb-1 block text-sm text-ink-secondary"
-                >Reply to {feedback.user.name}{" "}<span class="text-ink-muted">(they see this)</span></label
-              >
-              <textarea
-                id="response"
-                name="response"
-                rows="4"
-                maxlength={MAX_FEEDBACK_RESPONSE_LENGTH}
-                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
-                >{feedback.response ?? ""}</textarea
-              >
+              {feedback.theme && (
+                <a href={themeAdminPath(feedback.theme.id)} class:list={["inline-flex min-h-11 items-center text-sm font-semibold", TEXT_LINK]}>
+                  Open theme
+                </a>
+              )}
             </div>
-            <div>
-              <label
-                for="resolutionUrl"
-                class="mb-1 block text-sm text-ink-secondary"
-                >Link to the fix <span class="text-ink-muted">(they see this)</span></label
-              >
-              <input
-                id="resolutionUrl"
-                name="resolutionUrl"
-                type="url"
-                value={feedback.resolutionUrl ?? ""}
-                placeholder="https://github.com/…/pull/123"
-                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
-              />
-            </div>
-            <div>
-              <label for="adminNote" class="mb-1 block text-sm text-ink-secondary"
-                >Internal note <span class="text-ink-muted">(staff and agents only)</span></label
-              >
-              <textarea
-                id="adminNote"
-                name="adminNote"
-                rows="3"
-                maxlength={MAX_FEEDBACK_ADMIN_NOTE_LENGTH}
-                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
-                >{feedback.adminNote ?? ""}</textarea
-              >
-            </div>
-            <button
-              type="submit"
-              class="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark hover:bg-primary/90"
-            >
-              Save
-            </button>
+            <Checkbox
+              name="sensitive"
+              label="Sensitive"
+              hint="Personal or wellbeing content. Keeps it off themes and out of anything public."
+              defaultChecked={values.sensitive}
+            />
+            <TextAreaField
+              name="response"
+              label={`Reply to ${feedback.user.name}`}
+              hint="They see this on their feedback page."
+              optional
+              rows={4}
+              maxLength={MAX_FEEDBACK_RESPONSE_LENGTH}
+              defaultValue={values.response}
+            />
+            <TextField
+              name="resolutionUrl"
+              type="url"
+              label="Link to the fix"
+              hint="They see this too."
+              optional
+              placeholder="https://github.com/…/pull/123"
+              defaultValue={values.resolutionUrl}
+            />
+            <TextAreaField
+              name="adminNote"
+              label="Internal note"
+              hint="Staff and agents only."
+              optional
+              rows={3}
+              maxLength={MAX_FEEDBACK_ADMIN_NOTE_LENGTH}
+              defaultValue={values.adminNote}
+            />
+            <Button type="submit" variant="primary" size="lg">Save changes</Button>
           </form>
         </Card>
 
-        <Card>
-          <h3 class="mb-4 text-lg font-semibold text-white">Context</h3>
+        <Card as="section" aria-labelledby="feedback-context">
+          <h2 id="feedback-context" class={SECTION}>Context</h2>
           <dl class="space-y-3 text-sm">
-            {
-              facts.map(([label, value]) => (
-                <div>
-                  <dt class="text-ink-muted">{label}</dt>
-                  <dd class="break-words text-ink-primary">{value}</dd>
-                </div>
-              ))
-            }
+            {facts.map(([label, value]) => (
+              <div>
+                <dt class="text-ink-muted">{label}</dt>
+                <dd class="break-words text-ink-primary">{value}</dd>
+              </div>
+            ))}
           </dl>
         </Card>
       </div>

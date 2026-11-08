@@ -45,6 +45,7 @@ function seeded() {
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MENTOR}',id FROM Roles WHERE name='MENTOR';
     INSERT INTO mentor_profile(userId,headline,bio,areas,formats,monthlyCapacity,paused) VALUES
       ('${MENTOR}','Backend engineer','Reviews APIs.','["Code review"]','["WRITTEN_REVIEW"]',3,0);
+    INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
     UPDATE feature_flag SET audience='ALL';`);
   const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
   // The student has agreed to the habits, so their channel pages show the conversation; the admin has
@@ -77,6 +78,7 @@ const PAGES = {
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
+  "admin feedback detail": { path: () => "/admin/feedback/feedback", page: () => import("@/pages/admin/feedback/[id].astro"), user: ADMIN, id: "feedback" },
   "admin feedback themes": { path: () => "/admin/feedback/themes", page: () => import("@/pages/admin/feedback/themes/index.astro"), user: ADMIN },
   "admin feedback": { path: () => "/admin/feedback", page: () => import("@/pages/admin/feedback/index.astro"), user: ADMIN },
   "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
@@ -89,7 +91,8 @@ type PageName = keyof typeof PAGES;
 async function visit(name: PageName) {
   const { db, cohortChannel } = seeded();
   Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production" });
-  const { path, page, user: userId } = PAGES[name];
+  const entry = PAGES[name];
+  const { path, page, user: userId } = entry;
   const user = { id: userId, name: "Synthetic", email: `${userId}@example.test`, image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" } });
   const { default: Page } = await page();
@@ -98,7 +101,8 @@ async function visit(name: PageName) {
   // waitUntil, off the response's path; it settles after the trace, before the database closes.
   const deferred: Promise<unknown>[] = [];
   const locals = { cfContext: { waitUntil: (task: Promise<unknown>) => deferred.push(task) } } as unknown as App.Locals;
-  const params = { slug: cohortChannel, id: DIRECT };
+  // A detail page names its record; the conversation page reads the direct channel.
+  const params = { slug: cohortChannel, id: "id" in entry ? entry.id : DIRECT };
   const context = {
     url, request: new Request(url), locals, params,
     cookies: { get: () => undefined, set: () => {} },
@@ -139,6 +143,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 3 },
   "admin curricula": { d1: 14, depth: 3 },
+  // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
+  "admin feedback detail": { d1: 16, depth: 3 },
   "admin feedback themes": { d1: 14, depth: 3 },
   "admin feedback": { d1: 15, depth: 3 },
   "admin feature flags": { d1: 14, depth: 3 },
