@@ -1,285 +1,271 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  Card,
+  Chip,
+  ConfirmStep,
+  DescriptionItem,
+  DescriptionList,
+  Notice,
+  PageHeader,
+  StatusChip,
+  confirmHref,
+  confirmingAction,
+  linkClass,
+  statusTone,
+  withoutConfirm,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { PROJECT_TRANSITIONS } from "@/lib/talent/transitions";
 import { budgetLabel } from "@/lib/talent/budget";
 import { parseSkillsJson } from "@/lib/talent/profile";
-import {
-  validateProjectTransition,
-  separateInterests,
-} from "@/lib/talent/admin-review";
+import { separateInterests } from "@/lib/talent/admin-review";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { formatMomentDate } from "@/lib/display-date";
 
+type ProjectStatus = (typeof schema.clientProject.$inferSelect)["status"];
+
+const LIST_PATH = "/admin/projects";
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 
-if (!id) return Astro.redirect("/admin/projects");
+if (!id) return Astro.redirect(LIST_PATH);
+
+/** What each change says on its button, and once it is done. */
+const ACTIONS: Partial<Record<ProjectStatus, { label: string; done: string }>> = {
+  APPROVED: { label: "Accept", done: "Project accepted" },
+  MATCHED: { label: "Mark matched", done: "Project marked matched" },
+  REJECTED: { label: "Decline", done: "Project declined" },
+  CLOSED: { label: "Close", done: "Project closed" },
+};
+// Declining and closing are final: nothing moves a project on from either. They ask first, on
+// the page itself; accepting and matching can still be followed by closing.
+const CONFIRMED = { decline: "REJECTED", close: "CLOSED" } as const satisfies Record<string, ProjectStatus>;
+const isStatus = (value: unknown): value is ProjectStatus =>
+  typeof value === "string" && Object.hasOwn(PROJECT_TRANSITIONS, value);
+const label = (status: ProjectStatus) => statusTone("project", status).label.toLowerCase();
+const allowedFrom = (status: ProjectStatus): ProjectStatus[] => (PROJECT_TRANSITIONS[status] ?? []).filter(isStatus);
 
 let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const newStatus = formData.get("status") as string;
+  const target = formData.get("status");
+  // The status the page showed when the admin chose: a change made since then is not overwritten.
+  const expected = formData.get("expectedStatus");
+  try {
+    const current = await db.query.clientProject.findFirst({
+      where: eq(schema.clientProject.id, id),
+      columns: { status: true },
+    });
+    if (!current) return Astro.redirect(LIST_PATH, 303);
 
-  const current = await db.query.clientProject.findFirst({
-    where: eq(schema.clientProject.id, id),
-    columns: { status: true },
-  });
-
-  if (!current) return Astro.redirect("/admin/projects");
-
-  const validation = validateProjectTransition(current.status, newStatus);
-  if (!validation.valid) {
-    actionError = validation.reason;
-    Astro.response.status = 400;
-  } else {
-    await db
-      .update(schema.clientProject)
-      .set({
-        status: newStatus as
-          | "PENDING"
-          | "APPROVED"
-          | "REJECTED"
-          | "MATCHED"
-          | "CLOSED",
-      })
-      .where(eq(schema.clientProject.id, id));
-
-    return Astro.redirect(`/admin/projects/${id}`);
+    if (expected !== current.status) {
+      actionError = "Someone changed this project while you were looking at it. Check its status below before changing it again.";
+      Astro.response.status = 400;
+    } else if (!isStatus(target) || !allowedFrom(current.status).includes(target)) {
+      // The stored values ("PENDING", "CLOSED") are said as the page says them.
+      actionError = isStatus(target)
+        ? `A project that is ${label(current.status)} can't be changed to ${label(target)}. Its status below is the current one.`
+        : "Choose one of the changes below.";
+      Astro.response.status = 400;
+    } else {
+      // Only from the status just read, so two admins acting at once can't both move it.
+      const changed = await db
+        .update(schema.clientProject)
+        .set({ status: target })
+        .where(and(eq(schema.clientProject.id, id), eq(schema.clientProject.status, current.status)))
+        .returning({ id: schema.clientProject.id });
+      if (changed.length > 0) {
+        return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: ACTIONS[target]?.done ?? "Status changed" });
+      }
+      actionError = "Someone changed this project while you were looking at it. Check its status below before changing it again.";
+      Astro.response.status = 400;
+    }
+  } catch {
+    actionError = "The database didn't answer, so nothing changed. Try again in a moment.";
+    Astro.response.status = 503;
   }
 }
 
-const project = await db.query.clientProject.findFirst({
-  where: eq(schema.clientProject.id, id),
-  with: {
-    projectInterests: {
-      with: {
-        profile: {
-          with: { user: true },
+// The project and the Admin space are independent reads: one round trip, not two.
+const [project, spaces] = await Promise.all([
+  db.query.clientProject.findFirst({
+    where: eq(schema.clientProject.id, id),
+    with: {
+      projectInterests: {
+        with: {
+          profile: {
+            with: { user: true },
+          },
         },
+        orderBy: (pi, { desc }) => [desc(pi.createdAt)],
       },
-      orderBy: (pi, { desc }) => [desc(pi.createdAt)],
     },
-  },
-});
+  }),
+  resolveSpacePage(Astro.locals, "adminProjects"),
+]);
 
-if (!project) return Astro.redirect("/admin/projects");
+if (!project) return Astro.redirect(LIST_PATH);
 
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
 const skills = parseSkillsJson(project.skills);
-const allowed = PROJECT_TRANSITIONS[project.status] ?? [];
-
+const allowed = allowedFrom(project.status);
 const { interested, withdrawn } = separateInterests(project.projectInterests);
-
-const TRANSITION_LABELS: Record<string, string> = {
-  APPROVED: "Approve",
-  REJECTED: "Reject",
-  MATCHED: "Mark matched",
-  CLOSED: "Close",
-};
-
-const TRANSITION_COLORS: Record<string, string> = {
-  APPROVED: "bg-green-700 text-white hover:bg-green-800",
-  REJECTED: "bg-red-600 text-white hover:bg-red-700",
-  MATCHED: "bg-indigo-600 text-white hover:bg-indigo-700",
-  CLOSED: "bg-gray-600 text-white hover:bg-gray-700",
-};
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminProjects");
+const asking = confirmingAction(
+  Astro.url,
+  (Object.keys(CONFIRMED) as (keyof typeof CONFIRMED)[]).filter((action) => allowed.includes(CONFIRMED[action])),
+);
+const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
+const builderName = (pi: (typeof project.projectInterests)[number]) => pi.profile.user?.name ?? pi.profile.handle;
 ---
 
-<AdminLayout title="Project Detail" spaces={spaces}>
+<AdminLayout title={project.title} titlePrefix={actionError ? "Error: " : ""} spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/projects" class="text-sm text-primary hover:underline">
-      &larr; Back to Client Projects
-    </a>
+    <BackLink href={LIST_PATH}>Client projects</BackLink>
 
+    <PageHeader title={project.title}>
+      <span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusChip domain="project" status={project.status} />
+        <span>From {project.organization} · submitted {formatMomentDate(project.createdAt)}</span>
+      </span>
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
+      <Notice tone="danger" focusOnLoad id="project-failure" title="The status didn't change">
         {actionError}
-      </p>
+      </Notice>
     )}
-
-    <div class="flex items-center gap-3">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{project.title}</PageTitle>
-      <Badge
-        variant={
-          project.status.toLowerCase() as
-            | "pending"
-            | "approved"
-            | "rejected"
-            | "matched"
-            | "closed"
-        }
-      />
-    </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Client Contact</h3>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Organization</dt>
-            <dd class="text-white">{project.organization}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Contact Name</dt>
-            <dd class="text-white">{project.contactName}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Contact Email</dt>
-            <dd>
-              <a
-                href={`mailto:${project.contactEmail}`}
-                class="text-primary hover:underline"
-              >
-                {project.contactEmail}
-              </a>
-            </dd>
-          </div>
-        </dl>
+        <div class="grid gap-4">
+          <h2 class="text-lg text-ink-primary">Client</h2>
+          <DescriptionList>
+            <DescriptionItem term="Organisation">{project.organization}</DescriptionItem>
+            <DescriptionItem term="Contact">{project.contactName}</DescriptionItem>
+            <DescriptionItem term="Email">
+              <a href={`mailto:${project.contactEmail}`} class={linkClass()}>{project.contactEmail}</a>
+            </DescriptionItem>
+          </DescriptionList>
+        </div>
       </Card>
 
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Project Details</h3>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Budget</dt>
-            <dd class="text-white">{budgetLabel(project.budgetBand)}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Timeline</dt>
-            <dd class="text-white">{project.timeline ?? "—"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Submitted</dt>
-            <dd class="text-white">
-              {project.createdAt
-                ? new Date(project.createdAt).toLocaleDateString()
-                : "—"}
-            </dd>
-          </div>
-        </dl>
+        <div class="grid gap-4">
+          <h2 class="text-lg text-ink-primary">Project</h2>
+          <DescriptionList>
+            <DescriptionItem term="Budget">{budgetLabel(project.budgetBand)}</DescriptionItem>
+            <DescriptionItem term="Timeline">{project.timeline ?? "Not given"}</DescriptionItem>
+            <DescriptionItem term="Submitted">{formatMomentDate(project.createdAt)}</DescriptionItem>
+          </DescriptionList>
+        </div>
       </Card>
     </div>
 
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Description</h3>
-      <p class="text-sm text-white/80">{project.description}</p>
-
-      {skills.length > 0 && (
-        <div class="mt-4 flex flex-wrap gap-2">
-          {skills.map((skill) => (
-            <span class="rounded-full bg-teal/20 px-3 py-1 text-xs font-medium text-white/80">
-              {skill}
-            </span>
-          ))}
-        </div>
-      )}
+      <div class="grid gap-4">
+        <h2 class="text-lg text-ink-primary">Description</h2>
+        <p class="whitespace-pre-line text-sm text-ink-secondary">{project.description}</p>
+        {skills.length > 0 && (
+          <ul class="flex flex-wrap gap-2" aria-label="Skills">
+            {skills.map((skill) => (
+              <li><Chip>{skill}</Chip></li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
 
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">
-        Interested Builders
-      </h3>
-      {interested.length === 0 && withdrawn.length === 0 ? (
-        <p class="text-sm text-ink-muted">
-          No builders have raised a hand yet.
-        </p>
-      ) : (
-        <div class="space-y-6">
-          {interested.length > 0 && (
-            <div class="space-y-3">
-              {interested.map((pi) => (
-                <div class="rounded-md border border-teal/10 p-4">
-                  <div class="flex items-center gap-3">
-                    <span class="font-medium text-white">
-                      {pi.profile.user?.name ?? "Unknown"}
-                    </span>
-                    <a
-                      href={`/talent/${pi.profile.handle}`}
-                      class="text-sm text-primary hover:underline"
-                    >
-                      @{pi.profile.handle}
-                    </a>
-                    <a
-                      href={`/admin/profiles/${pi.profile.id}`}
-                      class="text-sm text-ink-muted hover:text-ink-secondary"
-                    >
-                      admin profile
-                    </a>
-                    <Badge variant="interested" />
-                  </div>
-                  {pi.note && (
-                    <p class="mt-2 text-sm text-ink-secondary">{pi.note}</p>
-                  )}
-                  {pi.createdAt && (
-                    <p class="mt-1 text-xs text-ink-muted">
-                      {new Date(pi.createdAt).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {withdrawn.length > 0 && (
-            <div class="space-y-3 opacity-50">
-              <p class="text-xs uppercase text-ink-muted">Withdrawn</p>
-              {withdrawn.map((pi) => (
-                <div class="rounded-md border border-teal/10 p-3">
-                  <div class="flex items-center gap-3">
-                    <span class="text-sm text-ink-secondary">
-                      {pi.profile.user?.name ?? "Unknown"}
-                    </span>
-                    <a
-                      href={`/talent/${pi.profile.handle}`}
-                      class="text-xs text-ink-muted hover:underline"
-                    >
-                      @{pi.profile.handle}
-                    </a>
-                    <Badge variant="withdrawn" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <div class="grid gap-2" data-interests>
+        <h2 class="text-lg text-ink-primary">Interested builders</h2>
+        {interested.length === 0 && withdrawn.length === 0 ? (
+          <p class="text-sm text-ink-secondary">None yet. Builders who raise a hand on this project show here.</p>
+        ) : (
+          <>
+            {interested.length > 0 ? (
+              <ul class="divide-y divide-hairline">
+                {interested.map((pi) => (
+                  <li class="grid gap-1 py-3 first:pt-0">
+                    <div class="flex flex-wrap items-center gap-x-4">
+                      <span class="font-semibold text-ink-primary">{builderName(pi)}</span>
+                      <a href={`/talent/${pi.profile.handle}`} class={ROW_LINK}>@{pi.profile.handle}</a>
+                      <a href={`/admin/profiles/${pi.profile.id}`} class={ROW_LINK}>
+                        Admin view<span class="sr-only"> of {builderName(pi)}</span>
+                      </a>
+                    </div>
+                    {pi.note && <p class="whitespace-pre-line text-sm text-ink-secondary">{pi.note}</p>}
+                    {pi.createdAt && <p class="text-xs text-ink-muted">Raised a hand {formatMomentDate(pi.createdAt)}</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="text-sm text-ink-secondary">Nobody is interested now.</p>
+            )}
+            {withdrawn.length > 0 && (
+              <div class="grid gap-1 border-t border-hairline pt-3" data-withdrawn>
+                <h3 class="text-sm text-ink-secondary">Withdrawn</h3>
+                <ul>
+                  {withdrawn.map((pi) => (
+                    <li class="flex flex-wrap items-center gap-x-4 text-sm text-ink-secondary">
+                      <span>{builderName(pi)}</span>
+                      <a href={`/talent/${pi.profile.handle}`} class={ROW_LINK}>@{pi.profile.handle}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </Card>
 
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>
-      {allowed.length > 0 ? (
-        <div class="flex flex-wrap gap-2">
-          {allowed.map((status) => (
-            <form method="POST">
-              <input type="hidden" name="status" value={status} />
-              <button
-                type="submit"
-                class:list={[
-                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                  TRANSITION_COLORS[status] ?? "bg-teal/30 text-white hover:bg-teal/40",
-                ]}
-              >
-                {TRANSITION_LABELS[status] ?? status}
-              </button>
-            </form>
-          ))}
-        </div>
-      ) : (
-        <p class="text-sm text-ink-muted">
-          No actions available — this project is in a terminal state.
-        </p>
-      )}
+      <div class="grid gap-4" data-status-actions>
+        <h2 class="text-lg text-ink-primary">Change status</h2>
+        {allowed.length === 0 ? (
+          <p class="text-sm text-ink-secondary">It's {label(project.status)}, and that's final: the status can't change again.</p>
+        ) : asking ? (
+          <ConfirmStep
+            title={asking === "decline" ? `Decline ${project.title}?` : `Close ${project.title}?`}
+            confirmLabel={asking === "decline" ? "Decline project" : "Close project"}
+            cancelHref={withoutConfirm(Astro.url)}
+            action={Astro.url.pathname}
+            fields={{ expectedStatus: project.status, status: CONFIRMED[asking] }}
+          >
+            {asking === "decline"
+              ? "Builders never see it, and nothing moves it on from there."
+              : "Builders stop seeing it, and nothing moves it on from there."}
+          </ConfirmStep>
+        ) : (
+          <>
+            <p class="text-sm text-ink-secondary">It's {label(project.status)} now.</p>
+            <div class="flex flex-wrap gap-3">
+              {allowed.filter((target) => target === "APPROVED" || target === "MATCHED").map((target) => (
+                <form method="POST" action={Astro.url.pathname}>
+                  <input type="hidden" name="expectedStatus" value={project.status} />
+                  <input type="hidden" name="status" value={target} />
+                  <Button type="submit" variant="quiet">{ACTIONS[target]?.label}</Button>
+                </form>
+              ))}
+              {(Object.keys(CONFIRMED) as (keyof typeof CONFIRMED)[])
+                .filter((action) => allowed.includes(CONFIRMED[action]))
+                .map((action) => (
+                  <ButtonLink variant="quiet" href={confirmHref(Astro.url, action)}>{ACTIONS[CONFIRMED[action]]?.label}</ButtonLink>
+                ))}
+            </div>
+          </>
+        )}
+      </div>
     </Card>
   </div>
 </AdminLayout>

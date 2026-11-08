@@ -207,21 +207,16 @@ test.describe("admin review surfaces", () => {
 
     if (isMobile) return;
 
-    // The page's own content: the Admin space's sidebar (T14) has matching spans of its own.
+    // The status chip under the title carries the stored value; it reads "In review" and "Accepted".
     const main = page.locator("main");
-    const badge = main.locator(".flex.items-center.gap-3 span").first();
-    const statusText = (await badge.textContent())?.trim().toUpperCase() ?? "";
-
-    if (statusText === "PENDING") {
-      await main.getByRole("button", { name: /approve/i }).click();
-      await expect(
-        main.locator("span", { hasText: /approved/i }).first(),
-      ).toBeVisible();
+    const status = main.locator("[data-page-header] [data-status]");
+    if ((await status.getAttribute("data-status")) === "PENDING") {
+      await main.getByRole("button", { name: "Accept", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Project accepted" })).toBeVisible();
     }
 
-    await expect(
-      main.locator("span", { hasText: /approved/i }).first(),
-    ).toBeVisible();
+    await expect(status).toHaveAttribute("data-status", "APPROVED");
+    await expect(status).toHaveText("Accepted");
 
     await page.screenshot({
       path: evidence("admin-project-pending-final"),
