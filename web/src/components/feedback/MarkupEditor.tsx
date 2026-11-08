@@ -1,9 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  PiArrowCounterClockwiseBold,
-  PiPencilSimpleBold,
-  PiSquareBold,
-} from "react-icons/pi";
+import { PiArrowCounterClockwise, PiPencilSimple, PiSquare } from "react-icons/pi";
+import { Button, Pill } from "@/components/platform/ui";
 import { canvasToBlob } from "./feedback-client";
 
 type Point = readonly [number, number];
@@ -150,20 +147,11 @@ export default function MarkupEditor({
     }
   }
 
-  const toolButton = (value: Tool, label: string, Icon: typeof PiPencilSimpleBold) => (
-    <button
-      type="button"
-      aria-pressed={tool === value}
-      onClick={() => setTool(value)}
-      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        tool === value
-          ? "bg-primary text-dark"
-          : "text-ink-secondary hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-      }`}
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
+  const toolButton = (value: Tool, label: string, Icon: typeof PiPencilSimple) => (
+    <Pill pressed={tool === value} onClick={() => setTool(value)}>
+      <Icon className="size-4" aria-hidden="true" />
       {label}
-    </button>
+    </Pill>
   );
 
   return (
@@ -171,19 +159,21 @@ export default function MarkupEditor({
       <p className="text-sm text-ink-secondary">
         Circle or box the part you mean. It helps more than you'd think.
       </p>
-      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-rule bg-dark/60 p-1">
-        {toolButton("box", "Box", PiSquareBold)}
-        {toolButton("pen", "Pen", PiPencilSimpleBold)}
-        <button
-          type="button"
+      <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-hairline bg-ground/40 p-1">
+        <legend className="sr-only">Drawing tools</legend>
+        {toolButton("box", "Box", PiSquare)}
+        {toolButton("pen", "Pen", PiPencilSimple)}
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<PiArrowCounterClockwise className="size-4" />}
           onClick={() => setShapes((previous) => previous.slice(0, -1))}
           disabled={shapes.length === 0}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:text-ink-primary disabled:opacity-40"
+          className="ml-auto"
         >
-          <PiArrowCounterClockwiseBold className="h-4 w-4" aria-hidden="true" />
           Undo
-        </button>
-      </div>
+        </Button>
+      </fieldset>
       <canvas
         ref={canvasRef}
         aria-label="Screenshot. Drag to draw on it."
@@ -191,24 +181,15 @@ export default function MarkupEditor({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        className="mx-auto block h-auto max-h-[55dvh] w-auto max-w-full cursor-crosshair touch-none rounded-md border border-rule"
+        className="mx-auto block h-auto max-h-[55dvh] w-auto max-w-full cursor-crosshair touch-none rounded-lg border border-hairline"
       />
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
-        >
+        <Button variant="ghost" onClick={onCancel}>
           Keep as is
-        </button>
-        <button
-          type="button"
-          onClick={() => void finish()}
-          disabled={!ready || saving}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark transition-colors hover:bg-primary/90 disabled:opacity-40"
-        >
-          {saving ? "Saving…" : "Done"}
-        </button>
+        </Button>
+        <Button variant="primary" onClick={() => void finish()} disabled={!ready} loading={saving}>
+          Done
+        </Button>
       </div>
     </div>
   );

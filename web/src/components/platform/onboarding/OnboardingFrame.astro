@@ -17,7 +17,7 @@ import "@/components/platform/shell/spaces-shell.css";
 import "./onboarding.css";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
-import FeedbackWidget from "@/components/feedback/FeedbackWidget";
+import Feedback from "@/components/feedback/Feedback.astro";
 import AccountMenu, { type ShellAccount } from "@/components/platform/shell/AccountMenu";
 import SheetTransition from "@/components/platform/shell/SheetTransition.astro";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
@@ -74,7 +74,7 @@ const signedIn = Boolean(Astro.locals.user);
         </main>
       </div>
     </div>
-    {account.feedback && <FeedbackWidget client:idle showLauncher={false} />}
+    {account.feedback && <Feedback launcher={false} />}
   </body>
 </html>
 

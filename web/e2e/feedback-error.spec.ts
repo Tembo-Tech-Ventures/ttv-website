@@ -11,18 +11,23 @@ test("a rate-limited submission preserves the draft without claiming success or 
     await route.fulfill({ status: 429, json: { error: message } });
   });
   await page.goto("/feedback.html");
+  // Nothing of the form is on the page until the launcher is pressed: it loads then.
+  await expect(page.getByTestId("feedback-panel")).toHaveCount(0);
   await page.getByRole("button", { name: "Feedback", exact: true }).click();
   const panel = page.getByTestId("feedback-panel");
+  await expect(page.getByRole("dialog", { name: "Send feedback" })).toBeVisible();
   // The fixture must load the actual utilities, not pass against an unstyled dialog.
   await expect(panel).toHaveCSS("display", "flex");
   await expect(panel).toHaveCSS("flex-direction", "column");
   await expect(panel).toHaveCSS("overflow-y", "auto");
   const bounds = await panel.boundingBox();
   expect(bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-  await panel.getByText("Idea", { exact: true }).click();
+  await panel.getByRole("button", { name: "Idea", exact: true }).click();
   await panel.getByLabel("Your feedback").fill(draft);
   await panel.getByRole("button", { name: "Send feedback" }).click();
-  await expect(panel.getByRole("alert")).toHaveText(message);
+  // A danger notice: what went wrong, and that the note is kept.
+  await expect(panel.getByRole("alert")).toContainText(message);
+  await expect(panel.getByRole("alert")).toContainText("Your note is still here.");
   await expect(panel.getByLabel("Your feedback")).toHaveValue(draft);
   await expect(panel.getByText("Thank you, it's with the team.")).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Send feedback" })).toBeEnabled();

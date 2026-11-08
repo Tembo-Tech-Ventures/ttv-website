@@ -21,14 +21,13 @@ const START_PAGE = "/dashboard/feedback";
 
 /**
  * The floating launcher. The spaces shell has none (the account menu opens the
- * form), so there the page's own "Send feedback" button opens it. That button
- * is static markup the widget listens for once it hydrates (client:idle), so
- * wait for every island first.
+ * form), so there the page's own "Send feedback" button opens it. Both are
+ * static markup the feedback loader answers: the form loads on that press.
  */
 async function openFeedback(page: Page) {
   const inSpaces = (await page.locator(".spaces-shell").count()) > 0;
-  if (inSpaces) await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await page.getByRole("button", { name: inSpaces ? "Send feedback" : "Feedback", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Send feedback" })).toBeVisible();
 }
 
 async function contextFor(browser: Browser, token: string, baseURL: string | undefined) {
@@ -68,7 +67,7 @@ test.describe("student feedback loop", () => {
     const panel = page.getByTestId("feedback-panel");
     await expect(panel).toBeVisible();
 
-    await panel.getByText("Something's broken").click();
+    await panel.getByRole("button", { name: "Something's broken", exact: true }).click();
     await panel.getByLabel("Your feedback").fill(note);
     await panel.getByRole("button", { name: "Capture this page" }).click();
 
@@ -140,7 +139,7 @@ test.describe("student feedback loop", () => {
     await page.goto(START_PAGE);
     await openFeedback(page);
     const panel = page.getByTestId("feedback-panel");
-    await panel.getByText("Idea").click();
+    await panel.getByRole("button", { name: "Idea", exact: true }).click();
     await panel.getByLabel("Your feedback").fill(note);
     const submission = page.waitForResponse((response) =>
       new URL(response.url()).pathname === "/api/feedback" && response.request().method() === "POST"

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "@/lib/platform/contracts";
 import { meByPersona } from "@/lib/platform/fixtures";
 import { OPEN_FEEDBACK_EVENT } from "@/components/feedback/feedback-client";
-import { buttonClass } from "@/components/platform/ui";
+import { buttonClass, INSET_FOCUS_RING } from "@/components/platform/ui";
 import { SHELL_OVERLAY_EVENT, type ShellOverlayRequest } from "./overlays";
 import SpacesShell from "./SpacesShell";
 
@@ -147,6 +147,13 @@ describe("SpacesShell controls come from the kit", () => {
     const tagline = q(".spaces-shell__tagline");
     expect(tagline.textContent).toBe("Tech Ventures");
     expect(tagline.className).not.toMatch(/uppercase|tracking-/);
+  });
+
+  it("rings the account menu's rows inside their edge, with the kit's inset recipe", async () => {
+    await mount();
+    const rows = [...container.querySelectorAll<HTMLElement>(".spaces-account__panel li > a, .spaces-account__panel li > button, .spaces-account__panel form > button")];
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) for (const name of INSET_FOCUS_RING.split(" ")) expect(row.classList).toContain(name);
   });
 
   it("casts the account menu's shadow from the theme, with no raw colour or arbitrary value anywhere in the frame", () => {
