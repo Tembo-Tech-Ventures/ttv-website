@@ -57,7 +57,6 @@ function seeded() {
     INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown) VALUES ('draft','profile','first-draft','A first draft','Fictional.');
     INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('contribution','synthetic-achieng','Savings tracker','Fictional work.','2026-01-01','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmation','contribution','${MENTOR}','Fictional statement.','REVIEWED_WORK',1);
-    INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.');
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description,status) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.','APPROVED');
     INSERT INTO recording(id,programId,title,processingStatus) VALUES ('recording','cohort-a','Week 3: Testing a service','complete');
     INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','recording',0,4,'Mentor','Welcome back.');
