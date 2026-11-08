@@ -21,40 +21,37 @@ test.describe("admin review surfaces", () => {
   test("profiles index renders rows for fixture profiles", async ({ page }) => {
     await page.goto("/admin/profiles");
     await expect(
-      page.getByRole("heading", { name: /profiles/i }),
+      page.getByRole("heading", { level: 1, name: "Profiles" }),
     ).toBeVisible();
 
     const table = page.locator("table");
     await expect(table).toBeVisible();
 
-    await expect(table.getByText("Amina Fixture")).toBeVisible();
-    await expect(table.getByText("Kwame Fixture")).toBeVisible();
+    await expect(table.getByRole("link", { name: "Amina Fixture" })).toBeVisible();
+    await expect(table.getByRole("link", { name: "Kwame Fixture" })).toBeVisible();
 
-    const held = page.getByRole("region", { name: "Held by check" });
-    await expect(held.getByText("Kwame Fixture")).toBeVisible();
-    await expect(
-      held.getByRole("button", { name: "Publish", exact: true }),
-    ).toBeVisible();
-    await expect(
-      held.getByRole("button", { name: "Unpublish", exact: true }),
-    ).toBeVisible();
-    await expect(
-      held.getByRole("button", { name: "Clear flag" }),
-    ).toBeVisible();
+    // Each profile in the content check's queue offers only the actions that
+    // would change it, each named by the builder it acts on.
+    const held = page.getByRole("region", { name: "Held by the content check" });
+    await expect(held.getByRole("link", { name: "Kwame Fixture" })).toBeVisible();
+    for (const action of ["Publish", "Unpublish", "Clear flag"]) {
+      await expect(
+        held.getByRole("button", { name: `${action} Kwame Fixture`, exact: true }),
+      ).toBeVisible();
+    }
 
     const unavailable = page.getByRole("region", {
-      name: "Published, needs a look (check unavailable)",
+      name: "Published while the check was unavailable",
     });
-    await expect(unavailable.getByText("Amina Fixture")).toBeVisible();
+    await expect(unavailable.getByRole("link", { name: "Amina Fixture" })).toBeVisible();
     await expect(
-      unavailable.getByRole("button", { name: "Publish", exact: true }),
-    ).toBeVisible();
-    await expect(
-      unavailable.getByRole("button", { name: "Unpublish", exact: true }),
-    ).toBeVisible();
-    await expect(
-      unavailable.getByRole("button", { name: "Clear flag" }),
-    ).toBeVisible();
+      unavailable.getByRole("button", { name: "Publish Amina Fixture", exact: true }),
+    ).toHaveCount(0);
+    for (const action of ["Unpublish", "Clear flag"]) {
+      await expect(
+        unavailable.getByRole("button", { name: `${action} Amina Fixture`, exact: true }),
+      ).toBeVisible();
+    }
 
     await page.screenshot({
       path: evidence("admin-profiles-index"),
@@ -65,7 +62,7 @@ test.describe("admin review surfaces", () => {
   test("profiles index status filter works", async ({ page }) => {
     await page.goto("/admin/profiles?status=PUBLISHED");
     const table = page.locator("table");
-    await expect(table.getByText("Amina Fixture")).toBeVisible();
+    await expect(table.getByRole("link", { name: "Amina Fixture" })).toBeVisible();
 
     await page.screenshot({
       path: evidence("admin-profiles-filtered"),
@@ -85,7 +82,7 @@ test.describe("admin review surfaces", () => {
       await page.goto("/admin/profiles");
       const kwameRow = page.locator("tr", { hasText: "Kwame Fixture" });
       await expect(kwameRow).toBeVisible();
-      await kwameRow.getByRole("link", { name: "View" }).click();
+      await kwameRow.getByRole("link", { name: "Kwame Fixture" }).click();
     }
 
     await expect(page.getByRole("heading", { level: 1, name: "Kwame Fixture" })).toBeVisible();
