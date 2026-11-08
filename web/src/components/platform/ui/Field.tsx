@@ -271,6 +271,10 @@ function Choice({ type, label, hint, error, id, name, value, className, ...rest 
 
 type ChoiceCardProps = ChoiceProps & {
   type?: "radio" | "checkbox";
+  /** A small decorative mark before the words, such as a `PersonMarker` for who the choice makes you. */
+  mark?: ReactNode;
+  /** A line under the hint that is part of the choice's description, such as a status chip ("Needs approval"). */
+  detail?: ReactNode;
 };
 
 /**
@@ -279,7 +283,7 @@ type ChoiceCardProps = ChoiceProps & {
  * target; the chosen card takes the peach edge and a faint peach lift, and
  * says so with its box as well as its colour.
  */
-export function ChoiceCard({ type = "radio", label, hint, error, id, name, value, className, ...rest }: ChoiceCardProps) {
+export function ChoiceCard({ type = "radio", label, hint, error, mark, detail, id, name, value, className, ...rest }: ChoiceCardProps) {
   const fid = fieldId(id, name && value !== undefined ? `${name}-${idPart(String(value))}` : name);
   return (
     <label
@@ -295,20 +299,34 @@ export function ChoiceCard({ type = "radio", label, hint, error, id, name, value
     >
       <input
         {...rest}
-        {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
+        {...fieldAria(fid, { hint, error }, [rest["aria-describedby"], detail ? `${fid}-detail` : null].filter(Boolean).join(" ") || undefined)}
         aria-invalid={error || rest["aria-invalid"] ? true : undefined}
+        // Named by its title alone; the hint and detail describe it, so a card is not read as one long name.
+        aria-labelledby={rest["aria-labelledby"] ?? `${fid}-label`}
         id={fid}
         name={name}
         value={value}
         type={type}
         className={CHOICE_BOX}
       />
+      {mark && (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          {mark}
+        </span>
+      )}
       <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm font-semibold text-ink-primary">{label}</span>
+        <span id={`${fid}-label`} className="text-sm font-semibold text-ink-primary">
+          {label}
+        </span>
         {hint && (
           <Hint id={fid} onTint>
             {hint}
           </Hint>
+        )}
+        {detail && (
+          <span id={`${fid}-detail`} className="mt-1 flex flex-wrap gap-2">
+            {detail}
+          </span>
         )}
         {error && <ErrorText id={fid}>{error}</ErrorText>}
       </span>

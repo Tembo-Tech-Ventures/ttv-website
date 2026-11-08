@@ -32,7 +32,10 @@ describe("WelcomeChoices, as the server sends it", () => {
   it("names each checkbox by its card's title and describes it by the card's words", () => {
     const page = html();
     const mentor = page.querySelector<HTMLInputElement>("input[value=MENTOR]")!;
-    expect(page.querySelector(`#${CSS.escape(mentor.getAttribute("aria-labelledby")!)}`)?.textContent).toBe("Mentor");
+    // The kit's ChoiceCard: the whole card is the checkbox's label, its title first.
+    const label = page.querySelector(`label[for="${mentor.id}"]`)!;
+    expect(label.contains(mentor)).toBe(true);
+    expect(label.querySelector(":scope > span:not([aria-hidden]) > span")?.textContent).toBe("Mentor");
     const description = mentor.getAttribute("aria-describedby")!.split(" ")
       .map((id) => page.querySelector(`#${CSS.escape(id)}`)?.textContent).join(" ");
     expect(description).toContain("Review work that members share");
@@ -66,10 +69,12 @@ describe("WelcomeChoices, as the server sends it", () => {
   it("puts a refused post's problem first in line for focus, without JavaScript", () => {
     const page = html({ error: WELCOME.required });
     const problem = page.querySelector(`#${CHOICES_ERROR_ID}`)!;
-    expect(problem.textContent).toBe(WELCOME.required);
+    expect(problem.getAttribute("data-notice")).toBe("danger");
+    expect(problem.textContent).toContain(WELCOME.required);
     expect(problem.hasAttribute("autofocus")).toBe(true);
     expect(page.querySelector("fieldset")?.getAttribute("aria-describedby")).toBe(CHOICES_ERROR_ID);
-    expect(html().querySelector(`#${CHOICES_ERROR_ID}`)?.hasAttribute("autofocus")).toBe(false);
+    // Nothing to say, nothing shown: no empty alert waits in the page.
+    expect(html().querySelector(`#${CHOICES_ERROR_ID}`)).toBeNull();
   });
 });
 
@@ -121,10 +126,10 @@ describe("WelcomeChoices, hydrated", () => {
     const form = await mount();
     expect(press(form, "continue")).toBe(false);
     const problem = container.querySelector(`#${CHOICES_ERROR_ID}`)!;
-    expect(problem.textContent).toBe(WELCOME.required);
+    expect(problem.textContent).toContain(WELCOME.required);
     expect(problem.getAttribute("role")).toBe("alert");
     act(() => container.querySelector<HTMLInputElement>("input[value=MEMBER]")!.click());
-    expect(problem.textContent).toBe("");
+    expect(container.querySelector(`#${CHOICES_ERROR_ID}`)).toBeNull();
   });
 
   it("lets just looking around through with nothing chosen", async () => {
