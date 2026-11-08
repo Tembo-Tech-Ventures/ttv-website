@@ -82,6 +82,7 @@ const PAGES = {
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
   conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
+  conduct: { path: () => "/dashboard/community/conduct", page: () => import("@/pages/dashboard/community/conduct.astro"), user: ADMIN },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring home": { path: () => "/dashboard/mentoring", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
   "mentoring confirm": { path: () => "/dashboard/mentoring/confirm", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
@@ -179,6 +180,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Two more than PERF-2 measured: the journey's profile and entries, read with the page since PERF-3
   // (#330) in place of three API calls after hydration, each with its own middleware and auth reads.
   community: { d1: 18, depth: 3 },
+  conduct: { d1: 14, depth: 3 },
   mentors: { d1: 20, depth: 3 },
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
   // Its channel list, requests and availability start beside onboarding (depth 5 before).
