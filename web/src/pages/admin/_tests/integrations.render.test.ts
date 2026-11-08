@@ -75,11 +75,11 @@ const setCookies = (response: Response): string[] => {
   const cookies = Reflect.get(response, Symbol.for("astro.cookies")) as { consume(): Iterable<string> } | undefined;
   return [...response.headers.getSetCookie(), ...(cookies ? cookies.consume() : [])];
 };
-async function visit({ query = "", form }: { query?: string; form?: Record<string, string> } = {}) {
+async function visit({ query = "", form, locals = {} }: { query?: string; form?: Record<string, string>; locals?: Record<string, unknown> } = {}) {
   const init = form ? { method: "POST", body: new URLSearchParams(form), headers: { "Content-Type": "application/x-www-form-urlencoded" } } : {};
   const response = await container.renderToResponse(Page, {
     request: new Request(`https://ttv.invalid${PATH}${query}`, init),
-    locals: { user: { id: "synthetic-admin" }, isAdmin: true } as unknown as App.Locals,
+    locals: { user: { id: "synthetic-admin" }, isAdmin: true, ...locals } as unknown as App.Locals,
   });
   const flash = setCookies(response).join("\n");
   return { response, status: response.status, location: response.headers.get("location"), flash: decodeURIComponent(flash), body: await response.text() };
@@ -202,6 +202,16 @@ describe("integrations on the style guide", () => {
 
     store.read.mockResolvedValue({ credential: null, activity: [] });
     expect((await visit({ query: "?confirm=remove" })).body).not.toContain("data-confirm-step");
+  });
+
+  it("refuses a personal access token 403, reading and changing nothing", async () => {
+    const token = { personalAccessToken: { id: "token-1" } };
+    const read = await visit({ locals: token });
+    expect(read.status).toBe(403);
+    expect(read.body).toContain("delegated credentials cannot manage integration credentials");
+    expect((await visit({ form: { action: "remove" }, locals: token })).status).toBe(403);
+    expect(store.read).not.toHaveBeenCalled();
+    expect(store.remove).not.toHaveBeenCalled();
   });
 
   it("without the encryption key: a warning, no forms, and a change refused 403", async () => {

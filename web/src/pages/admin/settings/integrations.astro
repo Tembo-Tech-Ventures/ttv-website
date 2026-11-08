@@ -45,6 +45,11 @@ Astro.response.headers.set("Cache-Control", "no-store");
 
 const userId = Astro.locals.user?.id;
 if (!userId) return Astro.redirect("/auth/login");
+// A personal access token is delegated: it never sets or removes another credential. Agent sessions stay
+// allowed: they exist only on isolated previews, whose admin-integrations spec drives this page with one.
+if (Astro.locals.personalAccessToken) {
+  return new Response("Forbidden: delegated credentials cannot manage integration credentials.", { status: 403 });
+}
 
 const encryptionAvailable = Boolean(env.CREDENTIALS_ENCRYPTION_KEY);
 const db = drizzle(env.DB, { schema });
