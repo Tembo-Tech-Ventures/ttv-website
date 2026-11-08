@@ -146,7 +146,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
   "admin feedback detail": { d1: 16, depth: 3 },
   "admin feedback themes": { d1: 14, depth: 3 },
-  "admin feedback": { d1: 15, depth: 3 },
+  // With the seed's one note listed, its attachments are read too (one query, same depth).
+  "admin feedback": { d1: 16, depth: 3 },
   "admin feature flags": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the queue's channels waited for the flag reads.
   "admin moderation": { d1: 15, depth: 3 },
