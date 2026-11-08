@@ -1,13 +1,16 @@
 ---
+/**
+ * Cohort → Sessions → one session: its title, then the player and the transcript beside it. Each
+ * transcript line links to `?t=`, which the player starts from.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import Card from "@/components/common/Card.astro";
+import { BackLink, EmptyState, PageTitle, StatusChip } from "@/components/platform/ui";
 import SessionViewer from "@/components/recordings/SessionViewer";
-import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { parseTimestampParam } from "@/lib/recordings/time-utils";
-import { userCanAccessProgram } from "@/lib/recordings/access";
+import { programAccessible } from "@/lib/recordings/access";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
@@ -16,49 +19,52 @@ import { env } from "cloudflare:workers";
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
-const spaces = await resolveSpacePage(Astro.locals, "sessions");
-// In the shell, go straight to the list's space path instead of through its redirect.
-const sessionsHref = spaces ? SPACE_PAGE_PATHS.sessions : "/dashboard/sessions";
+const sessionsHref = SPACE_PAGE_PATHS.sessions;
 if (!id) return Astro.redirect(sessionsHref);
 
-const recording = await db.query.recording.findFirst({
-  where: eq(schema.recording.id, id),
-  with: {
-    program: true,
-    segments: {
-      orderBy: (segment, { asc }) => [asc(segment.startTime)],
-    },
-  },
-});
+// The recording and the person's cohorts (read once per request, shared with the space context)
+// start together, beside the space context rather than after it.
+const reads = Promise.all([
+  db.query.recording.findFirst({
+    where: eq(schema.recording.id, id),
+    with: { segments: { orderBy: (segment, { asc }) => [asc(segment.startTime)] } },
+  }),
+  requestCapabilities(db, Astro.locals),
+]);
+const resolved = await resolveSpacePageWith(Astro.locals, "sessions", () => reads);
+const spaces = resolved?.[0] ?? null;
+// Without the spaces shell (a token, or a context that failed to load) the page still checks access.
+const [recording, capabilities] = resolved?.[1] ?? await reads;
 
-if (!recording) return Astro.redirect(sessionsHref);
-const hasAccess = await userCanAccessProgram(db, user.id, recording.programId);
-if (!hasAccess) return Astro.redirect(sessionsHref);
+if (!recording || !programAccessible(capabilities.cohortIds, user.id, recording.programId)) {
+  return Astro.redirect(sessionsHref);
+}
 
+const ready = recording.processingStatus === "complete";
+const failed = recording.processingStatus === "failed";
 const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
+// The video's accessible name is the page's h1.
+const TITLE_ID = "session-title";
 ---
 
 <SpacePage context={spaces} title={recording.title}>
-  <div class="space-y-6">
-    <a href={sessionsHref} class="text-sm text-primary hover:underline">
-      &larr; Back to Sessions
-    </a>
+  <div class="flex flex-col gap-6">
+    <div class="flex flex-col items-start gap-3">
+      <BackLink href={sessionsHref}>Sessions</BackLink>
+      <PageTitle id={TITLE_ID}>{recording.title}</PageTitle>
+      {ready ? (
+        <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
+          Use the transcript to jump to a moment in the session.
+        </p>
+      ) : (
+        <StatusChip domain="recording" status={recording.processingStatus} />
+      )}
+    </div>
 
-    {recording.processingStatus !== "complete" ? (
-      <Card>
-        <div class="space-y-3 py-8 text-center">
-          <ProcessingStatus status={recording.processingStatus} />
-          <PageTitle spaces={Boolean(spaces)} size="card" legacyClass="text-xl font-semibold text-white">{recording.title}</PageTitle>
-          <p class="text-ink-muted">
-            This recording is still being processed. Check back once the transcript is ready.
-          </p>
-        </div>
-      </Card>
-    ) : (
+    {ready ? (
       <SessionViewer
         client:load
-        title={recording.title}
-        titleAs={spaces ? "h1" : "h2"}
+        labelledBy={TITLE_ID}
         videoUrl={`/api/recordings/${recording.id}/video`}
         initialTime={initialTime}
         segments={recording.segments.map((segment) => ({
@@ -69,6 +75,14 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
           speaker: segment.speaker,
         }))}
       />
+    ) : failed ? (
+      <EmptyState title="This recording couldn't be processed" headingLevel={2}>
+        Its video and transcript aren't available. Ask your instructor if you need this session.
+      </EmptyState>
+    ) : (
+      <EmptyState title="Not ready to watch yet" headingLevel={2}>
+        This recording is still being processed. Check back once the transcript is ready.
+      </EmptyState>
     )}
   </div>
 </SpacePage>

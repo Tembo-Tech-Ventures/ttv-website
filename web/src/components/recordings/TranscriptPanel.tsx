@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
+import { Chip, EmptyState, INSET_FOCUS_RING, RAISED, cx } from "@/components/platform/ui";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 
 export interface TranscriptSegment {
@@ -30,6 +31,11 @@ export function centredScrollTop({
   return Math.max(0, Math.min(centred, furthest));
 }
 
+/** A plain click seeks in place; a new tab or window, or any other modified click, follows the link. */
+function seeksInPlace(event: MouseEvent<HTMLAnchorElement>) {
+  return !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
 export default function TranscriptPanel({
   segments,
   activeSegmentId,
@@ -39,7 +45,7 @@ export default function TranscriptPanel({
   activeSegmentId: string | null;
   onSeek: (seconds: number) => void;
 }) {
-  const activeRef = useRef<HTMLButtonElement | null>(null);
+  const activeRef = useRef<HTMLAnchorElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   /*
@@ -67,43 +73,51 @@ export default function TranscriptPanel({
     <div
       ref={panelRef}
       data-transcript-panel="true"
-      className="h-full overflow-y-auto overscroll-contain rounded-md border border-teal/20 bg-dark/40"
+      className="h-full overflow-y-auto overscroll-contain rounded-[1.125rem] border border-hairline"
     >
       {segments.length === 0 ? (
-        <div className="p-6 text-sm text-ink-muted">Transcript is not available yet.</div>
+        <EmptyState title="No transcript yet" headingLevel={2} className="m-3">
+          This session has no transcript lines to jump to. The video still plays.
+        </EmptyState>
       ) : (
-        <div className="divide-y divide-teal/10">
+        <div className="divide-y divide-hairline">
           {segments.map((segment) => {
             const active = segment.id === activeSegmentId;
             const time = formatTimestamp(segment.startTime);
-            // One control per line: the time and the words seek to the same moment, so a
-            // keyboard stops here once, and the name says where the video will go.
+            // One link per line: the time and the words seek to the same moment, so a keyboard
+            // stops here once, and the name says where the video will go. As a link to ?t= it
+            // still opens the page at that moment without the script.
             return (
-              <button
+              <a
                 key={segment.id}
                 ref={active ? activeRef : undefined}
-                type="button"
+                href={`?t=${segment.startTime}`}
                 aria-current={active || undefined}
-                onClick={() => onSeek(segment.startTime)}
-                className={`group flex w-full gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
-                  active
-                    ? "border-l-4 border-primary bg-teal/25"
-                    : "border-l-4 border-transparent hover:bg-teal/10"
-                }`}
+                onClick={(event) => {
+                  if (!seeksInPlace(event)) return;
+                  event.preventDefault();
+                  onSeek(segment.startTime);
+                }}
+                className={cx(
+                  "flex w-full gap-3 border-l-4 px-4 py-3 text-left transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
+                  INSET_FOCUS_RING,
+                  // No more than a card's lift under the timestamp chip, whose ink is proven only that far.
+                  active ? cx("border-ink-primary", RAISED) : "border-transparent hover:bg-ink-primary/4",
+                )}
               >
-                <span className="inline-flex h-fit shrink-0 items-center rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary/25">
+                <Chip className="tabular-nums">
                   <span className="sr-only">Play from </span>
                   {time}
-                </span>
-                <span className="min-w-0 flex-1 text-sm leading-relaxed text-white/85">
+                </Chip>
+                <span className="min-w-0 flex-1 text-sm leading-relaxed text-ink-primary">
                   {segment.speaker && (
-                    <span className="mb-1 block text-xs font-semibold uppercase text-ink-muted">
+                    <span className="mb-1 block text-xs font-semibold text-ink-secondary">
                       {segment.speaker}
                     </span>
                   )}
                   {segment.text}
                 </span>
-              </button>
+              </a>
             );
           })}
         </div>

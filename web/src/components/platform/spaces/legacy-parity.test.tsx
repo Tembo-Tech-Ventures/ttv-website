@@ -27,6 +27,11 @@ import type { ChatSession } from "@/components/chat/types";
  *   apart from a channel's "Ask Tembo here"; a disclosure above the box says
  *   what Tembo sees, who can see a conversation, how long it is kept and where
  *   requests go; each answer is labelled "Tembo · AI".
+ * - session-viewer (M8, the session viewer onto the style guide): the page
+ *   keeps no legacy frame of its own, so both frames get the kit's look. The
+ *   session's title is the page's h1 above the player (the island names the
+ *   video by its id), each transcript line is a link to `?t=`, the retry is the
+ *   kit's quiet Button, and the colours are tokens.
  */
 const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };
@@ -65,7 +70,7 @@ const cases: Record<string, () => string> = {
     renderToStaticMarkup(
       <SessionViewer
         videoUrl="/api/recordings/r1/video"
-        title="Synthetic session"
+        labelledBy="session-title"
         segments={[{ id: "t1", startTime: 0, endTime: 4, text: "Welcome back.", speaker: "Mentor" }]}
       />,
     ),
