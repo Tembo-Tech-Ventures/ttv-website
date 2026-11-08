@@ -333,6 +333,39 @@ test.describe("every admin page", () => {
     await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
   });
 
+  test("a recording: one primary, its details saved without JavaScript, and a confirm step before transcribing again", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Saving writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    const path = "/admin/recordings/ttv-local-persona-recording-05";
+    await page.goto(path);
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Save details"]);
+    await expect(main.getByText("Ready", { exact: true }).first()).toBeVisible();
+
+    // Saved as the page showed it: the seed is unchanged, and the page says so once.
+    const save = main.getByRole("button", { name: "Save details" });
+    await save.focus();
+    await save.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(main.getByText("Details saved")).toBeVisible();
+    await page.reload();
+    await expect(main.getByText("Details saved")).toHaveCount(0);
+
+    const again = main.getByRole("link", { name: "Transcribe again" });
+    await again.focus();
+    await again.press("Enter");
+    await expect(page).toHaveURL(/\?confirm=reprocess$/);
+    const step = page.getByRole("region", { name: "Transcribe Week 4: SQL joins and indexes again?" });
+    await expect(step).toContainText("including any edits saved below");
+    const cancel = main.getByRole("link", { name: "Cancel" });
+    await cancel.focus();
+    await cancel.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -446,7 +479,8 @@ test.describe("every admin page", () => {
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
-    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"]]) {
+    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);
