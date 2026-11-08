@@ -7,13 +7,12 @@
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
-import { getStudentJourney } from "@/lib/student/journey";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import ProfileOverview from "@/components/platform/profile/ProfileOverview.astro";
 import { profileOverview } from "@/components/platform/profile/overview";
-import { loadProfileOverview } from "@/components/platform/profile/overview-server";
+import { profileOverviewFacts, readProfileOverview } from "@/components/platform/profile/overview-server";
 
 // Before T01 the editor rendered here, and its forms post back to the page they are on. A tab opened
 // then still posts here: send it on to the editor, keeping the method and the body (307), so the
@@ -22,14 +21,20 @@ if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") {
   return new Response(null, { status: 307, headers: { Location: SPACE_PAGE_PATHS.portfolio + Astro.url.search, "Cache-Control": "no-store" } });
 }
 
-const spaces = await resolveSpacePage(Astro.locals, "profile");
-if (!spaces) return new Response("Not found.", { status: 404, headers: { "Cache-Control": "no-store" } });
-
 const db = drizzle(env.DB, { schema });
-const journey = await getStudentJourney(db, spaces.me.user.id);
-const model = profileOverview(await loadProfileOverview(Astro.locals, db, spaces, journey));
+const user = Astro.locals.user;
+// The page's reads need only the person's id: start them beside the space context rather than after
+// it. They are the person's own, and shown only if the page exists for them.
+const reads = user ? readProfileOverview(Astro.locals, db, user.id) : null;
+const spaces = await resolveSpacePage(Astro.locals, "profile");
+if (!spaces || !reads) {
+  reads?.catch(() => {});
+  return new Response("Not found.", { status: 404, headers: { "Cache-Control": "no-store" } });
+}
+const overview = await reads;
+const model = profileOverview(profileOverviewFacts(overview, spaces));
 ---
 
-<SpacePage context={spaces} title={model.title} journey={journey}>
+<SpacePage context={spaces} title={model.title} journey={overview.journey}>
   <ProfileOverview model={model} />
 </SpacePage>

@@ -9,12 +9,7 @@
 import {
   PiArrowRight, PiArrowSquareOut, PiCertificate, PiEnvelopeSimple, PiIdentificationCard, PiNotePencil, PiPencilSimple, PiShieldCheck,
 } from "react-icons/pi";
-import Avatar from "@/components/platform/ui/Avatar";
-import Chip from "@/components/platform/ui/Chip";
-import PersonMarker from "@/components/platform/ui/PersonMarker";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { RAISED } from "@/components/platform/ui/tones";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { Avatar, ButtonLink, Chip, PageTitle, PersonMarker, RAISED, linkClass } from "@/components/platform/ui";
 import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import type { NeedIcon, ProfileOverviewModel } from "./overview";
@@ -29,8 +24,6 @@ const { card, noProfile, projects, needs, opportunities, certificates, actions }
 const SECTION = `rounded-[1.125rem] border border-hairline p-5 sm:p-6 ${RAISED}`;
 /* Card headings stay in Maven Pro: the page title is the screen's one Mattone heading. */
 const HEADING = "font-body text-lg leading-snug font-bold text-ink-primary";
-const ROW_ACTION = `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-ink-primary underline-offset-3 hover:bg-ink-primary/7 hover:underline ${FOCUS_RING}`;
-const BUTTON = "inline-flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors";
 const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
   message: PiEnvelopeSimple,
   revision: PiShieldCheck,
@@ -42,22 +35,22 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
 <div class="max-w-6xl" data-profile-overview>
   <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
     <div class="min-w-0 basis-96 grow">
-      <PageTitle spaces legacyClass="">{model.title}</PageTitle>
+      <PageTitle>{model.title}</PageTitle>
       <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">{model.lead}</p>
     </div>
     {(actions.view || actions.edit) && (
       <div class="flex flex-wrap gap-3">
         {actions.view && (
-          <a href={actions.view} class:list={[BUTTON, BUTTON_VARIANTS.quiet, FOCUS_RING]} data-profile-view>
+          <ButtonLink href={actions.view} size="lg" data-profile-view>
             <PiArrowSquareOut aria-hidden="true" className="size-4" />
             View public page
-          </a>
+          </ButtonLink>
         )}
         {actions.edit && (
-          <a href={actions.edit.href} class:list={[BUTTON, BUTTON_VARIANTS.primary, FOCUS_RING]} data-profile-edit>
+          <ButtonLink href={actions.edit.href} variant="primary" size="lg" data-profile-edit>
             <PiPencilSimple aria-hidden="true" className="size-4" />
             {actions.edit.label}
-          </a>
+          </ButtonLink>
         )}
       </div>
     )}
@@ -106,10 +99,15 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
               <h2 id="profile-card-title" class={HEADING}>{noProfile.title}</h2>
               <p class="mt-2 text-[0.9375rem] leading-relaxed text-ink-secondary">{noProfile.body}</p>
               {noProfile.action && (
-                <a href={noProfile.action.href} class:list={["mt-4", BUTTON, noProfile.kind === "create" ? BUTTON_VARIANTS.primary : BUTTON_VARIANTS.quiet, FOCUS_RING]}>
+                <ButtonLink
+                  href={noProfile.action.href}
+                  variant={noProfile.kind === "create" ? "primary" : "quiet"}
+                  size="lg"
+                  className="mt-4"
+                >
                   {noProfile.action.label}
                   <PiArrowRight aria-hidden="true" className="size-4" />
-                </a>
+                </ButtonLink>
               )}
             </div>
           </div>
@@ -128,10 +126,10 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
             {needs.map((need) => {
               const Icon = NEED_ICONS[need.icon];
               return (
-                <li class="flex items-center gap-3 py-1.5" data-profile-need={need.icon}>
+                <li class="flex items-center gap-3 py-2.5" data-profile-need={need.icon}>
                   <Icon aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
                   <span class="min-w-0 flex-1 text-sm break-words text-ink-primary">{need.text}</span>
-                  <a href={need.action.href} aria-label={need.action.name} class:list={[ROW_ACTION, "-mr-3"]}>{need.action.label}</a>
+                  <ButtonLink href={need.action.href} size="sm" aria-label={need.action.name}>{need.action.label}</ButtonLink>
                 </li>
               );
             })}
@@ -143,21 +141,21 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
         <section aria-labelledby="profile-opportunities-title" class={SECTION} data-profile-opportunities>
           <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="profile-opportunities-title" class={HEADING}>Opportunities for you</h2>
-            {opportunities.more && <a href={SPACE_PAGE_PATHS.opportunities} class:list={[ROW_ACTION, "-mr-3"]}>See all</a>}
+            {opportunities.more && <ButtonLink href={SPACE_PAGE_PATHS.opportunities} variant="ghost" size="sm" className="-mr-3">See all</ButtonLink>}
           </div>
           {opportunities.items.length === 0 ? (
             <p class="mt-3 text-sm leading-relaxed text-ink-secondary">No approved projects right now.</p>
           ) : (
             <ul class="mt-2 divide-y divide-hairline">
               {opportunities.items.map((item) => (
-                <li class="flex items-center gap-3 py-1.5" data-profile-opportunity>
+                <li class="flex items-center gap-3 py-2.5" data-profile-opportunity>
                   <span class="min-w-0 flex-1 text-sm break-words">
                     <span class="block text-ink-primary">{item.title}</span>
                     <span class="block text-ink-secondary">{item.organization}</span>
                   </span>
                   {item.interested
                     ? <Chip tone="ring">Hand raised</Chip>
-                    : <a href={item.href} aria-label={`Raise hand on Opportunities: ${item.title}`} class:list={[ROW_ACTION, "-mr-3"]}>Raise hand</a>}
+                    : <ButtonLink href={item.href} size="sm" aria-label={`Raise hand on Opportunities: ${item.title}`}>Raise hand</ButtonLink>}
                 </li>
               ))}
             </ul>
@@ -171,10 +169,10 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
           <h2 id="profile-certificates-title" class={HEADING}>Certificates</h2>
           <ul class="mt-2 divide-y divide-hairline">
             {certificates.map((certificate) => (
-              <li class="flex items-center gap-3 py-1.5">
+              <li class="flex items-center gap-3 py-2.5">
                 <PiCertificate aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
                 <span class="min-w-0 flex-1 text-sm break-words text-ink-primary">{certificate.programName}</span>
-                <a href={certificate.href} aria-label={`View your ${certificate.programName} certificate`} class:list={[ROW_ACTION, "-mr-3"]}>View</a>
+                <ButtonLink href={certificate.href} size="sm" aria-label={`View your ${certificate.programName} certificate`}>View</ButtonLink>
               </li>
             ))}
           </ul>
@@ -187,19 +185,19 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
         <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 id="profile-projects-title" class={HEADING}>Your work</h2>
           {projects.total > 0 && (
-            <a href={SPACE_PAGE_PATHS.journey} class:list={[ROW_ACTION, "-mr-3"]}>
+            <ButtonLink href={SPACE_PAGE_PATHS.journey} variant="ghost" size="sm" className="-mr-3">
               {projects.total > projects.items.length ? `See all ${projects.total} on Your journey` : "Open Your journey"}
-            </a>
+            </ButtonLink>
           )}
         </div>
         {!projects.available && (
           <p class="mt-3 text-sm leading-relaxed text-ink-secondary" data-profile-projects-unavailable>
-            Your work couldn't be loaded just now. It's still on <a href={SPACE_PAGE_PATHS.journey} class={`font-semibold text-ink-primary underline underline-offset-3 ${FOCUS_RING}`}>Your journey</a>.
+            Your work couldn't be loaded just now. It's still on <a href={SPACE_PAGE_PATHS.journey} class={linkClass()}>Your journey</a>.
           </p>
         )}
         {projects.available && projects.items.length === 0 && (
           <p class="mt-3 text-sm leading-relaxed text-ink-secondary">
-            Nothing shared yet. Add what you've built on <a href={SPACE_PAGE_PATHS.journey} class={`font-semibold text-ink-primary underline underline-offset-3 ${FOCUS_RING}`}>Your journey</a>, and mentors can confirm the part that was yours.
+            Nothing shared yet. Add what you've built on <a href={SPACE_PAGE_PATHS.journey} class={linkClass()}>Your journey</a>, and mentors can confirm the part that was yours.
           </p>
         )}
         {projects.items.length > 0 && (
