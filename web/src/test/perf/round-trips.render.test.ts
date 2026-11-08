@@ -100,6 +100,9 @@ const PAGES = {
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
   "profile overview": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: STUDENT },
   "profile overview, published": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: BUILDER },
+  "your feedback": { path: () => "/dashboard/feedback", page: () => import("@/pages/dashboard/feedback.astro"), user: STUDENT },
+  "visitor messages": { path: () => "/dashboard/me/leads", page: () => import("@/pages/dashboard/leads.astro"), user: BUILDER },
+  writing: { path: () => "/dashboard/me/writing", page: () => import("@/pages/dashboard/writing/index.astro"), user: BUILDER },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
@@ -222,6 +225,12 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // no profile (19 before), none of them waiting.
   "profile overview": { d1: 23, depth: 3 },
   "profile overview, published": { d1: 21, depth: 3 },
+  // Depth 5 before the style-guide rollout: the notes and their screenshots, then the space context.
+  "your feedback": { d1: 16, depth: 3 },
+  // Depth 4 before the style-guide rollout: the profile, then its messages, then the space context.
+  "visitor messages": { d1: 14, depth: 3 },
+  // Depth 4 before the style-guide rollout: the profile, its posts, then the space context, in turn.
+  writing: { d1: 14, depth: 3 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
   // read beside the page of people, in the same round trip.
   "admin users": { d1: 15, depth: 2 },

@@ -1,198 +1,119 @@
 ---
+/**
+ * Writing: the builder's blog posts, drafts first, then published and suspended ones. Writing opens
+ * with a published profile; until then the page says what opens it. Read-only: the editor is
+ * /dashboard/me/writing/new and /dashboard/me/writing/[id].
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
-import Button from "@/components/common/Button.astro";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { ButtonLink, Card, EmptyState, RowAction, StatusChip, linkClass } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { formatMomentDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
+/** The person's published profile, as a subquery: its posts are read beside it. */
+const publishedProfile = db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
+  .where(and(eq(schema.studentProfile.userId, user.id), eq(schema.studentProfile.status, "PUBLISHED")));
 
-const profile = await db.query.studentProfile.findFirst({
-  where: eq(schema.studentProfile.userId, user.id),
-  columns: { id: true, status: true, handle: true },
-});
+// The profile, its posts (only while it is published) and the space context: one round trip.
+const [profile, posts, spaces] = await Promise.all([
+  db.query.studentProfile.findFirst({
+    where: eq(schema.studentProfile.userId, user.id),
+    columns: { id: true, status: true, handle: true },
+  }),
+  db.query.blogPost.findMany({
+    where: inArray(schema.blogPost.profileId, publishedProfile),
+    orderBy: [desc(schema.blogPost.updatedAt)],
+    columns: { id: true, title: true, slug: true, status: true, readingMinutes: true, publishedAt: true, updatedAt: true },
+  }),
+  resolveSpacePage(Astro.locals, "writing"),
+]);
 
 const hasPublishedProfile = profile?.status === "PUBLISHED";
+const base = spaces ? SPACE_PAGE_PATHS.writing : "/dashboard/writing";
+const profilePath = spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio";
+const listed = hasPublishedProfile ? posts : [];
+const sections = [
+  { key: "drafts", title: "Drafts", posts: listed.filter((post) => post.status === "DRAFT") },
+  { key: "published", title: "Published", posts: listed.filter((post) => post.status === "PUBLISHED") },
+  { key: "suspended", title: "Suspended", posts: listed.filter((post) => post.status === "SUSPENDED") },
+].filter((section) => section.posts.length > 0);
 
-const posts = hasPublishedProfile
-  ? await db.query.blogPost.findMany({
-      where: eq(schema.blogPost.profileId, profile!.id),
-      orderBy: [desc(schema.blogPost.updatedAt)],
-      columns: {
-        id: true,
-        title: true,
-        slug: true,
-        status: true,
-        readingMinutes: true,
-        publishedAt: true,
-        updatedAt: true,
-      },
-    })
-  : [];
-
-const drafts = posts.filter((p) => p.status === "DRAFT");
-const published = posts.filter((p) => p.status === "PUBLISHED");
-const suspended = posts.filter((p) => p.status === "SUSPENDED");
-
-function formatDate(d: Date | null) {
-  return d ? formatMomentDate(d) : "";
-}
-const spaces = await resolveSpacePage(Astro.locals, "writing");
+const detail = (post: (typeof posts)[number]) =>
+  post.status === "PUBLISHED"
+    ? `Published ${post.publishedAt ? formatMomentDate(post.publishedAt) : ""} · ${post.readingMinutes} min read`
+    : post.status === "SUSPENDED"
+      ? "Suspended by the TTV team"
+      : `Updated ${formatMomentDate(post.updatedAt)} · ${post.readingMinutes} min read`;
 ---
 
 <SpacePage context={spaces} title="Writing">
-  <div class="space-y-6">
-    <div class={spaces ? "flex flex-wrap items-center justify-between gap-4" : "flex items-center justify-between"}>
-      <div>
+  <div class="max-w-3xl space-y-8">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+      <div class="min-w-0 basis-80 grow">
         <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Writing</PageTitle>
-        <p class="mt-1 text-ink-secondary">
-          Write and publish posts to the TTV blog.
-        </p>
+        <p class="mt-3 text-base leading-relaxed text-ink-secondary">Write and publish posts to the TTV blog.</p>
       </div>
-      {hasPublishedProfile && (
-        <Button href="/dashboard/writing/new">New Post</Button>
-      )}
-    </div>
+      {listed.length > 0 && <ButtonLink href={`${base}/new`} variant="primary" size="lg">New post</ButtonLink>}
+    </header>
 
-    {!profile && (
-      <Card>
-        <div class="py-8 text-center">
-          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <p class="text-lg font-semibold text-white">
-            Blog access requires a published profile
-          </p>
-          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
-            Complete a cohort, build your portfolio, and get it published.
-            Once your profile is live, you can start writing posts.
-          </p>
-          <Button href="/dashboard/portfolio" class="mt-6">
-            Go to Portfolio
-          </Button>
-        </div>
-      </Card>
+    {!hasPublishedProfile && (
+      <EmptyState title={profile ? "Your profile isn't published yet" : "Writing opens with a published profile"} headingLevel={2}>
+        {!profile
+          ? "Complete a cohort and publish your builder profile. Once it's live, you can write posts here."
+          : profile.status === "SUSPENDED"
+            ? "Your profile is suspended, so writing is closed for now. Contact the TTV team for help."
+            : "Your profile is still a draft. Writing opens once it's published."}
+        <ButtonLink slot="action" href={profilePath}>Go to your profile</ButtonLink>
+      </EmptyState>
     )}
 
-    {profile && !hasPublishedProfile && (
-      <Card>
-        <div class="py-8 text-center">
-          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <p class="text-lg font-semibold text-white">
-            Your profile isn't published yet
-          </p>
-          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
-            Your profile is currently <span class="font-medium text-white">{profile.status.toLowerCase().replace("_", " ")}</span>.
-            Blog writing unlocks once your profile is published.
-          </p>
-          <Button href="/dashboard/portfolio" class="mt-6">
-            Go to Portfolio
-          </Button>
-        </div>
-      </Card>
+    {hasPublishedProfile && listed.length === 0 && (
+      <EmptyState title="No posts yet" headingLevel={2}>
+        Share what you've learned, what you're building, or what caught your attention.
+        <ButtonLink slot="action" href={`${base}/new`} variant="primary">Start writing</ButtonLink>
+      </EmptyState>
     )}
 
-    {hasPublishedProfile && posts.length === 0 && (
-      <Card>
-        <div class="py-8 text-center">
-          <p class="text-lg font-semibold text-white">No posts yet</p>
-          <p class="mt-2 text-ink-secondary">
-            Write your first post — share what you've learned, what you're building, or what caught your attention.
-          </p>
-          <Button href="/dashboard/writing/new" class="mt-6">
-            Start Writing
-          </Button>
-        </div>
-      </Card>
-    )}
-
-    {drafts.length > 0 && (
-      <div class="space-y-3">
-        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Drafts</h3>
-        {drafts.map((post) => (
-          <a href={`/dashboard/writing/${post.id}`} class="block">
-            <Card>
-              <div class="flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="truncate font-medium text-white">{post.title || "Untitled"}</p>
-                  <p class="mt-0.5 text-sm text-ink-muted">
-                    Updated {formatDate(post.updatedAt)} · {post.readingMinutes} min read
-                  </p>
-                </div>
-                <Badge variant="draft" />
-              </div>
-            </Card>
-          </a>
-        ))}
-      </div>
-    )}
-
-    {published.length > 0 && (
-      <div class="space-y-3">
-        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Published</h3>
-        {published.map((post) => (
-          <Card>
-            <div class="flex items-center justify-between gap-4">
-              <div class="min-w-0">
-                <a
-                  href={`/dashboard/writing/${post.id}`}
-                  class="block truncate font-medium text-white hover:text-primary"
-                >
-                  {post.title}
-                </a>
-                <p class="mt-0.5 text-sm text-ink-muted">
-                  Published {formatDate(post.publishedAt)} · {post.readingMinutes} min read
-                </p>
-                {profile!.handle && (
-                  <a
-                    href={`/blog/${profile!.handle}/${post.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="mt-1 inline-block break-all text-sm text-primary hover:underline"
-                  >
-                    View live · /blog/{profile!.handle}/{post.slug}
-                  </a>
-                )}
-              </div>
-              <Badge variant="published" />
-            </div>
-          </Card>
-        ))}
-      </div>
-    )}
-
-    {suspended.length > 0 && (
-      <div class="space-y-3">
-        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Suspended</h3>
-        {suspended.map((post) => (
-          <a href={`/dashboard/writing/${post.id}`} class="block">
-            <Card>
-              <div class="flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="truncate font-medium text-white">{post.title}</p>
-                  <p class="mt-0.5 text-sm text-ink-muted">
-                    Suspended by admin
-                  </p>
-                </div>
-                <Badge variant="suspended" />
-              </div>
-            </Card>
-          </a>
-        ))}
-      </div>
-    )}
+    {sections.map((section) => (
+      <section aria-labelledby={`writing-${section.key}`} data-writing-section={section.key}>
+        <h2 id={`writing-${section.key}`} class="font-body text-lg leading-snug font-bold text-ink-primary">{section.title}</h2>
+        <ul class="mt-3 space-y-3">
+          {section.posts.map((post) => {
+            const title = post.title || "Untitled";
+            return (
+              <li>
+                <Card>
+                  <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                    <div class="min-w-0 basis-60 grow">
+                      <h3 class="text-base leading-snug font-semibold break-words text-ink-primary">{title}</h3>
+                      <p class="mt-0.5 text-sm text-ink-muted">{detail(post)}</p>
+                      {post.status === "PUBLISHED" && profile?.handle && (
+                        <p class="mt-1 text-sm break-all">
+                          <a href={`/blog/${profile.handle}/${post.slug}`} target="_blank" rel="noopener noreferrer" class={linkClass()}>
+                            View live<span class="sr-only"> (opens in a new tab)</span>
+                          </a>
+                          <span class="text-ink-muted"> · /blog/{profile.handle}/{post.slug}</span>
+                        </p>
+                      )}
+                    </div>
+                    <div class="flex shrink-0 items-center gap-3">
+                      <StatusChip domain="profile" status={post.status} />
+                      <RowAction href={`${base}/${post.id}`} row={title}>{post.status === "DRAFT" ? "Edit" : "Open"}</RowAction>
+                    </div>
+                  </div>
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    ))}
   </div>
 </SpacePage>

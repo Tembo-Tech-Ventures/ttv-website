@@ -48,7 +48,8 @@ export const FEEDBACK_THEME_STATUS_LABELS: Record<FeedbackThemeStatus, string> =
 
 /**
  * What a student sees for one of their notes. A note on a theme follows the
- * theme, so one agent update moves every student who raised it.
+ * theme, so one agent update moves every student who raised it. Its names
+ * and tones are the UI kit's (`STATUSES.studentFeedback`).
  */
 export type StudentFeedbackState =
   | "RECEIVED"
@@ -56,14 +57,6 @@ export type StudentFeedbackState =
   | "IN_PROGRESS"
   | "DONE"
   | "NOT_PLANNED";
-
-export const STUDENT_FEEDBACK_STATE_LABELS: Record<StudentFeedbackState, string> = {
-  RECEIVED: "Received",
-  PLANNED: "Planned",
-  IN_PROGRESS: "Being worked on",
-  DONE: "Done",
-  NOT_PLANNED: "Not planned",
-};
 
 const STATE_FROM_NOTE: Record<FeedbackStatus, StudentFeedbackState> = {
   NEW: "RECEIVED",
