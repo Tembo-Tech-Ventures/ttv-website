@@ -160,6 +160,7 @@ export type HomePostResult =
   | { kind: "refuse"; status: 400 | 403 | 413 };
 
 const KEPT = "Everything you wrote is still here.";
+const CHANGED: HomeFailure = { title: "This contribution changed since you opened it", detail: `Reload before editing. ${KEPT}` };
 const text = (form: FormData, name: string, max: number) => {
   const value = form.get(name);
   // Generous bounds: a refusal shows what was typed, and nothing unbounded is held.
@@ -176,6 +177,55 @@ export const SAVED_FLASH: Record<SavedForm, { title: string; message?: string }>
   profile: { title: "Profile saved." },
 };
 
+/** A form that passed its own checks, and the call that saves it; or the refusal to render. */
+type Prepared = { render: HomeRender; write: CommunityWrite; saved: SavedForm } | Extract<HomePostResult, { kind: "render" }>;
+
+function prepareContribution(form: FormData, claims: readonly JourneyClaim[]): Prepared {
+  const values: ContributionValues = {
+    title: text(form, "title", TITLE_MAX),
+    description: text(form, "description", DESCRIPTION_MAX),
+    date: text(form, "date", 10),
+    sourceUrl: text(form, "sourceUrl", SOURCE_MAX),
+  };
+  const id = form.get("id");
+  const claimId = typeof id === "string" && id ? id : null;
+  const render: HomeRender = { form: "contribution", claimId, values, errors: validateContribution(values) };
+  if (Object.keys(render.errors).length > 0) return { kind: "render", status: 400, render, failure: null };
+  const body = {
+    title: values.title.trim(),
+    description: values.description.trim(),
+    evidenceUrl: values.sourceUrl.trim() || null,
+    occurredAt: values.date,
+  };
+  if (!claimId) return { render, saved: "added", write: { path: "journey", method: "POST", body: { ...body, visibility: "institution" } } };
+  const revision = Number(form.get("revision"));
+  const claim = claims.find((item) => item.id === claimId);
+  if (!claim || !Number.isSafeInteger(revision) || revision < 1) return { kind: "render", status: 409, render, failure: CHANGED };
+  return {
+    render,
+    saved: "updated",
+    write: { path: `journey/${encodeURIComponent(claimId)}`, method: "PUT", body: { ...body, visibility: claim.visibility, expectedRevision: revision } },
+  };
+}
+
+function prepareProfile(form: FormData): Prepared {
+  const values: ProfileValues = {
+    headline: text(form, "headline", HEADLINE_MAX),
+    bio: text(form, "bio", BIO_MAX),
+    skills: text(form, "skills", (SKILL_MAX + 2) * SKILLS_MAX),
+    opportunityGoals: text(form, "opportunityGoals", GOALS_MAX),
+  };
+  const render: HomeRender = { form: "profile", values, errors: validateProfile(values) };
+  if (Object.keys(render.errors).length > 0) return { kind: "render", status: 400, render, failure: null };
+  const body = {
+    headline: values.headline.trim(),
+    bio: values.bio.trim(),
+    skills: parseSkills(values.skills),
+    opportunityGoals: values.opportunityGoals.trim(),
+  };
+  return { render, saved: "profile", write: { path: "profile", method: "PUT", body } };
+}
+
 /**
  * Handles a post to Community. `claims` are the caller's own, as the page read them, so an edit
  * keeps its contribution's visibility; `send` answers as `/api/community/<path>` would.
@@ -188,82 +238,28 @@ export async function handleCommunityHomePost(
   if (!isSameOriginRequest(request)) return { kind: "refuse", status: 403 };
   const form = await boundedForm(request);
   if (!form) return { kind: "refuse", status: 413 };
-
   const kind = form.get("form");
-  let render: HomeRender;
-  let write: CommunityWrite;
-  let saved: SavedForm;
-  if (kind === "contribution") {
-    const values: ContributionValues = {
-      title: text(form, "title", TITLE_MAX),
-      description: text(form, "description", DESCRIPTION_MAX),
-      date: text(form, "date", 10),
-      sourceUrl: text(form, "sourceUrl", SOURCE_MAX),
-    };
-    const id = form.get("id");
-    const claimId = typeof id === "string" && id ? id : null;
-    render = { form: "contribution", claimId, values, errors: validateContribution(values) };
-    if (Object.keys(render.errors).length > 0) return { kind: "render", status: 400, render, failure: null };
-    const body = {
-      title: values.title.trim(),
-      description: values.description.trim(),
-      evidenceUrl: values.sourceUrl.trim() || null,
-      occurredAt: values.date,
-    };
-    if (claimId) {
-      const revision = Number(form.get("revision"));
-      const claim = claims.find((item) => item.id === claimId);
-      if (!claim || !Number.isSafeInteger(revision) || revision < 1) {
-        return {
-          kind: "render", status: 409, render,
-          failure: { title: "This contribution changed since you opened it", detail: `Reload before editing. ${KEPT}` },
-        };
-      }
-      write = { path: `journey/${encodeURIComponent(claimId)}`, method: "PUT", body: { ...body, visibility: claim.visibility, expectedRevision: revision } };
-      saved = "updated";
-    } else {
-      write = { path: "journey", method: "POST", body: { ...body, visibility: "institution" } };
-      saved = "added";
-    }
-  } else if (kind === "profile") {
-    const values: ProfileValues = {
-      headline: text(form, "headline", HEADLINE_MAX),
-      bio: text(form, "bio", BIO_MAX),
-      skills: text(form, "skills", (SKILL_MAX + 2) * SKILLS_MAX),
-      opportunityGoals: text(form, "opportunityGoals", GOALS_MAX),
-    };
-    render = { form: "profile", values, errors: validateProfile(values) };
-    if (Object.keys(render.errors).length > 0) return { kind: "render", status: 400, render, failure: null };
-    write = {
-      path: "profile",
-      method: "PUT",
-      body: {
-        headline: values.headline.trim(),
-        bio: values.bio.trim(),
-        skills: parseSkills(values.skills),
-        opportunityGoals: values.opportunityGoals.trim(),
-      },
-    };
-    saved = "profile";
-  } else {
-    return { kind: "refuse", status: 400 };
-  }
+  if (kind !== "contribution" && kind !== "profile") return { kind: "refuse", status: 400 };
+  const prepared = kind === "contribution" ? prepareContribution(form, claims) : prepareProfile(form);
+  if ("kind" in prepared) return prepared;
 
-  const what = render.form === "profile" ? "your profile" : "your contribution";
+  const { render, write, saved } = prepared;
+  const unavailable: HomeFailure = {
+    title: `Couldn't save ${render.form === "profile" ? "your profile" : "your contribution"}`,
+    detail: `${KEPT} Try saving again in a moment.`,
+  };
   const failed = (status: number, failure: HomeFailure): HomePostResult => ({ kind: "render", status, render, failure });
   let response: Response;
   try {
     response = await send(write);
   } catch {
-    return failed(503, { title: `Couldn't save ${what}`, detail: `${KEPT} Try saving again in a moment.` });
+    return failed(503, unavailable);
   }
   if (response.ok) return { kind: "saved", saved };
-  if (response.status >= 500) return failed(503, { title: `Couldn't save ${what}`, detail: `${KEPT} Try saving again in a moment.` });
-  if (response.status === 409) {
-    return failed(409, { title: "This contribution changed since you opened it", detail: `Reload before editing. ${KEPT}` });
-  }
+  if (response.status >= 500) return failed(503, unavailable);
+  if (response.status === 409) return failed(409, CHANGED);
   // A refusal the form could not foresee: the API's own sentence.
   const reply = (await response.json().catch(() => null)) as { error?: unknown } | null;
   const reason = typeof reply?.error === "string" ? `${reply.error} ` : "";
-  return failed(response.status, { title: `Couldn't save ${what}`, detail: `${reason}${KEPT}` });
+  return failed(response.status, { title: unavailable.title, detail: `${reason}${KEPT}` });
 }

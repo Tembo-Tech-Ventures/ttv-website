@@ -116,7 +116,7 @@ describe("a Community form's save", () => {
   });
 
   it("is refused, as the API refuses, without the page's own origin", async () => {
-    for (const headers of [{}, { Origin: "https://elsewhere.example" }]) {
+    for (const headers of [{}, { Origin: "https://elsewhere.example" }] as HeadersInit[]) {
       const response = await sendCommunityWrite(post(headers), locals("wanjiru"), runtime.env, { path: "profile", method: "PUT", body: { headline: "Changed", bio: "", skills: [], opportunityGoals: "" } });
       expect(response.status).toBe(403);
     }
