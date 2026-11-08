@@ -37,7 +37,10 @@ describe("buildSitemapXml", () => {
       expect(xml).toContain(`<loc>https://tembotechventures.com/community/${audience}</loc>`);
     }
     expect(xml).not.toContain("/dashboard/community");
-    expect((xml.match(/<url>/g) ?? [])).toHaveLength(10);
+    for (const section of ["", "/foundations", "/components", "/patterns", "/voice"]) {
+      expect(xml).toContain(`<loc>https://tembotechventures.com/style-guide${section}</loc>`);
+    }
+    expect((xml.match(/<url>/g) ?? [])).toHaveLength(15);
   });
 
   it("handles a trailing slash on the site origin without doubling it", () => {

@@ -1,4 +1,5 @@
 ---
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 /**
  * The moderation page's lists as tabs: the message queue's own two, and "Request notes" while mentor
  * requests are on for this admin. Plain links held in the address, so they work without JavaScript.
@@ -15,7 +16,6 @@ interface Props {
 }
 
 const { tabs } = Astro.props;
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
 <nav aria-label="Moderation lists">
@@ -27,7 +27,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
           aria-current={tab.current ? "page" : undefined}
           class:list={[
             "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-semibold transition-colors motion-reduce:transition-none",
-            FOCUS,
+            FOCUS_RING,
             tab.current ? "bg-ink-primary text-dark" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
           ]}
         >

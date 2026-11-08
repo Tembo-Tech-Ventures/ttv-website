@@ -1,0 +1,164 @@
+---
+import GuideSection from "@/components/style-guide/GuideSection.astro";
+import Specimen from "@/components/style-guide/Specimen.astro";
+import StyleGuideLayout from "@/components/style-guide/StyleGuideLayout.astro";
+import { NextStep, OnwardLinks, PeopleFirst, WhereYouAre, WordsCarryMeaning } from "@/components/style-guide/PrincipleSpecimens";
+import { GUIDE_SECTIONS } from "@/components/style-guide/sections";
+import { worstContrast } from "@/lib/design/tokens";
+
+const contents = [
+  { id: "where-you-are", label: "Know where you are" },
+  { id: "people", label: "People first" },
+  { id: "next-step", label: "One clear next step" },
+  { id: "meaning", label: "Words carry the meaning" },
+  { id: "readable", label: "Readable by everyone" },
+  { id: "motion", label: "Motion explains" },
+  { id: "honest", label: "Honest by default" },
+  { id: "using-this-guide", label: "Using this guide" },
+];
+
+// Measured from the theme at render time: the weakest text ink on the lightest surface it can land on.
+const mutedFloor = worstContrast("ink-muted");
+const text = "text-base leading-relaxed text-ink-secondary";
+const pair = "grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] xl:gap-12";
+---
+
+<StyleGuideLayout
+  section="principles"
+  lead="How the Tembo Tech Ventures platform looks, reads and behaves, and the parts it is built from. It is written for everyone who builds TTV: members, mentors, staff and contributors. Every example is the real component the platform renders, shown with fictional people. Some of what it describes, such as spaces, channels and mentor requests, is still rolling out to members."
+  contents={contents}
+>
+  <GuideSection id="where-you-are" title="Know where you are">
+    <div class:list={[text, "flex max-w-3xl flex-col gap-4"]}>
+      <p class="m-0">
+        The platform is a few spaces: Cohort, Community, Mentoring, Discover and your Profile. Each is a sheet in a tone of its own, and its tabs
+        stand on it like the index tabs of a card file. The sheet in front is where you are, and the colour under your hand says so before any
+        heading does.
+      </p>
+      <p class="m-0">
+        People see only the spaces their roles open, always in the same order, so someone who mentors and is also an alum finds Mentoring in the
+        same place every day. Switching spaces lifts the new sheet into place; staying in one never moves the page under you.
+      </p>
+    </div>
+    <Specimen ground class="mt-8" caption="Wanjiku is in Cohort 04. Community waits behind, carrying a count.">
+      <WhereYouAre />
+    </Specimen>
+  </GuideSection>
+
+  <GuideSection id="people" title="People first, as themselves">
+    <div class={pair}>
+      <div class:list={[text, "flex flex-col gap-4"]}>
+        <p class="m-0">
+          TTV is a community, so the interface is mostly people. Everyone keeps one look everywhere: their photo, or initials on a colour taken
+          from who they are rather than where they sit in a list.
+        </p>
+        <p class="m-0">
+          The homepage's network carries through: builders are peach dots, mentors teal rings, institutions diamonds. Tembo, the AI, wears its
+          own mark and never a face, so nobody mistakes an answer for a person.
+        </p>
+      </div>
+      <Specimen>
+        <PeopleFirst />
+      </Specimen>
+    </div>
+  </GuideSection>
+
+  <GuideSection id="next-step" title="One clear next step">
+    <div class={pair}>
+      <div class:list={[text, "flex flex-col gap-4"]}>
+        <p class="m-0">
+          Each view has at most one peach button: the thing a person most likely came to do. Everything beside it is quiet, and the way out is
+          a ghost. When everything shouts, nothing is a next step.
+        </p>
+        <p class="m-0">
+          Actions say what happens in words, “Accept”, “Not this month”, rather than “OK” or “Submit”. Places to go are links; things that
+          change something are buttons.
+        </p>
+      </div>
+      <Specimen caption="A mentor's request card: one primary, one alternative, one way out.">
+        <NextStep />
+      </Specimen>
+    </div>
+  </GuideSection>
+
+  <GuideSection id="meaning" title="Words carry the meaning">
+    <div class={pair}>
+      <div class:list={[text, "flex flex-col gap-4"]}>
+        <p class="m-0">
+          Reactions are words, not emoji: “Useful”, “Learned something”. They say what they mean, read the same in every font, and keep a
+          conversation between builders sounding like one.
+        </p>
+        <p class="m-0">
+          Numbers come with their meaning (“2 waiting for your answer”), a notice says what happened and what to do next, and colour is never
+          the only signal: an icon and the words say it too.
+        </p>
+      </div>
+      <Specimen>
+        <WordsCarryMeaning />
+      </Specimen>
+    </div>
+  </GuideSection>
+
+  <GuideSection
+    id="readable"
+    title="Readable by everyone"
+    intro="Every page is built for a phone on a slow connection as much as for a laptop. These are the kit's commitments, checked by tests on every change; older pages are moving onto it."
+  >
+    <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3" data-commitments>
+      {
+        [
+          ["4.5:1 or better", `For every word on every sheet and card. The quietest ink measures ${mutedFloor} at its worst.`],
+          ["3:1 edges", "For anything you need to find to use it: a field's border, a focus ring, an invalid field."],
+          ["44px targets", "Every control grows to a 44px target on a touch screen, and form fields are that size on every screen."],
+          ["Works without JavaScript", "The parts render on the server, so forms post and links go before any script arrives."],
+          ["Still, when asked", "With reduced motion, sheets cut instead of sliding and spinners stop turning."],
+          ["No sideways scroll", "Nothing overflows a 320px screen. Rows wrap, and long words break."],
+        ].map(([title, body]) => (
+          <li class="rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5">
+            <p class="m-0 text-lg font-bold text-ink-primary">{title}</p>
+            <p class="mt-2 mb-0 text-sm leading-relaxed text-ink-secondary">{body}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </GuideSection>
+
+  <GuideSection id="motion" title="Motion explains; it never performs">
+    <div class:list={[text, "flex max-w-3xl flex-col gap-4"]}>
+      <p class="m-0">
+        Things move to show where they came from and where they went: a sheet rises into place when you change space, a drawer slides from the
+        side it lives on. Hover and focus change colour in 150 milliseconds and move nothing.
+      </p>
+      <p class="m-0">
+        Motion never stands between a person and the page. It is short, it can be interrupted, and with reduced motion it becomes a cut. A
+        decorative movement never pretends something happened: a ring drawing itself is not a mentor confirming your work.
+      </p>
+    </div>
+  </GuideSection>
+
+  <GuideSection id="honest" title="Honest by default">
+    <div class:list={[text, "flex max-w-3xl flex-col gap-4"]}>
+      <p class="m-0">
+        The interface shows what exists and says plainly what does not exist yet. Examples use fictional people, labelled as such. Evidence is
+        shown with its source, and “not enough evidence” is a state of its own, never a low score.
+      </p>
+      <p class="m-0">
+        TTV helps grow tech communities across Africa with the people in them, so the platform speaks as a member of that community: never as a
+        rescuer, never inflating what someone did, never promising an outcome.
+      </p>
+    </div>
+  </GuideSection>
+
+  <GuideSection
+    id="using-this-guide"
+    title="Using this guide"
+    intro="Foundations has the tokens, Components the parts, Patterns how they combine, and Voice how we write. The engineering guide in the repository has every component's full API and the rules for adding a new one."
+  >
+    <OnwardLinks
+      links={[
+        ...GUIDE_SECTIONS.filter((section) => section.id !== "principles").map((section) => ({ href: section.href, label: section.label })),
+        { href: "https://github.com/Tembo-Tech-Ventures/ttv-website/tree/main/web/docs/design-system", label: "Engineering guide on GitHub" },
+      ]}
+    />
+  </GuideSection>
+</StyleGuideLayout>

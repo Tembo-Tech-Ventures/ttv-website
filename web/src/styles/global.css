@@ -105,6 +105,14 @@
   --color-peach-ink: #FFB496;
   --color-ring: #9FD3CA;
   --color-danger-ink: #FFB3A6;
+  /*
+   * Status inks for notices, beside the danger ink: a confirmation that
+   * something worked, and a caution before something that cannot be undone.
+   * Like every ink here they clear 4.5:1 on every sheet and card, on their own
+   * tint too (contrast.test.ts). Never the ring: that is a mentor's colour.
+   */
+  --color-success-ink: #B7E4C7;
+  --color-warning-ink: #FFD98E;
   --color-hairline: rgba(255, 248, 242, 0.1);
 
   --font-heading: "Mattone", sans-serif;

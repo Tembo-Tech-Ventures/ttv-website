@@ -3,6 +3,7 @@ import { PiArrowSquareOutDuotone, PiChatCircleTextDuotone, PiClockCounterClockwi
 import Avatar from "@/components/platform/ui/Avatar";
 import Chip from "@/components/platform/ui/Chip";
 import DecisionForm from "./DecisionForm.astro";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 import {
   DIRECT_CASE_NOTE, EVIDENCE_CAUSE_LABEL, caseContext, channelReference, decisionLabel, decisionOptions, firstName,
   formatModerationTime, messageHref, sourceLabel, type ModerationCase,
@@ -37,7 +38,6 @@ const headingId = `moderation-${item.id}-author`;
 // Every case has the same buttons, so each name says whose message it decides.
 const where = channelReference(channel);
 const names = options.map((option) => `${option.label}: ${authorName}'s message in ${where}`);
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
 <li
@@ -59,7 +59,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       <Avatar id={author.id ?? `tembo-${item.id}`} name={authorName} src={author.avatarUrl ?? undefined} size="md" decorative />
       <h3 id={headingId} class="min-w-0 text-base font-bold text-ink-primary">
         {author.id && message.authorKind === "USER" ? (
-          <a href={`/admin/users/${encodeURIComponent(author.id)}`} class={`rounded-sm hover:underline ${FOCUS}`}>{authorName}</a>
+          <a href={`/admin/users/${encodeURIComponent(author.id)}`} class={`rounded-sm hover:underline ${FOCUS_RING}`}>{authorName}</a>
         ) : (
           authorName
         )}
@@ -111,7 +111,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
     {item.evidence.length > 0 && (
       <details class="group rounded-xl border border-hairline" data-moderation-evidence>
-        <summary class={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-sm font-semibold text-ink-primary [&::-webkit-details-marker]:hidden ${FOCUS}`}>
+        <summary class={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-sm font-semibold text-ink-primary [&::-webkit-details-marker]:hidden ${FOCUS_RING}`}>
           <PiClockCounterClockwiseDuotone className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
           Earlier text ({item.evidence.length})
           <span class="ml-auto text-xs font-normal text-ink-muted group-open:hidden">Show</span>
@@ -129,7 +129,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
     )}
 
     {href ? (
-      <a href={href} class={`inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS}`} data-moderation-link>
+      <a href={href} class={`inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`} data-moderation-link>
         {message.parentId
           ? <PiChatCircleTextDuotone className="size-4 shrink-0" aria-hidden="true" />
           : <PiArrowSquareOutDuotone className="size-4 shrink-0" aria-hidden="true" />}
@@ -157,7 +157,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       <DecisionForm caseId={item.id} action={action} options={options} names={names} error={error} draftReason={draftReason} />
     ) : (
       <details class="rounded-xl border border-hairline" data-moderation-change open={Boolean(error)}>
-        <summary class={`flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary ${FOCUS}`}>
+        <summary class={`flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary ${FOCUS_RING}`}>
           Change this decision
         </summary>
         <DecisionForm

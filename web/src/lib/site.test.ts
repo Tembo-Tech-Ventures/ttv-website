@@ -35,6 +35,12 @@ describe("public navigation", () => {
       expect(footerLinks).toContainEqual(link);
     }
   });
+
+  it("links the public style guide from the footer only, beside the other things to read", () => {
+    const read = PUBLIC_FOOTER_GROUPS.find((group) => group.heading === "Read");
+    expect(read?.links).toContainEqual({ label: "Style guide", href: "/style-guide" });
+    expect(PUBLIC_NAV_LINKS.map((link) => link.href)).not.toContain("/style-guide");
+  });
 });
 
 describe("homepage facts", () => {

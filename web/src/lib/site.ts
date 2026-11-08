@@ -54,6 +54,7 @@ export const PUBLIC_FOOTER_GROUPS = [
       { label: "Builders", href: "/talent" },
       { label: "Hire", href: "/hire" },
       { label: "Blog", href: "/blog" },
+      { label: "Style guide", href: "/style-guide" },
     ],
   },
   {

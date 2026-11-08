@@ -1,0 +1,21 @@
+---
+/**
+ * One section of a style guide page: an h2 in Maven Pro (the display face is
+ * the page title's alone), a sentence or two about it, then its content.
+ */
+interface Props {
+  id: string;
+  title: string;
+  intro?: string;
+}
+
+const { id, title, intro } = Astro.props;
+---
+
+<section id={id} aria-labelledby={`${id}-title`} class="mt-16 scroll-mt-28 border-t border-hairline pt-12 sm:mt-20 sm:pt-14" data-guide-section>
+  <h2 id={`${id}-title`} class="m-0 font-body text-2xl leading-tight font-bold text-ink-primary sm:text-3xl">{title}</h2>
+  {intro && <p class="mt-3 mb-0 max-w-3xl text-base leading-relaxed text-ink-secondary">{intro}</p>}
+  <div class="mt-8">
+    <slot />
+  </div>
+</section>

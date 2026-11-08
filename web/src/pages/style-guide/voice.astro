@@ -1,0 +1,122 @@
+---
+import GuideSection from "@/components/style-guide/GuideSection.astro";
+import StyleGuideLayout from "@/components/style-guide/StyleGuideLayout.astro";
+import WordPair from "@/components/style-guide/WordPair.astro";
+
+const contents = [
+  { id: "community", label: "Community voice" },
+  { id: "plain", label: "Plain words" },
+  { id: "actions", label: "Actions" },
+  { id: "errors", label: "Errors and empty lists" },
+  { id: "tembo", label: "Tembo" },
+  { id: "details", label: "Names, numbers, dates" },
+  { id: "honest", label: "Honest claims" },
+];
+
+const pairs = "m-0 grid list-none gap-4 p-0 lg:grid-cols-2";
+const text = "m-0 max-w-3xl text-base leading-relaxed text-ink-secondary";
+---
+
+<StyleGuideLayout
+  section="voice"
+  lead="TTV writes the way a good member of the community talks: plainly, warmly, and without overselling. The words are part of the interface, so they follow rules too."
+  contents={contents}
+>
+  <GuideSection
+    id="community"
+    title="Community voice"
+    intro="TTV helps grow tech communities across Africa with the people in them. We write as part of that community: about what people build, learn and do together, never about rescuing anyone."
+  >
+    <ul class={pairs}>
+      <WordPair
+        write="Builders across Africa learning and shipping together."
+        not="Empowering underserved youth with life-changing opportunities."
+        why="Describe what people do. Framing members as beneficiaries takes their work away from them."
+      />
+      <WordPair
+        write="Mentors review real projects with the people who built them."
+        not="Our world-class mentors transform careers."
+        why="Say what happens, at its real size. Let the work make the claim."
+      />
+    </ul>
+  </GuideSection>
+
+  <GuideSection id="plain" title="Plain words" intro="Short sentences, common words, active voice. Write for someone reading on a phone, between other things, perhaps in their second language.">
+    <ul class={pairs}>
+      <WordPair write="Your request is waiting for David." not="Your mentorship engagement request is currently pending review." />
+      <WordPair write="Only people in Cohort 04 can read this channel." not="Channel visibility is restricted to cohort-scoped participants." />
+    </ul>
+    <p class:list={[text, "mt-6"]}>
+      Sentence case for everything, headings and buttons included. No capitals for emphasis, no small labels above headings, no exclamation
+      marks to make something sound friendly.
+    </p>
+  </GuideSection>
+
+  <GuideSection id="actions" title="Actions" intro="A button says what will happen when you press it. A link says where it goes.">
+    <ul class={pairs}>
+      <WordPair write="Send request" not="Submit" />
+      <WordPair write="Not this month" not="Decline" why="Say no kindly, and say what kind of no it is." />
+      <WordPair write="Find a mentor" not="Click here" />
+      <WordPair write="Remove request" not="Delete" why="Name the thing an action acts on, especially when it cannot be undone." />
+    </ul>
+  </GuideSection>
+
+  <GuideSection
+    id="errors"
+    title="Errors and empty lists"
+    intro="Say what happened, whose problem it is, and what to do next. Never blame the reader, and never leave them at a dead end."
+  >
+    <ul class={pairs}>
+      <WordPair
+        write="We couldn't send your request. Your note is saved: check your connection and send it again."
+        not="Error 500: request failed."
+      />
+      <WordPair write="Enter an email address, like wanjiku@example.com." not="Invalid input." />
+      <WordPair write="No requests yet. When you ask a mentor for time, it waits here until they answer." not="Nothing here!" />
+      <WordPair write="This channel is read-only after the cohort ends. You can still read and search it." not="You do not have permission to post." />
+    </ul>
+  </GuideSection>
+
+  <GuideSection
+    id="tembo"
+    title="Tembo"
+    intro="The platform's AI is called Tembo, everywhere: “Ask Tembo”, “@tembo”. It has its own mark and is labelled AI wherever it speaks. As Tembo comes to channels, every sentence it writes there cites a source it was given."
+  >
+    <ul class={pairs}>
+      <WordPair write="Ask Tembo" not="Ask AI" />
+      <WordPair
+        write="Tembo couldn't find this in the session recordings."
+        not="I'm sorry, I don't know the answer to that, but I'd love to help!"
+        why="Tembo is helpful and brief. It says what it looked through and what it found, and never pretends to be a person."
+      />
+    </ul>
+  </GuideSection>
+
+  <GuideSection id="details" title="Names, numbers, dates">
+    <ul class="m-0 flex list-none flex-col gap-3 p-0">
+      {
+        [
+          "People by their name, as they wrote it. A role badge says what they are; the sentence doesn't need to.",
+          "Numbers with what they count: “3 unread messages”, never a bare “3”. Numerals for numbers, “1 person” and “2 people”.",
+          "Dates people can read at a glance: “3 Nov”, “Today, 14:05”.",
+          "Examples use realistic, fictional names (Wanjiku Mwangi, David Kamau) and say they are fictional. Never a real member's name or record.",
+        ].map((item) => <li class="border-l-2 border-hairline pl-4 text-[0.9375rem] leading-relaxed text-ink-secondary">{item}</li>)
+      }
+    </ul>
+  </GuideSection>
+
+  <GuideSection
+    id="honest"
+    title="Honest claims"
+    intro="Only describe what exists. If something is coming, say so plainly or say nothing; never let a screenshot or a sentence imply it already works."
+  >
+    <ul class={pairs}>
+      <WordPair write="Mentors can confirm work they reviewed with you." not="Every project is verified by industry experts." />
+      <WordPair
+        write="Not enough evidence yet to rate this."
+        not="1 out of 5"
+        why="Missing evidence is its own state, never a low score."
+      />
+    </ul>
+  </GuideSection>
+</StyleGuideLayout>

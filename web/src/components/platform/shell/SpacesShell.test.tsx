@@ -70,7 +70,7 @@ function q<T extends Element = HTMLElement>(selector: string): T {
 describe("SpacesShell on the server", () => {
   it("shows the person's spaces in order, Profile last, with the page's own as current", () => {
     const html = renderToString(<SpacesShell {...props()} />);
-    const tabs = [...html.matchAll(/class="space-tab" data-space="([a-z]+)"/g)].map((match) => match[1]);
+    const tabs = [...html.matchAll(/class="space-tab" data-tab="([a-z]+)"/g)].map((match) => match[1]);
     expect(tabs).toEqual(["cohort", "community", "mentoring", "profile"]);
     expect(html.match(/aria-current="page"/g)).toHaveLength(2); // the tab and the bottom-bar item
     expect(html).toContain('data-space-file="mentoring"');
@@ -349,7 +349,7 @@ describe("SpacesShell space preference", () => {
     document.addEventListener("click", stay);
     await mount({ persistPreference: true });
 
-    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-space="community"] a').click());
+    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-tab="community"] a').click());
     expect(document.cookie).toContain("ttv-last-space=community");
 
     await act(async () => q<HTMLAnchorElement>('.spaces-bottom [data-space="profile"] a').click());
@@ -363,7 +363,7 @@ describe("SpacesShell space preference", () => {
     const stay = (event: Event) => event.preventDefault();
     document.addEventListener("click", stay);
     await mount({ me: meByPersona.amina, space: "community", persistPreference: true });
-    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-space="admin"] a').click());
+    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-tab="admin"] a').click());
     expect(document.cookie).toContain("ttv-last-space=community");
     document.removeEventListener("click", stay);
 
@@ -382,7 +382,7 @@ describe("SpacesShell space preference", () => {
     const stay = (event: Event) => event.preventDefault();
     document.addEventListener("click", stay);
     await mount({ persistPreference: false });
-    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-space="community"] a').click());
+    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-tab="community"] a').click());
     expect(document.cookie).not.toContain("ttv-last-space=community");
     document.removeEventListener("click", stay);
   });
@@ -455,11 +455,11 @@ describe("SpacesShell live attention counts", () => {
     await mount({ overlays: ["search"] });
     publishAttentionCounts({ cohort: 0, community: 4, mentoring: 1, discover: 0, admin: 0, profile: 0 });
     // Without the attention overlay nothing publishes for this page, so Me's counts stand.
-    expect(container.querySelector('[data-space="community"]')?.textContent).toContain("1 new");
+    expect(container.querySelector('.space-file__nav [data-tab="community"]')?.textContent).toContain("1 new");
 
     await mount({ overlays: ["search", "attention"] });
     expect(q('[aria-label="Attention, 5 waiting"]')).toBeTruthy();
-    expect(container.querySelector('[data-space="community"]')?.textContent).toContain("4 new");
+    expect(container.querySelector('.space-file__nav [data-tab="community"]')?.textContent).toContain("4 new");
     await act(async () => publishAttentionCounts({ cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 }));
     expect(q('[aria-label="Attention"]')).toBeTruthy();
   });

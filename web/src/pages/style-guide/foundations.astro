@@ -1,0 +1,243 @@
+---
+import { PiBellSimple, PiChatCircleText, PiCheckCircle, PiMagnifyingGlass, PiPaperPlaneTilt, PiUsersThree } from "react-icons/pi";
+import { Card, Sheet } from "@/components/platform/ui";
+import GuideSection from "@/components/style-guide/GuideSection.astro";
+import Specimen from "@/components/style-guide/Specimen.astro";
+import StyleGuideLayout from "@/components/style-guide/StyleGuideLayout.astro";
+import { contrast, formatRatio, parseColour } from "@/lib/design/contrast";
+import { COLOUR_GROUPS, colourToken, trackingToken, worstContrast } from "@/lib/design/tokens";
+
+const contents = [
+  { id: "colour", label: "Colour" },
+  { id: "type", label: "Type" },
+  { id: "shape", label: "Shape and space" },
+  { id: "surfaces", label: "Surfaces" },
+  { id: "motion", label: "Motion" },
+  { id: "icons", label: "Icons" },
+];
+
+const INK_GROUPS = new Set(["inks", "status"]);
+const darkOnPeach = formatRatio(contrast(parseColour(colourToken("dark")).rgb, parseColour(colourToken("primary")).rgb));
+
+/** What a swatch says about how readable it is, measured from the theme. */
+function measure(group: string, token: string): string | null {
+  if (INK_GROUPS.has(group)) return `${worstContrast(token)} at worst on any sheet or card`;
+  if (token === "primary") return `Dark teal on it: ${darkOnPeach}`;
+  return null;
+}
+
+const TYPE_SCALE = [
+  { role: "Page title", spec: "Mattone · 36–60px · one per page", sample: "Find a mentor", class: "font-heading text-4xl tracking-display text-ink-primary sm:text-5xl" },
+  { role: "Section", spec: "Maven Pro bold · 24–30px", sample: "Your requests", class: "font-body text-2xl font-bold text-ink-primary sm:text-3xl" },
+  { role: "Heading in a card", spec: "Maven Pro bold · 16–18px", sample: "Thirty minutes on SQL joins", class: "font-body text-lg font-bold text-ink-primary" },
+  { role: "Body", spec: "Maven Pro · 16px · line height 1.6", sample: "I have the ledger matching working, but I am not sure my tests cover reversed payments.", class: "text-base leading-relaxed text-ink-secondary" },
+  { role: "Small", spec: "Maven Pro · 14px", sample: "Asked 2 hours ago in Cohort 04", class: "text-sm text-ink-secondary" },
+  { role: "Hint and caption", spec: "Maven Pro · 13px · muted ink", sample: "Mentors reply here.", class: "text-[0.8125rem] text-ink-muted" },
+];
+
+const RADII = [
+  { name: "Sheet", value: "1.75rem (1.25rem on phones)", class: "rounded-t-[1.75rem]", note: "Rounded at the head; a space's sheet runs off the foot of the screen." },
+  { name: "Card", value: "1.125rem", class: "rounded-[1.125rem]", note: "Cards, empty states, specimen panels." },
+  { name: "Control", value: "0.75rem", class: "rounded-xl", note: "Buttons, fields, notices." },
+  { name: "Small control", value: "0.5rem", class: "rounded-lg", note: "Small buttons and icon buttons." },
+  { name: "Chip and pill", value: "Fully round", class: "rounded-full", note: "Labels, filters, counts." },
+];
+
+const MOTION = [
+  { what: "Hover and focus", how: "Colour only, 150ms ease. Nothing moves or grows." },
+  { what: "Opening a drawer", how: "Slides in from its own edge, 220ms." },
+  { what: "Changing space", how: "The new sheet rises 4.5rem into place over the old one, 250ms. Only when the sheet changes." },
+  { what: "Working", how: "A button's loading mark turns; under reduced motion it is a still, open ring." },
+  { what: "Reduced motion", how: "Every transition above becomes a cut. Nothing is lost by it." },
+];
+
+---
+
+<StyleGuideLayout
+  section="foundations"
+  lead="The tokens every TTV screen is drawn with. They live in one stylesheet, and the values on this page are read from it as the page renders, so they cannot drift from what the site actually uses."
+  contents={contents}
+>
+  <GuideSection
+    id="colour"
+    title="Colour"
+    intro="Two brand colours, a ground, a sheet for each space, and inks proven readable on all of them. Use the Tailwind names (bg-primary, text-ink-muted); never a raw hex."
+  >
+    <div class="flex flex-col gap-12">
+      {
+        COLOUR_GROUPS.map((group) => (
+          <div data-colour-group={group.id}>
+            <h3 class="m-0 text-lg font-bold text-ink-primary">{group.title}</h3>
+            <p class="mt-1.5 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">{group.summary}</p>
+            <ul class="mt-5 mb-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 p-0">
+              {group.colours.map(({ token, name, use }) => {
+                const measured = measure(group.id, token);
+                return (
+                  <li class="min-w-0 overflow-hidden rounded-[1.125rem] border border-hairline bg-ink-primary/4" data-swatch={token}>
+                    {INK_GROUPS.has(group.id) ? (
+                      <div class="flex h-24 items-end p-4" style={`background: var(--color-sheet-community); color: var(--color-${token})`}>
+                        <span class="text-2xl font-bold">Aa</span>
+                        <span class="sr-only">{`, ${name} on the Community sheet`}</span>
+                      </div>
+                    ) : group.id === "lines" ? (
+                      <div class="flex h-24 items-center px-4" aria-hidden="true">
+                        <span class="h-px w-full" style={`background: var(--color-${token})`} />
+                      </div>
+                    ) : (
+                      <div class:list={["flex h-24 items-end p-4", token === "primary" ? "text-dark" : "text-ink-primary"]} style={`background: var(--color-${token})`}>
+                        <span class="text-2xl font-bold" aria-hidden="true">
+                          Aa
+                        </span>
+                      </div>
+                    )}
+                    <div class="p-4">
+                      <p class="m-0 font-semibold text-ink-primary">{name}</p>
+                      <p class="mt-1 mb-0 font-mono text-xs break-words text-ink-muted">
+                        --color-{token} · {colourToken(token)}
+                      </p>
+                      <p class="mt-2 mb-0 text-sm leading-relaxed text-ink-secondary">{use}</p>
+                      {measured && <p class="mt-2 mb-0 text-xs font-semibold text-ink-primary">{measured}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+  </GuideSection>
+
+  <GuideSection
+    id="type"
+    title="Type"
+    intro="Two faces with two jobs. Mattone Black is the display face, for the one page title on a screen and Tembo's mark. Maven Pro does everything else, headings included. Both are self-hosted under the SIL Open Font License."
+  >
+    <div class="grid gap-4 md:grid-cols-2">
+      <Card className="flex min-w-0 flex-col gap-3">
+        <p class="m-0 font-heading text-4xl sm:text-5xl leading-none tracking-display text-ink-primary">Mattone</p>
+        <p class="m-0 text-sm text-ink-secondary">Display. Page titles only, 36px and up, with the display tracking token.</p>
+      </Card>
+      <Card className="flex min-w-0 flex-col gap-3">
+        <p class="m-0 text-4xl sm:text-5xl leading-none font-bold text-ink-primary">Maven Pro</p>
+        <p class="m-0 text-sm text-ink-secondary">Body and headings. Regular for reading, semibold for labels, bold for headings.</p>
+      </Card>
+    </div>
+
+    <ul class="mt-8 mb-0 flex list-none flex-col p-0" data-type-scale>
+      {
+        TYPE_SCALE.map((step) => (
+          <li class="grid gap-2 border-t border-hairline py-5 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
+            <div>
+              <p class="m-0 text-sm font-semibold text-ink-primary">{step.role}</p>
+              <p class="mt-1 mb-0 text-xs text-ink-muted">{step.spec}</p>
+            </div>
+            <p class:list={["m-0 min-w-0 break-words", step.class]}>{step.sample}</p>
+          </li>
+        ))
+      }
+    </ul>
+
+    <p class="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+      Display tracking comes from three tokens rather than per-heading values, so the face can change without retuning every title:{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-display</code> ({trackingToken("display")}),{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-heading</code> ({trackingToken("heading")}) and{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-subhead</code> ({trackingToken("subhead")}). Sentence case everywhere; no capitals for emphasis, and no small
+      labels above headings.
+    </p>
+  </GuideSection>
+
+  <GuideSection
+    id="shape"
+    title="Shape and space"
+    intro="Corners soften as surfaces get smaller, so a page reads as sheets holding cards holding controls. Space follows a 4px grid: tight inside a group, open between groups, generous between sections."
+  >
+    <ul class="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-4 gap-y-6 p-0">
+      {
+        RADII.map((radius) => (
+          <li class="flex min-w-0 flex-col gap-3">
+            <div class:list={["h-20 border border-ink-primary/30 bg-ink-primary/6", radius.class]} aria-hidden="true" />
+            <div>
+              <p class="m-0 text-sm font-semibold text-ink-primary">{radius.name}</p>
+              <p class="mt-0.5 mb-0 text-xs text-ink-muted">{radius.value}</p>
+              <p class="mt-1.5 mb-0 text-[0.8125rem] leading-snug text-ink-secondary">{radius.note}</p>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+    <div class="mt-10 grid gap-4 md:grid-cols-3">
+      {
+        [
+          ["Inside a group", "4–8px", "A label and its field, an icon and its word."],
+          ["Between groups", "16–24px", "Fields in a form, cards in a list."],
+          ["Between sections", "48px and up", "Sections of a page, each with a hairline above."],
+        ].map(([name, value, note]) => (
+          <Card padding="sm" className="flex flex-col gap-1">
+            <p class="m-0 text-sm font-semibold text-ink-primary">{name}</p>
+            <p class="m-0 font-mono text-xs text-ink-muted">{value}</p>
+            <p class="m-0 text-[0.8125rem] leading-snug text-ink-secondary">{note}</p>
+          </Card>
+        ))
+      }
+    </div>
+    <p class="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+      Touch targets are 44px. The kit's controls grow to it on any coarse pointer, and stay compact under a mouse.
+    </p>
+  </GuideSection>
+
+  <GuideSection
+    id="surfaces"
+    title="Surfaces"
+    intro="Three depths, each a step lighter than the one below: the ground, a sheet, and a card lifted in the sheet's own light. A field is the exception, a dark well set into whatever holds it. Inside a sheet there are no drop shadows: lightness alone says what sits on what."
+  >
+    <Specimen ground label="The four surfaces, nested" class="[--sheet-foot:1.25rem]">
+      <div class="px-2 pb-4 sm:px-3">
+        <p class="m-0 mb-3 px-1 text-sm font-semibold text-ink-secondary">Ground</p>
+        <Sheet space="mentoring" className="px-5 pt-5 pb-6 sm:px-7">
+          <p class="m-0 mb-4 text-sm font-semibold text-ink-primary">Sheet, in the Mentoring tone</p>
+          <Card>
+            <p class="m-0 mb-3 text-sm font-semibold text-ink-primary">Card</p>
+            <div class="flex h-11 items-center rounded-xl border border-ink-primary/45 bg-ground/40 px-3.5 text-[0.9375rem] text-ink-muted">
+              Field well
+            </div>
+          </Card>
+        </Sheet>
+      </div>
+    </Specimen>
+  </GuideSection>
+
+  <GuideSection
+    id="motion"
+    title="Motion"
+    intro="Motion shows where something came from and where it went. It is brief, it never blocks reading, and reduced motion turns it into a cut."
+  >
+    <dl class="m-0 grid gap-0" data-motion>
+      {
+        MOTION.map((row) => (
+          <div class="grid gap-1 border-t border-hairline py-4 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
+            <dt class="text-sm font-semibold text-ink-primary">{row.what}</dt>
+            <dd class="m-0 text-sm leading-relaxed text-ink-secondary">{row.how}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </GuideSection>
+
+  <GuideSection
+    id="icons"
+    title="Icons"
+    intro="Phosphor, at its regular weight: the platform imports it from react-icons/pi. Icons sit beside words and are hidden from screen readers; an icon alone is an IconButton, which takes a label."
+  >
+    <Specimen caption="Search, attention, messages, people, send, done: 20px in controls, 16px inline.">
+      <div class="flex flex-wrap items-center gap-6 text-ink-primary">
+        <PiMagnifyingGlass aria-hidden className="size-5" />
+        <PiBellSimple aria-hidden className="size-5" />
+        <PiChatCircleText aria-hidden className="size-5" />
+        <PiUsersThree aria-hidden className="size-5" />
+        <PiPaperPlaneTilt aria-hidden className="size-5" />
+        <PiCheckCircle aria-hidden className="size-5" />
+      </div>
+    </Specimen>
+  </GuideSection>
+</StyleGuideLayout>

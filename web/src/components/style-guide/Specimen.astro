@@ -1,0 +1,38 @@
+---
+import CodeBlock from "./CodeBlock.astro";
+
+/**
+ * A live example, framed: real components outlined on the page's own sheet,
+ * which is the surface they are made for, or down on the ground when the
+ * example brings sheets of its own. The frame is a line, not a card, so a
+ * card shown inside it is not a card inside a card.
+ * An optional caption says what to notice; optional code says how.
+ */
+interface Props {
+  caption?: string;
+  /** For examples that stand their own sheets or tabs: lay them on the ground. */
+  ground?: boolean;
+  code?: string;
+  /** Names the example for assistive tech when it has no caption. */
+  label?: string;
+  class?: string;
+}
+
+const { caption, ground = false, code, label, class: className } = Astro.props;
+---
+
+<figure class:list={["m-0 min-w-0", className]} aria-label={caption ? undefined : label} data-specimen>
+  <div class="min-w-0 overflow-hidden rounded-[1.25rem] border border-hairline">
+    <div
+      class:list={[
+        "min-w-0",
+        // On the ground, an example's own sheets stand clear of the frame on every side, their feet rounded.
+        ground ? "bg-ground px-2 pt-5 pb-2 [--sheet-foot:1.25rem] sm:px-4 sm:pb-4" : "p-4 sm:p-7",
+      ]}
+    >
+      <slot />
+    </div>
+    {code && <CodeBlock code={code} attached />}
+  </div>
+  {caption && <figcaption class="mt-3 text-sm leading-relaxed text-ink-muted">{caption}</figcaption>}
+</figure>

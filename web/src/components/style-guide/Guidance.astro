@@ -1,0 +1,36 @@
+---
+import { PiCheckBold, PiPersonArmsSpread, PiXBold } from "react-icons/pi";
+
+/**
+ * What a part is for, what it is not for, and how it stays accessible: three
+ * short lists, side by side where there is room.
+ */
+interface Props {
+  use: readonly string[];
+  avoid: readonly string[];
+  access: readonly string[];
+}
+
+const { use, avoid, access } = Astro.props;
+const columns = [
+  { title: "Use it for", items: use, Icon: PiCheckBold, tone: "text-success-ink" },
+  { title: "Not for", items: avoid, Icon: PiXBold, tone: "text-danger-ink" },
+  { title: "Accessibility", items: access, Icon: PiPersonArmsSpread, tone: "text-peach-ink" },
+];
+---
+
+<div class="mt-8 grid gap-6 md:grid-cols-3 md:gap-8" data-guidance>
+  {
+    columns.map(({ title, items, Icon, tone }) => (
+      <div class="min-w-0">
+        <h3 class="m-0 flex items-center gap-2 text-sm font-bold text-ink-primary">
+          <Icon aria-hidden className={`size-4 shrink-0 ${tone}`} />
+          {title}
+        </h3>
+        <ul class="mt-3 mb-0 flex list-none flex-col gap-2.5 p-0">
+          {items.map((item) => <li class="text-sm leading-relaxed text-ink-secondary">{item}</li>)}
+        </ul>
+      </div>
+    ))
+  }
+</div>
