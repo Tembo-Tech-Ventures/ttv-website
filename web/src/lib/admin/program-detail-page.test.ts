@@ -56,4 +56,11 @@ describe("admin cohort detail page wiring", () => {
     expect(pageSource).toMatch(/<Button variant="primary" type="submit">Save changes<\/Button>/);
     expect(mentorsSource).not.toContain('variant="primary"');
   });
+
+  it("posts every form to the page itself, never to a #fragment, so a focused notice takes focus", () => {
+    // A browser skips autofocus when the address targets an element; the confirm step and a rejected
+    // form's notice would render unfocused.
+    expect(pageSource).not.toMatch(/method="POST"[^>]*action=\{`[^`]*#/);
+    expect(pageSource).not.toMatch(/action=\{`\$\{page\}#/);
+  });
 });

@@ -324,6 +324,8 @@ test.describe("every admin page", () => {
     await roster.getByRole("button", { name: "Enroll", exact: true }).click();
     const ask = page.getByRole("region", { name: "Enroll Lucy Chebet as a past learner?" });
     await expect(ask).toBeVisible();
+    // The question takes focus, so a keyboard or screen-reader user lands on it after the POST.
+    await expect(ask).toBeFocused();
     await expect(roster.getByRole("button", { name: "Enroll as completed" })).toBeVisible();
     await roster.getByRole("link", { name: "Cancel" }).click();
     await expect(ask).toHaveCount(0);

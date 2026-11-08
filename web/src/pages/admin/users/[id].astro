@@ -192,7 +192,7 @@ const failed = Boolean(roleError || communityError);
               title={`Remove admin access from ${targetUser.name}?`}
               confirmLabel="Remove admin access"
               cancelHref={`${withoutConfirm(Astro.url)}#admin-access`}
-              action={`${page}#admin-access`}
+              action={page}
               fields={{ action: "remove-admin" }}
             >
               They lose every admin page and the Admin space at once. You can give it back from this page.
@@ -203,7 +203,7 @@ const failed = Boolean(roleError || communityError);
             </div>
           )
         ) : (
-          <form method="POST" action={`${page}#admin-access`}>
+          <form method="POST" action={page}>
             <input type="hidden" name="action" value="add-admin" />
             <Button type="submit">Give admin access</Button>
           </form>
@@ -242,7 +242,7 @@ const failed = Boolean(roleError || communityError);
                       Remove {access.label.toLowerCase()} access
                     </ButtonLink>
                   ) : (
-                    <form method="POST" action={`${page}#community-access`} class="shrink-0 self-start sm:self-auto">
+                    <form method="POST" action={page} class="shrink-0 self-start sm:self-auto">
                       <input type="hidden" name="action" value={`grant-${access.role}`} />
                       <Button type="submit">{access.pending ? "Approve and give access" : `Give ${access.label.toLowerCase()} access`}</Button>
                     </form>
@@ -254,7 +254,7 @@ const failed = Boolean(roleError || communityError);
                   title={`Remove ${access.label.toLowerCase()} access from ${targetUser.name}?`}
                   confirmLabel={`Remove ${access.label.toLowerCase()} access`}
                   cancelHref={`${withoutConfirm(Astro.url)}#community-access`}
-                  action={`${page}#community-access`}
+                  action={page}
                   fields={{ action: `revoke-${access.role}` }}
                 >
                   {access.role === "MENTOR"

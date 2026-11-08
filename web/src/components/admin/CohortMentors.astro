@@ -81,7 +81,7 @@ const option = (person: CohortPerson) => ({ value: person.id, label: `${person.n
         title={`Remove ${askingMentor.name} as a mentor of this cohort?`}
         confirmLabel="Remove as a mentor"
         cancelHref={`${withoutConfirm(url)}#cohort-mentors`}
-        action={`${page}#cohort-mentors`}
+        action={page}
         fields={{ action: "remove-role", roleId: askingMentor.roleId, roleKind: "MENTOR" }}
       >
         They lose this cohort's channels and recordings at once. Their community mentor access, if they have it, stays.
@@ -93,7 +93,7 @@ const option = (person: CohortPerson) => ({ value: person.id, label: `${person.n
     noCandidates ? (
       <p class="m-0 text-sm text-ink-secondary">Everyone who has signed in already mentors this cohort.</p>
     ) : (
-      <form method="POST" action={`${page}#cohort-mentors`} class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+      <form method="POST" action={page} class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="action" value="add-role" />
         <input type="hidden" name="roleName" value="MENTOR" />
         <SelectField

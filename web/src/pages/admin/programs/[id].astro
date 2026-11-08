@@ -333,7 +333,7 @@ const rosterIds = new Set(kept.rosterIds ?? []);
     <section id="details" aria-labelledby="details-title" class="flex max-w-3xl flex-col gap-5">
       <h2 id="details-title" class="m-0 text-2xl">Details</h2>
       {failedForm === "details" && <Notice tone="danger" focusOnLoad title="The details weren't saved">{failure}</Notice>}
-      <form method="POST" action={`${page}#details`} class="flex flex-col gap-5" data-cohort-details-form>
+      <form method="POST" action={page} class="flex flex-col gap-5" data-cohort-details-form>
         <input type="hidden" name="action" value="update-program" />
         <TextField id="name" name="name" label="Name" defaultValue={cohortEditValues.name} error={cohortFieldErrors.name} required />
         <TextAreaField id="description" name="description" label="Description" rows={3} defaultValue={cohortEditValues.description} error={cohortFieldErrors.description} required />
@@ -394,14 +394,14 @@ const rosterIds = new Set(kept.rosterIds ?? []);
             title={`Remove ${askingStaff.user?.name ?? "this person"} from the staff?`}
             confirmLabel="Remove from the staff"
             cancelHref={`${withoutConfirm(Astro.url)}#staff`}
-            action={`${page}#staff`}
+            action={page}
             fields={{ action: "remove-role", roleId: askingStaff.id, roleKind: askingStaff.name }}
           >
             They stop running this cohort at once. You can add them again here.
           </ConfirmStep>
         )
       }
-      <form method="POST" action={`${page}#staff`} class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
+      <form method="POST" action={page} class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="action" value="add-role" />
         <SelectField id="staffUserId" name="userId" label="Person" placeholder="Choose a person" options={people.map(personOption)} defaultValue={kept.staffUserId} required />
         <SelectField id="roleName" name="roleName" label="Role" options={STAFF_ROLE_OPTIONS} defaultValue={kept.staffRole ?? "INSTRUCTOR"} required />
@@ -439,11 +439,11 @@ const rosterIds = new Set(kept.rosterIds ?? []);
         {failedForm === "enrol" && <Notice tone="danger" focusOnLoad title="No one was enrolled">{failure}</Notice>}
         {
           confirming?.form === "enrol" ? (
-            <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={`${page}#roster`} fields={confirming.fields}>
+            <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={page} fields={confirming.fields}>
               {confirming.body}
             </ConfirmStep>
           ) : available.length > 0 ? (
-            <form method="POST" action={`${page}#roster`} class="grid gap-4 sm:grid-cols-2">
+            <form method="POST" action={page} class="grid gap-4 sm:grid-cols-2">
               <input type="hidden" name="action" value="direct-enroll" />
               <SelectField id="enrollmentUserId" name="userId" label="Person" placeholder="Choose a person" options={available.map(personOption)} defaultValue={kept.enrolUserId} required className="sm:col-span-2" />
               <SelectField id="enrollmentStatus" name="status" label="Status" options={ENROLMENT_STATUS_OPTIONS} defaultValue={kept.enrolStatus ?? "APPROVED"} required />
@@ -470,12 +470,12 @@ const rosterIds = new Set(kept.rosterIds ?? []);
       {failedForm === "roster" && <Notice tone="danger" focusOnLoad title="Nothing on the roster changed">{failure}</Notice>}
       {
         confirming?.form === "roster" && (
-          <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={`${page}#roster`} fields={confirming.fields}>
+          <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={page} fields={confirming.fields}>
             {confirming.body}
           </ConfirmStep>
         )
       }
-      <form method="POST" action={`${page}#roster`} class="flex flex-col gap-5" data-bulk-form data-selection-limit={MAX_BULK_SELECTION_SIZE}>
+      <form method="POST" action={page} class="flex flex-col gap-5" data-bulk-form data-selection-limit={MAX_BULK_SELECTION_SIZE}>
         <DataTable
           caption={`${prog.name} roster`}
           columns={[{ label: "Select", hidden: true }, { label: "Learner" }, { label: "Status" }, { label: "Joined" }, { label: "Links", hidden: true }]}
