@@ -131,7 +131,7 @@ test.describe("landings, as SPEC §3 maps them", () => {
     await expect(main(page).getByText("Your first contribution belongs here.")).toHaveCount(0);
     // Their own work is fully usable, under its own name.
     await expect(main(page).getByRole("heading", { level: 2, name: "Your own work" })).toBeVisible();
-    await expect(main(page).getByRole("button", { name: "Add a contribution" })).toBeEnabled();
+    await expect(main(page).getByRole("link", { name: "Add a contribution" })).toBeVisible();
     const labels = await sidebarLabels(page);
     expect(labels).not.toContain("Apply to a cohort");
     expect(labels).toContain("Your own work");

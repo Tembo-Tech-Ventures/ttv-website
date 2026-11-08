@@ -80,7 +80,7 @@ const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), ste
 const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
 ---
 
-<SpacePage context={spaces} title={PARTNER.title} titlePrefix={posted ? "Error: " : ""} journey={journey} channels={channels}>
+<SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} titlePrefix={posted ? "Error: " : ""} journey={journey} channels={channels}>
   <div class="flex max-w-4xl flex-col gap-10">
     <div class="flex flex-col gap-8">
       <PageHeader title="Community">
