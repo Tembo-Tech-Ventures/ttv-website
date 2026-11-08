@@ -63,9 +63,9 @@ const students = (count: number) => `${count} ${count === 1 ? "student" : "stude
     <header class="space-y-2">
       <PageTitle spaces>Themes</PageTitle>
       <p class="max-w-2xl text-sm leading-relaxed text-ink-secondary">
-        One problem or wish that several students raised. Ideas and confusing spots are put forward once
-        {THEME_AGREEMENT_STUDENTS} students raise them within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug needs
-        one report. Titles and summaries may be published, so they never identify a student.
+        One problem or wish that several students raised. Ideas and confusing spots are put forward
+        once {THEME_AGREEMENT_STUDENTS} students raise them within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug
+        needs one report. Titles and summaries may be published, so they never identify a student.
       </p>
     </header>
 
@@ -98,7 +98,7 @@ const students = (count: number) => `${count} ${count === 1 ? "student" : "stude
               <Card as="li" className="relative transition-colors hover:border-ink-primary/30 motion-reduce:transition-none">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                   <Chip tone={THEME_TONES[theme.status]}>{FEEDBACK_THEME_STATUS_LABELS[theme.status]}</Chip>
-                  <h2 class="min-w-0 font-body text-base font-semibold text-ink-primary">
+                  <h2 class="min-w-0 font-body text-base font-bold text-ink-primary">
                     {/* The title is the row's link; it stretches over the card, so the whole card opens the theme. */}
                     <a
                       href={themeAdminPath(theme.id)}

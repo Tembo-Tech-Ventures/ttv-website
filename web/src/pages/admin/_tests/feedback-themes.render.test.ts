@@ -66,6 +66,7 @@ describe("the feedback themes page on the style guide", () => {
 
   it("says the student count in one word, singular or plural", async () => {
     const { body } = await visit();
+    expect(body).toMatch(/put forward\s+once 3 students raise them within 60 days/);
     expect(body).toContain("3 students (3 in");
     expect(body).toContain("1 student (1 in");
     expect(body).not.toMatch(/student\s+s\b/);
