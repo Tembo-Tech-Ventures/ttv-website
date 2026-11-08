@@ -60,6 +60,12 @@ export const STATUSES = {
     PUBLISHED: { label: "Published", tone: "success" },
     SUSPENDED: { label: "Suspended", tone: "danger" },
   },
+  /** profileContact.status: a visitor's message on a builder's public page. New waits on the builder. */
+  contact: {
+    NEW: { label: "New", tone: "peach" },
+    READ: { label: "Read", tone: "neutral" },
+    ARCHIVED: { label: "Archived", tone: "neutral" },
+  },
   /** clientProject.status */
   project: {
     PENDING: { label: "In review", tone: "peach" },

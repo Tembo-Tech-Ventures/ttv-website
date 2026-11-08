@@ -1,196 +1,140 @@
 ---
+/**
+ * Visitor messages: what people who found the builder's public page wrote to them, newest first.
+ * Each can be marked read or archived; both post back here, which answers with a 303 to a notice
+ * (so a reload never posts again), a 400 when the form names no message of theirs, and a 503 when
+ * the write fails.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import Button from "@/components/common/Button.astro";
-import Badge from "@/components/common/Badge.astro";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { Button, ButtonLink, Card, Chip, EmptyState, Notice, StatusChip, linkClass } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { formatMomentDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
+const ownProfile = () => db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
+  .where(eq(schema.studentProfile.userId, user.id));
 
-const profile = await db.query.studentProfile.findFirst({
-  where: eq(schema.studentProfile.userId, user.id),
-  columns: { id: true },
-});
+const DONE = { READ: "read", ARCHIVED: "archived" } as const;
+let failure = "";
 
-let error = "";
-let success = "";
-
-if (Astro.request.method === "POST" && profile) {
+if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const contactId = formData.get("contactId") as string;
-  const newStatus = formData.get("status") as string;
-
-  if (!contactId || !["READ", "ARCHIVED"].includes(newStatus)) {
-    error = "Invalid request.";
+  const contactId = formData.get("contactId");
+  const status = formData.get("status");
+  if (typeof contactId !== "string" || !contactId || (status !== "READ" && status !== "ARCHIVED")) {
+    Astro.response.status = 400;
+    failure = "That didn't go through. Try again from the message.";
   } else {
-    const contact = await db.query.profileContact.findFirst({
-      where: and(
-        eq(schema.profileContact.id, contactId),
-        eq(schema.profileContact.profileId, profile.id),
-      ),
-      columns: { id: true },
-    });
-
-    if (!contact) {
-      error = "Lead not found.";
-    } else {
-      await db
-        .update(schema.profileContact)
-        .set({ status: newStatus as "READ" | "ARCHIVED" })
-        .where(
-          and(
-            eq(schema.profileContact.id, contactId),
-            eq(schema.profileContact.profileId, profile.id),
-          ),
-        );
-      success =
-        newStatus === "READ" ? "Marked as read." : "Lead archived.";
+    try {
+      // Only a message on the person's own profile changes; anything else changes nothing.
+      const updated = await db.update(schema.profileContact).set({ status })
+        .where(and(eq(schema.profileContact.id, contactId), inArray(schema.profileContact.profileId, ownProfile())))
+        .returning({ id: schema.profileContact.id });
+      if (updated.length > 0) return Astro.redirect(`${Astro.url.pathname}?done=${DONE[status]}`, 303);
+      Astro.response.status = 400;
+      failure = "That message isn't here any more.";
+    } catch (error) {
+      console.error("A visitor message could not be updated.", error);
+      Astro.response.status = 503;
+      failure = "That couldn't be saved just now. Try again in a moment.";
     }
   }
 }
 
-const contacts = profile
-  ? await db.query.profileContact.findMany({
-      where: eq(schema.profileContact.profileId, profile.id),
-      orderBy: [desc(schema.profileContact.createdAt)],
-    })
-  : [];
+// The profile, its messages (found through it) and the space context: one round trip, not three.
+const [profile, contacts, spaces] = await Promise.all([
+  db.query.studentProfile.findFirst({ where: eq(schema.studentProfile.userId, user.id), columns: { id: true } }),
+  db.query.profileContact.findMany({
+    where: inArray(schema.profileContact.profileId, ownProfile()),
+    orderBy: [desc(schema.profileContact.createdAt)],
+  }),
+  resolveSpacePage(Astro.locals, "leads"),
+]);
+const unreadCount = contacts.filter((contact) => contact.status === "NEW").length;
 
-const unreadCount = contacts.filter((c) => c.status === "NEW").length;
-
-const spaces = await resolveSpacePage(Astro.locals, "leads");
+const done = Astro.request.method === "GET" ? Astro.url.searchParams.get("done") : null;
+const notice = done === "read" ? "Marked as read." : done === "archived" ? "Message archived." : "";
+const title = spaces ? "Visitor messages" : "Leads";
 ---
 
-<SpacePage context={spaces} title={spaces ? "Visitor messages" : "Leads"}>
-  <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{spaces ? "Visitor messages" : "Leads"}</PageTitle>
-        <p class="mt-1 text-ink-secondary">
-          Messages from people who found you through your profile.
+<SpacePage context={spaces} title={failure ? `Error: ${title}` : title}>
+  <div class="max-w-3xl space-y-6">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+      <div class="min-w-0 basis-80 grow">
+        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
+        <p class="mt-3 text-base leading-relaxed text-ink-secondary">
+          Messages from people who found you through your public profile.
         </p>
       </div>
-      {unreadCount > 0 && (
-        <span class="rounded-full bg-primary/20 px-3 py-1 text-sm font-medium text-primary">
-          {unreadCount} unread
-        </span>
-      )}
-    </div>
+      {unreadCount > 0 && <Chip tone="peach">{unreadCount} unread</Chip>}
+    </header>
 
-    {success && (
-      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        {success}
-      </div>
-    )}
-
-    {error && (
-      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        {error}
-      </div>
-    )}
+    {notice && <Notice tone="success" focusOnLoad>{notice}</Notice>}
+    {failure && <Notice tone="danger" focusOnLoad>{failure}</Notice>}
 
     {!profile && (
-      <Card>
-        <div class="py-8 text-center">
-          <h3 class="text-lg font-semibold text-white">
-            Set up your portfolio first
-          </h3>
-          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
-            Create your portfolio profile so people can find and reach you.
-          </p>
-          <Button href="/dashboard/portfolio" class="mt-6">
-            Create Portfolio
-          </Button>
-        </div>
-      </Card>
+      <EmptyState title="Set up your public profile first" headingLevel={2}>
+        Once you have a public profile, people who find it can write to you here.
+        <ButtonLink slot="action" href={spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio"} variant="primary">Create your profile</ButtonLink>
+      </EmptyState>
     )}
 
     {profile && contacts.length === 0 && (
-      <Card>
-        <div class="py-8 text-center">
-          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal/20">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p class="text-lg font-semibold text-white">No leads yet</p>
-          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
-            When someone reaches you through your public profile, their note
-            lands here.
-          </p>
-        </div>
-      </Card>
+      <EmptyState title="No messages yet" headingLevel={2}>
+        When someone reaches you through your public profile, their note lands here.
+      </EmptyState>
     )}
 
-    {profile && contacts.length > 0 && (
-      <div class="space-y-3">
-        {contacts.map((contact) => (
-          <Card class:list={[
-            contact.status === "NEW" && "border-primary/40",
-          ]}>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div class="min-w-0 flex-1 space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-medium text-white">
-                    {contact.fromName}
-                  </span>
-                  <Badge variant={contact.status.toLowerCase() as "new" | "read" | "archived"} />
-                  {contact.organization && (
-                    <span class="text-sm text-ink-muted">
-                      {contact.organization}
-                    </span>
+    {contacts.length > 0 && (
+      <ol class="space-y-3" aria-label="Messages" data-visitor-messages>
+        {contacts.map((contact) => {
+          const from = `contact-${contact.id}-from`;
+          return (
+            <li data-visitor-message={contact.status}>
+              <Card>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <h2 id={from} class="font-body text-base leading-snug font-bold break-words text-ink-primary">
+                        {contact.fromName}{contact.organization && <span class="font-normal text-ink-secondary"> · {contact.organization}</span>}
+                      </h2>
+                      <StatusChip domain="contact" status={contact.status} />
+                    </div>
+                    <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-secondary">{contact.message}</p>
+                    <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
+                      <a href={`mailto:${contact.fromEmail}`} class={`${linkClass()} break-all`}>{contact.fromEmail}</a>
+                      <span>{formatMomentDate(contact.createdAt)}</span>
+                    </p>
+                  </div>
+                  {contact.status !== "ARCHIVED" && (
+                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                      {contact.status === "NEW" && (
+                        <form method="POST">
+                          <input type="hidden" name="contactId" value={contact.id} />
+                          <input type="hidden" name="status" value="READ" />
+                          <Button type="submit" size="sm" aria-describedby={from}>Mark read</Button>
+                        </form>
+                      )}
+                      <form method="POST">
+                        <input type="hidden" name="contactId" value={contact.id} />
+                        <input type="hidden" name="status" value="ARCHIVED" />
+                        <Button type="submit" size="sm" variant="ghost" aria-describedby={from}>Archive</Button>
+                      </form>
+                    </div>
                   )}
                 </div>
-                <p class="text-sm text-ink-secondary">{contact.message}</p>
-                <div class="flex flex-wrap items-center gap-3 text-xs text-ink-muted">
-                  <a
-                    href={`mailto:${contact.fromEmail}`}
-                    class="text-primary hover:underline"
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                  >
-                    {contact.fromEmail}
-                  </a>
-                  <span>{formatMomentDate(contact.createdAt)}</span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                {contact.status === "NEW" && (
-                  <form method="POST">
-                    <input type="hidden" name="contactId" value={contact.id} />
-                    <input type="hidden" name="status" value="READ" />
-                    <button
-                      type="submit"
-                      class="rounded-md border border-teal/40 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-teal/20"
-                    >
-                      Mark Read
-                    </button>
-                  </form>
-                )}
-                {contact.status !== "ARCHIVED" && (
-                  <form method="POST">
-                    <input type="hidden" name="contactId" value={contact.id} />
-                    <input type="hidden" name="status" value="ARCHIVED" />
-                    <button
-                      type="submit"
-                      class="rounded-md border border-teal/40 px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-teal/20"
-                    >
-                      Archive
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+              </Card>
+            </li>
+          );
+        })}
+      </ol>
     )}
   </div>
 </SpacePage>
