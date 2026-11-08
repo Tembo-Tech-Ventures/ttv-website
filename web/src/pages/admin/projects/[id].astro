@@ -58,6 +58,8 @@ let actionError: string | undefined;
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const target = formData.get("status");
+  // The status the page showed when the admin chose: a change made since then is not overwritten.
+  const expected = formData.get("expectedStatus");
   try {
     const current = await db.query.clientProject.findFirst({
       where: eq(schema.clientProject.id, id),
@@ -65,7 +67,10 @@ if (Astro.request.method === "POST") {
     });
     if (!current) return Astro.redirect(LIST_PATH, 303);
 
-    if (!isStatus(target) || !allowedFrom(current.status).includes(target)) {
+    if (expected !== current.status) {
+      actionError = "Someone changed this project while you were looking at it. Check its status below before changing it again.";
+      Astro.response.status = 400;
+    } else if (!isStatus(target) || !allowedFrom(current.status).includes(target)) {
       // The stored values ("PENDING", "CLOSED") are said as the page says them.
       actionError = isStatus(target)
         ? `A project that is ${label(current.status)} can't be changed to ${label(target)}. Its status below is the current one.`
@@ -235,7 +240,7 @@ const builderName = (pi: (typeof project.projectInterests)[number]) => pi.profil
             confirmLabel={asking === "decline" ? "Decline project" : "Close project"}
             cancelHref={withoutConfirm(Astro.url)}
             action={Astro.url.pathname}
-            fields={{ status: CONFIRMED[asking] }}
+            fields={{ expectedStatus: project.status, status: CONFIRMED[asking] }}
           >
             {asking === "decline"
               ? "Builders never see it, and nothing moves it on from there."
@@ -247,6 +252,7 @@ const builderName = (pi: (typeof project.projectInterests)[number]) => pi.profil
             <div class="flex flex-wrap gap-3">
               {allowed.filter((target) => target === "APPROVED" || target === "MATCHED").map((target) => (
                 <form method="POST" action={Astro.url.pathname}>
+                  <input type="hidden" name="expectedStatus" value={project.status} />
                   <input type="hidden" name="status" value={target} />
                   <Button type="submit" variant="quiet">{ACTIONS[target]?.label}</Button>
                 </form>

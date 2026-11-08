@@ -82,13 +82,13 @@ describe("a client project on the style guide", () => {
   it("offers quiet changes only, and asks before the final ones", async () => {
     const pending = actions((await visit()).body);
     expect(pending).toContain("It's in review now.");
-    expect(pending).toMatch(/<input type="hidden" name="status" value="APPROVED"><button [^>]*data-variant="quiet"[^>]*>Accept<\/button>/);
+    expect(pending).toMatch(/<input type="hidden" name="expectedStatus" value="PENDING"><input type="hidden" name="status" value="APPROVED"><button [^>]*data-variant="quiet"[^>]*>Accept<\/button>/);
     expect(pending).toMatch(/<a href="\/admin\/projects\/project-1\?confirm=decline" data-variant="quiet"[^>]*>Decline<\/a>/);
     expect(pending).not.toMatch(/data-variant="(primary|danger)"|value="REJECTED"/);
 
     const step = actions((await visit({ query: "?confirm=decline" })).body);
     expect(step).toMatch(/<div autofocus="" tabindex="-1" role="region" aria-label="Decline Member savings tracker\?" data-notice="warning"/);
-    expect(step).toMatch(/<input type="hidden" name="status" value="REJECTED"\/><button [^>]*data-variant="danger"[^>]*>Decline project<\/button><a href="\/admin\/projects\/project-1" data-variant="ghost"[^>]*>Cancel<\/a>/);
+    expect(step).toMatch(/<input type="hidden" name="expectedStatus" value="PENDING"\/><input type="hidden" name="status" value="REJECTED"\/><button [^>]*data-variant="danger"[^>]*>Decline project<\/button><a href="\/admin\/projects\/project-1" data-variant="ghost"[^>]*>Cancel<\/a>/);
 
     store.find.mockResolvedValue(project("APPROVED"));
     const approved = actions((await visit()).body);
@@ -100,7 +100,7 @@ describe("a client project on the style guide", () => {
   });
 
   it("answers a change with a 303 and a flash", async () => {
-    const { status, location, response } = await visit({ form: { status: "APPROVED" } });
+    const { status, location, response } = await visit({ form: { expectedStatus: "PENDING", status: "APPROVED" } });
     expect(status).toBe(303);
     expect(location).toBe(PATH);
     expect(store.update).toHaveBeenCalledWith({ status: "APPROVED" });
@@ -108,19 +108,25 @@ describe("a client project on the style guide", () => {
   });
 
   it("says a refused, stale or failed change in words, in a focused danger Notice", async () => {
-    const refused = await visit({ form: { status: "CLOSED" } });
+    const refused = await visit({ form: { expectedStatus: "PENDING", status: "CLOSED" } });
     expect(refused.status).toBe(400);
     expect(refused.body).toMatch(/data-title-prefix="Error: "/);
     expect(refused.body).toMatch(/<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\s\S]*?A project that is in review can(?:&#39;|&#x27;)t be changed to closed\./);
     expect(store.update).not.toHaveBeenCalled();
 
+    // Changed since the page was drawn: refused before any write.
+    const moved = await visit({ form: { expectedStatus: "APPROVED", status: "MATCHED" } });
+    expect(moved.status).toBe(400);
+    expect(moved.body).toContain("Someone changed this project while you were looking at it.");
+    expect(store.update).not.toHaveBeenCalled();
+
     store.update.mockResolvedValue([]);
-    const stale = await visit({ form: { status: "APPROVED" } });
+    const stale = await visit({ form: { expectedStatus: "PENDING", status: "APPROVED" } });
     expect(stale.status).toBe(400);
     expect(stale.body).toContain("Someone changed this project while you were looking at it.");
 
     store.update.mockRejectedValue(new Error("D1 down"));
-    const failed = await visit({ form: { status: "APPROVED" } });
+    const failed = await visit({ form: { expectedStatus: "PENDING", status: "APPROVED" } });
     expect(failed.status).toBe(503);
     expect(failed.body).toMatch(/The database didn(?:&#39;|&#x27;)t answer, so nothing changed\./);
   });
