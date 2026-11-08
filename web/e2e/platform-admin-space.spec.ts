@@ -333,6 +333,38 @@ test.describe("every admin page", () => {
     await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
   });
 
+  test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    const label = `e2e check ${Date.now().toString(36)}`;
+    await page.goto("/admin/personal-access-tokens");
+    const form = page.getByRole("region", { name: "Create a token" });
+    await form.getByRole("textbox", { name: "Label" }).fill(label);
+    await form.getByRole("combobox", { name: "Access" }).selectOption("channels-read");
+    await form.getByRole("button", { name: "Create token" }).click();
+
+    const secret = page.getByRole("region", { name: `Your new token: ${label}` });
+    await expect(secret.locator("code#personal-access-token")).toHaveText(/^\S{20,}$/);
+    await expect(form.getByRole("textbox", { name: "Label" })).toHaveValue("");
+    await runAxe(page, testInfo, "admin-tokens-created");
+
+    const tokens = page.getByRole("table", { name: "Your tokens" });
+    const row = tokens.getByRole("row").filter({ hasText: label });
+    await expect(row).toContainText("Channels, read only");
+    await expect(row).toContainText("Active");
+    await row.getByRole("link", { name: `Revoke ${label}` }).click();
+    await expect(page.getByRole("region", { name: `Revoke “${label}”?` })).toBeVisible();
+    await expect(page).toHaveURL(/\?confirm=revoke-[^#]+$/);
+    await page.getByRole("button", { name: "Revoke token" }).click();
+    await expect(page).toHaveURL(/\/admin\/personal-access-tokens$/);
+    await expect(page.getByRole("status").filter({ hasText: "Token revoked" })).toBeVisible();
+    await expect(tokens.getByRole("row").filter({ hasText: label })).toContainText("Revoked");
+    await expect(page.getByRole("region", { name: `Your new token: ${label}` })).toHaveCount(0);
+    await context.close();
+  });
+
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Changing a role changes the seed; one project writes, and puts it back.");
     await as(page, baseURL!, "staff");
