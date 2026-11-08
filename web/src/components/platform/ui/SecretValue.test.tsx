@@ -11,7 +11,7 @@ describe("SecretValue", () => {
 
   it("is a card region named by its h2, saying what to do before the value", () => {
     expect(html).toMatch(/^<section aria-labelledby="new-key-title" data-card="true"/);
-    expect(html).toMatch(/<h2 id="new-key-title" class="text-lg text-ink-primary">Your new key: Nightly check<\/h2>[\s\S]*?Copy it now/);
+    expect(html).toMatch(/<h2 id="new-key-title" class="m-0 font-body text-lg text-ink-primary">Your new key: Nightly check<\/h2>[\s\S]*?Copy it now/);
   });
 
   it("shows the value in mono, wrapping anywhere, beside a quiet button that names what it copies and where it is", () => {

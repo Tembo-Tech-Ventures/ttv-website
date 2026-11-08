@@ -32,7 +32,7 @@ export default function SecretValue({ title, value, id, children, copyLabel, usa
   return (
     <Card as="section" aria-labelledby={headingId} className={cx("flex min-w-0 flex-col gap-4", className)}>
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-lg text-ink-primary">
+        <h2 id={headingId} className="m-0 font-body text-lg text-ink-primary">
           {title}
         </h2>
         <div className="max-w-prose text-sm text-ink-secondary">{children}</div>
