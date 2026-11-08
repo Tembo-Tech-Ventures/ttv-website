@@ -79,13 +79,17 @@ export default function Notice({ tone = "info", title, children, actions, announ
   const { frame, ink } = NOTICE_TONES[tone];
   const role = ROLE[announce ?? DEFAULT_ANNOUNCE[tone]];
   /*
-   * A notice that is part of the page, not announced, is a region named by its
-   * title, so it can be found and told apart. An alert or a status is read by
-   * its content as it arrives, so it takes no name that could replace it.
+   * A notice that takes focus (a confirm step, a rejected form) or that a page
+   * points at by its id is a region named by its title, so the reader who lands
+   * on it, or is sent to it, hears what it is. Other notices stay part of the
+   * page, so a page with several does not gain a landmark for each. An alert or
+   * a status is read by its content as it arrives, so it takes no name that
+   * could replace it.
    */
   const titleId = id && title ? `${id}-title` : undefined;
   const regionName = titleId ? { "aria-labelledby": titleId } : typeof title === "string" ? { "aria-label": title } : null;
-  const named = !role && regionName ? { role: "region" as const, ...regionName } : { role };
+  const landmark = Boolean(focusOnLoad || tabIndex === -1 || id);
+  const named = !role && landmark && regionName ? { role: "region" as const, ...regionName } : { role };
 
   return (
     <div

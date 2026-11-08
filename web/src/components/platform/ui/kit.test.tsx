@@ -127,7 +127,9 @@ describe("Notice", () => {
   });
 
   it("is a region named by its title when it is part of the page, and an alert keeps no name that would replace its words", () => {
-    expect(renderToStaticMarkup(<Notice tone="warning" title="This channel is read-only" />)).toContain('role="region" aria-label="This channel is read-only"');
+    expect(renderToStaticMarkup(<Notice tone="warning" title="This channel is read-only" focusOnLoad />)).toContain('role="region" aria-label="This channel is read-only"');
+    // A notice that is simply part of the page adds no landmark.
+    expect(renderToStaticMarkup(<Notice tone="warning" title="This channel is read-only" />)).not.toContain("role=");
     const labelled = renderToStaticMarkup(<Notice id="limits" title={<>Read-only <em>after</em> the cohort</>} />);
     expect(labelled).toContain('role="region" aria-labelledby="limits-title"');
     expect(labelled).toContain('<p id="limits-title"');

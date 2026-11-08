@@ -31,11 +31,17 @@ const MAX_MESSAGE = 400;
 /**
  * Answers a successful POST: a 303 to `location` that carries `flash` to it.
  * `location` is a path on this site; the cookie is scoped to it, so no other
- * page, or other tab, reads it first.
+ * page, or other tab, reads it first. A cookie's path also matches the pages
+ * below it, so a page under `location` that takes the flash first would show
+ * it instead; point the flash at the page that shows it.
  */
 export function redirectWithFlash(context: FlashContext, location: string, flash: Flash): Response {
   const target = new URL(location, context.url);
   if (target.origin !== context.url.origin) throw new Error("A flash only travels to a page on this site.");
+  // A same-origin URL can still have a path that a browser reads as another host
+  // ("/.//evil.example" resolves to the path "//evil.example"), so the Location
+  // built from the path alone must never start with two slashes or a backslash.
+  if (/^\/[/\\]/.test(target.pathname)) throw new Error("A flash only travels to a page on this site.");
   if (!flash.title && !flash.message) throw new Error("A flash needs a title or a message.");
   context.cookies.set(FLASH_COOKIE, JSON.stringify({ ...flash, path: target.pathname }), {
     path: target.pathname,

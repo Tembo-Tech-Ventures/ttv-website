@@ -27,8 +27,27 @@ describe("redirectWithFlash", () => {
   it("refuses another site and an empty message", () => {
     const { cookies } = jar();
     expect(() => redirectWithFlash({ cookies, url }, "https://evil.invalid/x", { tone: "info", title: "Hi" })).toThrow(/this site/);
+    expect(() => redirectWithFlash({ cookies, url }, "//evil.invalid", { tone: "info", title: "Hi" })).toThrow(/this site/);
     expect(() => redirectWithFlash({ cookies, url }, "/admin", { tone: "info" })).toThrow(/title or a message/);
   });
+});
+
+describe("redirectWithFlash and paths that read as another host", () => {
+  it.each(["/.//evil.invalid/x", "http://127.0.0.1:4321//evil.invalid/x", "/./\\evil.invalid", "/%2e//evil.invalid"])(
+    "never answers %s with a Location a browser would follow off the site",
+    (location) => {
+      const { cookies, writes } = jar();
+      let response: Response | undefined;
+      try {
+        response = redirectWithFlash({ cookies, url }, location, { tone: "info", title: "Hi" });
+      } catch (error) {
+        expect(String(error)).toMatch(/this site/);
+      }
+      const header = response?.headers.get("location") ?? "/";
+      expect(header).toMatch(/^\/(?![/\\])/);
+      if (!response) expect(writes).toEqual([]);
+    },
+  );
 });
 
 describe("takeFlash", () => {
