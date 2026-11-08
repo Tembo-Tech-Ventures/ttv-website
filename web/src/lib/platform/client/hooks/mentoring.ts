@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import type { AvailabilityState, AvailabilityStore } from "../mentor-availability";
 import type { RequestFormState, RequestFormStore } from "../mentor-request-form";
 import type { MentorRequestsState, MentorRequestsStore } from "../mentor-requests";
 import { useStore } from "../store";
@@ -27,14 +26,5 @@ export function useRequestForm<T = RequestFormState>(
   isEqual?: (a: T, b: T) => boolean,
 ): T {
   useEffect(() => { store.restore(); }, [store]);
-  return useStore(store, selector, isEqual);
-}
-
-export function useAvailability<T = AvailabilityState>(
-  store: AvailabilityStore,
-  selector: (state: AvailabilityState) => T = whole as (state: AvailabilityState) => T,
-  isEqual?: (a: T, b: T) => boolean,
-): T {
-  useEffect(() => store.retain(), [store]);
   return useStore(store, selector, isEqual);
 }

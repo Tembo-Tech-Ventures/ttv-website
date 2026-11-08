@@ -8,7 +8,8 @@ import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./
  * and their private conversation opens with the note as its first message.
  * Then the other ways a request ends: withdrawn, not this month, a suggestion
  * of Samuel (who has one spot a month), and Samuel full once someone waits.
- * Last, an organisation account asks as itself (owner decision 2026-11-02).
+ * Then an organisation account asks as itself (owner decision 2026-11-02), and
+ * last David saves his availability without JavaScript.
  *
  * Local seed only (`platform-personas.local.sql`, which also clears every
  * earlier request): agent previews have no browser mentor yet. The desktop
@@ -21,11 +22,12 @@ test.describe.configure({ mode: "serial" });
 
 const DIRECTORY = "/dashboard/community/mentors";
 const REQUESTS = "/dashboard/mentoring/requests";
+const AVAILABILITY = "/dashboard/mentoring/availability";
 
-async function as(browser: Browser, baseURL: string, who: PersonaKey | "mentor-two"): Promise<Page> {
+async function as(browser: Browser, baseURL: string, who: PersonaKey | "mentor-two", { javaScriptEnabled = true } = {}): Promise<Page> {
   const session = who === "mentor-two" ? localPersonaSession(who) : personaSession(who);
   if (typeof session === "string") throw new Error(session);
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, javaScriptEnabled });
   await signIn(context, baseURL, session);
   return context.newPage();
 }
@@ -192,3 +194,24 @@ test("an organisation account is told it can ask as itself, and its request come
   await expect(ownRow(institution, "David Kamau")).toContainText("Withdrawn");
 });
 
+test("a mentor saves their availability without JavaScript, and sees it saved", async ({ browser, baseURL }) => {
+  const mentor = await as(browser, baseURL!, "mentor", { javaScriptEnabled: false });
+  await mentor.goto(AVAILABILITY);
+  await expect(mentor.getByRole("heading", { level: 1, name: "Availability" })).toBeVisible();
+  const form = mentor.locator("[data-availability-form]");
+  const bio = form.getByRole("textbox", { name: "About you (optional)" });
+  const before = await bio.inputValue();
+  const changed = `Reviews APIs and data models. (${Date.now()})`;
+  await bio.fill(changed);
+  await form.getByRole("button", { name: "Save availability" }).click();
+  await expect(mentor).toHaveURL(new RegExp(`${AVAILABILITY}\\?saved=1$`));
+  await expect(mentor.locator("#availability-saved")).toContainText("Availability saved");
+  await expect(mentor.locator("[data-listing]")).toContainText("Listed");
+  await expect(bio).toHaveValue(changed);
+
+  // Leave the shared seed as it was.
+  await bio.fill(before);
+  await form.getByRole("button", { name: "Save availability" }).click();
+  await expect(mentor.locator("#availability-saved")).toBeVisible();
+  await expect(bio).toHaveValue(before);
+});

@@ -39,7 +39,7 @@ export const FORMAT_LABELS: Record<MentorRequestFormat, string> = {
   QUICK_QUESTION: "Quick question",
 };
 
-/** What each format asks of the mentor, under the choice in the request drawer and the availability editor. */
+/** What each format asks of the mentor, under the choice in the request drawer and the availability form. */
 export const FORMAT_HINTS: Record<MentorRequestFormat, string> = {
   WRITTEN_REVIEW: "Comments on your work, written in the conversation.",
   CALL_30_MIN: "A call you arrange together in the conversation.",

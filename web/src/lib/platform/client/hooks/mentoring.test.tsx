@@ -3,12 +3,11 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { availability, mentors, people, pendingMentorRequest } from "../../fixtures";
-import { createAvailabilityStore, type AvailabilityStore } from "../mentor-availability";
+import { mentors, people, pendingMentorRequest } from "../../fixtures";
 import { createRequestFormStore, mentorRequestDraftKey, type RequestFormStore } from "../mentor-request-form";
 import { createMentorRequestsStore, shownStatus, type MentorRequestsStore } from "../mentor-requests";
 import { createMentoringMock } from "../mentoring.mock";
-import { useAvailability, useMentorRequests, useRequestForm } from "./mentoring";
+import { useMentorRequests, useRequestForm } from "./mentoring";
 
 const david = mentors.items[0];
 
@@ -18,9 +17,6 @@ function Note({ store }: { store: RequestFormStore }) {
 function Status({ store }: { store: MentorRequestsStore }) {
   const shown = useMentorRequests(store, state => shownStatus(state, pendingMentorRequest));
   return <span>{shown}</span>;
-}
-function Headline({ store }: { store: AvailabilityStore }) {
-  return <span>{useAvailability(store, state => state.draft.headline)}</span>;
 }
 
 describe("mentor connection hooks", () => {
@@ -57,12 +53,5 @@ describe("mentor connection hooks", () => {
     expect(container.textContent).toBe("ACCEPTED");
     await act(async () => { await accepting; });
     expect(store.getState().items.find(item => item.id === pendingMentorRequest.id)?.channelId).not.toBeNull();
-  });
-
-  it("follows the availability draft", async () => {
-    const store = createAvailabilityStore({ initial: availability, mock: createMentoringMock({ viewer: people.david }).api });
-    await act(async () => root.render(<Headline store={store} />));
-    act(() => store.setHeadline("Payments engineer"));
-    expect(container.textContent).toBe("Payments engineer");
   });
 });

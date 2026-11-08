@@ -22,8 +22,13 @@ exist only while `mentor_requests` is on for the person (effective only with
   `mentor-request-form.ts` (the draft, kept per person and mentor in
   `sessionStorage` while the habits are agreed or the person signs in again),
   `mentor-requests.ts` (optimistic accept, redirect, decline and withdraw that
-  roll back when the server refuses) and `mentor-availability.ts` (the editor's
-  draft, dirty state and undo).
+  roll back when the server refuses).
+- Availability has no island: `AvailabilityForm.astro` is a kit form that
+  posts to its page, and `availability-post.ts` checks it (the contract's rules,
+  in words that say how to fix each field) and saves through the API's own
+  handler (`mentorsServer(...).saveAvailability`). A save lands on `?saved=1`;
+  a refusal renders the form again with everything typed, a danger notice and
+  each field's reason.
 - `mentor-display.ts` holds the copy that depends on data: capacity in
   Africa/Nairobi months (always "2 of 3 spots open in November"), status lines
   and what a check means, "Full this month", and `AS_YOURSELF`.
