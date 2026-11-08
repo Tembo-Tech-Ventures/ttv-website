@@ -4,9 +4,7 @@ import type { Me } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { createAnnouncer } from "@/lib/platform/client/announcer";
 import { createSearchStore, SEARCH_GROUPS, useSearch, type SearchItem } from "@/lib/platform/client/search";
-import { Avatar, Button, SpaceGlyph } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, Button, cx, FOCUS_RING, Pill, SpaceGlyph } from "@/components/platform/ui";
 import { onShellOverlay } from "@/components/platform/shell/overlays";
 import MaskedText from "@/components/channels/MaskedText";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
@@ -446,21 +444,14 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
             <fieldset className="search-scopes">
               <legend className="sr-only">Search in</legend>
               {scopesFor(me, cohortLabel).map(({ scope, label, glyph }) => (
-                <button
-                  key={scope}
-                  type="button"
-                  aria-pressed={state.scope === scope}
-                  data-search-scope={scope}
-                  onClick={() => store.setScope(scope)}
-                  className={cx("search-scope", FOCUS_RING)}
-                >
+                <Pill key={scope} pressed={state.scope === scope} data-search-scope={scope} onClick={() => store.setScope(scope)}>
                   {glyph && (
                     <span aria-hidden="true" className="inline-flex">
                       <SpaceGlyph space={glyph} person={{ id: me.user.id, name: me.user.name }} />
                     </span>
                   )}
                   {label}
-                </button>
+                </Pill>
               ))}
             </fieldset>
           </div>

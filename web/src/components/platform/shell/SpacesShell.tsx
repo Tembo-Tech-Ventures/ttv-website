@@ -4,9 +4,7 @@ import type { Me, PersonSummary, SpaceId } from "@/lib/platform/contracts";
 import { createSpacesController } from "@/lib/platform/client/spaces";
 import { useSpaces } from "@/lib/platform/client/hooks/spaces";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
-import { Avatar, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, buttonClass, cx, FOCUS_RING, IconButton, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/platform/ui";
 import AccountMenu, { type ShellAccount } from "./AccountMenu";
 import { browserLanding, landedOnLastSpace, rememberLandingHint } from "./landing-hint";
 import { latestAttentionCounts, subscribeAttentionCounts, type ShellOverlay } from "./overlays";
@@ -277,17 +275,15 @@ export default function SpacesShell({
       {/*
        * The name holds the words the mark shows, in order (WCAG 2.5.3), so a
        * voice user can say them. The space between the two parts is what keeps
-       * "TEMBO" and "Tech" two words for anything reading the visible text.
+       * "TEMBO" and "Tech" two words for anything reading the visible text. The
+       * wordmark is the one Mattone outside the h1; its tagline is plain words.
        */}
       <a href="/" className={cx("spaces-shell__brand", FOCUS_RING)} aria-label="Tembo Tech Ventures home">
         <span aria-hidden="true" data-wordmark className="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">
           TEMBO
         </span>{" "}
-        <span
-          aria-hidden="true"
-          className="spaces-shell__tagline font-body text-[0.625rem] font-semibold tracking-[0.32em] text-ink-muted uppercase"
-        >
-          Tech · Ventures
+        <span aria-hidden="true" className="spaces-shell__tagline font-body text-xs font-semibold text-ink-muted">
+          Tech Ventures
         </span>
       </a>
       <div className="spaces-shell__compact-start">
@@ -299,10 +295,7 @@ export default function SpacesShell({
             aria-expanded={open}
             aria-label={`Open ${sidebarLabel}`}
             onClick={openDrawer}
-            className={cx(
-              "inline-grid size-10 shrink-0 place-items-center rounded-xl border border-hairline bg-ink-primary/6 text-ink-secondary pointer-coarse:size-11",
-              FOCUS_RING,
-            )}
+            className={buttonClass({ variant: "quiet", className: "spaces-shell__icon-link" })}
           >
             <PiList aria-hidden="true" className="size-5" />
           </a>
@@ -352,10 +345,7 @@ export default function SpacesShell({
                   data-drawer-close
                   aria-label={`Close ${sidebarLabel}`}
                   onClick={closeDrawer}
-                  className={cx(
-                    "spaces-shell__close inline-grid size-10 place-items-center rounded-xl text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:size-11",
-                    FOCUS_RING,
-                  )}
+                  className={buttonClass({ variant: "ghost", className: "spaces-shell__icon-link spaces-shell__close" })}
                 >
                   <PiX aria-hidden="true" className="size-5" />
                 </a>
@@ -373,21 +363,16 @@ export default function SpacesShell({
                 {landingHint && `You’re in ${SPACE_LABEL[space]}, the space you used last. Switch any time from the tabs.`}
               </output>
               {landingHint && (
-                <button
-                  type="button"
+                <IconButton
+                  variant="ghost"
+                  label="Dismiss this hint"
+                  icon={<PiX className="size-4" />}
                   onClick={() => {
                     setLandingHint(false);
                     // The button goes with the hint: keep focus where the reader was, in the page.
                     document.getElementById(MAIN_ID)?.focus();
                   }}
-                  aria-label="Dismiss"
-                  className={cx(
-                    "inline-grid size-10 shrink-0 place-items-center rounded-lg text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:size-11",
-                    FOCUS_RING,
-                  )}
-                >
-                  <PiX aria-hidden="true" className="size-4" />
-                </button>
+                />
               )}
             </div>
             {children}

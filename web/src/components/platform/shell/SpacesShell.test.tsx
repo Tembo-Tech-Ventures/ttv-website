@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "@/lib/platform/contracts";
 import { meByPersona } from "@/lib/platform/fixtures";
 import { OPEN_FEEDBACK_EVENT } from "@/components/feedback/feedback-client";
+import { buttonClass } from "@/components/platform/ui";
 import { SHELL_OVERLAY_EVENT, type ShellOverlayRequest } from "./overlays";
 import SpacesShell from "./SpacesShell";
 
@@ -125,6 +126,34 @@ describe("SpacesShell on the server", () => {
   it("serialises nothing but the contract: no cookie or session in the markup", () => {
     const html = renderToString(<SpacesShell {...props({ lastSpace: "community" })} />);
     expect(html).not.toMatch(/cookie|session|token/i);
+  });
+});
+
+describe("SpacesShell controls come from the kit", () => {
+  it("draws the menu link and the drawer's close as kit buttons, still links for the no-JS drawer", () => {
+    const html = renderToString(<SpacesShell {...props()} />);
+    container.innerHTML = html;
+    expect(q('a[aria-controls="space-sidebar"]').className).toBe(buttonClass({ variant: "quiet", className: "spaces-shell__icon-link" }));
+    expect(q("a[data-drawer-close]").className).toBe(buttonClass({ variant: "ghost", className: "spaces-shell__icon-link spaces-shell__close" }));
+  });
+
+  it("draws the search trigger as a quiet kit button", async () => {
+    await mount({ overlays: ["search"] });
+    expect(q("button.spaces-search").className).toBe(buttonClass({ variant: "quiet", className: "spaces-search" }));
+  });
+
+  it("sets the tagline in sentence case, with no capitals or hand-tuned tracking", () => {
+    container.innerHTML = renderToString(<SpacesShell {...props()} />);
+    const tagline = q(".spaces-shell__tagline");
+    expect(tagline.textContent).toBe("Tech Ventures");
+    expect(tagline.className).not.toMatch(/uppercase|tracking-/);
+  });
+
+  it("casts the account menu's shadow from the theme, with no raw colour or arbitrary value anywhere in the frame", () => {
+    container.innerHTML = renderToString(<SpacesShell {...props()} />);
+    expect(q(".spaces-account__panel").classList).toContain("shadow-overlay");
+    const classes = [...container.querySelectorAll<HTMLElement>("[class]")].flatMap((element) => [...element.classList]);
+    expect(classes.filter((name) => /rgb|#[0-9a-f]{3}|shadow-\[|tracking-\[/i.test(name))).toEqual([]);
   });
 });
 
@@ -393,8 +422,8 @@ describe("SpacesShell names hold the words they show (WCAG 2.5.3)", () => {
     await mount();
     const brand = q<HTMLAnchorElement>("a.spaces-shell__brand");
     expect(brand.getAttribute("aria-label")).toBe("Tembo Tech Ventures home");
-    // Read as a voice user sees it: "TEMBO Tech · Ventures", never "TEMBOTech".
-    expect(brand.textContent?.replace(/\s+/g, " ").trim()).toBe("TEMBO Tech · Ventures");
+    // Read as a voice user sees it: "TEMBO Tech Ventures", never "TEMBOTech".
+    expect(brand.textContent?.replace(/\s+/g, " ").trim()).toBe("TEMBO Tech Ventures");
   });
 
   it("ends the account menu's name with the initials its avatar shows, and leaves them out behind a photo", async () => {
@@ -486,7 +515,7 @@ describe("SpacesShell last-space landing hint", () => {
     await mount({ persistPreference: true, lastSpace: "mentoring" });
     expect(hint()).toBe("You’re in Mentoring, the space you used last. Switch any time from the tabs.");
 
-    const dismiss = q<HTMLButtonElement>('.spaces-shell__landing button[aria-label="Dismiss"]');
+    const dismiss = q<HTMLButtonElement>('.spaces-shell__landing button[aria-label="Dismiss this hint"]');
     await act(async () => dismiss.click());
     expect(hint()).toBeNull();
     expect(document.activeElement).toBe(q("#spaces-main"));

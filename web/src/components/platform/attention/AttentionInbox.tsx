@@ -1,9 +1,7 @@
 import { useEffect, useState, type MouseEvent, type Ref } from "react";
 import type { AttentionFilter, AttentionItem, Me } from "@/lib/platform/contracts";
 import { useAttention, type AttentionFailure } from "@/lib/platform/client/attention";
-import { Button } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Button, cx, FOCUS_RING, Pill } from "@/components/platform/ui";
 import { signInHref } from "@/components/platform/overlays/sign-in";
 import {
   attentionProblem,
@@ -100,25 +98,23 @@ function Filters({ chosen, total, onChoose, chosenRef }: FiltersProps) {
     <fieldset className="attention-filters">
       <legend className="sr-only">Show</legend>
       {ATTENTION_FILTERS.map(({ filter, label }) => (
-        <button
+        <Pill
           key={filter}
           ref={filter === chosen ? chosenRef : undefined}
-          type="button"
-          aria-pressed={filter === chosen}
+          pressed={filter === chosen}
           data-attention-filter={filter}
           onClick={() => onChoose(filter)}
-          className={cx("attention-filter", FOCUS_RING)}
         >
           {label}
           {/* Only All has an authoritative number: the server counts by space, not by kind. */}
           {filter === "all" && total > 0 && (
-            <span className="attention-filter__count">
+            <span className="text-xs font-medium tabular-nums">
               <span className="sr-only">, </span>
               {total}
               <span className="sr-only"> new</span>
             </span>
           )}
-        </button>
+        </Pill>
       ))}
     </fieldset>
   );

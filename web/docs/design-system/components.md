@@ -179,8 +179,9 @@ pattern.
 
 ## Recipes and tokens
 
-`recipes.ts` holds the strings the components are made of: `FOCUS_RING`,
-`BUTTON_VARIANTS`, `BUTTON_SIZES`, `buttonClass`, `pillClass`, `CONTROL`,
+`recipes.ts` holds the strings the components are made of: `FOCUS_RING`
+(and `INSET_FOCUS_RING`, the same ring drawn inside the edge for rows that fill
+a menu or list), `BUTTON_VARIANTS`, `BUTTON_SIZES`, `buttonClass`, `pillClass`, `CONTROL`,
 `CONTROL_HEIGHT`, `CHOICE_BOX`, `LABEL`, `HINT`, `FIELD_ERROR`. `tones.ts`
 holds `CHIP_TONES` and `RAISED`. Use a recipe only where a component cannot
 go, and never restate one by hand.

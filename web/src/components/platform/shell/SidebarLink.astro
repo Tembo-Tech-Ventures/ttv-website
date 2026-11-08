@@ -1,8 +1,7 @@
 ---
 import type { ComponentType } from "react";
 import { PiArrowUpRight } from "react-icons/pi";
-import { CountBadge } from "@/components/platform/ui";
-import { CHIP_TONES } from "@/components/platform/ui/tones";
+import { Chip, CountBadge, FOCUS_RING } from "@/components/platform/ui";
 
 /**
  * One destination in a space's sidebar. `current` marks the page you are on.
@@ -44,7 +43,7 @@ const name = noted ? `${label}${publicPage ? " (public website)" : ""}, ${note}`
     aria-label={name}
     class:list={[
       "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-[0.9375rem] leading-snug transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
-      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink",
+      FOCUS_RING,
       // One colour and one weight each, so no two utilities compete.
       current ? "bg-ink-primary/8" : "hover:bg-ink-primary/5",
       current || emphasis === "unread" ? "text-ink-primary" : "text-ink-secondary hover:text-ink-primary",
@@ -59,7 +58,7 @@ const name = noted ? `${label}${publicPage ? " (public website)" : ""}, ${note}`
     </span>
     {publicPage && <PiArrowUpRight aria-hidden className="size-4 shrink-0 text-ink-muted" />}
     {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && (
-      <>{" "}<span class:list={["shrink-0 text-xs font-semibold", noteTone ? ["rounded-full px-2 py-0.5", CHIP_TONES[noteTone]] : "text-ink-muted"]}>{note}</span></>
+      <>{" "}{noteTone ? <Chip tone={noteTone}>{note}</Chip> : <span class="shrink-0 text-xs font-semibold text-ink-muted">{note}</span>}</>
     )}
   </a>
 </li>

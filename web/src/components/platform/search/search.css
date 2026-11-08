@@ -25,7 +25,7 @@
 }
 
 .search-overlay::backdrop {
-  background: rgb(1 33 31 / 0.6);
+  background: color-mix(in srgb, var(--color-ground) 60%, transparent);
 }
 
 @media (min-width: 48rem) {
@@ -38,8 +38,8 @@
     border: 1px solid var(--color-hairline);
     border-radius: 1.75rem;
     box-shadow:
-      0 1px 0 rgb(255 248 242 / 0.08) inset,
-      0 40px 80px -24px rgb(0 0 0 / 0.7);
+      0 1px 0 color-mix(in srgb, var(--color-ink-primary) 8%, transparent) inset,
+      var(--shadow-overlay);
   }
 }
 
@@ -64,7 +64,7 @@
     transition: background-color 180ms ease-out;
 
     @starting-style {
-      background-color: rgb(1 33 31 / 0);
+      background-color: transparent;
     }
   }
 }
@@ -152,7 +152,7 @@
   padding: 0 0.875rem;
   border: 1px solid var(--color-hairline);
   border-radius: 999px;
-  background: rgb(255 248 242 / 0.06);
+  background: color-mix(in srgb, var(--color-ink-primary) 6%, transparent);
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-ink-secondary);
@@ -192,36 +192,6 @@
   scrollbar-width: none;
 }
 
-.search-scope {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.5rem;
-  padding: 0 1rem;
-  border-radius: 999px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  white-space: nowrap;
-  color: var(--color-ink-secondary);
-}
-
-.search-scope:hover {
-  background: rgb(255 248 242 / 0.07);
-  color: var(--color-ink-primary);
-}
-
-.search-scope[aria-pressed="true"] {
-  background: var(--color-ink-primary);
-  color: var(--color-dark);
-}
-
-@media (pointer: coarse) {
-  .search-scope {
-    min-height: 2.75rem;
-  }
-}
-
 .search-overlay__results {
   flex: 1;
   padding: 0.25rem 0.75rem 0.75rem;
@@ -244,7 +214,7 @@
   padding: 0.875rem 1rem;
   border: 1px solid var(--color-hairline);
   border-radius: 1rem;
-  background: rgb(255 248 242 / 0.05);
+  background: color-mix(in srgb, var(--color-ink-primary) 5%, transparent);
   font-size: 0.9375rem;
 }
 
@@ -293,12 +263,12 @@
 }
 
 .search-option:hover {
-  background: rgb(255 248 242 / 0.05);
+  background: color-mix(in srgb, var(--color-ink-primary) 5%, transparent);
 }
 
 /* The chosen result: lifted, with a peach edge where the eye enters. */
 .search-option[aria-selected="true"] {
-  background: rgb(255 248 242 / 0.08);
+  background: color-mix(in srgb, var(--color-ink-primary) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
@@ -308,7 +278,7 @@
   width: 3rem;
   height: 3rem;
   border-radius: 0.875rem;
-  background: rgb(255 248 242 / 0.07);
+  background: color-mix(in srgb, var(--color-ink-primary) 7%, transparent);
   color: var(--color-ink-secondary);
 }
 
@@ -357,7 +327,7 @@
   border-radius: 0.25rem;
   margin: 0 -0.0625rem;
   padding: 0.0625rem 0.1875rem;
-  background: rgb(242 141 104 / 0.2);
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
   color: inherit;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -389,7 +359,7 @@
 }
 
 .search-recent__item:hover {
-  background: rgb(255 248 242 / 0.06);
+  background: color-mix(in srgb, var(--color-ink-primary) 6%, transparent);
   color: var(--color-ink-primary);
 }
 
@@ -431,7 +401,7 @@
 }
 
 .search-overlay__ask:hover {
-  background: rgb(242 141 104 / 0.1);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 @media (pointer: coarse) {

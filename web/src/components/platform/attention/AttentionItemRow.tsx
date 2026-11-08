@@ -15,9 +15,7 @@ import {
   PiVideoCamera,
 } from "react-icons/pi";
 import type { AttentionItem, AttentionKind } from "@/lib/platform/contracts";
-import { Avatar, SpaceGlyph, TemboMark } from "@/components/platform/ui";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, BUTTON_VARIANTS, cx, FOCUS_RING, SpaceGlyph, TemboMark } from "@/components/platform/ui";
 import MaskedText from "@/components/channels/MaskedText";
 import { attentionAction, attentionActor, attentionPlace, attentionTime, summaryLead } from "./attention-display";
 
@@ -103,8 +101,11 @@ export default function AttentionItemRow({ item, now, viewer, onOpen }: Attentio
             </span>
             <span className="min-w-0 break-words">{attentionPlace(item)}</span>
           </span>
-          {/* The row is the link: the action shows where it leads, as the prototype's button does (T04). */}
-          {action && <span className={cx("attention-item__action", BUTTON_VARIANTS.primary)} data-attention-action>{action}</span>}
+          {/*
+           * The row is the link: the action shows where it leads, as the prototype's button does (T04).
+           * Quiet, as every row action is: a list of requests must not become a column of peach.
+           */}
+          {action && <span className={cx("attention-item__action", BUTTON_VARIANTS.quiet)} data-attention-action>{action}</span>}
         </span>
         <span className="attention-item__aside">
           <time dateTime={new Date(item.createdAt).toISOString()} title={time.title} className="attention-item__time">

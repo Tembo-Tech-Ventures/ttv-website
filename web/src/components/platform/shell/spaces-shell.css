@@ -170,6 +170,18 @@
   }
 }
 
+/* The menu trigger and the drawer's close: links (the no-JS drawer is a fragment) drawn as icon buttons. */
+.spaces-shell__icon-link {
+  width: 2.5rem;
+  padding-inline: 0;
+}
+
+@media (pointer: coarse) {
+  .spaces-shell__icon-link {
+    width: 2.75rem;
+  }
+}
+
 .spaces-search__words {
   display: inline-flex;
   align-items: center;
@@ -190,7 +202,7 @@
 }
 
 .spaces-account[open] > .spaces-account__trigger {
-  outline: 2px solid rgb(255 248 242 / 0.4);
+  outline: 2px solid color-mix(in srgb, var(--color-ink-primary) 40%, transparent);
   outline-offset: 2px;
 }
 
@@ -383,7 +395,7 @@
 }
 
 .spaces-bottom__link[aria-current="page"] .spaces-bottom__glyph {
-  background-color: rgb(255 248 242 / 0.1);
+  background-color: color-mix(in srgb, var(--color-ink-primary) 10%, transparent);
 }
 
 .spaces-bottom__badge {
@@ -499,7 +511,7 @@
     border-radius: 0 1.5rem 1.5rem 0;
     /* A drawer is its own surface; in the sheet the sidebar is the sheet itself. */
     background-color: var(--sheet);
-    box-shadow: 30px 0 60px -20px rgb(0 0 0 / 0.7);
+    box-shadow: var(--shadow-drawer);
     transform: translateX(-100%);
     visibility: hidden;
     transition:
@@ -518,7 +530,7 @@
     inset: 0;
     z-index: 1;
     display: block;
-    background-color: rgb(1 20 18 / 0.6);
+    background-color: color-mix(in srgb, var(--color-ground) 60%, transparent);
     opacity: 0;
     visibility: hidden;
     transition:

@@ -1,7 +1,5 @@
 import type { SpaceId } from "@/lib/platform/contracts";
-import { CountBadge, SpaceGlyph } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { CountBadge, cx, FOCUS_RING, SpaceGlyph } from "@/components/platform/ui";
 import type { SpaceLink } from "./SpacesShell";
 
 type Person = { id: string; name: string; src?: string };
