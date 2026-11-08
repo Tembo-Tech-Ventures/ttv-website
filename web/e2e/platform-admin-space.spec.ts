@@ -133,7 +133,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application", current: "Applications" },
   { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
   { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Profile", current: "Profiles" },
-  { path: "/admin/feedback", heading: "Feedback", current: "Feedback" },
+  { path: "/admin/feedback", heading: "Feedback", current: "Feedback", retired: true },
   { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback" },
   { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback", retired: true },
   { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback" },
