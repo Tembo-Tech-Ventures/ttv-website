@@ -41,7 +41,7 @@ describe("the detail parts from an .astro page", () => {
   it("asks before a destructive POST, with Cancel back to the same page and its other parameters", () => {
     // It takes focus as it renders, so the reader lands on the question.
     const step = between(/<div data-confirm-step="true"/, "</form>");
-    expect(step).toMatch(/^<div data-confirm-step="true"[^>]*><div autofocus="" tabindex="-1" data-notice="warning"/);
+    expect(step).toMatch(/^<div data-confirm-step="true"[^>]*><div autofocus="" tabindex="-1" role="region" aria-label="[^"]+" data-notice="warning"/);
     expect(step).toContain("Decline Wanjiku Mwangi&#x27;s application?");
     expect(step).toMatch(/<form method="post" class="flex flex-wrap gap-2"><input type="hidden" name="intent" value="decline"\/><input type="hidden" name="applicationId" value="a1"\/>/);
     expect(step).toMatch(/<button type="submit"[^>]*data-variant="danger"[^>]*>Decline application<\/button>/);

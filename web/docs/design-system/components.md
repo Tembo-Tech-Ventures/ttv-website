@@ -219,7 +219,7 @@ A message about the page or what just happened on it.
 | `title` | the point in a few words |
 | children | what happened and what to do next |
 | `actions` | at most two buttons or links |
-| `announce` | `assertive` (`role="alert"`), `polite` (`role="status"`), `none`. Defaults: danger assertive, success polite, info and warning none |
+| `announce` | `assertive` (`role="alert"`), `polite` (`role="status"`), `none`. Defaults: danger assertive, success polite, info and warning none. A titled notice that is not announced is a `region` named by its title (`aria-labelledby` when it has an `id`) |
 | `focusOnLoad` | lands focus on it when the page loads, as after a rejected submit; server-rendered, so no script is needed |
 | `id`, `tabIndex={-1}` | for a page that moves focus to it by script |
 

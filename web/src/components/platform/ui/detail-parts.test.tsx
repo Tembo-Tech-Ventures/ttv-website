@@ -73,13 +73,14 @@ describe("ConfirmStep", () => {
 
   it("is a warning that takes focus, then a form that posts the hidden fields", () => {
     const html = render();
-    expect(html).toMatch(/^<div data-confirm-step="true"[^>]*><div autofocus="" tabindex="-1" data-notice="warning"/);
+    expect(html).toMatch(/^<div data-confirm-step="true"[^>]*><div autofocus="" tabindex="-1" role="region" aria-label="Remove David Kamau from Cohort 05\?" data-notice="warning"/);
     expect(html).toContain('<form method="post" action="/admin/programs/c5" class="flex flex-wrap gap-2">');
     expect(html).toContain('<input type="hidden" name="intent" value="remove-mentor"/><input type="hidden" name="userId" value="u2"/>');
   });
 
   it("keeps its buttons off the warning tint, where a hovered danger button would not clear 4.5:1", () => {
     const notice = /<div autofocus=""[\s\S]*?<\/div><\/div><\/div>/.exec(render())?.[0] ?? "";
+    expect(notice).not.toBe("");
     expect(notice).toContain("He loses the cohort");
     expect(notice).not.toContain("<form");
     expect(notice).not.toContain("<button");
