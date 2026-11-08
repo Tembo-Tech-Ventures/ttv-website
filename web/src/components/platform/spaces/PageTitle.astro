@@ -6,6 +6,10 @@
  * page always had. A page that had no title there (`legacyTag={null}`) gains
  * one in the spaces shell alone. A page that has moved to the kit imports
  * `PageTitle` or `PageHeader` from `@/components/platform/ui` instead.
+ *
+ * Those pages' spacing was set for a smaller title, often with a link just
+ * above or tabs just below it, so the title brings 0.2em of room above and
+ * below: more than its text overhangs its box, which a browser hit-tests.
  */
 import { PageTitle } from "@/components/platform/ui";
 
@@ -28,7 +32,7 @@ const { spaces, legacyClass, legacyTag: Legacy = "h2", size = "page" } = Astro.p
 {
   spaces ? (
     size === "page" ? (
-      <PageTitle>
+      <PageTitle className="my-[0.2em]">
         <slot />
       </PageTitle>
     ) : (

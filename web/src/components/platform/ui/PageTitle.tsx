@@ -17,6 +17,12 @@ type PageTitleProps = {
  * than push the page sideways, even inside a flex row, and the lines balance
  * so a two-line title does not leave one word alone. Sections below it are
  * Maven Pro h2s, which the base styles give every h2 without a class.
+ *
+ * Mattone's line box is 1.43em, so any tighter line height lets the title's
+ * text overhang its box, and a browser hit-tests that overhang: at 60px and a
+ * line height of 1 it covered a back link sitting just above. 1.1 keeps the
+ * overhang to 0.165em and two-line titles close, as the homepage sets them;
+ * keep anything pressable at least 0.2em away (PageHeader does).
  */
 export default function PageTitle({ children, id, as: Tag = "h1", className }: PageTitleProps) {
   return (
@@ -24,7 +30,7 @@ export default function PageTitle({ children, id, as: Tag = "h1", className }: P
       id={id}
       data-page-title
       className={cx(
-        "m-0 font-heading tracking-heading text-4xl text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl",
+        "font-heading leading-[1.1] tracking-heading text-4xl text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl",
         className,
       )}
     >
