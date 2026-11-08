@@ -94,6 +94,7 @@ export function mapProfile(
     id: profile.userId,
     version: profile.version,
     name: profile.name,
+    image: profile.image,
     headline: profile.headline,
     about: profile.bio,
     skills: profile.skills,
