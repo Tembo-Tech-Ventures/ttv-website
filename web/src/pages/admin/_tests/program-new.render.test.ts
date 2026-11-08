@@ -93,7 +93,7 @@ describe("a new cohort on the style guide", () => {
     expect(body).toMatch(new RegExp(`<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\\s\\S]*?The cohort wasn${APOSTROPHE}t created[\\s\\S]*?Fix the fields marked below\\.`));
     expect(body).toContain("Enter a cohort name.");
     expect(body).toContain("End date must be on or after start date.");
-    expect(body).toMatch(/<input (?=[^>]*name="name")(?=[^>]*aria-invalid="true")[^>]*value="   "/);
+    expect(body).toMatch(/<input (?=[^>]*name="name")(?=[^>]*aria-invalid="true")[^>]*value=" {3}"/);
     expect(body).toContain("Kept description.</textarea>");
     expect(body).toMatch(/<input (?=[^>]*name="applicationsOpen")(?=[^>]*checked="")[^>]*>/);
     expect(cohorts()).toEqual([]);
