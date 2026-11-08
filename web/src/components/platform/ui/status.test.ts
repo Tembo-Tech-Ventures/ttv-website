@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import * as schema from "@/lib/db/schema";
 import { STATUSES, statusTone, type StatusDomain } from "./status";
 import { CHIP_TONES } from "./tones";
+import { studentFeedbackState } from "@/lib/feedback/themes";
 
 /** The stored values each domain names, read from the schema itself. */
-const COLUMNS: Record<Exclude<StatusDomain, "token">, readonly string[]> = {
+const COLUMNS: Record<Exclude<StatusDomain, "token" | "studentFeedback">, readonly string[]> = {
   application: schema.programApplication.status.enumValues,
   access: schema.accessRequest.status.enumValues,
   feedback: schema.feedback.status.enumValues,
@@ -17,6 +18,12 @@ const COLUMNS: Record<Exclude<StatusDomain, "token">, readonly string[]> = {
 describe("statusTone", () => {
   it.each(Object.entries(COLUMNS))("names every stored %s status, and only those", (domain, values) => {
     expect(Object.keys(STATUSES[domain as StatusDomain]).toSorted()).toEqual([...values].toSorted());
+  });
+
+  it("names every state a student's note can be in, from every note and theme status", () => {
+    const states = new Set(schema.feedback.status.enumValues.flatMap((note) =>
+      [null, ...schema.feedbackTheme.status.enumValues].map((theme) => studentFeedbackState(note, theme))));
+    expect(Object.keys(STATUSES.studentFeedback).toSorted()).toEqual([...states].toSorted());
   });
 
   it("names a blog post's statuses as a profile's, since they share the column's values", () => {
