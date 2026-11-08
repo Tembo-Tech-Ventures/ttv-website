@@ -87,7 +87,7 @@ describe("the availability page", () => {
     expect(headers.get("Cache-Control")).toBe("no-store");
     // The shell's own islands only: the page itself hydrates nothing.
     const islands = [...body.matchAll(/<astro-island[^>]*component-url="([^"]+)"/g)].map(([, url]) => url);
-    expect(islands.toSorted()).toEqual(["@/components/feedback/FeedbackWidget", "@/components/platform/overlays/PlatformOverlays", "@/components/platform/shell/SpacesShell"]);
+    expect(islands.toSorted()).toEqual(["@/components/platform/overlays/PlatformOverlays", "@/components/platform/shell/SpacesShell"]);
     expect(body).toMatch(/<form method="POST"[^>]*data-availability-form/);
     expect(body).toMatch(/<input[^>]*name="headline"[^>]*value="Backend engineer · fintech"/);
     expect(body).toMatch(/<textarea[^>]*name="areas"[^>]*>Code review\nAPI design<\/textarea>/);

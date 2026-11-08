@@ -94,8 +94,8 @@ describe("the mentor directory page", () => {
     expect(status).toBe(200);
     expect(headers.get("Cache-Control")).toBe("no-store");
     expect(islands(body)).toEqual([
-      "@/components/feedback/FeedbackWidget", "@/components/platform/mentors/DirectoryRequests",
-      "@/components/platform/overlays/PlatformOverlays", "@/components/platform/shell/SpacesShell",
+      "@/components/platform/mentors/DirectoryRequests", "@/components/platform/overlays/PlatformOverlays",
+      "@/components/platform/shell/SpacesShell",
     ]);
     // The filters, the results and the cards come after the island, outside it.
     const before = body.slice(0, body.indexOf('<nav aria-label="Filter mentors"'));
