@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { attentionRequest } from "@/lib/attention/http";
 import { VIEWER } from "@/lib/channels/test-support";
 import { AttentionItem, AttentionList, ErrorEnvelope, MentorAvailability, MentorDirectory, MentorRequest, ROUTES } from "@/lib/platform/contracts";
+import { directoryQuery, filterDirectory, type DirectoryFilters } from "@/lib/platform/client/mentor-directory";
 import { nextMonthStart } from "./capacity";
 import { DIRECTORY_LIMIT } from "./profiles";
 import type { MentoringOperation } from "./http";
@@ -160,6 +161,26 @@ describe("the directory", () => {
     await s.call("acceptMentorRequest", { id: (await s.call("listMentorRequests", { query: "?as=mentor", user: PEOPLE.mercy }).then((r) => (r.body as { items: { id: string }[] }).items[0]!.id)), user: PEOPLE.mercy, body: {} });
     // Accepted this month: the spot comes back when December starts.
     expect((await list()).at(-1)?.capacity).toEqual({ used: 1, limit: 1, nextOpeningAt: nextMonthStart(NOW) });
+  });
+
+  it("filters as the directory page does in memory from the unfiltered list (filterDirectory), match for match", async () => {
+    const s = setup();
+    await s.ask(PEOPLE.mercy);
+    s.database.exec(`UPDATE mentor_profile SET areas = '["Code review"," API design ","Écriture"]' WHERE userId = '${PEOPLE.david}'`);
+    const list = async (query = "") => MentorDirectory.parse((await s.call("listMentors", { query, user: "synthetic-otieno" })).body).items;
+    const everyone = await list();
+    const cases: DirectoryFilters[] = [
+      { area: "code REVIEW", format: null, available: false }, { area: "api design", format: null, available: false },
+      // SQLite folds ASCII letters only, and so does the page.
+      { area: "écriture", format: null, available: false }, { area: "Écriture", format: null, available: false },
+      { area: null, format: "WRITTEN_REVIEW", available: false }, { area: null, format: null, available: true },
+      { area: "Career", format: "CALL_30_MIN", available: true }, { area: "Portfolios", format: null, available: true },
+      { area: "Underwater basket weaving", format: null, available: false },
+    ];
+    for (const filters of cases) {
+      const search = new URLSearchParams(Object.entries(directoryQuery(filters)).map(([key, value]) => [key, String(value)]));
+      expect(filterDirectory(everyone, filters), `${JSON.stringify(filters)}`).toEqual(await list(`?${search}`));
+    }
   });
 
   it(`keeps mentors with a spot when more than ${DIRECTORY_LIMIT} are listed, first in the list and under available=true`, async () => {

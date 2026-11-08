@@ -135,7 +135,8 @@ export function usedShare(capacity: MentorCapacity): number {
   return capacity.limit === 0 ? 0 : Math.min(1, capacity.used / capacity.limit);
 }
 
-export type StatusTone = "peach" | "ring" | "neutral";
+/** Peach for what needs someone, the ring for a mentor's part, success for an accepted request, neutral for the rest. */
+export type StatusTone = "peach" | "ring" | "success" | "neutral";
 export interface StatusView {
   label: string;
   tone: StatusTone;
@@ -191,7 +192,7 @@ export function requesterStatus(
     case "PENDING":
       return { label: `Waiting for ${mentor}`, tone: "ring", detail: null };
     case "ACCEPTED":
-      return { label: "Accepted", tone: "peach", detail: `${mentor} accepted. Your conversation is open.` };
+      return { label: "Accepted", tone: "success", detail: `${mentor} accepted. Your conversation is open.` };
     case "REDIRECTED":
       return {
         label: "Another mentor suggested", tone: "neutral",
@@ -256,7 +257,7 @@ export function mentorStatus(
     case "PENDING":
       return { label: "Waiting for you", tone: "peach", detail: null };
     case "ACCEPTED":
-      return { label: "Accepted", tone: "peach", detail: null };
+      return { label: "Accepted", tone: "success", detail: null };
     case "REDIRECTED":
       return { label: request.redirectedTo ? `Suggested ${request.redirectedTo.name}` : "Suggested another mentor", tone: "neutral", detail: null };
     case "DECLINED":

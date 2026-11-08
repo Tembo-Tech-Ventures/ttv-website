@@ -34,12 +34,13 @@ import { canRenderSpace } from "@/components/platform/shell/access";
 import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
 import { spaceSidebar, type SpacePageKey } from "@/components/platform/spaces/sidebar";
 import HarnessMentors from "@/components/platform/mentors/harness/HarnessMentors";
+import MentorsDirectory from "@/components/platform/mentors/MentorsDirectory.astro";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
 import AvailabilityForm from "@/components/platform/mentors/AvailabilityForm.astro";
 import { handleAvailabilityPost, valuesOf, type AvailabilityPostResult } from "@/components/platform/mentors/availability-post";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { handleRequestPost, isRequestPost, type RequestPostResult } from "@/components/platform/mentors/request-post";
-import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
+import { areaOptions, directoryHref, filterDirectory, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
@@ -132,21 +133,19 @@ const sidebar = spaceSidebar(space, {
   channels: { items: channelList.items },
 });
 
+// The directory around the island, as the page renders it on the server.
+const directoryReads = view === "directory"
+  ? await Promise.all([mock.api.call(ROUTES.listMentors, { query: {} }), mock.api.call(ROUTES.listMentorRequests, { query: { as: "requester" } })])
+  : null;
 const harness = view === "directory"
   ? {
-    view, props: await (async () => {
-      const [all, shown, own] = await Promise.all([
-        mock.api.call(ROUTES.listMentors, { query: {} }),
-        mock.api.call(ROUTES.listMentors, { query: directoryQuery(filters) }),
-        mock.api.call(ROUTES.listMentorRequests, { query: { as: "requester" } }),
-      ]);
-      return {
-        me, path: Astro.url.pathname, filters: posted ? { ...filters, ask: posted.mentorId } : filters, mentors: all.items, shown: shown.items, areas: areaOptions(all.items, filters.area),
-        ownRequests: own, projects: mock.projects, now,
-        serverForm: posted ? { mentorId: posted.mentorId, form: posted.form } : null,
-        conduct: { version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree: true, agreed: agreedNow },
-      };
-    })(),
+    view,
+    props: {
+      userId: me.user.id, path: Astro.url.pathname, filters: posted ? { ...filters, ask: posted.mentorId } : filters, mentors: directoryReads![0].items,
+      ownRequests: directoryReads![1], projects: mock.projects, now,
+      serverForm: posted ? { mentorId: posted.mentorId, form: posted.form } : null,
+      conduct: { version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree: true, agreed: agreedNow },
+    },
   } as const
   : view === "requests"
     ? {
@@ -181,7 +180,16 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
 >
   <SpaceSidebar slot="sidebar" model={sidebar} />
   <MentorPageIntro page={view === "directory" ? "mentors" : view} />
-  {harness && <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />}
+  {directoryReads && harness ? (
+    <MentorsDirectory
+      me={me} path={Astro.url.pathname} filters={directory} areas={areaOptions(directoryReads[0].items, filters.area)}
+      shown={filterDirectory(directoryReads[0].items, directory)} ownRequests={directoryReads[1]} now={now}
+    >
+      <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
+    </MentorsDirectory>
+  ) : harness && (
+    <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
+  )}
   {availability && (
     <AvailabilityForm
       saved={availability}

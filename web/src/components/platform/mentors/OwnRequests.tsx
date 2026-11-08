@@ -4,9 +4,7 @@ import type { MentorDirectoryItem, MentorRequest } from "@/lib/platform/contract
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import { hasOpenSpot } from "@/lib/platform/client/mentor-directory";
 import { shownStatus, type MentorRequestsStore } from "@/lib/platform/client/mentor-requests";
-import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, Button, ButtonLink, Card, Chip, FOCUS_RING, buttonClass, cx } from "@/components/platform/ui";
 import MaskedText from "@/components/channels/MaskedText";
 import { capacityView, conversationHref, requesterStatus, requestHasNews, requestMeta, requestsSummary, type StatusView } from "./mentor-display";
 
@@ -25,8 +23,6 @@ export const RECENT_DAYS = 14;
 export function isRecent(request: MentorRequest, now: number): boolean {
   return request.status === "PENDING" || now - request.updatedAt < RECENT_DAYS * 86_400_000;
 }
-
-const LINK = cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[0.8125rem] font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING);
 
 /**
  * The requests this person sent, newest first, with where each stands. A
@@ -72,7 +68,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
             <p id={`own-request-${request.id}`} className="text-[0.9375rem] font-semibold break-words text-ink-primary">{request.mentor.name}</p>
             <p className="text-[0.8125rem] text-ink-secondary">{requestMeta(request, now)}</p>
           </div>
-          <span ref={node => { if (node) statusRefs.current.set(request.id, node); else statusRefs.current.delete(request.id); }} tabIndex={-1} className="focus:outline-none" data-request-status>
+          <span ref={node => { if (node) statusRefs.current.set(request.id, node); else statusRefs.current.delete(request.id); }} tabIndex={-1} className={cx("rounded-full", FOCUS_RING)} data-request-status>
             <Chip tone={view.tone}>{pending ? `${view.label}…` : view.label}</Chip>
           </span>
           <div className="flex flex-wrap gap-2 empty:hidden">
@@ -81,12 +77,16 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
               <Button size="sm" onClick={() => withdraw(request)} aria-label={`Withdraw request to ${request.mentor.name}`}>Withdraw</Button>
             )}
             {status === "ACCEPTED" && request.channelId && (
-              <a href={conversationHref(request.channelId)} className={LINK} aria-describedby={`own-request-${request.id}`}>
-                Open conversation <PiArrowRight aria-hidden className="size-4" />
-              </a>
+              <ButtonLink
+                href={conversationHref(request.channelId)} size="sm" variant="quiet" trailingIcon={<PiArrowRight className="size-4" />}
+                aria-describedby={`own-request-${request.id}`}
+              >
+                Open conversation
+              </ButtonLink>
             )}
             {suggested && hasOpenSpot(suggested) && (
-              <Button size="sm" variant="primary" aria-haspopup="dialog" onClick={event => onAsk(suggested, event.currentTarget)}>
+              // Quiet, as every row can hold one: the drawer's Send is the page's one primary.
+              <Button size="sm" aria-haspopup="dialog" onClick={event => onAsk(suggested, event.currentTarget)}>
                 Ask {suggested.person.name}
               </Button>
             )}
@@ -116,15 +116,15 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
     .filter(Boolean).join(" · ");
 
   return (
-    <section aria-labelledby="own-requests-title" className="own-requests mb-5" data-own-requests>
+    <section aria-labelledby="own-requests-title" className="own-requests mb-5 flex flex-col gap-2" data-own-requests>
       {/* The heading stays outside the summary, which some screen readers read as a button (S3 review nit). */}
-      <h2 id="own-requests-title" className="own-requests__title font-body text-[0.9375rem] font-bold text-ink-primary">Your requests</h2>
+      <h2 id="own-requests-title" className="text-[0.9375rem] text-ink-primary">Your requests</h2>
       {/* Open on arrival when a request has news the person came here for: a suggestion, not this month, a check (S3). */}
       <details className="group" open={newsOnArrival || undefined} data-own-requests-fold>
-        <summary className={cx("own-requests__summary", FOCUS_RING)}>
+        <summary className={buttonClass({ variant: "quiet", className: "own-requests__summary w-full cursor-pointer" })}>
           <span className="sr-only">Your requests: </span>
-          {summary && <span className="min-w-0 text-sm text-ink-secondary" data-own-requests-summary>{summary}</span>}
-          <span className="own-requests__toggle" aria-hidden="true">
+          {summary && <span className="min-w-0 font-normal text-ink-secondary" data-own-requests-summary>{summary}</span>}
+          <span className="ml-auto inline-flex items-center gap-1 text-ink-secondary" aria-hidden="true">
             <span className="group-open:hidden">Show</span>
             <span className="hidden group-open:inline">Hide</span>
             <PiCaretDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
@@ -137,7 +137,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
       )}
       {earlier.length > 0 ? (
         <details className="mt-3" data-own-requests-earlier>
-          <summary className={cx("inline-flex min-h-11 cursor-pointer items-center rounded-lg px-1 text-sm font-semibold text-ink-secondary hover:text-ink-primary", FOCUS_RING)}>
+          <summary className={buttonClass({ variant: "ghost", size: "sm", className: "cursor-pointer" })}>
             Earlier ({earlier.length}{state.nextCursor !== null ? "+" : ""})
           </summary>
           <Card as="div" padding="sm" className="mt-2 p-0 sm:p-0">

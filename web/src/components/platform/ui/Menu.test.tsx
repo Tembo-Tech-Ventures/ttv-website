@@ -138,6 +138,25 @@ describe("Menu", () => {
     expect(document.activeElement).toBe(trigger());
   });
 
+  it("keeps its Escape from an enclosing drawer or dialog, which would close too", async () => {
+    const enclosing = vi.fn();
+    const page = vi.fn();
+    document.addEventListener("keydown", page);
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- A stand-in for a drawer that closes on Escape.
+    await mount(<div onKeyDown={enclosing}><Actions /></div>);
+    await key(trigger(), "ArrowDown");
+    enclosing.mockClear();
+    page.mockClear();
+    await key(document.activeElement!, "Escape");
+    expect($("[role=menu]")).toBeNull();
+    expect(enclosing).not.toHaveBeenCalled();
+    expect(page).not.toHaveBeenCalled();
+    document.removeEventListener("keydown", page);
+    // Its other keys still reach the drawer: only the Escape that closed the menu is its own.
+    await key(trigger(), "x");
+    expect(enclosing).toHaveBeenCalledTimes(1);
+  });
+
   it("does what was chosen once it has closed, with focus back on its button", async () => {
     let focusedOnSelect: Element | null = null;
     const onReport = vi.fn(() => {

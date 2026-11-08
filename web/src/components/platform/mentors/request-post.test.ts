@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { CreateMentorRequest } from "@/lib/platform/contracts";
 import { mentors, pendingMentorRequest, projects } from "@/lib/platform/fixtures";
 import { failureMessage, requestFailure } from "@/lib/platform/client/mentor-request-form";
-import { AGREE_FIELD, handleRequestPost, isRequestPost, projectValue, REQUEST_INTENT, type RequestPostOptions } from "./request-post";
+import { AGREE_FIELD, projectValue, REQUEST_INTENT } from "./request-fields";
+import { handleRequestPost, isRequestPost, type RequestPostOptions } from "./request-post";
 
 const ORIGIN = "https://ttv.test";
 const PAGE = `${ORIGIN}/dashboard/community/mentors`;

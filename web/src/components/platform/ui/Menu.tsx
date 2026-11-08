@@ -219,6 +219,8 @@ export default function Menu({
         move(-1);
         break;
       case "Escape":
+        // Handled here: a drawer or dialog around the menu, listening for Escape itself, stays open.
+        event.stopPropagation();
         close(true);
         break;
       case "Tab":

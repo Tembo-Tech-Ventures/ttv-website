@@ -6,7 +6,7 @@ import {
 } from "../contracts";
 import * as fixtures from "../fixtures";
 import { createApiClient, type ApiClient } from "./apiClient";
-import { filterDirectoryFixture, hasOpenSpot } from "./mentor-directory";
+import { filterDirectory, hasOpenSpot } from "./mentor-directory";
 import { createMockTransport, type MockOptions, type MockReply } from "./mockTransport";
 
 /**
@@ -137,7 +137,7 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
       const query = MentorDirectoryQuery.parse(Object.fromEntries(url.searchParams));
       const items = [...availability.keys()].filter(id => id !== viewer.id)
         .map(directoryItem).filter((item): item is MentorDirectoryItem => item !== null);
-      return { data: { items: filterDirectoryFixture(items, { area: query.area ?? null, format: query.format ?? null, available: query.available ?? false }) } };
+      return { data: { items: filterDirectory(items, { area: query.area ?? null, format: query.format ?? null, available: query.available ?? false }) } };
     } },
     { ...ROUTES.listMentorRequests, reply: ({ request }) => {
       const url = new URL(request.url);

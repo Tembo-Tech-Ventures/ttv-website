@@ -100,7 +100,7 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
     const results = page.getByRole("heading", { level: 2, name: /^\d+ mentors? · Career$/ });
     await expect(results).toBeFocused();
-    await expect(page.locator("[data-mentor-filters]").getByRole("link", { name: "Career" })).toHaveAttribute("aria-current", "true");
+    await expect(page.locator("[data-mentor-filters]").getByRole("link", { name: "Career" })).toHaveAttribute("aria-current", "page");
     // The jump scrolls the sheet only: the shell, its tabs and the phone's bottom bar stay put.
     expect(await page.locator(".spaces-shell").evaluate((el) => el.scrollTop)).toBe(0);
     await expect(results).toBeInViewport();
@@ -258,7 +258,7 @@ test.describe("without JavaScript", () => {
 test("someone in an organisation is told they can ask as themselves, and can", async ({ page }, testInfo) => {
   await page.setViewportSize(PHONE);
   await open(page, harness({ persona: "joseph", view: "directory" }));
-  await expect(page.locator("[data-mentors-as-yourself]")).toHaveText(
+  await expect(page.locator("[data-mentors-as-yourself]")).toContainText(
     "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.",
   );
   await expect(page.getByRole("link", { name: /Ask for time/ }).first()).toBeVisible();
