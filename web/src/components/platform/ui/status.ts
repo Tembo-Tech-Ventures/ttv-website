@@ -43,6 +43,17 @@ export const STATUSES = {
     DECLINED: { label: "Declined", tone: "neutral" },
     DORMANT: { label: "Dormant", tone: "neutral" },
   },
+  /**
+   * A note as its author sees it, from the note and its theme (studentFeedbackState): the outcome,
+   * never staff's workflow. Nothing in it waits on the student, so nothing is peach.
+   */
+  studentFeedback: {
+    RECEIVED: { label: "Received", tone: "neutral" },
+    PLANNED: { label: "Planned", tone: "neutral" },
+    IN_PROGRESS: { label: "Being worked on", tone: "neutral" },
+    DONE: { label: "Done", tone: "success" },
+    NOT_PLANNED: { label: "Not planned", tone: "neutral" },
+  },
   /** studentProfile.status, and a blog post's. */
   profile: {
     DRAFT: { label: "Draft", tone: "neutral" },
