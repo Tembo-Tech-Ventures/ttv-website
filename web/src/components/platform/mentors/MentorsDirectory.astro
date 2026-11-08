@@ -1,0 +1,56 @@
+---
+/**
+ * Community → Mentors (screen 05), as the server renders it: a notice when
+ * there is one, the island (`DirectoryRequests`: Your requests, the "Ask for
+ * time" drawer and each card's live part) in the default slot, then the
+ * directory itself with no island: the filters, the results heading and the
+ * mentors' cards. The page passes the live island; the DEV harness passes its
+ * own over the mentoring mock.
+ */
+import type { Me, MentorDirectoryItem, MentorRequest, MentorRequestList } from "@/lib/platform/contracts";
+import type { DirectoryFilters } from "@/lib/platform/client/mentor-directory";
+import { Notice } from "@/components/platform/ui";
+import { standings } from "./MentorCard";
+import MentorDirectoryList from "./MentorDirectoryList";
+import { AS_YOURSELF } from "./mentor-display";
+// oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet, for the grid and the filter menus.
+import "./mentors.css";
+
+interface Props {
+  me: Me;
+  path: string;
+  filters: DirectoryFilters;
+  areas: readonly string[];
+  shown: readonly MentorDirectoryItem[];
+  ownRequests: MentorRequestList;
+  /** After a send without JavaScript that went through: the new request, named by `?sent=`. */
+  sent?: MentorRequest | null;
+  now: number;
+}
+
+const { me, path, filters, areas, shown, ownRequests, sent = null, now } = Astro.props;
+---
+
+<div class="mentors-directory" data-mentors-directory>
+  {/* One notice at a time: the request just sent, else that an organisation's person asks as themselves (QA4-09). */}
+  {sent ? (
+    <div class="mb-6" data-request-sent-notice>
+      <Notice tone="success" announce="polite" focusOnLoad title={`Request sent to ${sent.mentor.name}`}>
+        It's under Your requests while it waits, and you can withdraw it there. Some requests get a check from TTV
+        before they reach a mentor; if yours does, it says so there.
+      </Notice>
+    </div>
+  ) : me.capabilities.isInstitution ? (
+    <div class="mb-6" data-mentors-as-yourself>
+      <Notice tone="info">{AS_YOURSELF}</Notice>
+    </div>
+  ) : null}
+  <slot />
+  <MentorDirectoryList path={path} filters={filters} areas={areas} shown={shown} standings={standings({ items: ownRequests.items, pending: {} })} now={now} />
+</div>
+
+<script>
+  import { wireFilterMenus } from "./filter-menus";
+
+  for (const row of document.querySelectorAll<HTMLElement>("[data-mentors-directory] [data-mentor-filters]")) wireFilterMenus(row);
+</script>

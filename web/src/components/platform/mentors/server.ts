@@ -1,12 +1,13 @@
 import type { APIContext } from "astro";
 import type {
-  Conversation, CreateMentorRequest, Me, MentorAvailability, MentorDirectory, MentorDirectoryQuery, MentorRequestList,
-  MentorRequestListQuery, ProjectEmbed, UpdateMentorAvailability, WorthAnotherLook,
+  Conversation, CreateMentorRequest, Me, MentorAvailability, MentorDirectory, MentorDirectoryItem, MentorDirectoryQuery,
+  MentorRequestList, MentorRequestListQuery, ProjectEmbed, UpdateMentorAvailability, WorthAnotherLook,
 } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
+import { directoryQuery, filterDirectory, type DirectoryFilters } from "@/lib/platform/client/mentor-directory";
 import { listOwnProjects } from "@/lib/channels/embeds";
 import { worthAnotherLook } from "@/lib/mentoring/another-look";
-import { getAvailability, listMentors } from "@/lib/mentoring/profiles";
+import { DIRECTORY_LIMIT, getAvailability, listMentors } from "@/lib/mentoring/profiles";
 import { getConversation, listRequests } from "@/lib/mentoring/requests";
 import { mentoringRequest } from "@/lib/mentoring/http";
 
@@ -19,6 +20,12 @@ import { mentoringRequest } from "@/lib/mentoring/http";
  */
 export interface MentorsServer {
   directory(query: MentorDirectoryQuery): Promise<MentorDirectory>;
+  /**
+   * The directory page's mentors: every listed one (the drawer and suggestions can open any), and the ones
+   * these filters match, filtered from that one read with the server's own rules (`filterDirectory`). Only
+   * when the list is at DIRECTORY_LIMIT, so matches past it would be missed, does it ask the server again.
+   */
+  browse(filters: DirectoryFilters): Promise<{ all: MentorDirectory; shown: readonly MentorDirectoryItem[] }>;
   requests(query: MentorRequestListQuery): Promise<MentorRequestList>;
   availability(): Promise<MentorAvailability>;
   /** The caller's own published projects, which the drawer can attach. */
@@ -40,6 +47,13 @@ export function mentorsServer(
   const ctx = { db, viewerId: me.user.id, now };
   return {
     directory: (query) => listMentors(db, me.user.id, query, now),
+    async browse(filters) {
+      const all = await listMentors(db, me.user.id, {}, now);
+      const filtered = Boolean(filters.area || filters.format || filters.available);
+      if (!filtered) return { all, shown: all.items };
+      if (all.items.length < DIRECTORY_LIMIT) return { all, shown: filterDirectory(all.items, filters) };
+      return { all, shown: (await listMentors(db, me.user.id, directoryQuery(filters), now)).items };
+    },
     requests: (query) => listRequests(ctx, query),
     availability: () => getAvailability(db, me.user.id, now),
     projects: () => listOwnProjects(db, me.user.id),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MentorDirectoryQuery } from "../contracts";
 import { mentors } from "../fixtures";
 import {
-  areaOptions, askHref, directoryHref, directoryQuery, directorySearch, filterDirectoryFixture, hasOpenSpot,
+  areaOptions, askHref, directoryHref, directoryQuery, directorySearch, filterDirectory, hasOpenSpot,
   NO_FILTERS, parseDirectoryUrl, sameArea,
 } from "./mentor-directory";
 
@@ -71,10 +71,10 @@ describe("area options", () => {
   });
 });
 
-describe("fixture filtering (harness only)", () => {
-  it("filters the fixtures as GET /api/mentors does", () => {
-    const names = (filters: Parameters<typeof filterDirectoryFixture>[1]) =>
-      filterDirectoryFixture(mentors.items, filters).map(item => item.person.name);
+describe("filtering the unfiltered list", () => {
+  it("filters as GET /api/mentors does (src/lib/mentoring/http.test.ts holds it to the SQL)", () => {
+    const names = (filters: Parameters<typeof filterDirectory>[1]) =>
+      filterDirectory(mentors.items, filters).map(item => item.person.name);
     expect(names(NO_FILTERS)).toHaveLength(4);
     expect(names({ ...NO_FILTERS, area: "code REVIEW" })).toEqual(["David Kamau"]);
     expect(names({ ...NO_FILTERS, format: "QUICK_QUESTION" })).toEqual(["Mercy Wambui", "Joseph Mutua", "Samuel Otieno"]);

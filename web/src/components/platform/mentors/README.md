@@ -16,7 +16,19 @@ exist only while `mentor_requests` is on for the person (effective only with
 
 - `server.ts` is the pages' one seam to the backend lane: page frontmatter
   reads through it, so everything renders without JavaScript from the same
-  functions the API serves.
+  functions the API serves. The directory is one read (`browse`): a filtered
+  view filters it in memory with the server's own rules (`filterDirectory`,
+  held to the SQL in `src/lib/mentoring/http.test.ts`), and asks the server
+  again only when the list is at its limit.
+- The directory renders on the server with no island (`MentorsDirectory.astro`,
+  `MentorDirectoryList.tsx`): the filters, the results heading and the cards.
+  Only what responds to a press hydrates (`DirectoryRequests.tsx`): Your
+  requests, the "Ask for time" drawer, and each card's live part
+  (`data-mentor-live`, `MentorCardLive`), which the island draws in place of the
+  server's once interactive. The filter menus' Escape, press-away and edge
+  alignment are a small script (`filter-menus.ts`). Client code takes the
+  contract's values from `mentor-constants.ts` and the form's field names from
+  `request-fields.ts`, not from zod schemas.
 - The islands keep their state in `src/lib/platform/client` (S-4.1):
   `mentor-directory.ts` (filters held in the URL, `?ask=` for the open drawer),
   `mentor-request-form.ts` (the draft, kept per person and mentor in
@@ -33,8 +45,10 @@ exist only while `mentor_requests` is on for the person (effective only with
   Africa/Nairobi months (always "2 of 3 spots open in November"), status lines
   and what a check means, "Full this month", and `AS_YOURSELF`.
 - A card shows where the person already stands with that mentor
-  (`MentorsDirectory`'s `standings`): a request still waiting replaces "Ask for
+  (`MentorCard`'s `standings`): a request still waiting replaces "Ask for
   time" with its status, and an accepted one offers its conversation beside it.
+- One peach action per view: every card's "Ask for time" and a suggestion's
+  "Ask {name}" are quiet; the drawer's Send is the primary.
 - Once the server has a mentor's answer, the queue asks the page's attention
   owner to count again (`requestAttentionRefresh`), so the bell and the
   Mentoring tab drop the answered request's notice at once.
@@ -48,8 +62,9 @@ Filters are links, and so is "Ask for time" (`?ask=`). Each filter link lands on
 (`#mentor-results`, "2 mentors · Career"), so the next Tab reaches the first mentor (QA4-18). The drawer named by `?ask=` renders as a plain panel with a
 real form that posts to the directory page; `request-post.ts` hands the same
 body to the API's own handler, so every gate is the API's. A send lands on
-`?sent=<id>`; a refusal renders the drawer again on what was written, with the
-reason.
+`?sent=<id>`, whose success notice takes focus; a refusal renders the drawer
+again on what was written, with the reason in a danger notice that takes focus
+and each field's error under it.
 
 ## How we talk to each other, before Send
 
@@ -92,6 +107,9 @@ name who raised it and never say "declined":
 
 - Unit: `mentor-display.test.ts`, `mentors-ui.test.tsx`, `request-post.test.ts`,
   and the client stores' tests beside them.
+- Render: `src/pages/dashboard/community/_tests/mentors.render.test.ts`, the page
+  through the middleware on SQLite: the server-rendered directory with one
+  island, filters, the drawer's no-JS post both ways, and the notices.
 - `e2e/platform-mentors.spec.ts`: the DEV harness `/dev/platform-mentors`
   (stateful mock) at 390 and 1440, axe, keyboard, rollback, no-JS drawer, the
   habits before Send, an organisation account asking as itself, flag off.

@@ -5,9 +5,9 @@
  * Motion brief, for the drawer. The directory is a file of cards; asking
  * pulls one sheet out from the right edge of the space, the way the space
  * tabs are pulled from their file, and lays it beside the cards rather than
- * over them. Only the sheet moves: a short slide that settles flush with the
- * edge, its shadow tightening as it lands. The directory stays still and
- * readable behind a faint veil. Leaving is a cut, so focus never waits on an
+ * over them. Only the sheet moves: a short slide (220ms) from its own edge
+ * that settles flush with it. The directory stays still and readable behind
+ * a faint veil. Leaving is a cut, so focus never waits on an
  * animation. Phones get the same sheet rising from the bottom edge. Reduced
  * motion: the sheet is simply there. Reject it if the sheet reads as a
  * floating modal box, or if anything else on the page moves.
@@ -27,53 +27,33 @@
 }
 
 /*
- * "Your requests", folded to one line above the directory (T06): where the person's requests stand,
- * and the way to open them. Open, the rows follow under the line.
+ * Disclosures drawn with the kit's button recipes ("Your requests", "Earlier", "How this works"):
+ * the button is the control, so the browser's marker goes.
  */
-/* The heading sits in the line's start, over the summary, which every click on the line toggles. */
-.own-requests {
-  position: relative;
-}
-
-.own-requests__title {
-  position: absolute;
-  top: 0;
-  left: 1rem;
-  display: flex;
-  align-items: center;
-  height: 2.75rem;
-  pointer-events: none;
-}
-
-.own-requests__summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  min-height: 2.75rem;
-  padding: 0.375rem 0.75rem 0.375rem 8.25rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 0.875rem;
-  cursor: pointer;
+.own-requests summary,
+.mentor-drawer__more > summary {
   list-style: none;
 }
 
-.own-requests__summary::-webkit-details-marker {
+.own-requests summary::-webkit-details-marker,
+.mentor-drawer__more > summary::-webkit-details-marker {
   display: none;
 }
 
-.own-requests__summary:hover {
-  background-color: rgb(255 248 242 / 0.04);
-}
-
-.own-requests__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: auto;
-  color: var(--color-peach-ink);
-  font-size: 0.8125rem;
-  font-weight: 700;
+/*
+ * "Your requests", folded to one line above the directory (T06), under its heading: a quiet button a
+ * whole line wide that says where the person's requests stand. It grows and wraps with the text
+ * rather than overflowing it (WCAG 1.4.4, 1.4.12). Open, the rows follow under it.
+ */
+.own-requests__summary {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  height: auto;
+  min-height: 2.75rem;
+  padding-block: 0.5rem;
+  white-space: normal;
+  text-align: start;
 }
 
 /*
@@ -110,7 +90,7 @@
   border: 1px solid var(--color-hairline);
   border-radius: 1rem;
   background: var(--color-sheet-community);
-  box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.65);
+  box-shadow: var(--shadow-overlay);
 }
 
 /*
@@ -160,9 +140,7 @@
   border-radius: 1.5rem;
   background: var(--color-sheet-community);
   color: var(--color-ink-primary);
-  box-shadow:
-    1px 0 0 rgb(255 248 242 / 0.08) inset,
-    -24px 0 60px -24px rgb(0 0 0 / 0.6);
+  box-shadow: inset 1px 0 0 var(--color-hairline), var(--shadow-overlay);
 }
 
 .mentor-drawer[open],
@@ -176,7 +154,7 @@
 }
 
 .mentor-drawer::backdrop {
-  background: rgb(1 33 31 / 0.3);
+  background: color-mix(in srgb, var(--color-ground) 30%, transparent);
 }
 
 /* Phones: a sheet from the bottom edge, tall enough to write in, never covering the whole screen. */
@@ -187,9 +165,7 @@
     max-height: calc(100dvh - 3rem);
     border-width: 1px 0 0;
     border-radius: 1.5rem 1.5rem 0 0;
-    box-shadow:
-      0 1px 0 rgb(255 248 242 / 0.08) inset,
-      0 -24px 60px -24px rgb(0 0 0 / 0.6);
+    box-shadow: inset 0 1px 0 var(--color-hairline), var(--shadow-overlay);
   }
 
   /*
@@ -204,17 +180,13 @@
   }
 }
 
+/* The slide only (foundations.md, "Motion"): 220ms from the drawer's own edge; under reduced motion the sheet is simply there. */
 @media (prefers-reduced-motion: no-preference) {
   .mentor-drawer[open] {
-    transition:
-      transform 260ms cubic-bezier(0.16, 0.9, 0.3, 1),
-      box-shadow 320ms ease-out;
+    transition: transform 220ms cubic-bezier(0.16, 0.9, 0.3, 1);
 
     @starting-style {
       transform: translateX(2.5rem);
-      box-shadow:
-        1px 0 0 rgb(255 248 242 / 0.08) inset,
-        -48px 0 80px -24px rgb(0 0 0 / 0.35);
     }
   }
 
@@ -222,7 +194,7 @@
     transition: background-color 200ms ease-out;
 
     @starting-style {
-      background-color: rgb(1 33 31 / 0);
+      background-color: transparent;
     }
   }
 
@@ -310,18 +282,16 @@
   }
 }
 
+/* "How this works": a ghost button whose words line up with the note's. */
 .mentor-drawer__more-toggle {
-  width: fit-content;
   margin-top: 0.375rem;
-  border-radius: 0.375rem;
-  color: var(--color-peach-ink);
-  font-weight: 600;
-  cursor: pointer;
+  margin-inline-start: -0.75rem;
 }
 
-.mentor-drawer__more-toggle:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+/* The no-JavaScript Close: a link, so the button recipe drawn as the ghost icon button's square. */
+.mentor-drawer__close {
+  width: 2rem;
+  padding-inline: 0;
 }
 
 /* ---- The Mentoring space ---------------------------------------------------- */
@@ -343,7 +313,7 @@
   height: 0.375rem;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 248 242 / 0.1);
+  background: color-mix(in srgb, var(--color-ink-primary) 10%, transparent);
 }
 
 .mentor-meter__fill {
@@ -353,7 +323,7 @@
 }
 
 @media (pointer: coarse) {
-  .mentor-drawer__more-toggle {
-    padding-block: 0.75rem;
+  .mentor-drawer__close {
+    width: 2.75rem;
   }
 }

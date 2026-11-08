@@ -1,6 +1,5 @@
-import {
-  MentorArea, MentorRequestFormat, type Id, type MentorDirectoryItem, type MentorDirectoryQuery,
-} from "../contracts";
+import type { Id, MentorDirectoryItem, MentorDirectoryQuery, MentorRequestFormat } from "../contracts";
+import { isMentorArea, isMentorRequestFormat } from "./mentor-constants";
 
 /**
  * The mentor directory's state, held in the URL (S-4.1) so a filtered list
@@ -33,12 +32,12 @@ const ASK_ID = /^[^\s/\\]{1,255}$/;
 
 /** Reads the directory's state from a query string. */
 export function parseDirectoryUrl(params: URLSearchParams): DirectoryUrlState {
-  const area = MentorArea.safeParse(params.get("area") ?? undefined);
-  const format = MentorRequestFormat.safeParse(params.get("format") ?? undefined);
+  const area = params.get("area");
+  const format = params.get("format");
   const ask = params.get("ask");
   return {
-    area: area.success ? area.data.trim() : null,
-    format: format.success ? format.data : null,
+    area: isMentorArea(area) ? area.trim() : null,
+    format: isMentorRequestFormat(format) ? format : null,
     available: params.get("available") === "true",
     ask: ask !== null && ASK_ID.test(ask) ? ask : null,
   };
@@ -107,14 +106,23 @@ export function hasOpenSpot(item: Pick<MentorDirectoryItem, "capacity">): boolea
 }
 
 /**
- * The directory as GET /api/mentors filters it, for fixtures and the DEV
- * harness only. Live pages always ask the server, which owns these rules.
+ * An area as GET /api/mentors compares it: SQLite's `lower(trim(…))`, which drops spaces at either end
+ * and folds ASCII letters only.
  */
-export function filterDirectoryFixture<T extends Pick<MentorDirectoryItem, "areas" | "formats" | "capacity">>(
+const serverAreaKey = (area: string) => area.replace(/^ +| +$/g, "").replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+
+/**
+ * The directory as GET /api/mentors filters it (`listMentors`), from the unfiltered list: an area one of
+ * the mentor's matches, a format they offer, a spot open now. Filtering keeps the server's order, so
+ * the page filters its one unfiltered read rather than reading again (while that read is complete), and
+ * the fixtures and the DEV harness filter the same way.
+ */
+export function filterDirectory<T extends Pick<MentorDirectoryItem, "areas" | "formats" | "capacity">>(
   items: readonly T[], filters: DirectoryFilters,
 ): T[] {
+  const area = filters.area === null ? null : serverAreaKey(filters.area);
   return items.filter(item =>
-    (!filters.area || item.areas.some(area => sameArea(area, filters.area!)))
+    (area === null || item.areas.some(offered => serverAreaKey(offered) === area))
     && (!filters.format || item.formats.includes(filters.format))
     && (!filters.available || hasOpenSpot(item)));
 }

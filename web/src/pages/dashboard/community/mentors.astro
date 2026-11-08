@@ -5,6 +5,8 @@
  * while `mentor_requests` is on for the person (effective only with
  * `channels`); the router answers 404 otherwise, and so does this page.
  *
+ * The directory renders on the server (MentorsDirectory.astro); only Your
+ * requests, the drawer and each card's live part hydrate (DirectoryRequests).
  * Without JavaScript everything reads, the filters are links, and the drawer
  * is a form that posts here (request-post.ts). Someone who has not agreed to
  * how we talk to each other yet agrees as they send, in the same post.
@@ -13,13 +15,14 @@ import { env } from "cloudflare:workers";
 import { isAgentSession } from "@/lib/agent-auth";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
-import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
+import { areaOptions, directoryHref, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { conductAgreed, handleConductPost } from "@/components/channels/conduct-flow";
 import { channelsServer } from "@/components/channels/server";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
-import MentorsDirectory from "@/components/platform/mentors/MentorsDirectory";
+import DirectoryRequests from "@/components/platform/mentors/DirectoryRequests";
+import MentorsDirectory from "@/components/platform/mentors/MentorsDirectory.astro";
 import { MENTORS_PATH, mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { mentorPageResponse } from "@/components/platform/mentors/page-responses";
 import { handleRequestPost, isRequestPost, type RequestPostResult } from "@/components/platform/mentors/request-post";
@@ -32,13 +35,13 @@ const filters = parseDirectoryUrl(Astro.url.searchParams);
 const base = { area: filters.area, format: filters.format, available: filters.available };
 const filtered = Boolean(filters.area || filters.format || filters.available);
 // The page's reads start beside onboarding, once `mentor_requests` is known to be on (PERF-2). A GET
-// also reads the person's agreement now; a POST reads it after the post below.
+// also reads the person's agreement now; a POST reads it after the post below. The directory is one
+// read: a filtered view filters it in memory (`browse`).
 const resolved = await resolveSpacePageWith(Astro.locals, "mentors", (me) => {
   if (!mentorRequestsOpen(me) || !allowed) return Promise.resolve(null);
   const server = mentorsServer(Astro, env, me, now);
   return Promise.all([
-    server.directory({}),
-    filtered ? server.directory(directoryQuery(filters)) : null,
+    server.browse(base),
     server.requests({ as: "requester" }),
     server.projects(),
     method === "POST" ? null : channelsServer(env.DB, me).conduct.load(),
@@ -48,7 +51,7 @@ if (!resolved || !mentorRequestsOpen(resolved[0].me)) return mentorPageResponse(
 const [context, reads] = resolved;
 // Null only for a method other than GET, HEAD or POST.
 if (!reads) return mentorPageResponse(405);
-const [all, matching, ownRequests, projects, earlyAgreement] = reads;
+const [{ all, shown }, ownRequests, projects, earlyAgreement] = reads;
 const server = mentorsServer(Astro, env, context.me, now);
 const conduct = channelsServer(env.DB, context.me).conduct;
 const canAgree = !isAgentSession(Astro.locals.session?.userAgent);
@@ -86,18 +89,21 @@ Astro.response.headers.set("Cache-Control", "no-store");
 <SpacePage context={context} title="Mentors" titlePrefix={posted ? "Error: " : ""}>
   <MentorPageIntro page="mentors" />
   <MentorsDirectory
-    client:load
-    me={context.me}
-    path={MENTORS_PATH}
-    filters={posted ? { ...filters, ask: posted.mentorId } : filters}
-    mentors={all.items}
-    shown={(matching ?? all).items}
-    areas={areaOptions(all.items, filters.area)}
-    ownRequests={ownRequests}
-    projects={projects}
-    conduct={{ version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree, agreed: agreedNow }}
-    now={now}
-    serverForm={posted ? { mentorId: posted.mentorId, form: posted.form } : null}
-    sent={sent}
-  />
+    me={context.me} path={MENTORS_PATH} filters={base} areas={areaOptions(all.items, filters.area)}
+    shown={shown} ownRequests={ownRequests} sent={sent} now={now}
+  >
+    {/* Only what responds to a press is hydrated: Your requests, the drawer and each card's live part. */}
+    <DirectoryRequests
+      client:load
+      userId={context.me.user.id}
+      path={MENTORS_PATH}
+      filters={posted ? { ...filters, ask: posted.mentorId } : filters}
+      mentors={all.items}
+      ownRequests={ownRequests}
+      projects={projects}
+      conduct={{ version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree, agreed: agreedNow }}
+      now={now}
+      serverForm={posted ? { mentorId: posted.mentorId, form: posted.form } : null}
+    />
+  </MentorsDirectory>
 </SpacePage>

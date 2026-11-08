@@ -40,6 +40,11 @@ async function visit(page: Page, path: string) {
 
 const card = (page: Page, name: string) => page.locator("[data-mentor-card]").filter({ has: page.getByRole("heading", { name }) });
 const ownRow = (page: Page, name: string) => page.locator("[data-own-request]").filter({ hasText: name }).first();
+/** Your requests is folded to one line (T06), open on arrival only when a request has news: opens it if it is closed. */
+async function openOwnRequests(page: Page) {
+  const fold = page.locator("[data-own-requests-fold]");
+  if (!await fold.evaluate((details: HTMLDetailsElement) => details.open)) await fold.locator(":scope > summary").click();
+}
 const queueCard = (page: Page, name: string) => page.locator("[data-mentor-request]").filter({ has: page.getByRole("heading", { name }) }).first();
 
 /**
@@ -104,6 +109,8 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   await visit(member, DIRECTORY);
   await expect(ownRow(member, "David Kamau")).toContainText("Accepted");
   await expect(member.locator("#space-sidebar").getByRole("link", { name: /David Kamau/ })).toBeVisible();
+  // An acceptance is no news to open Your requests for: David's card says so too.
+  await openOwnRequests(member);
   await ownRow(member, "David Kamau").getByRole("link", { name: "Open conversation" }).click();
   const memberAgree = member.getByRole("button", { name: "I’ll keep to this" });
   if (await memberAgree.isVisible().catch(() => false)) await memberAgree.click();
@@ -115,6 +122,7 @@ test("the member withdraws a waiting request, and the mentor sees it withdrawn",
   const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Would you review my API error messages?");
+  await openOwnRequests(member);
   await ownRow(member, "David Kamau").getByRole("button", { name: "Withdraw" }).click();
   await expect(ownRow(member, "David Kamau")).toContainText("Withdrawn");
   await visit(mentor, REQUESTS);
@@ -184,12 +192,13 @@ test("an organisation account is told it can ask as itself, and its request come
   const institution = await as(browser, baseURL!, "institution");
   await visit(institution, DIRECTORY);
   await expect(institution.getByRole("heading", { level: 1, name: "Mentors" })).toBeVisible();
-  await expect(institution.locator("[data-mentors-as-yourself]")).toHaveText(
+  await expect(institution.locator("[data-mentors-as-yourself]")).toContainText(
     "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.",
   );
   await runAxe(institution, testInfo, "directory-institution");
   await ask(institution, "David Kamau", "Could we talk about hiring junior developers?");
   // Leave the shared seed as it was.
+  await openOwnRequests(institution);
   await ownRow(institution, "David Kamau").getByRole("button", { name: "Withdraw" }).click();
   await expect(ownRow(institution, "David Kamau")).toContainText("Withdrawn");
 });

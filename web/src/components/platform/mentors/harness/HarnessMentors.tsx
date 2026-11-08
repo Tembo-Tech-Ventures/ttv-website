@@ -11,7 +11,7 @@ import { createMentoringMock, type MentoringMock } from "@/lib/platform/client/m
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import { agreeToConduct } from "../agree-conduct";
 import MentorRequestsQueue, { type MentorRequestsQueueProps } from "../MentorRequestsQueue";
-import MentorsDirectory, { type MentorsDirectoryProps } from "../MentorsDirectory";
+import DirectoryRequests, { type DirectoryRequestsProps } from "../DirectoryRequests";
 
 declare global {
   interface Window {
@@ -27,7 +27,7 @@ declare global {
 }
 
 type Harness =
-  | { view: "directory"; props: Omit<MentorsDirectoryProps, "api"> }
+  | { view: "directory"; props: Omit<DirectoryRequestsProps, "api"> }
   | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> };
 
 export default function HarnessMentors({ viewer, conductAgreed, check = null, latencyMs = 250, harness }: {
@@ -66,7 +66,7 @@ export default function HarnessMentors({ viewer, conductAgreed, check = null, la
       await agreeToConduct(window.location.pathname + window.location.search, conduct.version);
       mock.agreeConduct();
     };
-    return <MentorsDirectory {...harness.props} conduct={{ ...conduct, agree }} api={mock.api} />;
+    return <DirectoryRequests {...harness.props} conduct={{ ...conduct, agree }} api={mock.api} />;
   }
   return <MentorRequestsQueue {...harness.props} api={mock.api} />;
 }

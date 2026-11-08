@@ -1,14 +1,16 @@
 import {
-  ErrorEnvelope, MentorRequest, MentorRequestFormat,
+  ErrorEnvelope, MentorRequest,
   type CreateMentorRequest, type MentorDirectoryItem, type ProjectEmbedRef,
 } from "@/lib/platform/contracts";
 import { isSameOriginRequest } from "@/lib/agent-auth";
+import { isMentorRequestFormat } from "@/lib/platform/client/mentor-constants";
 import { hasOpenSpot } from "@/lib/platform/client/mentor-directory";
 import {
   failureMessage, requestFailure, validateRequestDraft, type RequestDraft, type ServerRequestForm,
 } from "@/lib/platform/client/mentor-request-form";
 import { boundedForm } from "@/components/platform/onboarding/welcome-flow";
 import { fullMessage } from "./mentor-display";
+import { AGREE_FIELD, REQUEST_INTENT } from "./request-fields";
 
 /**
  * Asking for time without JavaScript (U-4.1). The request drawer is a real
@@ -23,15 +25,6 @@ import { fullMessage } from "./mentor-display";
  * send (QA4-05): the form carries `agree` with the version it showed, the
  * agreement is recorded first, and the request goes in the same post.
  */
-
-/** The form field that marks this post as a mentor request, so the page can carry the conduct form too. */
-export const REQUEST_INTENT = "mentor-request";
-
-/** The form field that agrees to how we talk to each other as the request is sent: the version the drawer showed. */
-export const AGREE_FIELD = "agree";
-
-/** A project radio's value: the work and the revision it was offered at. */
-export const projectValue = (ref: Pick<ProjectEmbedRef, "journeyId" | "version">) => `${ref.journeyId}@${ref.version}`;
 
 export type RequestPostResult =
   | { kind: "redirect"; location: string }
@@ -60,11 +53,11 @@ function readProject(value: FormDataEntryValue | null): ProjectEmbedRef | null {
 
 function readDraft(form: FormData): RequestDraft {
   const note = form.get("note");
-  const format = MentorRequestFormat.safeParse(form.get("format"));
+  const format = form.get("format");
   return {
     note: typeof note === "string" ? note.slice(0, 4_000) : "",
     project: readProject(form.get("project")),
-    format: format.success ? format.data : null,
+    format: isMentorRequestFormat(format) ? format : null,
   };
 }
 

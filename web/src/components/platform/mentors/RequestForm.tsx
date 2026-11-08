@@ -1,16 +1,17 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { PiCheckCircle, PiFolderSimple, PiShieldCheck, PiX } from "react-icons/pi";
+import { PiCheckCircle, PiShieldCheck, PiX } from "react-icons/pi";
 import type { MentorDirectoryItem, MentorRequest, ProjectEmbed } from "@/lib/platform/contracts";
 import { useRequestForm } from "@/lib/platform/client/hooks/mentoring";
-import { MAX_NOTE, type RequestFailure, type RequestFormStore } from "@/lib/platform/client/mentor-request-form";
+import { MAX_NOTE, type RequestFailure, type RequestFormState, type RequestFormStore } from "@/lib/platform/client/mentor-request-form";
 import { firstName } from "@/components/channels/channel-format";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
-import { Avatar, Button, IconButton } from "@/components/platform/ui";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import {
+  Avatar, Button, ButtonLink, ChoiceGroup, FOCUS_RING, IconButton, Notice, TextAreaField, buttonClass, cx,
+} from "@/components/platform/ui";
+import { LABEL } from "@/components/platform/ui/recipes";
 import { agreeToConduct } from "./agree-conduct";
 import { FORMAT_HINTS, FORMAT_LABELS } from "./mentor-display";
-import { AGREE_FIELD, projectValue, REQUEST_INTENT } from "./request-post";
+import { AGREE_FIELD, projectValue, REQUEST_INTENT } from "./request-fields";
 
 /** Where agreeing to the habits posts (this page, drawer open) and where to read them first. */
 export interface ConductPrompt {
@@ -46,16 +47,6 @@ interface Props {
   onClose: () => void;
   onSent: (request: MentorRequest) => void;
 }
-
-const FIELD = cx(
-  "w-full rounded-xl border border-hairline bg-ink-primary/4 px-3.5 py-3 text-[0.9375rem] leading-relaxed text-ink-primary",
-  "placeholder:text-ink-muted aria-invalid:border-danger-ink", FOCUS_RING,
-);
-const LEGEND = "mb-2 text-[0.9375rem] font-semibold text-ink-primary";
-const OPTION = cx(
-  "relative flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-hairline px-3.5 py-2 text-sm font-semibold text-ink-primary",
-  "has-checked:border-peach-ink has-checked:bg-primary/10 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-peach-ink",
-);
 
 /**
  * Why a send didn't go. A conflict or a limit says the server's own sentence when it gave one (which request is
@@ -116,13 +107,13 @@ export default function RequestForm({
   store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent, onAgreed,
 }: Props) {
   const state = useRequestForm(store);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
-  const formatRef = useRef<HTMLInputElement>(null);
   const sentRef = useRef<HTMLHeadingElement>(null);
   const conductRef = useRef<HTMLHeadingElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   useStickyClearance(formRef, state.status);
   const ids = useId();
+  const noteId = `${ids}-note`;
+  const refusedId = `${ids}-refused`;
   const name = firstName(mentor.person.name);
   const sending = state.status === "sending";
   // Agreed as the page knows it (read at load, or in an earlier drawer: each drawer mounts afresh), or here
@@ -135,11 +126,13 @@ export default function RequestForm({
   const asksAgreement = !agreed && conduct.canAgree;
   // Agreeing from the habits step keeps that step in view while the request goes.
   const [fromStep, setFromStep] = useState(false);
+  // Opened refused: the page came back with this drawer after a send without JavaScript that did not go through.
+  const [refusedOnArrival] = useState(() => refused(store.getState()));
 
-  // The drawer opens on the note: what the person came to write.
+  // The drawer opens on the note, what the person came to write; or, sent back refused, on why.
   useEffect(() => {
-    noteRef.current?.focus();
-  }, []);
+    document.getElementById(refusedOnArrival ? refusedId : noteId)?.focus();
+  }, []); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // Focus follows the drawer's state: the thank-you once sent, the habits prompt when it appears.
   const lastStatus = useRef(state.status);
@@ -158,6 +151,15 @@ export default function RequestForm({
     lastStatus.current = state.status;
   }, [state.status]);
 
+  const attached = state.project ? projectValue(state.project) : "";
+  // The radios keep their own checked state; a draft restored from the tab after they rendered moves it.
+  useEffect(() => {
+    for (const input of formRef.current?.querySelectorAll<HTMLInputElement>("input[type=radio]") ?? []) {
+      const chosen = input.name === "format" ? state.format : input.name === "project" ? attached : undefined;
+      if (chosen !== undefined) input.checked = input.value === chosen;
+    }
+  }, [state.format, attached, state.status]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     const step = state.status === "conduct";
@@ -167,8 +169,17 @@ export default function RequestForm({
     setFromStep(false);
     if (agreement.recorded()) agreedNow();
     if (sent) onSent(sent);
-    else if (store.getState().errors.note) noteRef.current?.focus();
-    else if (store.getState().errors.format) formatRef.current?.focus();
+    else if (store.getState().errors.note) document.getElementById(noteId)?.focus();
+    else if (store.getState().errors.format) formRef.current?.querySelector<HTMLInputElement>("input[name=format]")?.focus();
+  }
+
+  // A radio's choice, for the draft: the radios are the kit's own, which keep their checked state.
+  function chose(event: FormEvent<HTMLFormElement>) {
+    const input = event.target as HTMLInputElement;
+    if (input.type !== "radio") return;
+    const format = mentor.formats.find(offered => offered === input.value);
+    if (input.name === "format" && format) store.setFormat(format);
+    if (input.name === "project") store.setProject(projects.find(project => projectValue(project) === input.value) ?? null);
   }
 
   // A failed send is read out by its alert, beside Send, so the live region doesn't say it a second time.
@@ -188,7 +199,7 @@ export default function RequestForm({
         {header}
         <ConductStep
           name={name} conduct={conduct} headingRef={conductRef} sending={sending} onBack={() => store.agreed()}
-          form={{ action, onSubmit: submit, mentorId: mentor.person.id, note: state.note, project: state.project ? projectValue(state.project) : "", format: state.format }}
+          form={{ action, onSubmit: submit, mentorId: mentor.person.id, note: state.note, project: attached, format: state.format }}
         />
       </>
     );
@@ -196,61 +207,45 @@ export default function RequestForm({
 
   const noteError = state.errors.note;
   const formatError = state.errors.format;
-  const attached = state.project ? projectValue(state.project) : "";
 
   return (
     <>
       {live}
       {header}
-      <form ref={formRef} method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
+      <form
+        ref={formRef} method="post" action={action} className="mentor-drawer__body" onSubmit={submit} onChange={chose}
+        noValidate aria-busy={sending || undefined}
+      >
         <input type="hidden" name="intent" value={REQUEST_INTENT} />
         <input type="hidden" name="mentorId" value={mentor.person.id} />
-        <div>
-          <label htmlFor={`${ids}-note`} className={LEGEND}>What would you like help with?</label>
-          <textarea
-            ref={noteRef}
-            id={`${ids}-note`}
-            name="note"
-            rows={5}
-            value={state.note}
-            onChange={event => store.setNote(event.target.value)}
-            aria-invalid={noteError ? true : undefined}
-            aria-describedby={`${ids}-note-hint${noteError ? ` ${ids}-note-error` : ""}`}
-            className={cx(FIELD, "mt-2 min-h-32 resize-y")}
-            placeholder="For example: I rebuilt my fare splitter after Session 9. Could you check how I handle a payment callback that arrives twice?"
-            readOnly={sending}
-          />
-          <p id={`${ids}-note-hint`} className="mt-1.5 text-[0.8125rem] text-ink-muted">
-            Something specific helps {name} say yes. {state.note.trim().length} of {MAX_NOTE} characters.
-          </p>
-          {noteError && <p id={`${ids}-note-error`} className="mt-1 text-sm font-semibold text-danger-ink">{noteError}</p>}
-        </div>
+        <TextAreaField
+          id={noteId}
+          name="note"
+          label="What would you like help with?"
+          hint={`Something specific helps ${name} say yes. ${state.note.trim().length} of ${MAX_NOTE} characters.`}
+          error={noteError}
+          rows={5}
+          value={state.note}
+          onChange={event => store.setNote(event.target.value)}
+          placeholder="For example: I rebuilt my fare splitter after Session 9. Could you check how I handle a payment callback that arrives twice?"
+          readOnly={sending}
+        />
 
-        <AttachWork projects={projects} attached={attached} sending={sending} store={store} />
+        <AttachWork projects={projects} attached={attached} sending={sending} />
 
-        <fieldset aria-describedby={formatError ? `${ids}-format-error` : undefined}>
-          <legend className={LEGEND}>How</legend>
-          <div className="flex flex-wrap gap-2">
-            {mentor.formats.map((format, index) => (
-              <label key={format} className={OPTION}>
-                <input
-                  ref={index === 0 ? formatRef : undefined}
-                  type="radio" name="format" value={format} checked={state.format === format}
-                  onChange={() => store.setFormat(format)} disabled={sending} className="size-4 accent-peach-ink"
-                />
-                {FORMAT_LABELS[format]}
-              </label>
-            ))}
-          </div>
-          {state.format && <p className="mt-2 text-[0.8125rem] text-ink-muted">{FORMAT_HINTS[state.format]}</p>}
-          {formatError && <p id={`${ids}-format-error`} className="mt-1 text-sm font-semibold text-danger-ink">{formatError}</p>}
-        </fieldset>
+        <ChoiceGroup
+          name="format"
+          label="How"
+          error={formatError}
+          defaultValue={state.format ?? undefined}
+          options={mentor.formats.map(format => ({ value: format, label: FORMAT_LABELS[format], hint: FORMAT_HINTS[format], disabled: sending }))}
+        />
 
         {/* Who sees what, in a line; the rest behind "How this works", so Send stays in view at 1440×900 (T05). */}
         <div className="mentor-drawer__note" data-request-privacy>
           <p>{name} sees your name, this note and the project you attach.</p>
           <details className="mentor-drawer__more">
-            <summary className={cx("mentor-drawer__more-toggle", FOCUS_RING)}>How this works</summary>
+            <summary className={buttonClass({ variant: "ghost", size: "sm", className: "mentor-drawer__more-toggle cursor-pointer" })}>How this works</summary>
             <p className="mt-2">
               Some requests get a check from TTV before they reach a mentor. If {name} accepts, you both get a private
               conversation, and it shows up under Needs your attention. If the timing doesn't work, {name} can suggest
@@ -265,12 +260,22 @@ export default function RequestForm({
         */}
         <SendActions
           agreement={asksAgreement ? <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} /> : null}
-          failure={<SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />}
+          failure={(
+            <SendRefused
+              id={refusedId} focusOnLoad={refusedOnArrival} name={name}
+              failure={state.status === "error" ? state.failure : null} message={state.failureMessage} fields={Boolean(noteError || formatError)}
+            />
+          )}
           sending={sending} closeHref={closeHref} onClose={onClose}
         />
       </form>
     </>
   );
+}
+
+/** Whether the form stands refused: the last send failed, or left something to fix. */
+function refused(state: Pick<RequestFormState, "status" | "errors">): boolean {
+  return state.status === "error" || Object.keys(state.errors).length > 0;
 }
 
 /** The draft as hidden fields, for the habits step's form, which sends it without JavaScript. */
@@ -291,7 +296,7 @@ function SentPanel({ name, headingRef, onClose }: { name: string; headingRef: Re
   return (
     <div className="mentor-drawer__body" data-request-sent>
       <PiCheckCircle aria-hidden className="size-8 text-peach-ink" />
-      <h3 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-ink-primary focus:outline-none">Request sent</h3>
+      <h3 ref={headingRef} tabIndex={-1} className={cx("w-fit rounded-sm text-lg font-bold text-ink-primary", FOCUS_RING)}>Request sent</h3>
       <p className="text-[0.9375rem] leading-relaxed text-ink-secondary">
         While it's waiting you'll find it under Your requests on this page, where you can withdraw it. Some requests
         get a check from TTV before they reach a mentor; if yours does, Your requests says so, and you'll get a
@@ -335,7 +340,7 @@ function ConductStep({ name, conduct, headingRef, sending, onBack, form }: {
   return (
     <div className="mentor-drawer__body" data-request-conduct>
       <PiShieldCheck aria-hidden className="size-8 text-ring" />
-      <h3 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-ink-primary focus:outline-none">First, how we talk to each other</h3>
+      <h3 ref={headingRef} tabIndex={-1} className={cx("w-fit rounded-sm text-lg font-bold text-ink-primary", FOCUS_RING)}>First, how we talk to each other</h3>
       <p className="text-[0.9375rem] leading-relaxed text-ink-secondary">
         Your request isn't sent yet. Your note becomes the first message of a private conversation with {name},
         so it follows the same habits as every channel. Read them, and agreeing sends your request, just as you wrote it.
@@ -374,13 +379,12 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
   return (
     <header className="mentor-drawer__header">
       <Avatar id={mentor.person.id} name={mentor.person.name} src={mentor.person.avatarUrl ?? undefined} size="md" mentor decorative />
-      <h2 id={headingId} className="min-w-0 flex-1 font-body text-xl leading-snug font-bold break-words text-ink-primary">
+      <h2 id={headingId} className="min-w-0 flex-1 text-xl leading-snug break-words text-ink-primary">
         Ask {name} for time
       </h2>
       {closeHref ? (
-        <a href={closeHref} aria-label="Close" className={cx("grid size-8 place-items-center rounded-lg text-ink-secondary hover:bg-ink-primary/7 pointer-coarse:size-11", FOCUS_RING)}>
-          <PiX aria-hidden size={18} />
-        </a>
+        // IconButton cannot be a link: the same ghost square, from the button recipe.
+        <ButtonLink href={closeHref} aria-label="Close" variant="ghost" size="sm" className="mentor-drawer__close" icon={<PiX size={18} />} />
       ) : (
         <IconButton label="Close" icon={<PiX size={18} />} variant="ghost" size="sm" onClick={onClose} />
       )}
@@ -411,48 +415,52 @@ function SendActions({ agreement, failure, sending, closeHref, onClose }: {
 /** Before the page is interactive (or without JavaScript), Cancel is a link back to the directory. */
 function CancelControl({ closeHref, onClose }: { closeHref: string | null; onClose: () => void }) {
   return closeHref ? (
-    <a href={closeHref} className={cx("inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING)}>Cancel</a>
+    <ButtonLink href={closeHref} variant="ghost">Cancel</ButtonLink>
   ) : (
-    <Button onClick={onClose}>Cancel</Button>
+    <Button variant="ghost" onClick={onClose}>Cancel</Button>
   );
 }
 
 /** One of the person's own published projects, at its current revision, or nothing. */
-function AttachWork({ projects, attached, sending, store }: {
-  projects: readonly ProjectEmbed[]; attached: string; sending: boolean; store: RequestFormStore;
-}) {
+function AttachWork({ projects, attached, sending }: { projects: readonly ProjectEmbed[]; attached: string; sending: boolean }) {
+  if (projects.length === 0) {
+    return (
+      <div className="flex flex-col gap-1.5" data-request-no-projects>
+        <p className={cx(LABEL, "m-0")}>Attach your work</p>
+        <p className="m-0 text-sm text-ink-secondary">You have no published projects to attach yet. A note on its own is fine.</p>
+      </div>
+    );
+  }
   return (
-    <fieldset>
-      <legend className={LEGEND}>Attach your work <span className="font-normal text-ink-secondary">(optional)</span></legend>
-      {projects.length === 0 ? (
-        <p className="text-sm text-ink-secondary">You have no published projects to attach yet. A note on its own is fine.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <label className={OPTION}>
-            <input type="radio" name="project" value="" checked={attached === ""} onChange={() => store.setProject(null)} disabled={sending} className="size-4 accent-peach-ink" />
-            Nothing attached
-          </label>
-          {projects.map(project => (
-            <label key={projectValue(project)} className={OPTION}>
-              <input
-                type="radio" name="project" value={projectValue(project)}
-                checked={attached === projectValue(project)}
-                onChange={() => store.setProject(project)} disabled={sending} className="size-4 accent-peach-ink"
-              />
-              <PiFolderSimple aria-hidden className="size-[1.125rem] shrink-0 text-ink-secondary" />
-              <span className="min-w-0 break-words">{project.title} · revision {project.version}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </fieldset>
+    <ChoiceGroup
+      name="project"
+      label="Attach your work"
+      optional
+      defaultValue={attached}
+      options={[
+        { value: "", label: "Nothing attached", disabled: sending },
+        ...projects.map(project => ({ value: projectValue(project), label: `${project.title} · revision ${project.version}`, disabled: sending })),
+      ]}
+    />
   );
 }
 
 /**
- * Why the last send didn't go, when it didn't. An alert, so it is read out as it appears, and again after
- * a retry that fails too: sending clears it first.
+ * Why the last send didn't go, when it didn't: a danger notice just above Send, where the person pressing it
+ * is looking (T13). A failure is an alert, so it is read out as it appears, and again after a retry that fails
+ * too: sending clears it first. Fields to fix are said under each field, which takes focus; this only says
+ * the request wasn't sent. After a send without JavaScript the page comes back with the drawer, and the
+ * notice takes focus, so the reason is where the reader lands.
  */
-function SendFailure({ failure, message, name }: { failure: RequestFailure | null; message: string | null; name: string }) {
-  return failure && <p role="alert" className="w-full text-sm font-semibold text-danger-ink" data-request-error>{failureText(failure, message, name)}</p>;
+function SendRefused({ id, failure, message, name, fields, focusOnLoad }: {
+  id: string; failure: RequestFailure | null; message: string | null; name: string; fields: boolean; focusOnLoad: boolean;
+}) {
+  if (!failure && !fields) return null;
+  return (
+    <div className="w-full" data-request-error>
+      <Notice id={id} tone="danger" tabIndex={-1} focusOnLoad={focusOnLoad} {...failure ? {} : { announce: "none" as const }}>
+        {failure ? failureText(failure, message, name) : "Your request wasn't sent. Fix what's marked above, then send it again."}
+      </Notice>
+    </div>
+  );
 }
