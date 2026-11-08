@@ -286,12 +286,12 @@ test.describe("a member applying to a cohort that asks no questions", () => {
     await expect(cohort).toContainText("Starts 15 Jan 2027 — Ends 16 Apr 2027");
     await cohort.getByRole("button", { name: "Apply" }).click();
 
-    await expect(page).toHaveURL(/notice=application-submitted/);
+    // A 303 to the canonical page, which says it once (a flash): nothing is left in the address.
+    await expect(page).toHaveURL((url) => url.pathname === "/dashboard/cohort/apply" && url.search === "");
     await hideDevToolbar(page);
     const submitted = page.locator("[data-application-submitted]");
-    await expect(submitted).toHaveAttribute("role", "status");
-    await expect(submitted).toContainText("Your cohort application was submitted.");
-    await expect(submitted).toContainText(frame === "on" ? "on your Cohort page" : "from your dashboard");
+    await expect(submitted.getByRole("status")).toContainText("Your cohort application was submitted.");
+    await expect(submitted).toContainText("on your Cohort page");
     await expect(page.getByText("No cohorts are accepting applications")).toHaveCount(0);
     await expect(page.getByText("You may already have applied")).toHaveCount(0);
     await expect(page.locator("[data-apply-empty]")).toHaveCount(0);

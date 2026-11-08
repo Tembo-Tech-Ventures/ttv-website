@@ -101,6 +101,7 @@ const PAGES = {
   "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
   application: { path: () => "/dashboard/cohort/application/application", page: () => import("@/pages/dashboard/application/[id].astro"), user: STUDENT, id: "application" },
+  apply: { path: () => "/dashboard/cohort/apply", page: () => import("@/pages/dashboard/apply.astro"), user: STUDENT },
   ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
   attention: { path: () => "/dashboard/attention", page: () => import("@/pages/dashboard/attention.astro"), user: STUDENT },
   "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
@@ -235,6 +236,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "mentoring requests": { d1: 15, depth: 3 },
   // The application is read beside the space context (16 queries 6 deep in the style-guide audit).
   application: { d1: 15, depth: 3 },
+  // The person's applications and the open cohorts are read beside the space context (14 queries 6 deep in the audit,
+  // three reads one after another).
+  apply: { d1: 16, depth: 3 },
   // The same before the style-guide rollout: the journey and the request's capabilities (shared with the
   // space context) start beside it through resolveSpacePageWith, instead of after it.
   ask: { d1: 14, depth: 2 },

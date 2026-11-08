@@ -17,13 +17,11 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "common/Button.astro": {
     pattern: /common\/Button(\.astro)?["']/,
     files: [
-    "pages/dashboard/apply.astro",
     ],
   },
   "common/Card.astro": {
     pattern: /common\/Card(\.astro)?["']/,
     files: [
-    "pages/dashboard/apply.astro",
     ],
   },
   "the form-control utility": {

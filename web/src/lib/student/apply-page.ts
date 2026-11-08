@@ -1,5 +1,5 @@
 /**
- * What /dashboard/apply says around its list of cohorts (QA1-04): after a
+ * What /dashboard/cohort/apply says around its list of cohorts (QA1-04): after a
  * successful application it confirms it, and nothing on the page contradicts
  * that.
  */
@@ -14,19 +14,22 @@ export interface ApplyPageState {
   emptyMessage: string | null;
 }
 
+/** What the page says, once, after an application went in: the flash its 303 carries. */
+export const APPLICATION_SUBMITTED = "Your cohort application was submitted.";
+
 export const APPLY_EMPTY_MESSAGES = {
   noneOpen: "No cohorts are accepting applications right now.",
   allApplied: "You've applied to every cohort that's open right now.",
 } as const;
 
 export function applyPageState({
-  notice,
+  submittedNow,
   appliedCount,
   openCount,
   availableCount,
 }: {
-  /** The `notice` query parameter. */
-  notice: string | null;
+  /** The page was reached by the redirect after an application went in (its flash). */
+  submittedNow: boolean;
   /** How many cohorts this person has applied to. */
   appliedCount: number;
   /** How many cohorts are open. */
@@ -34,8 +37,8 @@ export function applyPageState({
   /** How many open cohorts this person has not applied to. */
   availableCount: number;
 }): ApplyPageState {
-  // The notice is only believed once the person has an application to show.
-  const submitted = notice === "application-submitted" && appliedCount > 0;
+  // The confirmation is only believed once the person has an application to show.
+  const submitted = submittedNow && appliedCount > 0;
   const hasList = availableCount > 0;
   return {
     submitted,
