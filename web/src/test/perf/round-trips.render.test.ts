@@ -108,6 +108,7 @@ const PAGES = {
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
+  "admin recording": { path: () => "/admin/recordings/recording", page: () => import("@/pages/admin/recordings/[id].astro"), user: ADMIN, id: "recording" },
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
   "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
@@ -241,6 +242,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin cohort": { d1: 17, depth: 2 },
   // Depth 4 before the style-guide rollout: every recording with its cohort, then the space.
   "admin recordings": { d1: 15, depth: 2 },
+  // Depth 5 before the style-guide rollout: the recording with every segment, the cohorts and the space in turn;
+  // now together, with the segments counted in SQL.
+  "admin recording": { d1: 16, depth: 2 },
   // Depth 4 before the style-guide rollout: the tokens, then the space.
   "admin tokens": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the sessions, then the space.
