@@ -1,17 +1,15 @@
 ---
 import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
-import Badge from "@/components/common/Badge.astro";
-import Card from "@/components/common/Card.astro";
+import { BackLink, DescriptionItem, DescriptionList, Notice, PageHeader, StatusChip, type StatusOf } from "@/components/platform/ui";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import ApplicationAnswers from "@/components/platform/application/ApplicationAnswers.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
 import { draftsFor, parseApplicationAnswers, type ApplicationAnswerDrafts } from "@/lib/student/application-answers";
 import { saveApplicationAnswers } from "@/lib/student/save-application-answers";
 import { formatCalendarDate, formatMomentDate } from "@/lib/display-date";
@@ -20,7 +18,6 @@ const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 
-let success = "";
 let error = "";
 
 // The application, only if it belongs to this user.
@@ -35,11 +32,19 @@ const loadApplication = () =>
     with: { program: { with: { curriculum: true } } },
   });
 
-let application = await loadApplication();
+// The application is read beside the space context (PERF-2): it needs only who is asking.
+const [loaded, landing] = await Promise.all([
+  loadApplication(),
+  resolveSpacePageWith(Astro.locals, "apply", async () => null),
+]);
+let application = loaded;
+const spaces = landing?.[0] ?? null;
 
 if (!application) {
-  return Astro.redirect("/dashboard");
+  return Astro.redirect(SPACE_PATHS.cohort);
 }
+// Where a save lands: this application at its canonical address, which then says so once.
+const here = `${SPACE_PATHS.cohort}/application/${encodeURIComponent(application.id)}`;
 
 // Members answer the questions their application carries, as plain fields;
 // they never edit the stored JSON. Without questions there is nothing to post
@@ -75,11 +80,8 @@ if (Astro.request.method === "POST") {
       Astro.response.status = 400;
       break;
     case "saved":
-      application.application = result.application;
-      answers = parseApplicationAnswers(result.application);
-      drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
-      success = "Your answers are saved.";
-      break;
+      // 303 home, so a reload never posts again; the page says it once.
+      return redirectWithFlash(Astro, here, { tone: "success", title: "Your answers are saved." });
     case "stale":
       // Changed between reading and writing: show where it stands now, keeping what was typed.
       application = (await loadApplication()) ?? application;
@@ -104,7 +106,7 @@ if (Astro.request.method === "POST") {
     case "failed":
       drafts = result.drafts;
       error = "Your answers could not be saved. Please try again.";
-      Astro.response.status = 500;
+      Astro.response.status = 503;
       break;
     case "not-found":
     case "not-editable":
@@ -113,88 +115,49 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const spaces = await resolveSpacePage(Astro.locals, "apply");
+const flash = Astro.request.method === "POST" ? null : takeFlash(Astro);
 // Screen readers hear the tab title first on a reloaded page, so a form the member must
 // fix or resend says so there too. "Already reviewed" is not an error to fix.
-const titlePrefix = Object.keys(unsaved).length === 0 && (error || Object.keys(fieldErrors).length > 0) ? "Error: " : "";
+const reviewed = Object.keys(unsaved).length > 0;
+const titlePrefix = !reviewed && (error || Object.keys(fieldErrors).length > 0) ? "Error: " : "";
+const status = application.status as StatusOf<"application">;
+const program = application.program;
 ---
 
-<SpacePage context={spaces} title="Application details" legacyTitle="Application Details" titlePrefix={titlePrefix}>
-  <div class="space-y-6">
-    <div class="flex items-center gap-4">
-      <a
-        href={spaces ? SPACE_PATHS.cohort : "/dashboard"}
-        class="text-sm text-ink-secondary hover:text-white transition-colors"
-      >
-        &larr; {spaces ? "Back to Cohort" : "Back to Dashboard"}
-      </a>
+<SpacePage context={spaces} title="Application details" titlePrefix={titlePrefix}>
+  <div class="flex max-w-3xl flex-col gap-8">
+    <div class="flex flex-col gap-4">
+      <BackLink href={SPACE_PATHS.cohort}>Cohort</BackLink>
+      <PageHeader title={program?.name ?? "Unknown cohort"}>
+        {program?.curriculum?.title}
+      </PageHeader>
     </div>
 
-    {success && (
-      <div role="status" class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        {success}
-      </div>
-    )}
-
+    {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
+    {/* "Already reviewed" is not a problem to fix: what was typed is kept below to copy. */}
     {error && (
-      <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+      <Notice tone={reviewed ? "warning" : "danger"} announce="assertive" focusOnLoad title="Your answers weren't saved">
         {error}
-      </div>
+      </Notice>
     )}
 
-    <Card>
-      <div class="space-y-4">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <PageTitle spaces={Boolean(spaces)} size="card" legacyClass="text-2xl font-bold text-white">
-              {application.program?.name ?? "Unknown Cohort"}
-            </PageTitle>
-            {application.program?.curriculum && (
-              <p class="mt-1 text-ink-secondary">
-                {application.program.curriculum.title}
-              </p>
-            )}
-          </div>
-          <Badge variant={toProgramApplicationBadgeVariant(application.status)} />
-        </div>
-
-        <div class="grid gap-4 sm:grid-cols-2 text-sm">
-          {application.program?.startDate && (
-            <div>
-              <span class="text-ink-muted">Start Date</span>
-              <p class="text-white">{formatCalendarDate(application.program.startDate)}</p>
-            </div>
-          )}
-          {application.program?.endDate && (
-            <div>
-              <span class="text-ink-muted">End Date</span>
-              <p class="text-white">{formatCalendarDate(application.program.endDate)}</p>
-            </div>
-          )}
-          <div>
-            <span class="text-ink-muted">Applied</span>
-            <p class="text-white">{formatMomentDate(application.createdAt)}</p>
-          </div>
-          {application.completedAt && (
-            <div>
-              <span class="text-ink-muted">Completed</span>
-              <p class="text-white">{formatMomentDate(application.completedAt)}</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
+    <DescriptionList>
+      <DescriptionItem term="Status"><StatusChip domain="application" status={status} /></DescriptionItem>
+      {program?.startDate && <DescriptionItem term="Starts">{formatCalendarDate(program.startDate)}</DescriptionItem>}
+      {program?.endDate && <DescriptionItem term="Ends">{formatCalendarDate(program.endDate)}</DescriptionItem>}
+      <DescriptionItem term="Applied">{formatMomentDate(application.createdAt)}</DescriptionItem>
+      {application.completedAt && <DescriptionItem term="Completed">{formatMomentDate(application.completedAt)}</DescriptionItem>}
+    </DescriptionList>
 
     {application.status === "AUDIT" && (
-      <p class="text-sm text-ink-secondary">
+      <Notice tone="info">
         As an Audit participant, you can learn alongside the cohort through session recordings and Ask Tembo, but Audit does not include a completion certificate.
-      </p>
+      </Notice>
     )}
 
-    <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Application Details</h3>
-
+    <section aria-labelledby="application-answers-title" class="flex flex-col gap-4">
+      <h2 id="application-answers-title" class="text-2xl text-ink-primary">Your answers</h2>
       <ApplicationAnswers answers={answers} status={application.status} drafts={drafts} errors={fieldErrors} unsaved={unsaved} />
-    </Card>
+    </section>
   </div>
 </SpacePage>
