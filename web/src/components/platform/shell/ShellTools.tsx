@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PiBellSimple, PiMagnifyingGlass } from "react-icons/pi";
-import { IconButton } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { buttonClass, IconButton } from "@/components/platform/ui";
 import { awaitingConfirmationShort } from "@/components/platform/spaces/awaiting-confirmation";
 import { isSearchShortcut, requestShellOverlay } from "./overlays";
 
@@ -37,20 +35,15 @@ export function SearchTrigger() {
       aria-haspopup="dialog"
       aria-keyshortcuts="Control+K Meta+K"
       onClick={() => requestShellOverlay({ overlay: "search", trigger: ref.current, via: "click" })}
-      className={cx(
-        "spaces-search inline-flex h-10 shrink-0 items-center gap-2.5 rounded-xl border border-hairline bg-ink-primary/6 text-ink-secondary",
-        "transition-colors duration-150 hover:bg-ink-primary/10 hover:text-ink-primary motion-reduce:transition-none",
-        "pointer-coarse:h-11",
-        FOCUS_RING,
-      )}
+      className={buttonClass({ variant: "quiet", className: "spaces-search" })}
     >
-      <PiMagnifyingGlass aria-hidden="true" className="size-[1.125rem] shrink-0" />
+      <PiMagnifyingGlass aria-hidden="true" className="size-5 shrink-0" />
       <span className="spaces-search__words">
         {/* Spaced, so the visible text reads "Search Ctrl K", two words and the keys, as the name does. */}
-        <span className="spaces-search__label text-sm font-medium">Search</span>{" "}
+        <span className="spaces-search__label">Search</span>{" "}
         <kbd
           aria-hidden="true"
-          className="rounded-md border border-hairline px-1.5 py-0.5 font-body text-[0.6875rem] font-semibold text-ink-muted"
+          className="rounded-md border border-hairline px-1.5 py-0.5 font-body text-xs font-semibold text-ink-muted"
         >
           {keys}
         </kbd>

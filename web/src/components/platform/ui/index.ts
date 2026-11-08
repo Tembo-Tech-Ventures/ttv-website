@@ -30,6 +30,7 @@ export { cx } from "./cx";
 export {
   BUTTON_VARIANTS,
   FOCUS_RING,
+  INSET_FOCUS_RING,
   buttonClass,
   pillClass,
   type ButtonRecipe,

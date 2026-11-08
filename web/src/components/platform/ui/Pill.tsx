@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { pillClass } from "./recipes";
 
 type PillProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children"> & {
@@ -10,12 +10,17 @@ type PillProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "ch
   className?: string;
 };
 
-/** A filter toggle, as in "Needs a decision · 3 / Decided". */
-export default function Pill({ children, pressed, count, className, type = "button", ...rest }: PillProps) {
+/**
+ * A filter toggle, as in "Needs a decision · 3 / Decided". It takes a ref, so
+ * a dialog can put focus on the filter that is on when it opens.
+ */
+const Pill = forwardRef<HTMLButtonElement, PillProps>(function Pill({ children, pressed, count, className, type = "button", ...rest }, ref) {
   return (
-    <button {...rest} type={type} aria-pressed={pressed} data-pill className={pillClass(pressed, className)}>
+    <button {...rest} ref={ref} type={type} aria-pressed={pressed} data-pill className={pillClass(pressed, className)}>
       {children}
       {count !== undefined && <span className="text-xs font-medium tabular-nums">{count}</span>}
     </button>
   );
-}
+});
+
+export default Pill;

@@ -5,9 +5,7 @@ import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { clearChannelDrafts } from "@/lib/platform/client/channel-drafts";
 import { clearMentorRequestDrafts } from "@/lib/platform/client/mentor-request-form";
 import { clearOnboardingDrafts } from "@/lib/platform/client/onboarding-drafts";
-import { Avatar, initials, RoleBadge } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, cx, FOCUS_RING, initials, INSET_FOCUS_RING, RoleBadge } from "@/components/platform/ui";
 import { ACCOUNT_HREF } from "./space-routes";
 
 /**
@@ -27,7 +25,8 @@ export type ShellAccount = {
 
 const ITEM = cx(
   "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[0.9375rem] font-semibold text-ink-primary",
-  "hover:bg-ink-primary/8 focus-visible:bg-ink-primary/8 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-peach-ink",
+  "hover:bg-ink-primary/8 focus-visible:bg-ink-primary/8",
+  INSET_FOCUS_RING,
 );
 const ICON = "size-5 shrink-0 text-ink-secondary";
 
@@ -112,7 +111,7 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
       >
         <Avatar id={person.id} name={person.name} src={person.avatarUrl ?? undefined} size="md" decorative />
       </summary>
-      <div className="spaces-account__panel w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-hairline p-1.5 shadow-[0_24px_48px_-16px_rgb(0_0_0/0.6)]">
+      <div className="spaces-account__panel w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-hairline p-1.5 shadow-overlay">
         <div className="flex flex-col gap-1.5 px-3 pt-2 pb-3">
           <p className="text-[0.9375rem] leading-snug font-bold break-words text-ink-primary">{person.name}</p>
           {person.roleBadges.length > 0 && (

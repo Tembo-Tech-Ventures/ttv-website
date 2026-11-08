@@ -115,6 +115,16 @@
   --color-warning-ink: #FFD98E;
   --color-hairline: rgba(255, 248, 242, 0.1);
 
+  /*
+   * The two shadows the platform casts, both from things that float over the
+   * page: an overlay (the account menu, search, attention) onto what it covers,
+   * and an open drawer sideways off its edge. Nothing inside a sheet has one.
+   * Black at a low alpha, because the darkest teal is too light to read as
+   * depth on the ground. Use `shadow-overlay`, or var(--shadow-overlay) in CSS.
+   */
+  --shadow-overlay: 0 32px 64px -20px rgb(0 0 0 / 0.65);
+  --shadow-drawer: 30px 0 60px -20px rgb(0 0 0 / 0.7);
+
   --font-heading: "Mattone", sans-serif;
   --font-body: "Maven Pro", sans-serif;
 

@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import ButtonLink from "./ButtonLink";
 import EmptyState from "./EmptyState";
 import * as kit from "./index";
 import Notice from "./Notice";
+import Pill from "./Pill";
 import PillNav from "./PillNav";
 import { BUTTON_SIZES, BUTTON_VARIANTS, buttonClass, pillClass } from "./recipes";
 import TabFile, { type FileTab } from "./TabFile";
@@ -54,6 +56,28 @@ describe("ButtonLink", () => {
 
   it("passes link attributes through", () => {
     expect(renderToStaticMarkup(<ButtonLink href="/x" rel="noopener" target="_blank">Go</ButtonLink>)).toContain('rel="noopener" target="_blank"');
+  });
+});
+
+describe("Pill", () => {
+  it("is a toggle drawn from pillClass, pressed or not", () => {
+    const root = dom(renderToStaticMarkup(<><Pill pressed>All</Pill><Pill pressed={false} count={2}>Requests</Pill></>));
+    const [on, off] = [...root.querySelectorAll("button")];
+    expect([on.getAttribute("aria-pressed"), off.getAttribute("aria-pressed")]).toEqual(["true", "false"]);
+    expect([on.className, off.className]).toEqual([pillClass(true), pillClass(false)]);
+    expect(off.textContent).toBe("Requests2");
+  });
+
+  it("hands its ref to the button, so a dialog can focus the filter that is on", async () => {
+    const { createRoot } = await import("react-dom/client");
+    const { act } = await import("react");
+    const ref = createRef<HTMLButtonElement>();
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () => root.render(<Pill ref={ref} pressed data-filter="all">All</Pill>));
+    expect(ref.current?.tagName).toBe("BUTTON");
+    expect(ref.current?.dataset.filter).toBe("all");
+    await act(async () => root.unmount());
   });
 });
 

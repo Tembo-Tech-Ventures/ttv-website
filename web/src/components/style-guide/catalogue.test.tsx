@@ -6,7 +6,7 @@ import LiveSpecimen from "./LiveSpecimen";
 import { GUIDE_SECTIONS, guideSection } from "./sections";
 
 /** Exports that are plumbing rather than parts: helpers, types' runtime twins, constants. */
-const NOT_PARTS = new Set(["avatarColour", "initials", "cx", "fieldAria", "fieldId", "BUTTON_VARIANTS", "FOCUS_RING", "ButtonRecipe"]);
+const NOT_PARTS = new Set(["avatarColour", "initials", "cx", "fieldAria", "fieldId", "BUTTON_VARIANTS", "FOCUS_RING", "INSET_FOCUS_RING", "ButtonRecipe"]);
 
 describe("the public catalogue", () => {
   it("shows every component the kit exports, so the guide cannot fall behind the code", () => {

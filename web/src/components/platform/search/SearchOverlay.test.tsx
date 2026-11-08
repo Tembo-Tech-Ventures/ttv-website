@@ -8,6 +8,7 @@ import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient
 import { createMockTransport, type MockReply } from "@/lib/platform/client/mockTransport";
 import { requestShellOverlay } from "@/components/platform/shell/overlays";
 import { MASKED_NOTE } from "@/components/channels/MaskedText";
+import { pillClass } from "@/components/platform/ui";
 import { askTemboHref } from "./ask-handoff";
 import { recentSearchKey } from "./recent-searches";
 import SearchOverlay from "./SearchOverlay";
@@ -127,6 +128,18 @@ describe("SearchOverlay", () => {
     await act(async () => root.render(<SearchOverlay me={wanjiku} client={backend().client} />));
     expect(input().placeholder).toBe("Search messages, people, projects and your cohort's sessions");
     expect(container.querySelector('[data-search-scope="messages"]')?.textContent).toBe("Messages");
+  });
+
+  it("offers its scopes as the kit's pill toggles, one pressed", async () => {
+    await mount();
+    const scopes = [...container.querySelectorAll<HTMLButtonElement>("[data-search-scope]")];
+    expect(scopes.length).toBeGreaterThan(1);
+    expect(scopes.every((scope) => scope.hasAttribute("data-pill"))).toBe(true);
+    expect(scopes.filter((scope) => scope.getAttribute("aria-pressed") === "true").map((scope) => scope.dataset.searchScope)).toEqual(["all"]);
+    expect(scopes[0]!.className).toBe(pillClass(true));
+    await act(async () => scopes[1]!.click());
+    expect(scopes[1]!.getAttribute("aria-pressed")).toBe("true");
+    expect(scopes[1]!.className).toBe(pillClass(true));
   });
 
   it("names its close button with the key it shows, and gives Escape as its shortcut (WCAG 2.5.3)", async () => {

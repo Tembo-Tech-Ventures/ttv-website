@@ -14,6 +14,7 @@ import AttentionPanel from "./AttentionPanel";
 import { useAttentionOwner } from "./attention-client";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
 import { MASKED_NOTE } from "@/components/channels/MaskedText";
+import { BUTTON_VARIANTS, pillClass } from "@/components/platform/ui";
 
 const wanjiku = meByPersona.wanjiku;
 const SNAPSHOT = attention.snapshotAt;
@@ -140,6 +141,26 @@ describe("the attention page on the server", () => {
     expect([links.length, links[0]!.getAttribute("href")]).toEqual([1, attention.items[0]!.subject.href]);
     // Only an accepted request has one.
     expect(container.querySelectorAll("[data-attention-action]")).toHaveLength(1);
+  });
+
+  it("draws a row's next step quiet, never peach: a list of requests is not a column of primaries", () => {
+    const accepted = attention.items[0]!;
+    const items = [accepted, { ...accepted, id: "second-accepted", eventKey: "second" }];
+    container.innerHTML = renderToString(<AttentionPage me={wanjiku} initialList={{ ...attention, items }} />);
+    const actions = [...container.querySelectorAll<HTMLElement>("[data-attention-action]")];
+    expect(actions).toHaveLength(2);
+    for (const action of actions) {
+      for (const name of BUTTON_VARIANTS.quiet.split(" ")) expect(action.classList).toContain(name);
+      expect(action.classList).not.toContain("bg-primary");
+    }
+  });
+
+  it("offers its filters as the kit's pill toggles", () => {
+    container.innerHTML = renderToString(<AttentionPage me={wanjiku} initialList={attention} />);
+    const filters = [...container.querySelectorAll<HTMLButtonElement>("[data-attention-filter]")];
+    expect(filters.map((filter) => filter.dataset.attentionFilter)).toEqual(["all", "mentions", "requests", "updates"]);
+    expect(filters.map((filter) => filter.className)).toEqual([pillClass(true), pillClass(false), pillClass(false), pillClass(false)]);
+    expect(filters[0]!.textContent).toBe("All, 4 new");
   });
 
   it("shows a masked contact marker in a notice as the same note as in a message, never the marker (T03)", () => {

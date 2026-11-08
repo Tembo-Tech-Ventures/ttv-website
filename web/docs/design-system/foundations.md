@@ -68,7 +68,9 @@ pre-spaces dashboard. Don't use them in new platform work.
 
 Both faces are self-hosted from `src/assets/fonts/` under the SIL Open Font
 License, and layouts preload Maven Pro's latin file (`FontPreload`).
-Mattone appears in the kit only as Tembo's mark. Tracking comes from three
+Mattone appears in the kit only as Tembo's mark. The one other place outside
+the h1 is the logo, the TEMBO wordmark at the start of the spaces shell; its
+tagline beside it, "Tech Ventures", is Maven Pro in sentence case. Tracking comes from three
 tokens, `--tracking-display` (-0.02em), `--tracking-heading` (-0.015em) and
 `--tracking-subhead` (-0.01em), never inline `letter-spacing`
 (`src/styles/typography.test.ts`).
@@ -101,6 +103,11 @@ and a **card** (`RAISED`, `bg-ink-primary/4`, with a hairline) lifted in the
 sheet's own light. A field is a dark well (`bg-ground/40`) set into whatever
 holds it. Inside a sheet there are no drop shadows; the sheet itself casts a
 soft shadow upward onto the ground. No cards inside cards.
+
+Only what floats over the page casts a shadow, and only from the theme: the
+account menu, search and attention take `--shadow-overlay` (`shadow-overlay`),
+the open drawer `--shadow-drawer`. A scrim behind a drawer is the ground at
+60% (`color-mix(in srgb, var(--color-ground) 60%, transparent)`), never black.
 
 ## Motion
 

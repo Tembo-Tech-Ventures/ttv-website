@@ -14,6 +14,13 @@ import { cx } from "./cx";
 export const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 
+/**
+ * The same ring drawn inside the edge, for rows that fill a menu or a list:
+ * an outer ring would be clipped by the panel, or run into the next row.
+ */
+export const INSET_FOCUS_RING =
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-peach-ink";
+
 export type ButtonVariant = "primary" | "quiet" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
