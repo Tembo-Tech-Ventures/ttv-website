@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/platform/ui";
 import TranscriptPanel, {
   type TranscriptSegment,
 } from "@/components/recordings/TranscriptPanel";
@@ -12,21 +13,18 @@ export const RETRY_TIMEOUT_MS = 15_000;
 
 export default function SessionViewer({
   videoUrl,
-  title,
+  labelledBy,
   segments,
   initialTime = 0,
-  titleAs: Title = "h2",
 }: {
   videoUrl: string;
-  title: string;
+  /** The id of the page's h1, the session's title, which names the video. */
+  labelledBy: string;
   segments: TranscriptSegment[];
   initialTime?: number;
-  /** In the spaces shell the session's title is the page's one h1. */
-  titleAs?: "h1" | "h2";
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const retryRef = useRef<HTMLButtonElement | null>(null);
-  const titleId = useId();
+  const unavailableRef = useRef<HTMLDivElement | null>(null);
   const [currentTime, setCurrentTime] = useState(initialTime);
   /**
    * Whether the video could load. Without a failed state the player just sat
@@ -69,7 +67,7 @@ export default function SessionViewer({
     videoRef.current?.load();
   };
 
-  /* A retry that never hears back must not leave the button stuck on "Trying again…". */
+  /* A retry that never hears back must not leave the button stuck working. */
   useEffect(() => {
     if (media !== "retrying") return;
     const timer = setTimeout(() => {
@@ -82,7 +80,7 @@ export default function SessionViewer({
   const focusPlayer = useRef(false);
   const loaded = () => {
     if (media === "ok") return;
-    focusPlayer.current = document.activeElement === retryRef.current;
+    focusPlayer.current = Boolean(unavailableRef.current?.contains(document.activeElement));
     setMedia("ok");
   };
 
@@ -95,15 +93,17 @@ export default function SessionViewer({
 
   return (
     <div className="grid min-h-[70vh] gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-      <section className="min-w-0 space-y-4">
-        <div className="relative overflow-hidden rounded-md border border-teal/20 bg-black">
+      <section className="min-w-0">
+        {/* The box keeps its 16:9 before the video knows its size, so nothing below it moves. */}
+        <div className="relative aspect-video overflow-hidden rounded-[1.125rem] border border-hairline bg-ground">
           <video
             ref={videoRef}
-            src={videoUrl}
+            // A media fragment starts at ?t= even before (or without) the script.
+            src={initialTime > 0 ? `${videoUrl}#t=${initialTime}` : videoUrl}
             controls
             playsInline
-            aria-labelledby={titleId}
-            className={failed ? "invisible aspect-video w-full bg-black" : "aspect-video w-full bg-black"}
+            aria-labelledby={labelledBy}
+            className={failed ? "invisible size-full" : "size-full"}
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
             onError={() => setMedia("failed")}
             onLoadedMetadata={loaded}
@@ -112,6 +112,7 @@ export default function SessionViewer({
             <track kind="captions" srcLang="en" label="English" />
           </video>
           <div
+            ref={unavailableRef}
             data-video-unavailable={failed || undefined}
             className={failed ? "absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center" : "sr-only"}
           >
@@ -120,23 +121,11 @@ export default function SessionViewer({
               {failed && "This recording can’t be played right now. The transcript still has everything that was said."}
             </output>
             {failed && (
-              <button
-                ref={retryRef}
-                type="button"
-                onClick={retry}
-                aria-disabled={media === "retrying" || undefined}
-                className="min-h-11 rounded-md border border-white/40 px-4 text-sm font-semibold text-white hover:bg-teal/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary aria-disabled:cursor-wait aria-disabled:opacity-70"
-              >
-                {media === "retrying" ? "Trying again…" : "Try again"}
-              </button>
+              <Button variant="quiet" onClick={retry} loading={media === "retrying"}>
+                Try again
+              </Button>
             )}
           </div>
-        </div>
-        <div>
-          <Title id={titleId} className="text-xl font-semibold text-white">{title}</Title>
-          <p className="mt-1 text-sm text-ink-muted">
-            Use the transcript to jump to a moment in the session.
-          </p>
         </div>
       </section>
 

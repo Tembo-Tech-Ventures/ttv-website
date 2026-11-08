@@ -2,16 +2,23 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import SessionViewer from "./SessionViewer";
 
-const props = { videoUrl: "/api/recordings/synthetic/video", title: "Synthetic session", segments: [] };
+const props = { videoUrl: "/api/recordings/synthetic/video", labelledBy: "session-title", segments: [] };
 
 describe("SessionViewer", () => {
-  it("titles the session with an h2 in the existing dashboard", () => {
-    expect(renderToStaticMarkup(<SessionViewer {...props} />)).toMatch(/<h2 id="[^"]+" class="text-xl font-semibold text-white">Synthetic session<\/h2>/);
+  it("names the video by the page's h1 and renders no h1 of its own", () => {
+    const html = renderToStaticMarkup(<SessionViewer {...props} />);
+    expect(html).toContain('aria-labelledby="session-title"');
+    expect(html).not.toContain("<h1");
   });
 
-  it("makes the title the page's h1 inside the spaces shell", () => {
-    const html = renderToStaticMarkup(<SessionViewer {...props} titleAs="h1" />);
-    expect(html).toMatch(/<h1 id="[^"]+" class="text-xl font-semibold text-white">Synthetic session<\/h1>/);
-    expect(html).not.toContain("<h2");
+  it("holds the player in a 16:9 box on the ground tone, not black", () => {
+    const html = renderToStaticMarkup(<SessionViewer {...props} />);
+    expect(html).toMatch(/class="relative aspect-video [^"]*bg-ground"/);
+    expect(html).not.toMatch(/bg-black|text-white|border-white|outline-primary/);
+  });
+
+  it("starts the video at ?t= with a media fragment, which needs no script", () => {
+    expect(renderToStaticMarkup(<SessionViewer {...props} initialTime={75} />)).toContain('src="/api/recordings/synthetic/video#t=75"');
+    expect(renderToStaticMarkup(<SessionViewer {...props} />)).toContain('src="/api/recordings/synthetic/video"');
   });
 });

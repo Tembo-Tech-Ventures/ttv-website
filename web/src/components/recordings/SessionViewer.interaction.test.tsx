@@ -31,14 +31,21 @@ afterEach(async () => {
 });
 
 async function mount() {
-  await act(async () => root.render(<SessionViewer videoUrl="/api/recordings/r1/video" title="Week 4: SQL joins" segments={SEGMENTS} />));
+  await act(async () => root.render(
+    <>
+      <h1 id="session-title">Week 4: SQL joins</h1>
+      <SessionViewer videoUrl="/api/recordings/r1/video" labelledBy="session-title" segments={SEGMENTS} />
+    </>,
+  ));
   return container.querySelector("video")!;
 }
 
-const lines = () => Array.from(container.querySelectorAll<HTMLButtonElement>("[data-transcript-panel] button"));
+const lines = () => Array.from(container.querySelectorAll<HTMLAnchorElement>("[data-transcript-panel] a"));
+const retryButton = () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.startsWith("Try again"))!;
+const working = (button: HTMLButtonElement) => button.getAttribute("aria-busy") === "true";
 
 describe("session viewer", () => {
-  it("names the video by the session's title", async () => {
+  it("names the video by the session's title, the page's h1", async () => {
     const video = await mount();
     const title = document.getElementById(video.getAttribute("aria-labelledby")!);
     expect(title?.textContent).toBe("Week 4: SQL joins");
@@ -47,7 +54,7 @@ describe("session viewer", () => {
   it("gives each transcript line one stop, named for where it plays from", async () => {
     await mount();
     expect(lines()).toHaveLength(3);
-    expect(container.querySelectorAll("[data-transcript-panel] button button")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-transcript-panel] a a, [data-transcript-panel] button")).toHaveLength(0);
     expect(lines().map((line) => line.textContent)).toEqual([
       "Play from 0:00MentorWelcome back.",
       "Play from 0:04Today is about joins.",
@@ -56,11 +63,22 @@ describe("session viewer", () => {
     expect(lines()[0]!.querySelector(".sr-only")?.textContent).toBe("Play from ");
   });
 
-  it("seeks to a line's moment when it is chosen", async () => {
+  it("seeks to a line's moment in place when it is chosen, instead of following its ?t= link", async () => {
     const video = await mount();
-    await act(async () => lines()[2]!.click());
+    expect(lines()[2]!.getAttribute("href")).toBe("?t=75");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+    await act(async () => lines()[2]!.dispatchEvent(click));
+    expect(click.defaultPrevented).toBe(true);
     expect(video.currentTime).toBe(75);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it("lets a modified click open the line's link elsewhere", async () => {
+    await mount();
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, metaKey: true });
+    lines()[1]!.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    await act(async () => lines()[1]!.dispatchEvent(click));
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
   });
 
   it("says when the recording cannot play, keeps the transcript, and can try again", async () => {
@@ -75,19 +93,21 @@ describe("session viewer", () => {
     expect(video.classList).toContain("invisible");
     expect(lines()).toHaveLength(3);
 
-    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
+    const retry = retryButton();
+    expect(retry.dataset.variant).toBe("quiet");
     retry.focus();
     await act(async () => retry.click());
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
     // Still there while it retries, so keyboard focus is not dropped on the page.
     expect(retry.isConnected).toBe(true);
     expect(document.activeElement).toBe(retry);
-    expect(retry.textContent).toBe("Trying again…");
+    expect(working(retry)).toBe(true);
     expect(retry.getAttribute("aria-disabled")).toBe("true");
 
     // Failing again: the same button, still focused, offers another try.
     await act(async () => video.dispatchEvent(new Event("error")));
     expect(document.activeElement).toBe(retry);
+    expect(working(retry)).toBe(false);
     expect(retry.textContent).toBe("Try again");
 
     // Loading this time: the message goes, and focus moves to the player it brought back.
@@ -104,18 +124,18 @@ describe("session viewer", () => {
     await act(async () => video.dispatchEvent(new Event("error")));
     vi.useFakeTimers();
     try {
-      const retry = () => Array.from(container.querySelectorAll("button")).find((button) => /Try again|Trying again/.test(button.textContent ?? ""))!;
+      const retry = retryButton;
       await act(async () => retry().click());
-      expect(retry().textContent).toBe("Trying again…");
+      expect(working(retry())).toBe(true);
       // The media request neither fails nor loads: a stalled connection.
       await act(async () => vi.advanceTimersByTime(RETRY_TIMEOUT_MS - 1));
-      expect(retry().textContent).toBe("Trying again…");
+      expect(working(retry())).toBe(true);
       await act(async () => vi.advanceTimersByTime(1));
-      expect(retry().textContent).toBe("Try again");
+      expect(working(retry())).toBe(false);
       expect(retry().hasAttribute("aria-disabled")).toBe(false);
       // And it can be tried again from there.
       await act(async () => retry().click());
-      expect(retry().textContent).toBe("Trying again…");
+      expect(working(retry())).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -124,8 +144,7 @@ describe("session viewer", () => {
   it("counts the video's metadata arriving as recovered", async () => {
     const video = await mount();
     await act(async () => video.dispatchEvent(new Event("error")));
-    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
-    await act(async () => retry.click());
+    await act(async () => retryButton().click());
     await act(async () => video.dispatchEvent(new Event("loadedmetadata")));
     expect(container.querySelector("[data-video-unavailable]")).toBeNull();
     expect(video.classList).not.toContain("invisible");

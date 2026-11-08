@@ -53,6 +53,8 @@ function seeded() {
     INSERT INTO user(id,name,email) VALUES ('synthetic-achieng','Achieng Otieno','achieng@example.test');
     INSERT INTO studentProfile(id,userId,handle,status,headline) VALUES ('profile','synthetic-achieng','achieng-otieno','PUBLISHED','Fictional builder');
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.');
+    INSERT INTO recording(id,programId,title,processingStatus) VALUES ('recording','cohort-a','Week 3: Testing a service','complete');
+    INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','recording',0,4,'Mentor','Welcome back.');
     UPDATE feature_flag SET audience='ALL';`);
   // One request waiting for the mentor, for the Mentoring space's Requests page.
   sqlite.exec(`INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
@@ -75,6 +77,7 @@ beforeAll(async () => {
 const PAGES = {
   "cohort overview": { path: () => "/dashboard/cohort", page: () => import("@/pages/dashboard/index.astro"), user: STUDENT },
   "cohort sessions": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: STUDENT },
+  "session viewer": { path: () => "/dashboard/cohort/sessions/recording", page: () => import("@/pages/dashboard/sessions/[id].astro"), user: STUDENT, id: "recording" },
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
   conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
@@ -162,6 +165,10 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "cohort overview": { d1: 16, depth: 2 },
   // Its one read of its own is the recordings, once the router has the space context.
   "cohort sessions": { d1: 15, depth: 3 },
+  // The recording and its transcript are one read, started beside the space context; the access check
+  // reuses the request's capabilities. The same before the style-guide rollout, where the router's own
+  // reads already set the floor.
+  "session viewer": { d1: 15, depth: 3 },
   // The conversation's reads chain off the route channel, which the router reads beside the space
   // context (page-channels: 6, 4 and 8 deep before). A first visit reads the view too, unrendered,
   // rather than wait for the habits' answer.

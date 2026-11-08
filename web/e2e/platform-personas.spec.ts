@@ -454,11 +454,14 @@ test.describe("QA-1 polish (F-3)", () => {
     await expect(card).toContainText("12 Oct 2026");
     await card.click();
     await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions\/ttv-local-persona-recording-05$/);
-    await expect(page.getByRole("link", { name: "← Back to Sessions" })).toHaveAttribute("href", "/dashboard/cohort/sessions");
+    await expect(page.locator("[data-back-link]")).toHaveAttribute("href", "/dashboard/cohort/sessions");
+    await expect(page.locator("[data-back-link]")).toHaveAccessibleName("Sessions");
 
-    const lines = page.locator("[data-transcript-panel] button");
+    // Links to ?t=, so a line seeks even without the script.
+    const lines = page.locator("[data-transcript-panel] a");
     await expect(lines).toHaveCount(3);
     await expect(lines.first()).toHaveAccessibleName("Play from 0:00 Mentor Welcome back, everyone.");
+    await expect(lines.first()).toHaveAttribute("href", "?t=0");
     await lines.first().focus();
     await page.keyboard.press("Tab");
     await expect(lines.nth(1)).toBeFocused();
@@ -481,7 +484,8 @@ test.describe("QA-1 polish (F-3)", () => {
     await page.locator('a[href="/dashboard/cohort/sessions/ttv-local-persona-recording-05"]').click();
     // No hop through the legacy /dashboard/sessions/:id redirect.
     await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions\/ttv-local-persona-recording-05$/);
-    await expect(page.getByRole("link", { name: "← Back to Sessions" })).toHaveAttribute("href", "/dashboard/cohort/sessions");
+    await expect(page.locator("[data-back-link]")).toHaveAttribute("href", "/dashboard/cohort/sessions");
+    await expect(page.locator("[data-back-link]")).toHaveAccessibleName("Sessions");
     const missing = await page.request.get("/dashboard/cohort/sessions/ttv-local-persona-missing", { maxRedirects: 0 });
     expect(missing.headers().location).toBe("/dashboard/cohort/sessions");
   });
@@ -508,5 +512,26 @@ test.describe("without JavaScript", () => {
     // The application is a plain form: it posts without any script.
     const forms = page.locator("[data-cohort-id] form[method='POST']");
     if ((await forms.count()) > 0) await expect(forms.first().locator("button[type='submit']")).toBeVisible();
+  });
+});
+
+test.describe("a session without JavaScript", () => {
+  const session = personaSession("student");
+  test.skip(typeof session === "string", typeof session === "string" ? session : "");
+  test.use({ javaScriptEnabled: false });
+
+  test("a transcript line opens the session at its moment", async ({ context, page, baseURL }) => {
+    test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The fictional recording is in the local seed only.");
+    if (typeof session === "string") return;
+    await signIn(context, baseURL!, session);
+    test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
+
+    await page.goto("/dashboard/cohort/sessions/ttv-local-persona-recording-05");
+    const line = page.locator("[data-transcript-panel] a").nth(1);
+    await expect(line).toHaveAttribute("href", "?t=4");
+    await line.click();
+    await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions\/ttv-local-persona-recording-05\?t=4$/);
+    // The player starts there by a media fragment, not by script.
+    await expect(page.locator("video")).toHaveAttribute("src", "/api/recordings/ttv-local-persona-recording-05/video#t=4");
   });
 });
