@@ -101,6 +101,7 @@ const PAGES = {
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
   "admin profile": { path: () => "/admin/profiles/profile", page: () => import("@/pages/admin/profiles/[id].astro"), user: ADMIN, id: "profile" },
+  "admin projects": { path: () => "/admin/projects", page: () => import("@/pages/admin/projects/index.astro"), user: ADMIN },
   "admin project": { path: () => "/admin/projects/project", page: () => import("@/pages/admin/projects/[id].astro"), user: ADMIN, id: "project" },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
@@ -215,6 +216,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 4 before the style-guide rollout: every profile was read and filtered in JS, then the space.
   "admin profiles": { d1: 16, depth: 2 },
   "admin profile": { d1: 16, depth: 3 },
+  // Depth 4 before the style-guide rollout: every project with its interests, filtered in JS, then the space.
+  "admin projects": { d1: 15, depth: 2 },
   "admin project": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 2 },
