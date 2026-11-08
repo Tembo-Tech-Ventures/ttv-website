@@ -29,6 +29,7 @@ const STUDENT = "synthetic-wanjiku";
 const ADMIN = "synthetic-amina";
 const MENTOR = "synthetic-david";
 const DIRECT = "synthetic-direct";
+const BUILDER = "synthetic-achieng";
 const databases: { close(): void }[] = [];
 afterEach(() => databases.splice(0).forEach((database) => database.close()));
 
@@ -52,6 +53,10 @@ function seeded() {
     INSERT INTO feedback_theme(id,title,summary,kind,status,createdAt,updatedAt) VALUES ('theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',0,0);
     INSERT INTO user(id,name,email) VALUES ('synthetic-achieng','Achieng Otieno','achieng@example.test');
     INSERT INTO studentProfile(id,userId,handle,status,headline) VALUES ('profile','synthetic-achieng','achieng-otieno','PUBLISHED','Fictional builder');
+    INSERT INTO profileContact(id,profileId,fromName,fromEmail,organization,message) VALUES ('lead','profile','Grace Wanjiru','grace@example.test','Chama Savings','Fictional message.');
+    INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown) VALUES ('draft','profile','first-draft','A first draft','Fictional.');
+    INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('contribution','synthetic-achieng','Savings tracker','Fictional work.','2026-01-01','institution');
+    INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmation','contribution','${MENTOR}','Fictional statement.','REVIEWED_WORK',1);
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.');
     INSERT INTO recording(id,programId,title,processingStatus) VALUES ('recording','cohort-a','Week 3: Testing a service','complete');
     INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','recording',0,4,'Mentor','Welcome back.');
@@ -93,6 +98,8 @@ const PAGES = {
   attention: { path: () => "/dashboard/attention", page: () => import("@/pages/dashboard/attention.astro"), user: STUDENT },
   "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
+  "profile overview": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: STUDENT },
+  "profile overview, published": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: BUILDER },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
@@ -188,7 +195,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   conversation: { d1: 23, depth: 3 },
   // Two more than PERF-2 measured: the journey's profile and entries, read with the page since PERF-3
   // (#330) in place of three API calls after hydration, each with its own middleware and auth reads.
-  community: { d1: 18, depth: 3 },
+  // One more since the style-guide rollout: a journey's confirmations are read beside its entries, not
+  // after them, so a person with no entries pays a query that finds none.
+  community: { d1: 19, depth: 3 },
   conduct: { d1: 14, depth: 3 },
   mentors: { d1: 20, depth: 3 },
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
@@ -206,6 +215,12 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   attention: { d1: 10, depth: 2 },
   "admin home": { d1: 19, depth: 2 },
   account: { d1: 16, depth: 2 },
+  // Depth 6 (23 queries) for a published builder before the style-guide rollout: the journey, then the
+  // profile, then its messages and drafts, then the opportunities, in turn. Now one round trip after the
+  // router's, the profile's dependents found through it by subquery: four more queries for someone with
+  // no profile (19 before), none of them waiting.
+  "profile overview": { d1: 23, depth: 3 },
+  "profile overview, published": { d1: 21, depth: 3 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
   // read beside the page of people, in the same round trip.
   "admin users": { d1: 15, depth: 2 },

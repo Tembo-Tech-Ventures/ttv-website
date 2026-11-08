@@ -1,14 +1,13 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, desc, eq, exists, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { createCommunityService } from "@/lib/community/service";
 import type { CommunityJourney } from "@/lib/community/model";
 import { recordError } from "@/lib/observability/errors";
-import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { resolveGateState } from "@/components/hire/validation";
-import type { StudentJourney } from "@/lib/student/journey";
+import { getStudentJourney } from "@/lib/student/journey";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { loadCertificates, type SpacePageContext } from "@/components/platform/spaces/space-page";
 import { OVERVIEW_LIMITS, type OverviewFacts } from "./overview";
@@ -33,81 +32,103 @@ async function ownJourney(locals: App.Locals, userId: string): Promise<Community
   }
 }
 
+/** The person's builder profile, as a subquery, so what hangs off it is read beside it. */
+function ownProfileId(db: Database, userId: string, status?: "PUBLISHED") {
+  return db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
+    .where(and(eq(schema.studentProfile.userId, userId), status && eq(schema.studentProfile.status, status)));
+}
+
+/**
+ * The public builder profile and what hangs off it, in one round trip: unopened visitor messages,
+ * writing drafts and the Opportunities page's projects, each found through the profile's subquery
+ * rather than after it. The count of unopened messages is the journey's.
+ */
 async function profileFacts(db: Database, userId: string) {
-  const profile = await db.query.studentProfile.findFirst({
-    where: eq(schema.studentProfile.userId, userId),
-    columns: {
-      id: true, status: true, handle: true, headline: true, bio: true, location: true, country: true, skills: true,
-      publicName: true, publicAvatarUrl: true,
-    },
-  });
-  if (!profile) return { profile: null, leads: { items: [], total: 0 }, drafts: [] };
-  const [leadRows, [leadCount], drafts] = await Promise.all([
+  const [profile, leads, drafts, opportunities] = await Promise.all([
+    db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.userId, userId),
+      columns: {
+        id: true, status: true, handle: true, headline: true, bio: true, location: true, country: true, skills: true,
+        publicName: true, publicAvatarUrl: true,
+      },
+    }),
     db.query.profileContact.findMany({
-      where: and(eq(schema.profileContact.profileId, profile.id), eq(schema.profileContact.status, "NEW")),
+      where: and(inArray(schema.profileContact.profileId, ownProfileId(db, userId)), eq(schema.profileContact.status, "NEW")),
       columns: { id: true, fromName: true, organization: true },
       orderBy: [desc(schema.profileContact.createdAt)],
       limit: OVERVIEW_LIMITS.leads,
     }),
-    db.select({ value: count() }).from(schema.profileContact)
-      .where(and(eq(schema.profileContact.profileId, profile.id), eq(schema.profileContact.status, "NEW"))),
     db.query.blogPost.findMany({
-      where: and(eq(schema.blogPost.profileId, profile.id), eq(schema.blogPost.status, "DRAFT")),
+      where: and(inArray(schema.blogPost.profileId, ownProfileId(db, userId)), eq(schema.blogPost.status, "DRAFT")),
       columns: { id: true, title: true },
       orderBy: [desc(schema.blogPost.updatedAt)],
       limit: OVERVIEW_LIMITS.drafts,
     }),
+    opportunityFacts(db, userId),
   ]);
+  const gate = resolveGateState(profile).state;
   return {
-    profile,
-    leads: { items: leadRows, total: Number(leadCount?.value ?? 0) },
+    profile: profile ?? null,
+    leads,
     drafts,
+    // The SQL applies the same gate; this keeps the two from ever disagreeing on the page.
+    opportunities: { gate, items: gate === "published" ? opportunities : [] },
   };
 }
 
 /**
  * The approved client projects the Opportunities page lists, with the person's raised hands, read
- * only while that page is open to them: their journey has unlocked it (`open`) and its own gate,
- * a published profile, lets them in. Otherwise nothing is read, so no title or organisation can
- * reach someone the Opportunities page would refuse.
+ * only past that page's own gate, a published profile, which the query itself applies: for anyone
+ * else no title or organisation is read, so none can reach someone the Opportunities page would refuse.
  */
-export async function opportunityFacts(db: Database, profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null, open: boolean) {
-  const gate = resolveGateState(profile).state;
-  if (!open || gate !== "published" || !profile) return { gate, items: [] };
+export async function opportunityFacts(db: Database, userId: string) {
   const [projects, interests] = await Promise.all([
     db.query.clientProject.findMany({
-      where: eq(schema.clientProject.status, "APPROVED"),
+      where: and(eq(schema.clientProject.status, "APPROVED"), exists(ownProfileId(db, userId, "PUBLISHED"))),
       columns: { id: true, title: true, organization: true },
       orderBy: [desc(schema.clientProject.createdAt)],
       limit: OVERVIEW_LIMITS.opportunities + 1,
     }),
     db.query.projectInterest.findMany({
-      where: and(eq(schema.projectInterest.profileId, profile.id), eq(schema.projectInterest.status, "INTERESTED")),
+      where: and(inArray(schema.projectInterest.profileId, ownProfileId(db, userId, "PUBLISHED")), eq(schema.projectInterest.status, "INTERESTED")),
       columns: { projectId: true },
     }),
   ]);
   const raised = new Set(interests.map((interest) => interest.projectId));
-  return { gate, items: projects.map((project) => ({ ...project, interested: raised.has(project.id) })) };
+  return projects.map((project) => ({ ...project, interested: raised.has(project.id) }));
 }
 
-export async function loadProfileOverview(
-  locals: App.Locals, db: Database, context: SpacePageContext, journey: StudentJourney,
-): Promise<OverviewFacts> {
-  const { me } = context;
-  const userId = me.user.id;
-  const [eligible, own, contributions, certificates] = await Promise.all([
-    hasCompletedCohort(db, userId),
+/**
+ * Everything the Overview reads, with the journey the frame shares (getStudentJourney is read once
+ * per request). It needs only the person's id, so the page starts it beside the space context: every
+ * read here is one round trip.
+ */
+export async function readProfileOverview(locals: App.Locals, db: Database, userId: string) {
+  const [journey, own, contributions, certificates] = await Promise.all([
+    getStudentJourney(db, userId),
     profileFacts(db, userId),
     ownJourney(locals, userId),
     loadCertificates(db, userId),
   ]);
-  const opportunities = await opportunityFacts(db, own.profile, journey.visibleLinkIds.includes("opportunities"));
+  return { journey, own, contributions, certificates };
+}
+
+/** The Overview's facts, from its reads and the page's space context. */
+export function profileOverviewFacts(
+  { journey, own, contributions, certificates }: Awaited<ReturnType<typeof readProfileOverview>>,
+  context: SpacePageContext,
+): OverviewFacts {
+  const { me } = context;
   const profile = own.profile;
+  // The journey unlocks the Opportunities link on the same published-profile gate opportunityFacts
+  // applies; if the two reads of the profile ever disagree, the locked side wins.
+  const opportunities = journey.visibleLinkIds.includes("opportunities") ? own.opportunities : { gate: own.opportunities.gate, items: [] };
   return {
-    person: { id: userId, name: me.user.name, image: me.user.avatarUrl },
+    person: { id: me.user.id, name: me.user.name, image: me.user.avatarUrl },
     journeyState: journey.state,
     visibleLinkIds: journey.visibleLinkIds,
-    eligible,
+    // The journey shows the profile editor to whoever has completed a cohort (hasCompletedCohort).
+    eligible: journey.visibleLinkIds.includes("profile"),
     profile: profile && {
       status: profile.status,
       handle: profile.handle,
@@ -120,7 +141,7 @@ export async function loadProfileOverview(
       publicAvatarUrl: profile.publicAvatarUrl,
     },
     journey: contributions,
-    leads: own.leads,
+    leads: { items: own.leads, total: profile ? journey.unreadLeadCount : 0 },
     drafts: own.drafts,
     opportunities,
     certificates,
