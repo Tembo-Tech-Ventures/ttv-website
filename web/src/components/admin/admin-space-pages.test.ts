@@ -65,7 +65,8 @@ describe("admin pages in the spaces shell", () => {
         for (const text of titleSources(path, source)) {
           const pageTitle = /<PageTitle spaces=\{Boolean\(spaces\)\}/.test(text);
           const switched = /const (Title|titleTag) = spaces \? "h1" : "h2";/.test(text);
-          const retired = /<PageTitle spaces>/.test(text);
+          // Retired pages draw the kit's title (or the wrapper's, in spaces mode) in either frame.
+          const retired = /<PageTitle spaces>|<PageTitle>|<PageHeader\b/.test(text);
           expect(pageTitle || switched || retired).toBe(true);
         }
       });
