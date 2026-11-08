@@ -87,11 +87,17 @@ intent alone.
   is off for the person, for restricted staging identities, for personal access
   tokens and for agents' delegated sessions. A failed read is recorded and the
   page keeps the framing it had before onboarding.
-- `OnboardingNotices.astro` sits at the top of a landing page: the one-time card
-  (`ExistingAccountCard.astro`, S4), the status cards (`StatusCard.astro`, S3)
-  and, in Community, the welcome for someone just looking around and the
-  "Your spaces" line. An approval is announced everywhere but in the space it
-  opened, since opening that space marks it seen.
+- `OnboardingNotices.astro` sits at the top of a landing page: the status cards
+  (`StatusCard.astro`, S3) and, in Community, the welcome for someone just
+  looking around and the "Your spaces" line. An approval is announced
+  everywhere but in the space it opened, since opening that space marks it seen.
+- `OnboardingPrompt.astro` places the one-time card (`ExistingAccountCard.astro`,
+  S4) after the page's title and its own primary action, never above them:
+  after "Your next step" on Cohort, after "Review shared work" on Mentoring
+  (MentoringOverview's `after-primary` slot), and after the journey and scout
+  islands on Community and Discover, which draw their own titles. Its buttons
+  are quiet ("Not now" ghost), so the page keeps its one peach action, and with
+  a script it starts compact at every width until Choose opens the toggles.
 - Community: `partner` (chose to mentor or find people, and not to build and
   learn) drops the cohort invitation and "Apply to a cohort", and names the
   journey "Your own work"; `exploring` keeps the invitation and replaces the

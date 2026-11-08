@@ -4,6 +4,7 @@ import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import MentoringOverview from "@/components/platform/spaces/MentoringOverview.astro";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
+import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
@@ -30,7 +31,9 @@ const requests = spaces?.page === "mentoring" && mentorRequestsOpen(spaces.me) ?
   spaces?.page === "mentoring" ? (
     <SpacePage context={spaces} title="Mentoring">
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
-      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} requests={requests} />
+      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} requests={requests}>
+        <OnboardingPrompt slot="after-primary" view={spaces.onboarding} space={spaces.space} class="mt-6" />
+      </MentoringOverview>
     </SpacePage>
   ) : spaces ? (
     <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>

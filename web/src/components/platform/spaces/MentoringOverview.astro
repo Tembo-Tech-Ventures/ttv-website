@@ -2,7 +2,9 @@
 /**
  * The Mentoring space's landing: confirming shared work, then requests and
  * availability. While mentor requests are off for the person, those two say
- * they are not open yet rather than pretending to be empty inboxes.
+ * they are not open yet rather than pretending to be empty inboxes. The
+ * `after-primary` slot sits right after "Review shared work", the page's one
+ * primary action: the place for a side note such as the onboarding card.
  */
 import { PiArrowRight, PiCalendarCheck, PiChatsCircle, PiShieldCheck } from "react-icons/pi";
 import type { MentorAvailability } from "@/lib/platform/contracts";
@@ -116,6 +118,8 @@ const later = [
       </a>
     </div>
   </section>
+
+  <slot name="after-primary" />
 
   <ChannelShortcuts model={shortcuts} class="mt-6" />
 

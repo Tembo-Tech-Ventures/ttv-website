@@ -4,6 +4,7 @@ import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentat
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
+import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
 import { resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
 import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import Card from "@/components/common/Card.astro";
@@ -90,6 +91,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
         </div>
       </Card>
     </section>
+    {spaces && <OnboardingPrompt view={spaces.onboarding} space={spaces.space} />}
     <ChannelShortcuts model={shortcuts} />
     <CommunityJourneyCard restrictedQa={Boolean(qa)} />
   </div>

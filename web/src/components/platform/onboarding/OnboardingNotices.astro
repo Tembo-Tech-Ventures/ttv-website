@@ -1,9 +1,10 @@
 ---
 /**
  * What onboarding puts at the top of a space's landing page (SPEC §2, §3):
- * the one-time card for older accounts (S4), then the status cards (S3). In
- * Community it adds the welcome for someone just looking around, and the
- * "Your spaces" line for anyone a role has opened Mentoring or Discover to.
+ * the status cards (S3), and in Community the welcome for someone just
+ * looking around and the "Your spaces" line for anyone a role has opened
+ * Mentoring or Discover to. The one-time card for older accounts (S4) is not
+ * here: it goes after the page's title and primary action (OnboardingPrompt).
  *
  * After a form, the page says what happened and focus lands on it (QAO-02,
  * QAO-05, QAO-10): "Request sent." above the request's own Pending card, or
@@ -27,7 +28,6 @@ import {
   ACCOUNT_PATH, PROMPT_HIDDEN_VALUE, PROMPT_SAVED_VALUE, TAKING_PART_ID, UNSAVED_PARAM, UNSAVED_VALUE,
 } from "./account-actions";
 import { PROMPT, STATUS, YOUR_SPACES } from "./copy";
-import ExistingAccountCard from "./ExistingAccountCard.astro";
 import { ROLE_SPACES, cardsFor, yourSpaces, type OnboardingView } from "./framing";
 import StatusCard from "./StatusCard.astro";
 import { SEAL, action } from "./styles";
@@ -55,7 +55,7 @@ const promptDone = view.prompt ? null
   : note === PROMPT_SAVED_VALUE ? PROMPT.saved
   : note === PROMPT_HIDDEN_VALUE ? PROMPT.hidden
   : null;
-const shown = unsaved || sent.length > 0 || promptDone || view.prompt || cards.length > 0 || opened.length > 0 || welcome;
+const shown = unsaved || sent.length > 0 || promptDone || cards.length > 0 || opened.length > 0 || welcome;
 const CONFIRMATION = "flex items-start gap-2.5 rounded-xl border border-primary/45 bg-primary/10 px-4 py-3 text-[0.9375rem] font-semibold text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
@@ -77,7 +77,6 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
         <span>{promptDone} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{PROMPT.account}</a>.</span>
       </p>
     )}
-    {view.prompt && <ExistingAccountCard prompt={view.prompt} returnTo={returnTo} />}
     {cards.map((card) => <StatusCard card={card} returnTo={returnTo} />)}
     {welcome && (
       <section aria-labelledby="onboarding-welcome-title" data-onboarding-welcome class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:items-center sm:gap-x-5 sm:p-6">
