@@ -159,7 +159,7 @@ const TEXT_LINK = `rounded-sm text-peach-ink hover:underline ${FOCUS_RING}`;
                 <li class="relative py-3 first:pt-0 last:pb-0">
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
                     <Chip tone={NOTE_STATUS_TONES[note.status]}>{FEEDBACK_ADMIN_STATUS_LABELS[note.status]}</Chip>
-                    <a href={`/admin/feedback/${encodeURIComponent(note.id)}`} class:list={["rounded-sm text-sm font-semibold text-ink-primary after:absolute after:inset-0 hover:underline", FOCUS_RING]}>
+                    <a href={`/admin/feedback/${encodeURIComponent(note.id)}`} class:list={["rounded-sm text-sm font-semibold text-ink-primary after:absolute after:inset-0 hover:underline pointer-coarse:py-3", FOCUS_RING]}>
                       {note.user.name}
                     </a>
                     <span>{FEEDBACK_KIND_LABELS[note.kind]} · {formatDate(note.createdAt)} · {feedbackPagePath(note.pageUrl)}</span>
