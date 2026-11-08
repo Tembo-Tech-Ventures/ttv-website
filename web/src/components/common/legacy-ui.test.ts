@@ -39,7 +39,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "common/Badge.astro": {
     pattern: /common\/Badge(\.astro)?["']/,
     files: [
-    "pages/dashboard/opportunities.astro",
     "pages/dashboard/portfolio.astro",
     ],
   },

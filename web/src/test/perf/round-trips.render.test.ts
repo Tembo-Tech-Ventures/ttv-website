@@ -58,6 +58,7 @@ function seeded() {
     INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('contribution','synthetic-achieng','Savings tracker','Fictional work.','2026-01-01','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmation','contribution','${MENTOR}','Fictional statement.','REVIEWED_WORK',1);
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.');
+    INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description,status) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.','APPROVED');
     INSERT INTO recording(id,programId,title,processingStatus) VALUES ('recording','cohort-a','Week 3: Testing a service','complete');
     INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','recording',0,4,'Mentor','Welcome back.');
     UPDATE feature_flag SET audience='ALL';`);
@@ -104,6 +105,7 @@ const PAGES = {
   "your feedback": { path: () => "/dashboard/feedback", page: () => import("@/pages/dashboard/feedback.astro"), user: STUDENT },
   "visitor messages": { path: () => "/dashboard/me/leads", page: () => import("@/pages/dashboard/leads.astro"), user: BUILDER },
   writing: { path: () => "/dashboard/me/writing", page: () => import("@/pages/dashboard/writing/index.astro"), user: BUILDER },
+  opportunities: { path: () => "/dashboard/me/opportunities", page: () => import("@/pages/dashboard/opportunities.astro"), user: BUILDER },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
@@ -236,6 +238,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "visitor messages": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the profile, its posts, then the space context, in turn.
   writing: { d1: 14, depth: 3 },
+  // Depth 5 before the style-guide rollout: the profile, the projects, the raised hands, then the space
+  // context, in turn. The profile is now the journey's, which the frame reads anyway.
+  opportunities: { d1: 14, depth: 3 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
   // read beside the page of people, in the same round trip.
   "admin users": { d1: 15, depth: 2 },
