@@ -1,7 +1,9 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { PiCaretDown } from "react-icons/pi";
 import { cx } from "./cx";
-import { CHOICE_BOX, CONTROL, CONTROL_HEIGHT, FIELD_ERROR, HINT, LABEL } from "./recipes";
+import { CHOICE_BOX, CONTROL, CONTROL_HEIGHT, FIELD_ERROR, HINT, HINT_ON_TINT, LABEL } from "./recipes";
+// oxlint-disable-next-line import/no-unassigned-import -- the drawn checkbox and radio (CHOICE_BOX).
+import "./choice.css";
 
 /*
  * Form fields: a label above its control, an optional hint under the label,
@@ -66,9 +68,10 @@ function Label({ htmlFor, label, optional }: { htmlFor?: string; label: ReactNod
   );
 }
 
-function Hint({ id, children }: { id: string; children: ReactNode }) {
+/** On a tint (a chosen card), the hint takes the secondary ink: the muted one only clears on bare sheets and cards. */
+function Hint({ id, children, onTint = false }: { id: string; children: ReactNode; onTint?: boolean }) {
   return (
-    <p id={`${id}-hint`} className={cx(HINT, "m-0")}>
+    <p id={`${id}-hint`} className={cx(onTint ? HINT_ON_TINT : HINT, "m-0")}>
       {children}
     </p>
   );
@@ -106,6 +109,69 @@ export function TextField({ label, hint, error, optional, id, name, type = "text
   return (
     <Frame id={fid} label={label} hint={hint} error={error} optional={optional} className={className}>
       <input {...rest} {...fieldAria(fid, { hint, error }, rest["aria-describedby"])} id={fid} name={name} type={type} className={cx(CONTROL, CONTROL_HEIGHT)} />
+    </Frame>
+  );
+}
+
+type PrefixFieldProps = TextFieldProps & {
+  /** The fixed start of the value, shown in front of the control and never sent: "tembotechventures.com/talent/". */
+  prefix: string;
+};
+
+/**
+ * A text field whose value continues something fixed: a profile's handle
+ * after the site's address, a post's slug after its path. The prefix is part
+ * of what the reader sees and hears, not of what the form sends. On a narrow
+ * screen it wraps above the control rather than squeeze it.
+ */
+export function PrefixField({ label, hint, error, optional, id, name, type = "text", prefix, className, ...rest }: PrefixFieldProps) {
+  const fid = fieldId(id, name);
+  return (
+    <Frame id={fid} label={label} hint={hint} error={error} optional={optional} className={className}>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span id={`${fid}-prefix`} data-prefix className="min-w-0 text-[0.9375rem] break-all text-ink-secondary">
+          {prefix}
+        </span>
+        <input
+          {...rest}
+          {...fieldAria(fid, { hint, error }, [`${fid}-prefix`, rest["aria-describedby"]].filter(Boolean).join(" "))}
+          id={fid}
+          name={name}
+          type={type}
+          className={cx(CONTROL, CONTROL_HEIGHT, "min-w-40 flex-1 basis-40")}
+        />
+      </span>
+    </Frame>
+  );
+}
+
+type FileFieldProps = FieldText &
+  Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "type" | "value" | "defaultValue"> & {
+    className?: string;
+  };
+
+/**
+ * Choosing a file to upload: the browser's own picker, its button drawn as a
+ * quiet one, and the file's name beside it. Say in `hint` what it takes (the
+ * kinds and the size limit), because a rejected file is a wasted upload. The
+ * form posts as `multipart/form-data`.
+ */
+export function FileField({ label, hint, error, optional, id, name, className, ...rest }: FileFieldProps) {
+  const fid = fieldId(id, name);
+  return (
+    <Frame id={fid} label={label} hint={hint} error={error} optional={optional} className={className}>
+      <input
+        {...rest}
+        {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
+        id={fid}
+        name={name}
+        type="file"
+        className={cx(
+          CONTROL,
+          "min-h-11 cursor-pointer py-1.5 pl-1.5 leading-8 text-ink-secondary",
+          "file:mr-3 file:h-8 file:cursor-pointer file:rounded-lg file:border file:border-hairline file:bg-ink-primary/6 file:px-3 file:text-[0.8125rem] file:font-semibold file:text-ink-primary hover:file:bg-ink-primary/10",
+        )}
+      />
     </Frame>
   );
 }
@@ -203,6 +269,53 @@ function Choice({ type, label, hint, error, id, name, value, className, ...rest 
   );
 }
 
+type ChoiceCardProps = ChoiceProps & {
+  type?: "radio" | "checkbox";
+};
+
+/**
+ * A choice that needs a sentence to be understood, set as a card: "Learning
+ * in a cohort", "Mentoring". The whole card is the label, so it is one large
+ * target; the chosen card takes the peach edge and a faint peach lift, and
+ * says so with its box as well as its colour.
+ */
+export function ChoiceCard({ type = "radio", label, hint, error, id, name, value, className, ...rest }: ChoiceCardProps) {
+  const fid = fieldId(id, name && value !== undefined ? `${name}-${idPart(String(value))}` : name);
+  return (
+    <label
+      htmlFor={fid}
+      data-choice-card={type}
+      data-invalid={error ? true : undefined}
+      className={cx(
+        "flex min-w-0 cursor-pointer items-start gap-3 rounded-[1.125rem] border border-hairline p-4 transition-colors duration-150 motion-reduce:transition-none",
+        "bg-ink-primary/4 hover:border-ink-primary/45 has-checked:border-peach-ink has-checked:bg-primary/10 has-disabled:cursor-not-allowed has-disabled:opacity-60",
+        "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-peach-ink",
+        className,
+      )}
+    >
+      <input
+        {...rest}
+        {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
+        aria-invalid={error || rest["aria-invalid"] ? true : undefined}
+        id={fid}
+        name={name}
+        value={value}
+        type={type}
+        className={CHOICE_BOX}
+      />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold text-ink-primary">{label}</span>
+        {hint && (
+          <Hint id={fid} onTint>
+            {hint}
+          </Hint>
+        )}
+        {error && <ErrorText id={fid}>{error}</ErrorText>}
+      </span>
+    </label>
+  );
+}
+
 /** A yes-or-no question, or one of several independent ones in a `ChoiceGroup`. */
 export function Checkbox(props: ChoiceProps) {
   return <Choice {...props} type="checkbox" />;
@@ -217,6 +330,8 @@ type ChoiceGroupProps = FieldText & {
   /** The checked value or values. */
   defaultValue?: string | readonly string[];
   required?: boolean;
+  /** `cards` when each answer needs a sentence: a `ChoiceCard` each, two to a row from 40rem. */
+  appearance?: "rows" | "cards";
   className?: string;
 };
 
@@ -225,7 +340,8 @@ type ChoiceGroupProps = FieldText & {
  * radios for one answer and checkboxes for several. Under seven options and
  * the answers are worth reading side by side; past that, a select.
  */
-export function ChoiceGroup({ label, hint, error, optional, name, type = "radio", options, defaultValue, required, className }: ChoiceGroupProps) {
+export function ChoiceGroup({ label, hint, error, optional, name, type = "radio", options, defaultValue, required, appearance = "rows", className }: ChoiceGroupProps) {
+  const Option = appearance === "cards" ? ChoiceCard : Choice;
   const checked = new Set(typeof defaultValue === "string" ? [defaultValue] : (defaultValue ?? []));
   const describedBy = fieldAria(name, { hint, error })["aria-describedby"];
   return (
@@ -239,9 +355,9 @@ export function ChoiceGroup({ label, hint, error, optional, name, type = "radio"
         <Label label={label} optional={optional} />
       </legend>
       {hint && <Hint id={name}>{hint}</Hint>}
-      <div className="mt-1 flex flex-col gap-3">
+      <div className={appearance === "cards" ? "mt-1 grid gap-3 sm:grid-cols-2" : "mt-1 flex flex-col gap-3"}>
         {options.map((option) => (
-          <Choice
+          <Option
             key={option.value}
             type={type}
             name={name}

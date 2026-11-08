@@ -1,0 +1,87 @@
+/*
+ * A checkbox or radio's box (`CHOICE_BOX`). The native input, so it keeps its
+ * keyboard, form and accessibility behaviour, drawn by the kit instead of the
+ * browser: a 20px box with a 3:1 edge, peach when chosen. On a touch screen
+ * the input itself grows to a 44px target through a transparent border, and a
+ * negative margin as wide hands the space back, so the visible box and the
+ * row around it do not move. Backgrounds clipped to the padding box and an
+ * inset shadow draw it, not a mask, so the focus ring is never clipped. In
+ * forced colours the system draws it again.
+ */
+.kit-choice {
+  --choice-edge: color-mix(in srgb, var(--color-ink-primary) 45%, transparent);
+  --choice-well: color-mix(in srgb, var(--color-ground) 40%, transparent);
+  --choice-mark: none;
+  --choice-target: 0px;
+
+  appearance: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: calc(1.25rem + 2 * var(--choice-target));
+  height: calc(1.25rem + 2 * var(--choice-target));
+  margin: calc(0.125rem - var(--choice-target)) calc(0px - var(--choice-target)) calc(0px - var(--choice-target));
+  padding: 0;
+  border: var(--choice-target) solid transparent;
+  border-radius: calc(0.3125rem + var(--choice-target));
+  /* Inside the transparent border: the well, the mark over it, and the edge as an inset line. */
+  background:
+    var(--choice-mark) center / 100% 100% no-repeat padding-box,
+    linear-gradient(var(--choice-well), var(--choice-well)) padding-box;
+  box-shadow: inset 0 0 0 1px var(--choice-edge);
+  cursor: pointer;
+}
+
+.kit-choice[type="radio"] {
+  border-radius: 9999px;
+}
+
+@media (pointer: coarse) {
+  .kit-choice {
+    --choice-target: 0.75rem;
+  }
+  /* The ring keeps to the visible box, as it does under a mouse. */
+  .kit-choice:focus-visible {
+    outline-offset: calc(2px - var(--choice-target));
+  }
+}
+
+.kit-choice:hover {
+  --choice-edge: color-mix(in srgb, var(--color-ink-primary) 60%, transparent);
+}
+
+.kit-choice:checked {
+  --choice-edge: var(--color-peach-ink);
+  --choice-well: var(--color-peach-ink);
+}
+
+/* The tick, in --color-dark (#013D39; choice.test.ts holds the two together). */
+.kit-choice[type="checkbox"]:checked {
+  --choice-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M4.5 9.25l3 3 6-6.5' fill='none' stroke='%23013D39' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.kit-choice[type="radio"]:checked {
+  --choice-mark: radial-gradient(circle, var(--color-dark) 0 28%, transparent 31%);
+}
+
+.kit-choice[aria-invalid="true"] {
+  --choice-edge: var(--color-danger-ink);
+}
+
+.kit-choice:disabled {
+  --choice-edge: var(--color-hairline);
+  --choice-well: transparent;
+  cursor: not-allowed;
+}
+
+.kit-choice:disabled:checked {
+  --choice-edge: var(--color-ink-muted);
+  --choice-well: var(--color-ink-muted);
+}
+
+@media (forced-colors: active) {
+  .kit-choice {
+    appearance: auto;
+    background: none;
+    box-shadow: none;
+  }
+}

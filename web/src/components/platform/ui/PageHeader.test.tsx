@@ -9,7 +9,7 @@ describe("PageTitle", () => {
     const html = renderToStaticMarkup(<PageTitle id="title">Mentor requests</PageTitle>);
     expect(html).toMatch(/^<h1 id="title" data-page-title="true" class="[^"]+">Mentor requests<\/h1>$/);
     // The room above and below is more than Mattone overhangs a 1.1 line box, which a browser hit-tests.
-    for (const name of ["my-[0.2em]", "font-heading", "leading-[1.1]", "tracking-heading", "text-4xl", "sm:text-5xl", "lg:text-6xl", "wrap-anywhere", "text-balance", "text-ink-primary"]) {
+    for (const name of ["my-[0.2em]", "font-heading", "leading-[1.1]", "tracking-heading", "text-[clamp(1.75rem,9vw,2.25rem)]", "sm:text-5xl", "lg:text-6xl", "wrap-anywhere", "text-balance", "text-ink-primary"]) {
       expect(html).toContain(name);
     }
   });

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { PiCheckCircle, PiInfo, PiWarning, PiWarningOctagon } from "react-icons/pi";
 import { cx } from "./cx";
 import { FOCUS_RING } from "./recipes";
+import { filled } from "./slot";
 
 export type NoticeTone = "info" | "success" | "warning" | "danger";
 
@@ -109,8 +110,8 @@ export default function Notice({ tone = "info", title, children, actions, announ
             {title}
           </p>
         )}
-        {children && <div className={cx("min-w-0 break-words", title ? "text-ink-secondary" : "text-ink-primary")}>{children}</div>}
-        {actions && <div className="mt-2 flex flex-wrap gap-2">{actions}</div>}
+        {filled(children) && <div className={cx("min-w-0 break-words", title ? "text-ink-secondary" : "text-ink-primary")}>{children}</div>}
+        {filled(actions) && <div className="mt-2 flex flex-wrap gap-2">{actions}</div>}
       </div>
     </div>
   );

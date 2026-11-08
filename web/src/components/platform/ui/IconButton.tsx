@@ -1,9 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { FOCUS_RING } from "./Button";
 import CountBadge from "./CountBadge";
 import { cx } from "./cx";
-
-export type IconButtonVariant = "quiet" | "ghost" | "primary";
+import { buttonClass, type ButtonVariant } from "./recipes";
 
 type IconButtonProps = Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -12,8 +10,9 @@ type IconButtonProps = Omit<
   /** The button's whole accessible name. An icon has no words of its own. */
   label: string;
   icon: ReactNode;
-  variant?: IconButtonVariant;
-  size?: "sm" | "md";
+  /** As a Button's; pressed draws it ink, whatever its variant. */
+  variant?: ButtonVariant;
+  size?: "sm" | "md" | "lg";
   /** For toggles: on or off. Leave undefined for a plain action. */
   pressed?: boolean;
   /**
@@ -31,17 +30,6 @@ type IconButtonProps = Omit<
 
 /** The most a badge spells out; above it, "99+". */
 const BADGE_MAX = 99;
-
-const VARIANTS: Record<IconButtonVariant, string> = {
-  quiet: "border border-hairline bg-ink-primary/6 text-ink-secondary hover:bg-ink-primary/10 hover:text-ink-primary",
-  ghost: "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
-  primary: "bg-primary text-dark hover:bg-peach-ink",
-};
-
-const SIZES = {
-  sm: "size-8 rounded-lg",
-  md: "size-10 rounded-xl",
-};
 
 export default function IconButton({
   label,
@@ -73,14 +61,7 @@ export default function IconButton({
       aria-label={name}
       aria-pressed={pressed}
       data-variant={variant}
-      className={cx(
-        "relative inline-grid shrink-0 place-items-center transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ink-muted",
-        "pointer-coarse:size-11",
-        SIZES[size],
-        pressed ? "bg-ink-primary text-dark hover:bg-ink-primary hover:text-dark" : VARIANTS[variant],
-        FOCUS_RING,
-        className,
-      )}
+      className={buttonClass({ variant, size, disabled: rest.disabled, iconOnly: true, pressed, className: cx("relative", className) })}
     >
       <span aria-hidden="true" className="inline-flex">
         {icon}

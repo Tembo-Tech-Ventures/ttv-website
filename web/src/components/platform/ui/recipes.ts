@@ -44,6 +44,16 @@ export const BUTTON_SIZES: Record<ButtonSize, string> = {
   lg: "h-11 gap-2 rounded-xl px-4 text-sm",
 };
 
+/** The same sizes, square, for a button with an icon and no words (`IconButton`): 32, 40 and 44px. */
+export const ICON_BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "size-8 rounded-lg",
+  md: "size-10 rounded-xl",
+  lg: "size-11 rounded-xl",
+};
+
+/** A toggle that is on: ink, whatever its variant, as a pressed pill is. */
+export const BUTTON_PRESSED = "bg-ink-primary text-dark hover:bg-ink-primary";
+
 const BUTTON_BASE =
   "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11";
 
@@ -51,12 +61,22 @@ export type ButtonRecipe = {
   variant?: ButtonVariant;
   size?: ButtonSize;
   disabled?: boolean;
+  /** Square, for an icon with no words: 44px wide as well as tall on a touch screen. */
+  iconOnly?: boolean;
+  /** A toggle that is on. */
+  pressed?: boolean;
   className?: string;
 };
 
 /** A button's classes, for a `<button>` or an `<a>` that cannot be `Button` or `ButtonLink`. */
-export function buttonClass({ variant = "quiet", size = "md", disabled = false, className }: ButtonRecipe = {}): string {
-  return cx(BUTTON_BASE, BUTTON_SIZES[size], disabled ? BUTTON_DISABLED : BUTTON_VARIANTS[variant], FOCUS_RING, className);
+export function buttonClass({ variant = "quiet", size = "md", disabled = false, iconOnly = false, pressed = false, className }: ButtonRecipe = {}): string {
+  return cx(
+    BUTTON_BASE,
+    iconOnly ? cx(ICON_BUTTON_SIZES[size], "pointer-coarse:min-w-11") : BUTTON_SIZES[size],
+    disabled ? BUTTON_DISABLED : pressed ? BUTTON_PRESSED : BUTTON_VARIANTS[variant],
+    FOCUS_RING,
+    className,
+  );
 }
 
 /**
@@ -103,14 +123,21 @@ export const CONTROL = cx(
 /** Single-line controls are a 44px target on every pointer: forms are where thumbs land. */
 export const CONTROL_HEIGHT = "h-11";
 
-/** A checkbox or radio's box. The native control, tinted and dark, so it keeps every platform behaviour. */
-export const CHOICE_BOX = cx("mt-0.5 size-5 shrink-0 cursor-pointer scheme-dark accent-peach-ink disabled:cursor-not-allowed", FOCUS_RING);
+/**
+ * A checkbox or radio's box: the native control, drawn by choice.css (imported
+ * by the fields) as a 20px box with a 3:1 edge, and a 44px target on a touch
+ * screen without moving anything around it.
+ */
+export const CHOICE_BOX = cx("kit-choice", FOCUS_RING);
 
 /** A field's label: Maven Pro, semibold, always above its control. */
 export const LABEL = "text-sm font-semibold text-ink-primary";
 
 /** The quiet line under a label that says what a field is for or what it takes. */
 export const HINT = "text-[0.8125rem] leading-snug text-ink-muted";
+
+/** The same line on a tint, such as a chosen card, where the muted ink falls below 4.5:1. */
+export const HINT_ON_TINT = "text-[0.8125rem] leading-snug text-ink-secondary";
 
 /** What went wrong with one field, in words that say how to fix it. */
 export const FIELD_ERROR = "text-[0.8125rem] leading-snug font-semibold text-danger-ink";

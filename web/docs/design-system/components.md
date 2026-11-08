@@ -14,7 +14,8 @@ target on touch screens.
 ### PageHeader and PageTitle `#page-header`
 
 `PageTitle` is the page's one Mattone heading, its h1: 36–60px
-(`text-4xl sm:text-5xl lg:text-6xl`), `tracking-heading`, balanced lines,
+(`sm:text-5xl lg:text-6xl`, easing from 28px at 320px to 36px by 400px, so
+a long word such as "Applications" fits a phone's line), `tracking-heading`, balanced lines,
 and a word too long for the line breaks rather than push the page sideways,
 even in a flex row (`wrap-anywhere`). Line height 1.1 and 0.2em of room above
 and below: Mattone's line box is 1.43em, so tighter type overhangs the h1,
@@ -56,8 +57,9 @@ An action on this page. `<button type="button">` unless you pass `type="submit"`
 - Words say what happens: "Send request", not "Submit".
 - Never for navigation: that is `ButtonLink`.
 
-`buttonClass({ variant, size, disabled, className })` is the same recipe for
-an element that cannot be `Button` or `ButtonLink`. `Spinner` is its loading
+`buttonClass({ variant, size, disabled, iconOnly, pressed, className })` is
+the same recipe for an element that cannot be `Button` or `ButtonLink`;
+`iconOnly` makes it square, `pressed` draws a toggle that is on in ink. `Spinner` is its loading
 mark, exported for the rare custom control that needs it.
 
 ### ButtonLink `#button-link`
@@ -69,12 +71,14 @@ disabled link: if the destination is closed, say why in words.
 ### IconButton `#icon-button`
 
 A control with no room for words. `label` is required (it throws without
-one) and is the whole accessible name.
+one) and is the whole accessible name. It is built from `buttonClass({
+iconOnly: true })`, so each variant looks as the same `Button` does, and it
+is a 44px square on a touch screen.
 
 | Prop | Use |
 |---|---|
-| `variant` | `quiet` (default), `ghost`, `primary` |
-| `size` | `sm`, `md` |
+| `variant` | `quiet` (default), `ghost`, `primary`, `danger` |
+| `size` | `sm` (32px), `md` (40px), `lg` (44px) |
 | `pressed` | makes it a toggle (`aria-pressed`); pressed is ink |
 | `badge` | a number (99+ past 99) or `"dot"`; joined into the name ("Attention, 4 waiting") |
 | `badgeLabel`, `detail` | what the badge counts; extra words after it |
@@ -182,6 +186,39 @@ without it, a read-only tally that never looks pressable.
 A raised surface on a sheet. `as` (`div`, `article`, `section`, `li`,
 `aside`), `padding` (`sm`, `md`). No cards in cards.
 
+### DataTable `#data-table`
+
+Many things side by side. Composed, so it works from `.astro`:
+`<DataTable caption columns isEmpty empty>` holding `<DataRow>`s of
+`<DataCell label>`s.
+
+| Part | Use |
+|---|---|
+| `DataTable` | `caption` (read first; shown with `captionVisible`), `columns: { label, align?, hidden? }[]` in sentence case, `isEmpty` with an `EmptyState` in `empty` (from `.astro`, `<Fragment slot="empty">`) |
+| `DataRow` | one thing; `current` lifts it a little |
+| `DataCell` | `label` (its column, said beside it when the row stacks), `primary` for the cell that names the row (first; link it with `linkClass()`), `align` |
+| `RowAction` | `href`, the words, and `row`: a quiet small link read as "Open Wanjiku Mwangi" |
+| `DataSelectCell` | a row's selection box (`name`, `value`, `row`, `form`), named "Select Wanjiku Mwangi"; its column is `{ label: "Select", hidden: true }` |
+
+Below 40rem each row stacks into a block that names each fact (`data-table.css`),
+so nothing scrolls sideways at 320px; the table roles are written out so it is
+still a table to a screen reader. Rows lift on hover; nothing in a row uses the
+muted ink, which falls below 4.5:1 on that lift.
+
+### DataList `#data-list`
+
+Things read one at a time: notes, themes, requests. `<DataList label isEmpty
+empty>` of `<DataListItem title href meta status actions headingLevel>`,
+children for a sentence more. The title is a heading and the link; `status`
+and `actions` take named slots from `.astro`. Hairlines, not boxes.
+
+### Pager `#pager`
+
+`previousHref`, `nextHref` (either may be null), `summary` ("21–40 of 133"),
+`label` when a page has more than one. A named nav of plain links with
+`rel="prev"`/`"next"`; an end of the list has no link rather than a disabled
+one, and a list on one page draws nothing.
+
 ### DescriptionList `#description-list`
 
 Facts about one thing, as name and value, in a real `<dl>` separated by
@@ -266,7 +303,21 @@ and `ChoiceGroup` (a fieldset of radios, or checkboxes with
 Every native attribute passes through (`required`, `autoComplete`,
 `defaultValue`, `maxLength`…), so the browser's own validation runs first.
 Controls have a 3:1 edge on every surface, a dark well, `scheme-dark` so the
-browser's own parts match, and are 44px tall. `fieldAria(id, {hint, error})`
+browser's own parts match, and are 44px tall. A checkbox or radio is the
+native input drawn by `choice.css` (`CHOICE_BOX`): a 20px box with the same
+edge and well, peach with a dark tick or dot when chosen, a 44px target on a
+touch screen (a transparent border, handed back by a negative margin, so the
+row does not move), and the system's own drawing in forced colours.
+
+`FileField` is the browser's file picker with its button drawn quiet; say in
+`hint` the kinds of file and the size limit. `PrefixField` adds `prefix`, the
+fixed start of the value ("tembotechventures.com/talent/"), shown before the
+control, read with it and never sent; it wraps above the control on a narrow
+screen. `ChoiceCard` is a radio or checkbox set as a card whose whole surface
+is the label, for answers that need a sentence; `ChoiceGroup
+appearance="cards"` lays a group of them two to a row from 40rem. Its hint
+takes the secondary ink (`HINT_ON_TINT`), because the muted one falls below
+4.5:1 on a chosen card. `fieldAria(id, {hint, error})`
 and `fieldId` are exported for a custom control that has to join the same
 pattern.
 
@@ -275,6 +326,6 @@ pattern.
 `recipes.ts` holds the strings the components are made of: `FOCUS_RING`
 (and `INSET_FOCUS_RING`, the same ring drawn inside the edge for rows that fill
 a menu or list), `BUTTON_VARIANTS`, `BUTTON_SIZES`, `buttonClass`, `linkClass`, `pillClass`, `CONTROL`,
-`CONTROL_HEIGHT`, `CHOICE_BOX`, `LABEL`, `HINT`, `FIELD_ERROR`. `tones.ts`
-holds `CHIP_TONES` and `RAISED`. Use a recipe only where a component cannot
-go, and never restate one by hand.
+`CONTROL_HEIGHT`, `CHOICE_BOX`, `LABEL`, `HINT`, `FIELD_ERROR`, all exported
+from the kit's index. `tones.ts` holds `CHIP_TONES` and `RAISED`. Use a recipe
+only where a component cannot go, and never restate one by hand.

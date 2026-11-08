@@ -1,0 +1,42 @@
+---
+/** The list parts written the way an `.astro` page writes them, for lists.render.test.ts. */
+import { DataCell, DataList, DataListItem, DataRow, DataTable, EmptyState, RowAction, StatusChip, linkClass } from "@/components/platform/ui";
+
+interface Props {
+  users: ReadonlyArray<{ id: string; name: string; joined: string }>;
+}
+const { users } = Astro.props;
+---
+
+<DataTable caption="Users" columns={[{ label: "Name" }, { label: "Joined", align: "end" }, { label: "Actions", hidden: true }]} isEmpty={users.length === 0}>
+  {
+    users.map((user) => (
+      <DataRow>
+        <DataCell label="Name" primary>
+          <a href={`/admin/users/${user.id}`} class={linkClass()}>{user.name}</a>
+        </DataCell>
+        <DataCell label="Joined" align="end">{user.joined}</DataCell>
+        <DataCell label="">
+          <RowAction href={`/admin/users/${user.id}`} row={user.name}>Open</RowAction>
+        </DataCell>
+      </DataRow>
+    ))
+  }
+  <Fragment slot="empty">
+    <EmptyState title="No people yet">People appear here when they sign in.</EmptyState>
+  </Fragment>
+</DataTable>
+
+<DataList label="Feedback notes" isEmpty={users.length === 0}>
+  {
+    users.map((user) => (
+      <DataListItem title={`A note from ${user.name}`} href={`/admin/feedback/${user.id}`} meta={user.joined}>
+        <Fragment slot="status"><StatusChip domain="feedback" status="NEW" /></Fragment>
+        <Fragment slot="actions"><RowAction href={`/admin/feedback/${user.id}`} row={`A note from ${user.name}`}>Reply</RowAction></Fragment>
+      </DataListItem>
+    ))
+  }
+  <Fragment slot="empty">
+    <EmptyState title="No notes yet">Notes appear here when people send them.</EmptyState>
+  </Fragment>
+</DataList>

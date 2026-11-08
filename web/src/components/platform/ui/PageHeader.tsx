@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cx } from "./cx";
 import PageTitle from "./PageTitle";
+import { filled } from "./slot";
 
 type PageHeaderProps = {
   /** The page's title, its h1. */
@@ -32,9 +33,9 @@ export default function PageHeader({ title, children, action, titleId, titleAs, 
         <PageTitle id={titleId} as={titleAs}>
           {title}
         </PageTitle>
-        {children && <div className="max-w-prose text-base leading-relaxed text-ink-secondary">{children}</div>}
+        {filled(children) && <div className="max-w-prose text-base leading-relaxed text-ink-secondary">{children}</div>}
       </div>
-      {action && (
+      {filled(action) && (
         <div data-page-action className="flex shrink-0 flex-wrap gap-2">
           {action}
         </div>

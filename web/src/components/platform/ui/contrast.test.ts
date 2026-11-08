@@ -21,6 +21,9 @@ import { CHIP_TONES, RAISED, type ChipTone } from "./tones";
  */
 const HERE = resolve(__dirname);
 const PLATFORM_CSS = readFileSync(join(HERE, "platform-ui.css"), "utf8");
+const CHOICE_CSS = readFileSync(join(HERE, "choice.css"), "utf8");
+const DATA_TABLE = readFileSync(join(HERE, "DataTable.tsx"), "utf8");
+const FIELD = readFileSync(join(HERE, "Field.tsx"), "utf8");
 const AA = 4.5;
 /** WCAG 1.4.11: the edge that shows where a control is. */
 const NON_TEXT = 3;
@@ -127,6 +130,44 @@ describe.each(SPACES)("the %s sheet", (space) => {
       for (const name of ["danger-ink", "peach-ink"]) {
         expect(contrast(ink(name, base), base)).toBeGreaterThanOrEqual(NON_TEXT);
       }
+    });
+  });
+
+  describe.each(Object.entries(bases))("a checkbox or radio on the %s", (_, base) => {
+    const percent = (name: string) => Number(new RegExp(`--${name}: color-mix\\(in srgb, var\\(--color-ink-primary\\) (\\d+)%`).exec(CHOICE_CSS)?.[1]) / 100;
+
+    it("shows its edge at 3:1 at rest, as a field does", () => {
+      const edge = over(parse(token("ink-primary")).rgb, percent("choice-edge"), base);
+      expect(contrast(edge, base)).toBeGreaterThanOrEqual(NON_TEXT);
+    });
+
+    it("stands out at 3:1 when chosen or invalid, and its tick or dot reads on the peach", () => {
+      for (const name of ["peach-ink", "danger-ink"]) expect(contrast(ink(name, base), base)).toBeGreaterThanOrEqual(NON_TEXT);
+      const chosen = parse(token("peach-ink")).rgb;
+      expect(contrast(parse(token("dark")).rgb, chosen)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe.each(Object.entries(bases))("a table row on the %s", (_, base) => {
+    it("keeps its words at 4.5:1 when it is hovered or current, so a row never uses the muted ink", () => {
+      const row = lay(/\bhover:(bg-ink-primary\/\d+)/.exec(DATA_TABLE)![1], base);
+      for (const name of ["ink-primary", "ink-secondary"]) expect.soft(contrast(ink(name, row), row), name).toBeGreaterThanOrEqual(AA);
+      expect(DATA_TABLE).not.toContain("text-ink-muted");
+    });
+  });
+
+  describe.each(Object.entries(bases))("a choice card on the %s", (_, base) => {
+    const tints = /bg-(ink-primary\/\d+) hover:border-ink-primary\/\d+ has-checked:border-peach-ink has-checked:bg-(primary\/\d+)/.exec(FIELD)!;
+
+    it("keeps its words and its hint at 4.5:1, at rest and chosen", () => {
+      // The hint takes the secondary ink on a card (HINT_ON_TINT): the muted one falls to 4.3:1 there.
+      for (const surface of [lay(`bg-${tints[1]}`, base), lay(`bg-${tints[2]}`, base)]) {
+        for (const name of ["ink-primary", "ink-secondary"]) expect.soft(contrast(ink(name, surface), surface), name).toBeGreaterThanOrEqual(AA);
+      }
+    });
+
+    it("shows its chosen edge at 3:1", () => {
+      expect(contrast(ink("peach-ink", base), base)).toBeGreaterThanOrEqual(NON_TEXT);
     });
   });
 

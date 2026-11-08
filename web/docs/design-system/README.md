@@ -77,7 +77,10 @@ Two things Astro cannot do with React components:
   can be filled from `.astro` with `<Fragment slot="action">…</Fragment>`
   (`EmptyState`'s `action`, `Notice`'s `actions`, `PageHeader`'s `action`,
   `TabFile`'s `start` and `end`). Use `Fragment`, so the `slot` attribute does
-  not land on the element inside.
+  not land on the element inside. A slot inside a condition
+  (`{show && <Fragment slot="action">…</Fragment>}`) still arrives, empty, when
+  the condition fails; the kit's framed slots check for that (`filled`), so it
+  draws no empty box.
 - **Generate ids.** Each React component Astro renders is its own root, so
   `useId` would repeat across a page. The fields take their id from `id` or
   `name`, never from `useId`.
