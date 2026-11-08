@@ -6,38 +6,87 @@
  * `mentor_requests` is on for the person and they hold the Mentoring space.
  * The rail ends with "Worth another look" (B-4.2) when confirmed work has a
  * newer revision.
- * The list reads without JavaScript; answering needs it.
+ *
+ * The rail renders on the server (MentorRequests.astro); only the list of
+ * requests hydrates (MentorRequestsQueue). Without JavaScript each answer is a
+ * form that posts here (answer-post.ts) and lands back with what it did, and
+ * a panel opens through the URL (`?request=<id>&answer=decline`).
  */
 import { env } from "cloudflare:workers";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
+import MentorRequests from "@/components/platform/mentors/MentorRequests.astro";
 import MentorRequestsQueue from "@/components/platform/mentors/MentorRequestsQueue";
-import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { ANSWERED_PARAM, isAnswerPanel, PANEL_PARAM, REQUEST_PARAM } from "@/components/platform/mentors/answer-fields";
+import { handleAnswerPost, settleAnswer, type AnswerPostResult } from "@/components/platform/mentors/answer-post";
+import { MENTOR_REQUESTS_PATH, mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { mentorPageResponse } from "@/components/platform/mentors/page-responses";
-import { mentorsServer } from "@/components/platform/mentors/server";
+import { mentorsServer, type MentorsServer } from "@/components/platform/mentors/server";
 import { recordError } from "@/lib/observability/errors";
 
-const context = await resolveSpacePage(Astro.locals, "mentorRequests");
-if (!context || context.space !== "mentoring" || !mentorRequestsOpen(context.me)) return mentorPageResponse(404);
-if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return mentorPageResponse(405, { Allow: "GET, HEAD" });
-
+const { method } = Astro.request;
+const allowed = method === "GET" || method === "HEAD" || method === "POST";
 const now = Date.now();
-const server = mentorsServer(Astro, env, context.me, now);
-const [initial, mentors, availability, anotherLook] = await Promise.all([
+const read = (server: MentorsServer) => Promise.all([
   server.requests({ as: "mentor" }),
   server.directory({}),
   server.availability(),
   // "Worth another look" is a pointer, not the page: when it can't be read, the rail leaves it out.
   server.anotherLook().catch(async (error: unknown) => {
-    await recordError(env.DB, { source: "request", route: "/dashboard/mentoring/requests", error, level: "warning" });
+    await recordError(env.DB, { source: "request", route: MENTOR_REQUESTS_PATH, error, level: "warning" });
     return null;
   }),
 ]);
+// A GET's reads start beside onboarding, once `mentor_requests` is known to be on (PERF-2). A POST
+// reads after its answer, so a refusal shows the request as it is now.
+const resolved = await resolveSpacePageWith(Astro.locals, "mentorRequests", (me) =>
+  mentorRequestsOpen(me) && allowed && method !== "POST" ? read(mentorsServer(Astro, env, me, now)) : Promise.resolve(null));
+if (!resolved || resolved[0].space !== "mentoring" || !mentorRequestsOpen(resolved[0].me)) return mentorPageResponse(404);
+const [context, early] = resolved;
+if (!allowed) return mentorPageResponse(405);
+const server = mentorsServer(Astro, env, context.me, now);
+
+let posted: Extract<AnswerPostResult, { kind: "render" }> | null = null;
+if (method === "POST") {
+  const result = await handleAnswerPost(Astro.request, {
+    send: (intent, requestId, body) => server.answer(intent, requestId, body),
+    answered: (requestId) => `${MENTOR_REQUESTS_PATH}?${ANSWERED_PARAM}=${encodeURIComponent(requestId)}`,
+  });
+  if (result.kind === "redirect") return mentorPageResponse(303, { Location: result.location });
+  if (result.kind === "refuse") return mentorPageResponse(result.status);
+  posted = result;
+  Astro.response.status = result.status;
+}
+
+const [initial, mentors, availability, anotherLook] = early ?? await read(server);
+const find = (id: string | null) => id ? initial.items.find((request) => request.id === id) : undefined;
+const serverAnswer = posted ? settleAnswer(posted.answer, find(posted.answer.requestId)) : null;
+// A panel named in the URL opens only on a request still waiting for this mentor's answer.
+const panel = Astro.url.searchParams.get(PANEL_PARAM);
+const openedRequest = find(Astro.url.searchParams.get(REQUEST_PARAM));
+const opened = !posted && isAnswerPanel(panel) && openedRequest?.status === "PENDING" && openedRequest.check !== "reported"
+  ? { requestId: openedRequest.id, panel }
+  : null;
 Astro.response.headers.set("Cache-Control", "no-store");
 ---
 
-<SpacePage context={context} title="Requests">
+<SpacePage context={context} title="Requests" titlePrefix={posted ? "Error: " : ""}>
   <MentorPageIntro page="requests" />
-  <MentorRequestsQueue client:load initial={initial} mentors={mentors.items} availability={availability} anotherLook={anotherLook} now={now} />
+  <MentorRequests
+    availability={availability} anotherLook={anotherLook} now={now}
+    answered={posted ? null : find(Astro.url.searchParams.get(ANSWERED_PARAM)) ?? null}
+    failure={serverAnswer && !find(serverAnswer.requestId) ? serverAnswer.failure : null}
+  >
+    {/* Only what responds to a press is hydrated: the list of requests and their answers. */}
+    <MentorRequestsQueue
+      client:load
+      initial={initial}
+      mentors={mentors.items}
+      availability={availability}
+      now={now}
+      opened={opened}
+      serverAnswer={serverAnswer}
+    />
+  </MentorRequests>
 </SpacePage>

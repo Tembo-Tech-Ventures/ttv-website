@@ -8,8 +8,9 @@ import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./
  * and their private conversation opens with the note as its first message.
  * Then the other ways a request ends: withdrawn, not this month, a suggestion
  * of Samuel (who has one spot a month), and Samuel full once someone waits.
- * Then an organisation account asks as itself (owner decision 2026-11-02), and
- * last David saves his availability without JavaScript.
+ * The mentor answers without JavaScript too. Then an organisation account asks
+ * as itself (owner decision 2026-11-02), and last David saves his availability
+ * without JavaScript.
  *
  * Local seed only (`platform-personas.local.sql`, which also clears every
  * earlier request): agent previews have no browser mentor yet. The desktop
@@ -145,6 +146,33 @@ test("not this month carries an optional kind word, and reads as the mentor's ti
   await expect(row).toContainText("you're welcome to ask again or ask someone else");
   await expect(row).toContainText("I'm travelling this month. Try me in December?");
   await expect(row).not.toContainText(/reject|declined/i);
+});
+
+// Every essential task works without a script: the answers are forms that post to the page.
+test("without JavaScript the mentor says not this month with a note, and lands on the queue saying so", async ({ browser, baseURL }) => {
+  const member = await as(browser, baseURL!, "student");
+  await ask(member, "David Kamau", "Could you review my USSD menu flow?");
+  const mentor = await as(browser, baseURL!, "mentor", { javaScriptEnabled: false });
+  await mentor.goto(REQUESTS);
+  const request = queueCard(mentor, "Wanjiku Mwangi");
+  await expect(request).toContainText("Could you review my USSD menu flow?");
+  await expect(request.getByRole("button", { name: "Accept" })).toBeVisible();
+  // The panel opens through the page's URL.
+  await request.getByRole("button", { name: "Not this month" }).click();
+  await expect(mentor).toHaveURL(/[?&]answer=decline/);
+  const panel = queueCard(mentor, "Wanjiku Mwangi");
+  await panel.getByRole("textbox", { name: /A note for Wanjiku/ }).fill("Fully booked this month. Try me in December?");
+  await panel.getByRole("button", { name: "Send: not this month" }).click();
+  await expect(mentor).toHaveURL(/\/dashboard\/mentoring\/requests\?answered=/);
+  const notice = mentor.locator("[data-request-answered-notice] [data-notice='success']");
+  await expect(notice).toContainText("You told Wanjiku not this month");
+  await expect(notice).toBeFocused();
+  await expect(mentor.locator("[data-mentor-request][data-status='DECLINED']").first()).toContainText("Could you review my USSD menu flow?");
+
+  await visit(member, DIRECTORY);
+  const row = ownRow(member, "David Kamau");
+  await expect(row).toContainText("Not this month");
+  await expect(row).toContainText("Fully booked this month. Try me in December?");
 });
 
 test("the mentor suggests Samuel, and the member can ask him straight away", async ({ browser, baseURL }) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MentorArea, MentorRequestFormat } from "../contracts";
-import { isMentorArea, isMentorRequestFormat, MENTOR_REQUEST_FORMATS } from "./mentor-constants";
+import { MentorArea, MentorRequestFormat, WORTH_ANOTHER_LOOK_LIMIT as CONTRACT_LOOK_LIMIT } from "../contracts";
+import { isMentorArea, isMentorRequestFormat, MENTOR_REQUEST_FORMATS, WORTH_ANOTHER_LOOK_LIMIT } from "./mentor-constants";
 
 describe("the mentor contract's values without zod", () => {
   it("lists the formats the contract does, in its order", () => {
@@ -14,5 +14,9 @@ describe("the mentor contract's values without zod", () => {
     for (const value of ["Code review", " Mobile ", "x".repeat(40), "x".repeat(41), "", "   ", null, 7]) {
       expect(isMentorArea(value), `${String(value)}`).toBe(MentorArea.safeParse(value).success);
     }
+  });
+
+  it("caps \"Worth another look\" where the contract does", () => {
+    expect(WORTH_ANOTHER_LOOK_LIMIT).toBe(CONTRACT_LOOK_LIMIT);
   });
 });

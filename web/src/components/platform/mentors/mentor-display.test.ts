@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MentorRequestStatus, type MentorRequest } from "@/lib/platform/contracts";
 import { availability, FIXTURE_NOW, meByPersona, pendingMentorRequest, people } from "@/lib/platform/fixtures";
 import {
-  capacityView, conversationContext, conversationHref, dayPhrase, listingNote, mentorRequestsOpen, mentorStatus,
+  answeredNotice, capacityView, conversationContext, conversationHref, dayPhrase, listingNote, mentorRequestsOpen, mentorStatus,
   monthName, openingDate, personContext, requesterStatus, requestMeta, resultsHeading, usedShare, waitingText,
 } from "./mentor-display";
 
@@ -53,6 +53,14 @@ describe("statuses", () => {
     expect(words).not.toMatch(/reject|denied|refus|unfortunately|sorry|fail/i);
     expect(requesterStatus(request, "DECLINED")).toMatchObject({ label: "Not this month", tone: "neutral" });
     expect(requesterStatus(request, "DECLINED").detail).toContain("welcome to ask again");
+  });
+
+  // Chip tones keep their meaning: peach needs someone, success is an outcome, the rest is neutral.
+  it("tone a waiting request neutral for the person asking, peach for the mentor it waits for, and an acceptance success", () => {
+    expect(requesterStatus(request, "PENDING")).toMatchObject({ label: "Waiting for David", tone: "neutral" });
+    expect(mentorStatus(request, "PENDING")).toMatchObject({ label: "Waiting for you", tone: "peach" });
+    expect(requesterStatus(request, "ACCEPTED").tone).toBe("success");
+    expect(mentorStatus(request, "ACCEPTED").tone).toBe("success");
   });
 
   it("name the suggested mentor, or say the account has gone", () => {
@@ -153,5 +161,24 @@ describe("the directory's results heading (QA4-18)", () => {
     expect(resultsHeading(1, { area: "react", format: "CALL_30_MIN", available: true }, ["React", "Career"]))
       .toBe("1 mentor · React · 30-minute call · Has open spots");
     expect(resultsHeading(0, { area: "Rust", format: null, available: false }, ["React"])).toBe("0 mentors · Rust");
+  });
+});
+
+describe("answeredNotice", () => {
+  it("says what the mentor just did, with the conversation an acceptance opened", () => {
+    expect(answeredNotice({ ...request, status: "ACCEPTED", channelId: "dm-1" })).toEqual({
+      title: "You accepted Wanjiku's request", body: "Your conversation is open.",
+      conversation: { href: conversationHref("dm-1"), label: "Open conversation with Wanjiku" },
+    });
+    expect(answeredNotice({ ...request, status: "REDIRECTED", redirectedTo: people.samuel })).toMatchObject({
+      title: "You suggested Samuel Otieno to Wanjiku", conversation: null,
+    });
+    expect(answeredNotice({ ...request, status: "DECLINED" })).toMatchObject({ title: "You told Wanjiku not this month" });
+    expect(answeredNotice({ ...request, check: "reported" })?.body).toContain("Wanjiku sees only that it's being checked.");
+  });
+
+  it("says nothing for a request the mentor did not move", () => {
+    expect(answeredNotice(request)).toBeNull();
+    expect(answeredNotice({ ...request, status: "WITHDRAWN" })).toBeNull();
   });
 });

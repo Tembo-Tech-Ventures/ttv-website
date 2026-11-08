@@ -135,8 +135,8 @@ export function usedShare(capacity: MentorCapacity): number {
   return capacity.limit === 0 ? 0 : Math.min(1, capacity.used / capacity.limit);
 }
 
-/** Peach for what needs someone, the ring for a mentor's part, success for an accepted request, neutral for the rest. */
-export type StatusTone = "peach" | "ring" | "success" | "neutral";
+/** Peach for what needs someone, success for an accepted request, neutral for the rest. */
+export type StatusTone = "peach" | "success" | "neutral";
 export interface StatusView {
   label: string;
   tone: StatusTone;
@@ -190,7 +190,7 @@ export function requesterStatus(
   const mentor = firstName(request.mentor.name);
   switch (status) {
     case "PENDING":
-      return { label: `Waiting for ${mentor}`, tone: "ring", detail: null };
+      return { label: `Waiting for ${mentor}`, tone: "neutral", detail: null };
     case "ACCEPTED":
       return { label: "Accepted", tone: "success", detail: `${mentor} accepted. Your conversation is open.` };
     case "REDIRECTED":
@@ -264,6 +264,39 @@ export function mentorStatus(
       return { label: "Not this month", tone: "neutral", detail: null };
     case "WITHDRAWN":
       return { label: "Withdrawn", tone: "neutral", detail: `${requester} withdrew this request.` };
+  }
+}
+
+/**
+ * What a mentor just did, said where the queue lands after an answer posted without JavaScript: "You
+ * accepted Wanjiku's request", with the conversation it opened. Null when the request reads as nothing
+ * the mentor did (the person withdrew it meanwhile).
+ */
+export function answeredNotice(
+  request: Pick<MentorRequest, "requester" | "redirectedTo" | "status" | "channelId"> & Partial<Pick<MentorRequest, "check">>,
+): { title: string; body: string; conversation: { href: string; label: string } | null } | null {
+  const name = firstName(request.requester.name);
+  if (request.check === "reported") {
+    return {
+      title: `You reported ${name}'s request`, conversation: null,
+      body: `TTV will check it, and it's closed for you meanwhile. ${name} sees only that it's being checked.`,
+    };
+  }
+  switch (request.status) {
+    case "ACCEPTED":
+      return {
+        title: `You accepted ${name}'s request`, body: "Your conversation is open.",
+        conversation: request.channelId ? { href: conversationHref(request.channelId), label: `Open conversation with ${name}` } : null,
+      };
+    case "REDIRECTED":
+      return {
+        title: request.redirectedTo ? `You suggested ${request.redirectedTo.name} to ${name}` : `You suggested another mentor to ${name}`,
+        body: `${name} can ask them straight away.`, conversation: null,
+      };
+    case "DECLINED":
+      return { title: `You told ${name} not this month`, body: `${name} can ask again later, or ask someone else.`, conversation: null };
+    default:
+      return null;
   }
 }
 

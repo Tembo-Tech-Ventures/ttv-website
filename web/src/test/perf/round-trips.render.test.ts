@@ -48,6 +48,8 @@ function seeded() {
     INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
     INSERT INTO feedback_theme(id,title,summary,kind,status,createdAt,updatedAt) VALUES ('theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',0,0);
     UPDATE feature_flag SET audience='ALL';`);
+  // One request waiting for the mentor, for the Mentoring space's Requests page.
+  sqlite.exec(`INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
   const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
   // The student has agreed to the habits, so their channel pages show the conversation; the admin has
   // not, so theirs show the habits first. One message in each conversation, so its authors are read.
@@ -73,6 +75,7 @@ const PAGES = {
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring availability": { path: () => "/dashboard/mentoring/availability", page: () => import("@/pages/dashboard/mentoring/availability.astro"), user: MENTOR },
   "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
+  "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
   ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
   "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
@@ -140,6 +143,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "mentoring availability": { d1: 12, depth: 3 },
   // One directory read, filtered in memory: two (the same statement twice) before the style-guide rollout.
   "mentors, filtered": { d1: 20, depth: 3 },
+  // The same before the style-guide rollout: this page reads no onboarding, so starting its reads with the
+  // context (resolveSpacePageWith) keeps the depth rather than cuts it. "Worth another look" reads its access first.
+  "mentoring requests": { d1: 15, depth: 3 },
   ask: { d1: 14, depth: 3 },
   "admin home": { d1: 19, depth: 3 },
   account: { d1: 16, depth: 3 },
