@@ -99,7 +99,7 @@ test.describe("authenticated delivery agent", () => {
 
     await page.goto(`/admin/recordings/${recordingId}`);
     await expect(
-      page.getByRole("heading", { name: "Recording Details" })
+      page.getByRole("heading", { name: "Recording details" })
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Processing" })).toBeVisible();
     await page.screenshot({
