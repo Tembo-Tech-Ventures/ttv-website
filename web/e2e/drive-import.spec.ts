@@ -20,18 +20,18 @@ test.describe("Google Drive recording import", () => {
     await page.goto("/admin/recordings/import");
 
     const heading = page.getByRole("heading", {
-      name: "Import Session Recordings",
+      level: 1,
+      name: "Import session recordings",
     });
     await expect(heading).toBeVisible();
-    await expect(heading.locator("+ p")).toContainText(
-      "review historical counts"
+    await expect(page.locator("[data-page-header]")).toContainText(
+      "Review the historical count"
     );
 
     const notConfigured = page.getByTestId("drive-not-configured");
-    const configured = page.getByText(
-      "Service account credentials are configured.",
-      { exact: true }
-    );
+    const configured = page
+      .locator("dt")
+      .filter({ hasText: /^(Share each folder, as a Viewer, with|Reads Drive as)$/ });
     await expect(notConfigured.or(configured)).toBeVisible();
 
     if (await notConfigured.isVisible()) {

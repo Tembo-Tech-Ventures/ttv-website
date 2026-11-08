@@ -1,478 +1,373 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  Card,
+  Chip,
+  ConfirmStep,
+  DescriptionItem,
+  DescriptionList,
+  EmptyState,
+  Notice,
+  PageHeader,
+  SelectField,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  linkClass,
+  withoutConfirm,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
 import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
-import { parseGoogleDriveFolderId } from "@/lib/recordings/google-drive";
 import {
+  RecordingImportPreviewChangedError,
   previewRecordingImportSource,
   syncRecordingImportSource,
   type RecordingImportPreview,
 } from "@/lib/recordings/importer";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { formatMomentDateTime } from "@/lib/display-date";
+import { RECORDINGS_PATH } from "@/lib/admin/recordings";
+import {
+  FILTER_MAX,
+  SOURCE_NAME_MAX,
+  expectedEnabled,
+  reviewedCount,
+  setSourceEnabled,
+  sourceFromForm,
+  type SourceErrors,
+  type SourceValues,
+} from "@/lib/admin/recording-import";
 
+/*
+ * Google Drive import sources for session recordings: add one (paused), review
+ * how many videos its folder holds, add those to the queue, and turn its
+ * automatic scans on or off. A historical import queues many videos for
+ * transcription at once, so a personal access token can't make changes here.
+ */
 const db = drizzle(env.DB, { schema });
+const INTEGRATIONS_PATH = "/admin/settings/integrations";
 
-let credentialsConfigured = false;
-let clientEmail: string | undefined;
-let impersonatedUser: string | undefined;
-let historicalPreview:
-  | (RecordingImportPreview & { sourceId: string })
-  | undefined;
-
-if (env.CREDENTIALS_ENCRYPTION_KEY) {
+async function readCredentials() {
+  if (!env.CREDENTIALS_ENCRYPTION_KEY) return null;
   try {
-    const cipher = createCredentialCipher(env);
-    const creds = await getGoogleDriveCredentials(db, cipher);
-    if (creds) {
-      credentialsConfigured = true;
-      clientEmail = creds.clientEmail;
-      impersonatedUser = creds.impersonatedUser;
-    }
+    return await getGoogleDriveCredentials(db, createCredentialCipher(env));
   } catch {
-    // corrupt state — treat as unconfigured
+    // A credential that can't be read is one that isn't set up: Integrations replaces it.
+    return null;
   }
 }
+
+// The credential, the cohorts, the sources and the Admin space are independent reads: one round trip.
+const [credentials, programs, initialSources, spaces] = await Promise.all([
+  readCredentials(),
+  db.query.program.findMany({ columns: { id: true, name: true }, orderBy: (program, { desc }) => [desc(program.createdAt)] }),
+  db.query.recordingImportSource.findMany({ with: { program: { columns: { name: true } } }, orderBy: (source, { asc }) => [asc(source.name)] }),
+  resolveSpacePage(Astro.locals, "adminRecordings"),
+]);
+let sources = initialSources;
+const configured = Boolean(credentials);
+
+const SELF = Astro.url.pathname;
+const NOT_CONFIGURED = "Google Drive isn't connected yet. Set up its credential in Integrations, then review the folder.";
+const GONE = "That source was removed, perhaps by another admin. The list below is current.";
+
+let values: SourceValues = { name: "", programId: "", driveFolder: "", filenameContains: "" };
+let errors: SourceErrors = {};
+let createFailure: string | undefined;
+/** A refusal about a source or a scan rather than the form: what it's about, and what it says. */
+// Set through `refuse` below; the cast keeps TypeScript from narrowing it to undefined.
+let failure = undefined as { title: string; message: string } | undefined;
+let preview: (RecordingImportPreview & { sourceId: string }) | undefined;
 
 if (Astro.request.method === "POST") {
+  if (Astro.locals.personalAccessToken) {
+    return new Response("Forbidden: personal access tokens cannot change recording imports.", { status: 403 });
+  }
   const formData = await Astro.request.formData();
-  const action = String(formData.get("action") ?? "");
+  const action = formData.get("action");
+  const sourceId = formData.get("sourceId");
+  const source = typeof sourceId === "string" ? sources.find((one) => one.id === sourceId) : undefined;
+  const refuse = (title: string, message: string, status: 400 | 503 = 400) => {
+    failure = { title, message };
+    Astro.response.status = status;
+  };
 
-  try {
-    if (action === "create") {
-      const name = String(formData.get("name") ?? "").trim();
-      const programId = String(formData.get("programId") ?? "").trim();
-      const driveFolderId = parseGoogleDriveFolderId(
-        String(formData.get("driveFolder") ?? "")
-      );
-      const filenameContains =
-        String(formData.get("filenameContains") ?? "").trim() || null;
-
-      if (!name || !programId) {
-        throw new Error("Source name and program are required.");
+  if (action === "create") {
+    const parsed = sourceFromForm(formData, programs.map((program) => program.id));
+    values = parsed.values;
+    errors = parsed.errors;
+    if (parsed.source) {
+      try {
+        await db.insert(schema.recordingImportSource).values({ ...parsed.source, enabled: false });
+        return redirectWithFlash(Astro, SELF, {
+          tone: "success",
+          title: "Import source saved, paused",
+          message: "Review its historical import to see what it would add, then turn on automatic scans.",
+        });
+      } catch {
+        createFailure = "The database didn't answer, so the source wasn't saved. Try again in a moment.";
+        Astro.response.status = 503;
       }
-      const program = await db.query.program.findFirst({
-        where: eq(schema.program.id, programId),
-        columns: { id: true },
-      });
-      if (!program) {
-        throw new Error("Select a valid program.");
-      }
-
-      await db.insert(schema.recordingImportSource).values({
-        name,
-        programId,
-        driveFolderId,
-        filenameContains,
-        enabled: false,
-      });
-      return Astro.redirect(
-        "/admin/recordings/import?success=Import+source+saved+and+paused.+Review+the+historical+count,+then+enable+automatic+scans."
-      );
-    }
-
-    const sourceId = String(formData.get("sourceId") ?? "");
-    if (!sourceId) {
-      throw new Error("Import source is required.");
-    }
-
-    if (action === "preview") {
-      if (!credentialsConfigured) {
-        throw new Error(
-          "Google Drive credentials are not configured. Set them in Admin → Integrations."
-        );
-      }
-      historicalPreview = {
-        ...(await previewRecordingImportSource(env, sourceId)),
-        sourceId,
-      };
-    } else if (action === "confirm") {
-      if (!credentialsConfigured) {
-        throw new Error(
-          "Google Drive credentials are not configured. Set them in Admin → Integrations."
-        );
-      }
-      const expectedValue = String(
-        formData.get("expectedImportable") ?? ""
-      );
-      if (!/^\d+$/.test(expectedValue)) {
-        throw new TypeError("Review the historical import before confirming it.");
-      }
-      const expectedImportable = Number(expectedValue);
-      if (!Number.isSafeInteger(expectedImportable)) {
-        throw new TypeError("Review the historical import before confirming it.");
-      }
-      const summary = await syncRecordingImportSource(env, sourceId, {
-        expectedImportable,
-      });
-      const message = encodeURIComponent(
-        `Historical import started: ${summary.created} new, ${summary.queued} queued, ${summary.skipped} already known`
-      );
-      return Astro.redirect(
-        `/admin/recordings/import?success=${message}`
-      );
-    } else if (action === "toggle") {
-      await db
-        .update(schema.recordingImportSource)
-        .set({ enabled: formData.get("enabled") === "true" })
-        .where(eq(schema.recordingImportSource.id, sourceId));
-      return Astro.redirect("/admin/recordings/import?success=Source+updated");
-    } else if (action === "delete") {
-      await db
-        .delete(schema.recordingImportSource)
-        .where(eq(schema.recordingImportSource.id, sourceId));
-      return Astro.redirect("/admin/recordings/import?success=Source+removed");
     } else {
-      throw new Error("Unknown import action.");
+      createFailure = "Fix the fields marked below. Everything you wrote is kept.";
+      Astro.response.status = 400;
     }
-  } catch (error) {
-    const message = encodeURIComponent(
-      error instanceof Error ? error.message : String(error)
-    );
-    return Astro.redirect(`/admin/recordings/import?error=${message}`);
+  } else if (action !== "preview" && action !== "confirm" && action !== "toggle" && action !== "remove") {
+    refuse("Nothing changed", "Choose one of the actions on this page.");
+  } else if (!source) {
+    refuse("Nothing changed", GONE);
+  } else if (action === "toggle") {
+    const expected = expectedEnabled(formData.get("expectedEnabled"));
+    if (expected === null) refuse("Nothing changed", "Choose Pause or Turn on from the source's own row.");
+    else {
+      try {
+        const result = await setSourceEnabled(db, source.id, expected);
+        if (result.ok) {
+          return redirectWithFlash(Astro, SELF, {
+            tone: "success",
+            title: result.enabled ? `Automatic scans on for ${source.name}` : `${source.name} paused`,
+            message: result.enabled ? "Its folder is scanned every 15 minutes, and every video not yet in TTV is queued." : "Its folder isn't scanned until you turn it on again.",
+          });
+        }
+        refuse("Nothing changed", result.reason === "missing" ? GONE : "Someone changed this source while you were looking at it. Its state below is the current one.");
+      } catch {
+        refuse("Nothing changed", "The database didn't answer, so nothing changed. Try again in a moment.", 503);
+      }
+    }
+  } else if (action === "remove") {
+    try {
+      await db.delete(schema.recordingImportSource).where(eq(schema.recordingImportSource.id, source.id));
+      return redirectWithFlash(Astro, SELF, { tone: "success", title: `${source.name} removed`, message: "The recordings it already imported stay." });
+    } catch {
+      refuse("Nothing changed", "The database didn't answer, so the source wasn't removed. Try again in a moment.", 503);
+    }
+  } else if (!configured) {
+    refuse("Google Drive isn't connected", NOT_CONFIGURED);
+  } else if (action === "preview") {
+    try {
+      preview = { ...(await previewRecordingImportSource(env, source.id)), sourceId: source.id };
+    } catch (error) {
+      refuse("The folder wasn't scanned", `${error instanceof Error ? error.message : "Google Drive didn't answer."} Nothing was added.`, 503);
+    }
+  } else {
+    const expectedImportable = reviewedCount(formData.get("expectedImportable"));
+    if (expectedImportable === null) refuse("Nothing was added", "Review the historical import first, then add what it found.");
+    else {
+      try {
+        const summary = await syncRecordingImportSource(env, source.id, { expectedImportable });
+        return redirectWithFlash(Astro, SELF, {
+          tone: "success",
+          title: "Historical import started",
+          message: `${summary.created} new, ${summary.queued} queued to transcribe, ${summary.skipped} already in TTV.`,
+        });
+      } catch (error) {
+        if (error instanceof RecordingImportPreviewChangedError) refuse("Nothing was added", error.message);
+        else refuse("Nothing was added", `${error instanceof Error ? error.message : "Google Drive didn't answer."} Nothing was queued.`, 503);
+      }
+    }
+  }
+
+  // A scan writes its outcome on the source (its last scan, or its last error): show it.
+  if (action === "preview" || action === "confirm") {
+    sources = await db.query.recordingImportSource
+      .findMany({ with: { program: { columns: { name: true } } }, orderBy: (one, { asc }) => [asc(one.name)] })
+      .catch(() => sources);
   }
 }
 
-const [programs, sources] = await Promise.all([
-  db.query.program.findMany({
-    orderBy: (program, { desc }) => [desc(program.createdAt)],
-  }),
-  db.query.recordingImportSource.findMany({
-    with: { program: true },
-    orderBy: (source, { asc }) => [asc(source.name)],
-  }),
-]);
-
-const success = Astro.url.searchParams.get("success");
-const error = Astro.url.searchParams.get("error");
-const previewSource = historicalPreview
-  ? sources.find((source) => source.id === historicalPreview?.sourceId)
-  : undefined;
-const formatDateTime = (date: Date | null) =>
-  date
-    ? new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date)
-    : "Not yet";
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const reviewed = preview ? sources.find((source) => source.id === preview?.sourceId) : undefined;
+const removing = confirmingAction(Astro.url, sources.map((source) => `remove-${source.id}`));
+const removingSource = removing ? sources.find((source) => `remove-${source.id}` === removing) : undefined;
+const count = (value: number) => value.toLocaleString("en-GB");
+const cohortOptions = programs.map((program) => ({ value: program.id, label: program.name }));
+const SOURCE_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
 ---
 
-<AdminLayout title="Import Session Recordings" spaces={spaces}>
+<AdminLayout title="Import session recordings" titlePrefix={failure || createFailure ? "Error: " : ""} spaces={spaces}>
   <div class="space-y-6">
-    <div>
-      <a href="/admin/recordings" class="text-sm text-primary hover:underline">
-        &larr; Back to Recordings
-      </a>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="mt-3 text-2xl font-bold text-white">
-        Import Session Recordings
-      </PageTitle>
-      <p class="mt-1 max-w-3xl text-sm text-ink-muted">
-        Scan Google Drive folders and subfolders for Meet recordings, review
-        historical counts, and add approved videos to the transcription and
-        search queue.
-      </p>
-    </div>
+    <BackLink href={RECORDINGS_PATH}>Recordings</BackLink>
 
-    {success && (
-      <p class="rounded-md bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100">
-        {success}
-      </p>
-    )}
-    {error && (
-      <p class="rounded-md bg-red-500/15 px-4 py-3 text-sm text-red-100">
-        {error}
-      </p>
+    <PageHeader title="Import session recordings">
+      Scan Google Drive folders, and the folders inside them, for Meet recordings. Review the historical count before
+      anything is added to the transcription and search queue.
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    {failure && (
+      <Notice tone="danger" focusOnLoad id="import-failure" title={failure.title}>{failure.message}</Notice>
     )}
 
     <Card>
-      <h3 class="text-lg font-semibold text-white">Google connection</h3>
-      {credentialsConfigured ? (
-        <div class="mt-3 space-y-2 text-sm text-ink-secondary">
-          <p class="text-emerald-200">Service account credentials are configured.</p>
-          {impersonatedUser ? (
-            <p>
-              Drive access is delegated as
-              <span class="ml-1 font-medium text-white">
-                {impersonatedUser}
-              </span>.
-            </p>
-          ) : (
-            <p>
-              Share each source folder with
-              <span class="ml-1 break-all font-medium text-white">
-                {clientEmail}
-              </span>
-              as a Viewer.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div class="mt-3 space-y-2 text-sm text-amber-100" data-testid="drive-not-configured">
-          <p>
-            Google Drive credentials are not configured yet. Sources can be saved
-            now, but scans will remain unavailable until the credentials are set.
-          </p>
-          <p>
-            Go to{" "}
-            <a
-              href="/admin/settings/integrations"
-              class="font-medium text-primary hover:underline"
-            >
-              Admin &rarr; Settings &rarr; Integrations
-            </a>{" "}
-            to paste your Google service-account JSON.
-          </p>
-        </div>
-      )}
+      <section class="grid gap-4" aria-labelledby="connection-heading">
+        <h2 id="connection-heading" class="text-lg text-ink-primary">Google Drive connection</h2>
+        {credentials ? (
+          <DescriptionList>
+            <DescriptionItem term="Credential"><Chip tone="success">Set up</Chip></DescriptionItem>
+            {credentials.impersonatedUser ? (
+              <DescriptionItem term="Reads Drive as">{credentials.impersonatedUser}</DescriptionItem>
+            ) : (
+              <DescriptionItem term="Share each folder, as a Viewer, with"><span class="break-all">{credentials.clientEmail}</span></DescriptionItem>
+            )}
+          </DescriptionList>
+        ) : (
+          <div data-testid="drive-not-configured">
+            <Notice tone="warning" title="Google Drive isn't connected yet" announce="none">
+              You can save sources now, but nothing is scanned until the credential is set. Paste the Google
+              service-account JSON in <a href={INTEGRATIONS_PATH} class={linkClass()}>Integrations</a>.
+            </Notice>
+          </div>
+        )}
+      </section>
     </Card>
 
-    {historicalPreview && (
+    {preview && (
       <Card>
-        <div data-testid="historical-import-preview">
-          <p class="text-xs font-semibold uppercase tracking-wide text-primary">
-            Historical import review
+        <section class="grid gap-4" aria-labelledby="review-heading" data-testid="historical-import-preview">
+          <h2 id="review-heading" class="text-lg text-ink-primary">Historical import: {reviewed?.name ?? "Google Drive source"}</h2>
+          <p class="max-w-prose text-sm text-ink-secondary">
+            The scan checked the folder, every folder inside it and Drive shortcuts. Nothing has been added yet. Videos
+            Google marks as not downloadable can't be queued, because TTV can't fetch them to transcribe.
           </p>
-          <h3 class="mt-1 text-lg font-semibold text-white">
-            {previewSource?.name ?? "Google Drive source"}
-          </h3>
-          <p class="mt-2 max-w-3xl text-sm text-ink-secondary">
-            The scan checked the selected folder, all nested folders, and Drive
-            shortcuts. Nothing has been added by this review. Files that Google
-            marks as not downloadable cannot be queued because TTV would not be
-            able to fetch the video bytes for processing.
-          </p>
-
-          <dl class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">Drive items scanned</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {(historicalPreview.driveItemsScanned ?? historicalPreview.discovered).toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">Visible videos</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {(historicalPreview.visibleVideos ?? historicalPreview.discovered).toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">Importable videos</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {historicalPreview.discovered.toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
-              <dt class="text-xs text-amber-100/70">Download blocked by Drive</dt>
-              <dd class="mt-1 text-xl font-semibold text-amber-50">
-                {(historicalPreview.downloadBlockedVideos ?? 0).toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">New videos</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {historicalPreview.new.toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">Pending retry</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {historicalPreview.pending.toLocaleString()}
-              </dd>
-            </div>
-            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-ink-muted">Already in TTV</dt>
-              <dd class="mt-1 text-xl font-semibold text-white">
-                {historicalPreview.skipped.toLocaleString()}
-              </dd>
-            </div>
-          </dl>
-
-          {(historicalPreview.downloadBlockedVideos ?? 0) > 0 && (
-            <p class="mt-4 rounded-md border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-50">
-              Google returned {(historicalPreview.visibleVideos ?? historicalPreview.discovered).toLocaleString()} video files,
-              but {(historicalPreview.downloadBlockedVideos ?? 0).toLocaleString()} cannot be imported with the current
-              Drive credential because Google reports them as not downloadable.
-              Enable download access for the service account or impersonated
-              user, then review the import again.
-            </p>
+          <DescriptionList>
+            <DescriptionItem term="Drive items scanned">{count(preview.driveItemsScanned ?? preview.discovered)}</DescriptionItem>
+            <DescriptionItem term="Videos Google shows">{count(preview.visibleVideos ?? preview.discovered)}</DescriptionItem>
+            <DescriptionItem term="Videos that can be imported">{count(preview.discovered)}</DescriptionItem>
+            <DescriptionItem term="Download blocked by Drive">{count(preview.downloadBlockedVideos ?? 0)}</DescriptionItem>
+            <DescriptionItem term="New videos">{count(preview.new)}</DescriptionItem>
+            <DescriptionItem term="Waiting to retry">{count(preview.pending)}</DescriptionItem>
+            <DescriptionItem term="Already in TTV">{count(preview.skipped)}</DescriptionItem>
+          </DescriptionList>
+          {(preview.downloadBlockedVideos ?? 0) > 0 && (
+            <Notice tone="warning" title={`${count(preview.downloadBlockedVideos ?? 0)} videos can't be downloaded`} announce="none">
+              Google shows {count(preview.visibleVideos ?? preview.discovered)} videos, but reports these as not downloadable
+              with the current credential. Allow downloads for the service account or the user it reads Drive as, then
+              review again.
+            </Notice>
           )}
-
-          {historicalPreview.importable > 0 ? (
-            <div class="mt-5 flex flex-wrap items-center gap-3">
-              <form method="POST">
+          {preview.importable > 0 ? (
+            <div class="grid gap-3">
+              <form method="POST" action={SELF} class="flex flex-wrap items-center gap-3">
                 <input type="hidden" name="action" value="confirm" />
-                <input
-                  type="hidden"
-                  name="sourceId"
-                  value={historicalPreview.sourceId}
-                />
-                <input
-                  type="hidden"
-                  name="expectedImportable"
-                  value={historicalPreview.importable}
-                />
-                <Button type="submit">
-                  Add {historicalPreview.importable.toLocaleString()} to queue
-                </Button>
+                <input type="hidden" name="sourceId" value={preview.sourceId} />
+                <input type="hidden" name="expectedImportable" value={String(preview.importable)} />
+                <Button type="submit" variant="primary" aria-describedby="confirm-hint">Add {count(preview.importable)} to the queue</Button>
+                <ButtonLink variant="ghost" href={SELF}>Cancel</ButtonLink>
               </form>
-              <Button variant="secondary" href="/admin/recordings/import">
-                Cancel
-              </Button>
-              <p class="basis-full text-xs text-ink-muted">
-                The folder is scanned once more on confirmation. If the count
-                changed, you will be asked to review it again.
+              <p id="confirm-hint" class="text-sm text-ink-secondary">
+                The folder is scanned once more as you add them. If the count has changed, you'll be asked to review it again.
               </p>
             </div>
           ) : (
-            <div class="mt-5 flex flex-wrap items-center gap-3">
-              <p class="text-sm text-emerald-100">
-                Every discovered video is already in TTV. There is nothing to queue.
-              </p>
-              <Button variant="secondary" href="/admin/recordings/import">
-                Done
-              </Button>
+            <div class="flex flex-wrap items-center gap-3">
+              <p class="text-sm text-ink-secondary">Every video it found is already in TTV, so there's nothing to add.</p>
+              <ButtonLink variant="quiet" href={SELF}>Done</ButtonLink>
             </div>
           )}
-        </div>
+        </section>
       </Card>
     )}
 
     <Card>
-      <h3 class="text-lg font-semibold text-white">Add an import source</h3>
-      <p class="mt-1 text-sm text-ink-muted">
-        Use one source per program. An optional filename filter lets several
-        programs share the same Meet Recordings folder. New sources start
-        paused so the historical backlog cannot run before you review it.
-      </p>
-
-      <form method="POST" class="mt-5 grid gap-4 md:grid-cols-2">
-        <input type="hidden" name="action" value="create" />
-        <div class="flex flex-col gap-1.5">
-          <label for="name" class="text-sm font-medium text-white/90">
-            Source name *
-          </label>
-          <input id="name" name="name" required placeholder="2026 cohort sessions" class="form-control" />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <label for="programId" class="text-sm font-medium text-white/90">
-            Program *
-          </label>
-          <select id="programId" name="programId" required class="form-control max-w-full">
-            <option value="">Select a program</option>
-            {programs.map((program) => (
-              <option value={program.id}>{program.name}</option>
-            ))}
-          </select>
-        </div>
-        <div class="flex flex-col gap-1.5 md:col-span-2">
-          <label for="driveFolder" class="text-sm font-medium text-white/90">
-            Drive folder URL or ID *
-          </label>
-          <input id="driveFolder" name="driveFolder" required placeholder="https://drive.google.com/drive/folders/..." class="form-control" />
-        </div>
-        <div class="flex flex-col gap-1.5 md:col-span-2">
-          <label for="filenameContains" class="text-sm font-medium text-white/90">
-            Filename contains
-          </label>
-          <input id="filenameContains" name="filenameContains" placeholder="Optional, e.g. Cohort 2026" class="form-control" />
-          <p class="text-xs text-ink-muted">
-            Matching is case-insensitive. Leave blank to import every video in the folder.
+      <form method="POST" action={SELF} class="grid gap-5" aria-labelledby="create-heading" data-create>
+        <div class="grid gap-1">
+          <h2 id="create-heading" class="text-lg text-ink-primary">Add an import source</h2>
+          <p class="max-w-prose text-sm text-ink-secondary">
+            One source per cohort. A filename filter lets several cohorts share one Meet Recordings folder. A new source
+            starts paused, so nothing from the folder's history is queued before you review it.
           </p>
         </div>
-        <div class="md:col-span-2">
-          <Button type="submit">
-            Save Import Source
-          </Button>
+        {createFailure && (
+          <Notice tone="danger" focusOnLoad id="create-failure" title="The source wasn't saved">{createFailure}</Notice>
+        )}
+        <input type="hidden" name="action" value="create" />
+        <div class="grid gap-5 md:grid-cols-2">
+          <TextField label="Name" name="name" required maxLength={SOURCE_NAME_MAX} placeholder="Cohort 05 sessions" defaultValue={values.name} error={errors.name} />
+          <SelectField label="Cohort" name="programId" required placeholder="Choose a cohort" options={cohortOptions} defaultValue={values.programId} error={errors.programId} />
+        </div>
+        <TextField label="Drive folder" name="driveFolder" required hint="The folder's address from Drive, or its ID." placeholder="https://drive.google.com/drive/folders/…" defaultValue={values.driveFolder} error={errors.driveFolder} />
+        <TextField label="Filename contains" name="filenameContains" optional maxLength={FILTER_MAX} hint="Matching ignores case. Leave it empty to import every video in the folder." placeholder="Cohort 05" defaultValue={values.filenameContains} error={errors.filenameContains} />
+        <div>
+          <Button type="submit" variant={preview && preview.importable > 0 ? "quiet" : "primary"}>Save import source</Button>
         </div>
       </form>
     </Card>
 
     <Card>
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 class="text-lg font-semibold text-white">Configured sources</h3>
-          <p class="mt-1 text-sm text-ink-muted">
-            Enabled sources scan every 15 minutes. Review historical import
-            scans the full folder tree and shows the count before queueing.
+      <section class="grid gap-4" aria-labelledby="sources-heading" data-sources>
+        <div class="grid gap-1">
+          <h2 id="sources-heading" class="text-lg text-ink-primary">Sources</h2>
+          <p class="max-w-prose text-sm text-ink-secondary">
+            A source that's on is scanned every 15 minutes. Reviewing a historical import scans its whole folder and shows
+            the count before anything is queued.
           </p>
         </div>
-      </div>
-
-      <div class="mt-5 space-y-4">
         {sources.length === 0 ? (
-          <p class="rounded-md border border-dashed border-teal/30 px-4 py-8 text-center text-sm text-ink-muted">
-            No Google Drive import sources configured.
-          </p>
+          <EmptyState title="No import sources yet" headingLevel={3}>Add one above to import a cohort's recordings from Google Drive.</EmptyState>
         ) : (
-          sources.map((source) => (
-            <div class="rounded-lg border border-teal/20 bg-black/10 p-4">
-              <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h4 class="font-semibold text-white">{source.name}</h4>
-                    <span class:list={[
-                      "rounded-full px-2 py-0.5 text-xs",
-                      source.enabled
-                        ? "bg-emerald-500/15 text-emerald-100"
-                        : "bg-white/10 text-ink-muted",
-                    ]}>
-                      {source.enabled ? "Automatic" : "Paused"}
-                    </span>
+          <ul class="divide-y divide-hairline">
+            {sources.map((source) => (
+              <li class="grid gap-3 py-4 first:pt-0 last:pb-0" data-source={source.id}>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h3 class="text-base font-semibold text-ink-primary">{source.name}</h3>
+                  {source.enabled ? <Chip tone="success">Automatic</Chip> : <Chip tone="neutral">Paused</Chip>}
+                </div>
+                <DescriptionList>
+                  <DescriptionItem term="Cohort">{source.program.name}</DescriptionItem>
+                  <DescriptionItem term="Folder"><span class="break-all">{source.driveFolderId}</span></DescriptionItem>
+                  <DescriptionItem term="Filename contains">{source.filenameContains ?? "Any name"}</DescriptionItem>
+                  <DescriptionItem term="Last scan">{source.lastSyncedAt ? formatMomentDateTime(source.lastSyncedAt) : "Not yet"}</DescriptionItem>
+                </DescriptionList>
+                {source.lastError && (
+                  <Notice tone="danger" title="The last scan failed" announce="none"><span class="break-words">{source.lastError}</span></Notice>
+                )}
+                {removingSource?.id === source.id ? (
+                  <ConfirmStep
+                    title={`Remove ${source.name}?`}
+                    confirmLabel="Remove source"
+                    cancelHref={withoutConfirm(Astro.url)}
+                    action={SELF}
+                    fields={{ action: "remove", sourceId: source.id }}
+                  >
+                    Its folder is no longer scanned. The recordings it already imported stay.
+                  </ConfirmStep>
+                ) : (
+                  <div class="flex flex-wrap gap-2">
+                    {configured && (
+                      <form method="POST" action={SELF}>
+                        <input type="hidden" name="action" value="preview" />
+                        <input type="hidden" name="sourceId" value={source.id} />
+                        <Button type="submit" variant="quiet" size="sm">Review historical import<span class="sr-only"> for {source.name}</span></Button>
+                      </form>
+                    )}
+                    <form method="POST" action={SELF}>
+                      <input type="hidden" name="action" value="toggle" />
+                      <input type="hidden" name="sourceId" value={source.id} />
+                      <input type="hidden" name="expectedEnabled" value={String(source.enabled)} />
+                      <Button type="submit" variant="quiet" size="sm">{source.enabled ? "Pause" : "Turn on"}<span class="sr-only"> {source.name}</span></Button>
+                    </form>
+                    <ButtonLink variant="quiet" size="sm" href={confirmHref(Astro.url, `remove-${source.id}`)}>Remove<span class="sr-only"> {source.name}</span></ButtonLink>
                   </div>
-                  <p class="text-sm text-ink-secondary">{source.program.name}</p>
-                  <p class="break-all text-xs text-ink-muted">
-                    Folder: {source.driveFolderId}
-                  </p>
-                  <p class="text-xs text-ink-muted">
-                    Filter: {source.filenameContains ?? "All videos"}
-                  </p>
-                  <p class="text-xs text-ink-muted">
-                    Last scan: {formatDateTime(source.lastSyncedAt)}
-                  </p>
-                  {source.lastError && (
-                    <p class="mt-2 rounded bg-red-500/15 px-2 py-1 text-xs text-red-100">
-                      {source.lastError}
-                    </p>
-                  )}
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                  <form method="POST">
-                    <input type="hidden" name="action" value="preview" />
-                    <input type="hidden" name="sourceId" value={source.id} />
-                    <Button type="submit" size="sm" disabled={!credentialsConfigured}>
-                      Review historical import
-                    </Button>
-                  </form>
-                  <form method="POST">
-                    <input type="hidden" name="action" value="toggle" />
-                    <input type="hidden" name="sourceId" value={source.id} />
-                    <input type="hidden" name="enabled" value={source.enabled ? "false" : "true"} />
-                    <Button type="submit" variant="secondary" size="sm">
-                      {source.enabled ? "Pause" : "Enable"}
-                    </Button>
-                  </form>
-                  <form method="POST">
-                    <input type="hidden" name="action" value="delete" />
-                    <input type="hidden" name="sourceId" value={source.id} />
-                    <Button type="submit" variant="danger" size="sm">
-                      Remove
-                    </Button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          ))
+                )}
+              </li>
+            ))}
+          </ul>
         )}
-      </div>
+        {!configured && sources.length > 0 && (
+          <p class="text-sm text-ink-secondary">
+            Reviewing a historical import needs Google Drive connected. <a href={INTEGRATIONS_PATH} class={SOURCE_LINK}>Set it up in Integrations</a>
+          </p>
+        )}
+      </section>
     </Card>
   </div>
 </AdminLayout>
