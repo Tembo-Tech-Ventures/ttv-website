@@ -41,7 +41,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     pattern: /common\/Card(\.astro)?["']/,
     files: [
     "components/admin/CohortMentors.astro",
-    "pages/admin/applications/[id].astro",
     "pages/admin/curricula/new.astro",
     "pages/admin/profiles/[id].astro",
     "pages/admin/programs/[id].astro",
@@ -64,7 +63,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "common/Badge.astro": {
     pattern: /common\/Badge(\.astro)?["']/,
     files: [
-    "pages/admin/applications/[id].astro",
     "pages/admin/applications/index.astro",
     "pages/admin/profiles/[id].astro",
     "pages/admin/profiles/index.astro",

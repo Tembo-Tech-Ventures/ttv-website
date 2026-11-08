@@ -87,6 +87,7 @@ const PAGES = {
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
+  "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
   "admin curriculum": { path: () => "/admin/curricula/curriculum", page: () => import("@/pages/admin/curricula/[id].astro"), user: ADMIN, id: "curriculum" },
@@ -180,6 +181,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 5 before the style-guide rollout: the person, their pending requests and the space were read in turn.
   "admin user": { d1: 15, depth: 2 },
   "admin applications": { d1: 14, depth: 2 },
+  "admin application": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 2 },
   "admin curricula": { d1: 14, depth: 2 },
