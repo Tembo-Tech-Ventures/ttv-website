@@ -189,7 +189,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin access requests": { d1: 14, depth: 2 },
   "admin curricula": { d1: 14, depth: 2 },
   "admin curriculum": { d1: 14, depth: 2 },
-  "admin new curriculum": { d1: 14, depth: 2 },
+  "admin new curriculum": { d1: 13, depth: 2 },
   // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
   "admin feedback detail": { d1: 16, depth: 3 },
   "admin feedback theme": { d1: 15, depth: 2 },
