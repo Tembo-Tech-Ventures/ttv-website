@@ -99,6 +99,7 @@ const PAGES = {
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
+  "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
   "admin profile": { path: () => "/admin/profiles/profile", page: () => import("@/pages/admin/profiles/[id].astro"), user: ADMIN, id: "profile" },
   "admin project": { path: () => "/admin/projects/project", page: () => import("@/pages/admin/projects/[id].astro"), user: ADMIN, id: "project" },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
@@ -211,6 +212,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },
   "admin application": { d1: 14, depth: 2 },
+  // Depth 4 before the style-guide rollout: every profile was read and filtered in JS, then the space.
+  "admin profiles": { d1: 16, depth: 2 },
   "admin profile": { d1: 16, depth: 3 },
   "admin project": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
