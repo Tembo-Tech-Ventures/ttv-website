@@ -5,7 +5,7 @@
  * channelShortcuts(...) as it is, and nothing shows while `channels` is off.
  */
 import { PiChatsCircle } from "react-icons/pi";
-import { Card, CountBadge, FOCUS_RING } from "@/components/platform/ui";
+import { Card, CountBadge, buttonClass } from "@/components/platform/ui";
 import type { ChannelShortcutsModel } from "./channel-shortcuts";
 
 interface Props {
@@ -32,10 +32,7 @@ const { model, class: className } = Astro.props;
                 <a
                   href={channel.href}
                   data-channel-shortcut={channel.id}
-                  class:list={[
-                    "inline-flex min-h-11 items-center gap-2 rounded-xl border border-hairline px-4 text-sm font-semibold text-ink-primary hover:bg-ink-primary/7",
-                    FOCUS_RING,
-                  ]}
+                  class={buttonClass({ variant: "quiet", size: "lg" })}
                 >
                   <span><span aria-hidden="true" class="text-ink-muted">#</span>{channel.name}</span>
                   <CountBadge count={channel.unread} label="unread" />

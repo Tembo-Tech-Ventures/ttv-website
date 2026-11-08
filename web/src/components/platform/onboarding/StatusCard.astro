@@ -6,7 +6,7 @@
  * merely chose, and promises nothing about timing. A decline carries the
  * administrator's optional message as plain text, and never their name.
  */
-import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { Card, PersonMarker, StatusChip, linkClass } from "@/components/platform/ui";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import { formatMomentDate } from "@/lib/display-date";
 import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, requestRowId } from "./account-actions";
@@ -26,39 +26,35 @@ const marker = card.role === "MENTOR" ? "mentor" : "institution";
 const title = card.kind === "pending" ? STATUS.pending[card.role].title
   : card.kind === "approved" ? STATUS.approved[card.role].title
   : STATUS.declined.title[card.role];
-const TONES = {
-  pending: "border-ring/30 bg-linear-to-r from-ring/9 to-ink-primary/3",
-  approved: "border-primary/45 bg-linear-to-r from-primary/12 to-ink-primary/3",
-  declined: "border-hairline bg-ink-primary/4",
-} as const;
+// The request's state in its one name ("In review", "Accepted", "Declined"), as a chip in words: the card
+// itself is the kit's, the same surface whatever the state, and ring (the mentor colour) is never a status.
+const STATES = { pending: "PENDING", approved: "APPROVED", declined: "DECLINED" } as const;
 // Read with the title: "Dismiss" alone would not say which card it closes. A whole name, in one
 // string: a visually hidden part of it would be read with a stray space before its colon (QAO-09).
 const subject = REQUEST.sections[card.role].toLowerCase();
 const named = (visible: string, detail: string) => `${visible}: ${detail}`;
 ---
 
-<section
+<Card
+  as="section"
   aria-labelledby={titleId}
   data-onboarding-status={card.kind}
   data-role={card.role}
-  class:list={[
-    "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-[1.125rem] border p-5",
-    "sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:p-6",
-    TONES[card.kind],
-  ]}
+  className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5"
 >
   <span aria-hidden="true" class={SEAL}>
     <PersonMarker kind={marker} className="scale-150" />
   </span>
   <div class="min-w-0">
     <p id={titleId} class="text-lg leading-snug font-bold text-ink-primary">{title}</p>
+    <StatusChip domain="access" status={STATES[card.kind]} className="mt-2" />
     {card.kind === "pending" && (
       <>
         <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
           {STATUS.pending[card.role].body}
           {card.role === "INSTITUTION" && (
             <>
-              {" "}{STATUS.institutionsPage.before}<a href="/community/institutions" class="font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink">{STATUS.institutionsPage.link}</a>{STATUS.institutionsPage.after}
+              {" "}{STATUS.institutionsPage.before}<a href="/community/institutions" class={linkClass()}>{STATUS.institutionsPage.link}</a>{STATUS.institutionsPage.after}
             </>
           )}
         </p>
@@ -84,8 +80,9 @@ const named = (visible: string, detail: string) => `${visible}: ${detail}`;
         {STATUS.view}
       </a>
     )}
+    {/* Quiet: the page's own task keeps its one peach action. */}
     {card.kind === "approved" && (
-      <a href={SPACE_PATHS[ROLE_SPACES[card.role]]} class:list={action("primary")}>{STATUS.approved[card.role].open}</a>
+      <a href={SPACE_PATHS[ROLE_SPACES[card.role]]} class:list={action("quiet")}>{STATUS.approved[card.role].open}</a>
     )}
     {card.kind === "declined" && (
       <form method="post" action={ACCOUNT_PATH}>
@@ -104,4 +101,4 @@ const named = (visible: string, detail: string) => `${visible}: ${detail}`;
       </form>
     )}
   </div>
-</section>
+</Card>

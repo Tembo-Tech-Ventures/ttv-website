@@ -37,4 +37,10 @@ describe("community entry points", () => {
     expect(html).toContain('href="/dashboard/community"');
     expect(html).toContain("Open my profile and journey");
   });
+  it("draws the dashboard card as a kit card whose links are ink, not peach", () => {
+    const html = renderToStaticMarkup(<CommunityJourneyCard />);
+    expect(html).toMatch(/^<section[^>]*data-card/);
+    expect(html).not.toMatch(/text-primary|bg-dark|border-primary/);
+    expect(html).not.toMatch(/<h2[^>]*font-(semibold|bold|body)/);
+  });
 });

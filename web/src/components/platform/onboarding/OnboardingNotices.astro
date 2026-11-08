@@ -21,9 +21,8 @@
  * `view` only from its spaces context, which is null then.
  */
 import type { AccessRole, SpaceId } from "@/lib/platform/contracts";
-import { Notice, PersonMarker } from "@/components/platform/ui";
+import { Card, Notice, PersonMarker, linkClass } from "@/components/platform/ui";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
-import { PiCheckCircleBold } from "react-icons/pi";
 import {
   ACCOUNT_PATH, PROMPT_HIDDEN_VALUE, PROMPT_SAVED_VALUE, TAKING_PART_ID, UNSAVED_PARAM, UNSAVED_VALUE,
 } from "./account-actions";
@@ -56,8 +55,7 @@ const promptDone = view.prompt ? null
   : note === PROMPT_HIDDEN_VALUE ? PROMPT.hidden
   : null;
 const shown = unsaved || sent.length > 0 || promptDone || cards.length > 0 || opened.length > 0 || welcome;
-const CONFIRMATION = "flex items-start gap-2.5 rounded-xl border border-primary/45 bg-primary/10 px-4 py-3 text-[0.9375rem] font-semibold text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
-const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const LINK = linkClass();
 ---
 
 {shown && (
@@ -65,21 +63,20 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
     {unsaved && (
       <Notice tone="danger">{STATUS.unsaved}</Notice>
     )}
+    {/* The kit's confirmation takes focus as the page loads; the wrapper carries what the script and tests find it by. */}
     {sent.length > 0 && (
-      <p role="status" tabindex="-1" autofocus data-onboarding-sent data-once-param={SENT_PARAM} class={CONFIRMATION}>
-        <PiCheckCircleBold aria-hidden className="mt-0.5 size-5 shrink-0 text-peach-ink" />
-        <span>{STATUS.justSent(sent.length)}</span>
-      </p>
+      <div data-onboarding-sent data-once-param={SENT_PARAM}>
+        <Notice tone="success" focusOnLoad>{STATUS.justSent(sent.length)}</Notice>
+      </div>
     )}
     {promptDone && (
-      <p role="status" tabindex="-1" autofocus data-onboarding-prompt-done={note} data-once-param={UNSAVED_PARAM} class={CONFIRMATION}>
-        <PiCheckCircleBold aria-hidden className="mt-0.5 size-5 shrink-0 text-peach-ink" />
-        <span>{promptDone} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{PROMPT.account}</a>.</span>
-      </p>
+      <div data-onboarding-prompt-done={note} data-once-param={UNSAVED_PARAM}>
+        <Notice tone="success" focusOnLoad>{promptDone}{" "}<a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{PROMPT.account}</a>.</Notice>
+      </div>
     )}
     {cards.map((card) => <StatusCard card={card} returnTo={returnTo} />)}
     {welcome && (
-      <section aria-labelledby="onboarding-welcome-title" data-onboarding-welcome class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:items-center sm:gap-x-5 sm:p-6">
+      <Card as="section" aria-labelledby="onboarding-welcome-title" data-onboarding-welcome className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 sm:items-center sm:gap-x-5">
         <span aria-hidden="true" class={SEAL}><PersonMarker kind="builder" className="scale-150" /></span>
         <div class="min-w-0">
           <p id="onboarding-welcome-title" class="text-lg leading-snug font-bold text-ink-primary">{STATUS.welcome.title}</p>
@@ -87,10 +84,10 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
             {STATUS.welcome.body} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{STATUS.welcome.account}</a>.
           </p>
         </div>
-      </section>
+      </Card>
     )}
     {opened.length > 0 && (
-      <section aria-labelledby="onboarding-spaces-title" data-onboarding-spaces class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:p-6">
+      <Card as="section" aria-labelledby="onboarding-spaces-title" data-onboarding-spaces className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5">
         <span aria-hidden="true" class={SEAL}><PersonMarker kind={opened[0] === "MENTOR" ? "mentor" : "institution"} className="scale-150" /></span>
         <div class="min-w-0">
           <p id="onboarding-spaces-title" class="text-lg leading-snug font-bold text-ink-primary">{YOUR_SPACES.title}</p>
@@ -103,7 +100,7 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
             <a href={SPACE_PATHS[ROLE_SPACES[role]]} class:list={action("quiet")}>{YOUR_SPACES.open[role]}</a>
           ))}
         </div>
-      </section>
+      </Card>
     )}
   </div>
 )}

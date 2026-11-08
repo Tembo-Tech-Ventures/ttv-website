@@ -278,8 +278,8 @@ test.describe("the one-time card for existing accounts (S4)", () => {
       await prompt(page).getByRole("button", { name: "Not now" }).click();
       await page.waitForURL((url) => url.pathname === "/dashboard/cohort");
       // QAO-10: the card does not just vanish; the page says what happened, and focus is there.
-      const done = page.locator("[data-onboarding-prompt-done='hidden']");
-      await expect(done).toHaveText("Card hidden. You can still choose how you take part in Account.");
+      const done = page.locator("[data-onboarding-prompt-done='hidden'] [data-notice]");
+      await expect(done).toHaveText("Done: Card hidden. You can still choose how you take part in Account.");
       await expect(done).toBeFocused();
     } else {
       test.info().annotations.push({ type: "rerun", description: "Faith skipped the card in an earlier run: reseed to replay it." });
@@ -489,8 +489,8 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
       expect(new URL((await landing).url()).search).toBe("?sent=mentor");
       await page.waitForURL((url) => url.pathname === "/dashboard/community");
       // QAO-05: focus is on the result, a status that says it went.
-      const sent = page.locator("[data-onboarding-sent]");
-      await expect(sent).toHaveText("Request sent.");
+      const sent = page.locator("[data-onboarding-sent] [data-notice]");
+      await expect(sent).toHaveText("Done: Request sent.");
       await expect(sent).toHaveAttribute("role", "status");
       await expect(sent).toBeFocused();
     } else {
@@ -499,7 +499,7 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     }
     const pending = status(page, "pending", "MENTOR");
     await expect(page.getByRole("region", { name: "Your mentor request is with the team" })).toBeVisible();
-    await expect(page.locator("[data-onboarding-sent]")).toHaveText("Request sent.");
+    await expect(page.locator("[data-onboarding-sent]")).toHaveText("Done: Request sent.");
     // Said once: the address forgets it, so a reload shows the card without saying it again.
     await expect(page).toHaveURL((url) => url.pathname === "/dashboard/community" && url.search === "");
     await expect(page.getByText("Your portfolio unlocks when you complete a cohort")).toHaveCount(0);
@@ -549,8 +549,8 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     expect(new URL((await back).url()).search).toBe("?onboarding=saved");
     await page.waitForURL((url) => url.pathname === "/dashboard/mentoring");
     await expect(prompt(page)).toHaveCount(0);
-    const done = page.locator("[data-onboarding-prompt-done='saved']");
-    await expect(done).toHaveText("Saved. You can change how you take part any time in Account.");
+    const done = page.locator("[data-onboarding-prompt-done='saved'] [data-notice]");
+    await expect(done).toHaveText("Done: Saved. You can change how you take part any time in Account.");
     await expect(done.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account#taking-part");
     await expect(done).toHaveAttribute("role", "status");
     await expect(done).toBeFocused();

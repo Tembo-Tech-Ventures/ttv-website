@@ -160,7 +160,8 @@ for (const persona of personas) {
           "href",
           persona.actionHref.replace("/dashboard/sessions", "/dashboard/cohort/sessions")
         );
-        await expect(page.getByText("Your next step", { exact: true })).toHaveCount(1);
+        // The step's own h2 says what it is: no "Your next step" eyebrow above it.
+        await expect(page.getByText("Your next step", { exact: true })).toHaveCount(0);
         await expect(current).toHaveText("Overview");
         await page.screenshot({ path: evidence(persona.name), fullPage: true });
 
@@ -185,7 +186,7 @@ for (const persona of personas) {
           exact: true,
         })
       ).toHaveAttribute("href", persona.actionHref);
-      await expect(page.getByText("Your next step", { exact: true })).toHaveCount(1);
+      await expect(page.getByText("Your next step", { exact: true })).toHaveCount(0);
 
       await openMobileNavigation(page, isMobile);
       const navigation = visibleSiteNavigation(page);
