@@ -2,13 +2,17 @@ import type { ReactNode } from "react";
 import { PiArrowRight, PiBellSimple, PiCheck, PiDotsThreeBold, PiFolderSimple, PiMagnifyingGlass, PiPaperPlaneTilt, PiPushPin, PiTrash } from "react-icons/pi";
 import {
   Avatar,
+  BackLink,
   Button,
   ButtonLink,
   Card,
   Checkbox,
   Chip,
   ChoiceGroup,
+  ConfirmStep,
   CountBadge,
+  DescriptionItem,
+  DescriptionList,
   EmptyState,
   IconButton,
   Menu,
@@ -23,11 +27,13 @@ import {
   RoleBadge,
   SelectField,
   SpaceFile,
+  StatusChip,
   TabFile,
   TemboMark,
   TextAreaField,
   TextField,
   TextReaction,
+  linkClass,
 } from "@/components/platform/ui";
 import type { LiveDemo } from "./LiveSpecimen";
 import { GUIDE_PEOPLE, PHOTO } from "./people";
@@ -114,9 +120,9 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
 import { ButtonLink, PageHeader } from "@/components/platform/ui";
 ---
 <PageHeader title="Mentor requests">
-  The people who asked you for time, newest first.
+  The mentors you asked for time, and what each one said.
   <Fragment slot="action">
-    <ButtonLink variant="primary" href="/dashboard/mentoring/availability">Set your availability</ButtonLink>
+    <ButtonLink variant="primary" href="/dashboard/community/mentors">Find a mentor</ButtonLink>
   </Fragment>
 </PageHeader>`,
   },
@@ -198,6 +204,39 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
     ],
     access: ["It is an a element: it opens in a new tab, can be copied and works without JavaScript."],
     code: `<ButtonLink href="/dashboard/community/mentors" variant="primary">Find a mentor</ButtonLink>`,
+  },
+  {
+    id: "back-link",
+    name: "BackLink and linkClass",
+    exports: ["BackLink", "linkClass"],
+    summary: "The two kinds of plain link: the way up from a detail page to its list, and a link inside a sentence.",
+    specimen: () => (
+      <Specimens>
+        <Row label="BackLink">
+          <BackLink href="#back-link">Applications</BackLink>
+        </Row>
+        <Row label="linkClass, in a sentence">
+          <p className="m-0 max-w-prose text-sm leading-relaxed text-ink-secondary">
+            Your request waits in{" "}
+            <a href="#back-link" className={linkClass()}>
+              Mentoring
+            </a>{" "}
+            until David answers.
+          </p>
+        </Row>
+      </Specimens>
+    ),
+    use: [
+      "BackLink above a detail page's title, named as the list it returns to.",
+      "linkClass for a link inside running text: ink like the words around it, set apart by its underline.",
+    ],
+    avoid: [
+      "Peach text for a link. Peach is the one primary action; a link in a sentence is the sentence's ink.",
+      "An arrow typed into the words (“← Back”). BackLink draws it and hides it from screen readers.",
+    ],
+    access: ["A link is told apart by its underline, not by colour alone.", "BackLink grows to a 44px target on a touch screen."],
+    code: `<BackLink href="/admin/applications">Applications</BackLink>
+<a href="/dashboard/mentoring" class={linkClass()}>Mentoring</a>`,
   },
   {
     id: "icon-button",
@@ -316,7 +355,7 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
           <Chip tone="ring">Confirmed by a mentor</Chip>
         </Row>
         <Row label="Status">
-          <Chip tone="success">Approved</Chip>
+          <Chip tone="success">Accepted</Chip>
           <Chip tone="warning">Being checked</Chip>
           <Chip tone="danger">Declined</Chip>
         </Row>
@@ -324,11 +363,49 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
     ),
     use: [
       "Neutral for facts, peach for something that needs the reader, ring only for a mentor's part.",
-      "Success, warning and danger for an outcome, always in words: “Approved”, never a green dot.",
+      "Success, warning and danger for an outcome, always in words: “Accepted”, never a green dot.",
+      "A stored status (an application's, a recording's) is a StatusChip, so its name and tone are the same on every page.",
     ],
     avoid: ["Anything pressable. A chip that looks like a button but does nothing breaks trust; use Pill."],
     access: ["Long text truncates inside the chip, so a chip never pushes its row wider than the screen."],
     code: `<Chip tone="ring">Confirmed by a mentor</Chip>`,
+  },
+  {
+    id: "status-chip",
+    name: "StatusChip",
+    exports: ["StatusChip", "statusTone", "STATUSES"],
+    summary: "A stored status in its one name and tone, the same for the member and the admin: an application that was APPROVED reads “Accepted” everywhere.",
+    specimen: () => (
+      <Specimens>
+        <Row label="Application">
+          <StatusChip domain="application" status="PENDING" />
+          <StatusChip domain="application" status="APPROVED" />
+          <StatusChip domain="application" status="AUDIT" />
+          <StatusChip domain="application" status="REJECTED" />
+        </Row>
+        <Row label="Recording">
+          <StatusChip domain="recording" status="transcribing" />
+          <StatusChip domain="recording" status="complete" />
+          <StatusChip domain="recording" status="failed" />
+        </Row>
+        <Row label="Feedback theme">
+          <StatusChip domain="theme" status="PROPOSED" />
+          <StatusChip domain="theme" status="PLANNED" />
+          <StatusChip domain="theme" status="SHIPPED" />
+        </Row>
+      </Specimens>
+    ),
+    use: [
+      "Any status read from the database: applications, access requests, feedback and its themes, profiles and posts, projects, recordings, tokens.",
+      "statusTone(domain, status) for the name and tone where a chip cannot go, such as a sentence or a table's sort label.",
+    ],
+    avoid: [
+      "Writing a status's word by hand. A second name for the same state is how “Approved” and “Accepted” ended up side by side.",
+      "A status without its word: the tint only repeats what the word says.",
+    ],
+    access: ["The word is the whole meaning, so the chip reads the same without colour.", "Every name and tone is proven: each stored value has a name, and every tone clears 4.5:1."],
+    code: `<StatusChip domain="application" status={application.status} />
+const { label, tone } = statusTone("recording", recording.processingStatus);`,
   },
   {
     id: "count-badge",
@@ -485,6 +562,33 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
     code: `<Card as="article" aria-labelledby="request-title">…</Card>`,
   },
   {
+    id: "description-list",
+    name: "DescriptionList",
+    exports: ["DescriptionList", "DescriptionItem"],
+    summary: "Facts about one thing, as name and value: an application's dates, a person's roles, a recording's source.",
+    specimen: () => (
+      <DescriptionList className="max-w-xl">
+        <DescriptionItem term="Status">
+          <StatusChip domain="application" status="APPROVED" />
+        </DescriptionItem>
+        <DescriptionItem term="Cohort">Cohort 05 · Full-stack foundations</DescriptionItem>
+        <DescriptionItem term="Applied">3 Nov</DescriptionItem>
+        <DescriptionItem term="Email">
+          <a href="#description-list" className={linkClass()}>
+            {wanjiku.name.toLowerCase().replace(" ", ".")}@invalid.ttv
+          </a>
+        </DescriptionItem>
+      </DescriptionList>
+    ),
+    use: ["The facts at the top of a detail page.", "items={[{ term, detail }]} when every detail is plain text; DescriptionItem when one holds a link or a chip."],
+    avoid: ["A table for one thing's facts: a table compares many things.", "Boxes around each fact. Hairlines separate them."],
+    access: ["A real dl, so each fact is read with its name.", "The name stacks above the fact on a phone, and long values wrap."],
+    code: `<DescriptionList>
+  <DescriptionItem term="Status"><StatusChip domain="application" status={status} /></DescriptionItem>
+  <DescriptionItem term="Applied">3 Nov</DescriptionItem>
+</DescriptionList>`,
+  },
+  {
     id: "notice",
     name: "Notice",
     exports: ["Notice"],
@@ -510,6 +614,12 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
     ],
     code: `<Notice tone="danger" focusOnLoad title="We couldn't send your request">
   Check the two fields marked below.
+</Notice>
+
+<!-- From .astro, the actions come in a named slot -->
+<Notice tone="success" title="Application accepted">
+  Wanjiku can join Cohort 05.
+  <Fragment slot="actions"><ButtonLink href="/admin/programs/c5" size="sm">Open Cohort 05</ButtonLink></Fragment>
 </Notice>`,
   },
   {
@@ -535,7 +645,53 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
     access: ["Its heading level is set to fit the page's outline (h3 by default)."],
     code: `<EmptyState title="No requests yet" action={<ButtonLink href="/dashboard/community/mentors">Find a mentor</ButtonLink>}>
   When you ask a mentor for time, the request waits here until they answer.
+</EmptyState>
+
+<!-- From .astro, the action comes in a named slot -->
+<EmptyState title="No requests yet">
+  When you ask a mentor for time, the request waits here until they answer.
+  <Fragment slot="action"><ButtonLink href="/dashboard/community/mentors">Find a mentor</ButtonLink></Fragment>
 </EmptyState>`,
+  },
+  {
+    id: "confirm-step",
+    name: "ConfirmStep",
+    exports: ["ConfirmStep", "confirmHref", "confirmingAction", "withoutConfirm", "CONFIRM_PARAM"],
+    summary: "The step between pressing a destructive action and it happening, with no script: the page itself asks, at ?confirm=.",
+    specimen: () => (
+      <ConfirmStep
+        title={`Remove ${david.name} from Cohort 05?`}
+        confirmLabel="Remove from cohort"
+        cancelHref="#confirm-step"
+        action="#confirm-step"
+        fields={{ intent: "remove-mentor" }}
+        focusOnLoad={false}
+        className="max-w-xl"
+      >
+        He loses the cohort's channels at once. You can add him again from this page.
+      </ConfirmStep>
+    ),
+    use: [
+      "Anything that removes, revokes or cannot be undone. The action is a link to confirmHref(url, action); the page draws the step when confirmingAction(url, offered) returns it.",
+      "The question names the thing; the danger button says what happens; Cancel goes back with withoutConfirm(url).",
+    ],
+    avoid: ["The browser's confirm(): it needs script and cannot say what will happen.", "A confirm step for something easy to undo. Do it, and offer the undo."],
+    access: [
+      "The warning takes focus when it appears, so the reader lands on the question.",
+      "The buttons sit below the warning, not on its tint, so both read at 4.5:1 at rest and hovered.",
+      "The step only asks: the POST handler still checks who may do this.",
+    ],
+    code: `---
+const asking = confirmingAction(Astro.url, ["remove-mentor"]);
+---
+{asking ? (
+  <ConfirmStep title="Remove David Kamau from Cohort 05?" confirmLabel="Remove from cohort"
+    cancelHref={withoutConfirm(Astro.url)} fields={{ intent: "remove-mentor", userId }}>
+    He loses the cohort's channels at once.
+  </ConfirmStep>
+) : (
+  <ButtonLink variant="danger" href={confirmHref(Astro.url, "remove-mentor")}>Remove from cohort</ButtonLink>
+)}`,
   },
   {
     id: "fields",

@@ -72,9 +72,12 @@ Two things Astro cannot do with React components:
 
 - **Pass JSX as a prop.** `<Button icon={<PiCheck />}>` in an `.astro` file
   hands React an Astro value, not a React element. Pass icons and other nodes
-  from a small `.tsx` component instead, or use a named slot where the
-  component takes one (`TabFile`'s `start` and `end` are props, so
-  `<span slot="end">` works).
+  from a small `.tsx` component instead, or use a named slot: Astro hands a
+  React component each named slot as the prop of that name, so any node prop
+  can be filled from `.astro` with `<Fragment slot="action">…</Fragment>`
+  (`EmptyState`'s `action`, `Notice`'s `actions`, `PageHeader`'s `action`,
+  `TabFile`'s `start` and `end`). Use `Fragment`, so the `slot` attribute does
+  not land on the element inside.
 - **Generate ids.** Each React component Astro renders is its own root, so
   `useId` would repeat across a page. The fields take their id from `id` or
   `name`, never from `useId`.

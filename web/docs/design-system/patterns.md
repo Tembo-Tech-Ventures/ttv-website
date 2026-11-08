@@ -76,11 +76,46 @@ const count = Object.keys(errors).length;
   (`required`, `type="email"`) run first.
 - A rejected submit re-renders with every value kept, a danger `Notice` at the
   top saying how many things to fix, an `error` under each field, and focus
-  on the notice (`focusOnLoad`, server-rendered, so it needs no script). Prefix the tab title ("Error: ") as `SpacesLayout`'s
-  `titlePrefix` does.
+  on the notice (`focusOnLoad`, server-rendered, so it needs no script).
+  Prefix the tab title with `titlePrefix="Error: "` on `SpacePage` or
+  `AdminLayout`.
 - A destructive action gets its own small form and a `danger` button, away
-  from the main submit, with a `warning` notice saying what is final.
-- On success, redirect (303) and show the new state.
+  from the main submit, and a confirm step (below) before it happens.
+- On success, redirect (303) to the page's canonical address and show the new
+  state. When the change is not visible where the person lands, say it once
+  with a flash (below).
+
+### Saying it once after a 303
+
+`redirectWithFlash(Astro, location, { tone, title, message })` from
+`@/lib/platform/server/flash` answers the POST with the 303 and a cookie
+scoped to `location`; that page reads it with `takeFlash(Astro)`, which clears
+it, and shows a `Notice` in its tone. A reload, the next POST and every other
+page see nothing. Never put the message in the query string (`?notice=`): it
+survives a reload and shows beside the next error. A failure never flashes; it
+renders again with its errors.
+
+```astro
+---
+if (Astro.request.method === "POST") {
+  // validate and save…
+  return redirectWithFlash(Astro, `/admin/programs/${id}`, { tone: "success", title: "Cohort updated" });
+}
+const flash = takeFlash(Astro);
+---
+{flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+```
+
+### A confirm step without JavaScript
+
+The destructive action is a link to the same page with `?confirm=<action>`
+(`confirmHref(Astro.url, action)`). When `confirmingAction(Astro.url,
+offered)` returns that action, the page draws a `ConfirmStep` where the
+action was: a warning notice that names the thing and says what happens,
+taking focus, then a form posting the hidden `fields` with a `danger` button
+that says what it does and a ghost Cancel back to `withoutConfirm(Astro.url)`.
+The buttons sit under the warning, never on its tint. Never `confirm()`. The
+POST handler authorises as it always does; the step only asks.
 
 ## Feedback
 
@@ -88,16 +123,30 @@ const count = Object.keys(errors).length;
 |---|---|
 | A form was rejected | Danger notice at the top, errors under fields, focus on the notice |
 | A change was saved | The new state; a success notice only if the change is not visible where the person is looking |
-| Something cannot be undone | A warning notice before the action, then a confirming step |
+| Something cannot be undone | A `ConfirmStep`: a warning that says what happens, then the danger button |
 | The page is limited | An info notice where the limit applies |
 | An island action failed | Say what failed, keep the input, offer the same action again |
 
 One notice per region, at the top of what it is about. Never stack them.
 
+## Detail pages
+
+A `BackLink` to the list above the title, then a `PageHeader`, then the
+thing's facts in a `DescriptionList`. A status is a `StatusChip`: each stored
+status has one name everywhere (`statusTone`), so an application that was
+`APPROVED` reads "Accepted" for the member and the admin alike.
+
+## Links
+
+A link inside a sentence takes `linkClass()`: the ink of the words around it,
+underlined. Peach is the one primary action, never the colour of a link. A
+link that carries a button's weight is a `ButtonLink`.
+
 ## Empty and waiting
 
 An `EmptyState` says what belongs here and how it fills, with one next step
-if there is one; never "Nothing here". It keeps the list's place. Work in
+if there is one; never "Nothing here". From an `.astro` page, pass the step
+as `<Fragment slot="action">` (a `Notice`'s as `<Fragment slot="actions">`). It keeps the list's place. Work in
 progress keeps its place too: a `Button` with `loading`, never a page that
 jumps or blanks.
 

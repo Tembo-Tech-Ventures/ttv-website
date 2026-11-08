@@ -1,0 +1,30 @@
+---
+/** The detail-page parts written the way an `.astro` page writes them, for detail-parts.render.test.ts. */
+import { BackLink, ButtonLink, ConfirmStep, DescriptionItem, DescriptionList, EmptyState, Notice, StatusChip, withoutConfirm } from "@/components/platform/ui";
+---
+
+<BackLink href="/admin/applications">Applications</BackLink>
+<DescriptionList>
+  <DescriptionItem term="Status"><StatusChip domain="application" status="APPROVED" /></DescriptionItem>
+  <DescriptionItem term="Email"><a href="mailto:wanjiku@invalid.ttv">wanjiku@invalid.ttv</a></DescriptionItem>
+</DescriptionList>
+<EmptyState title="No notes yet">
+  Notes you add appear here.
+  <Fragment slot="action">
+    <ButtonLink href="/admin/applications/a1/notes">Add a note</ButtonLink>
+  </Fragment>
+</EmptyState>
+<Notice tone="success" title="Application accepted">
+  Wanjiku can join Cohort 05.
+  <Fragment slot="actions">
+    <ButtonLink href="/admin/programs/cohort-05" size="sm">Open Cohort 05</ButtonLink>
+  </Fragment>
+</Notice>
+<ConfirmStep
+  title="Decline Wanjiku Mwangi's application?"
+  confirmLabel="Decline application"
+  cancelHref={withoutConfirm(Astro.url)}
+  fields={{ intent: "decline", applicationId: "a1" }}
+>
+  She is told by email. You can accept her later from this page.
+</ConfirmStep>

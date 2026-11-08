@@ -103,6 +103,7 @@ describe("heading base styles", () => {
 });
 
 describe("display headings", () => {
+  // A literal <h2 only: a heading whose tag is chosen at runtime (<Heading>) is out of its reach.
   it("say font-display when an h2 takes the display face, never font-heading", async () => {
     const files = await markupFiles(SRC);
     const offenders: string[] = [];

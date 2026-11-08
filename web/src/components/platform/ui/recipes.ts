@@ -60,6 +60,19 @@ export function buttonClass({ variant = "quiet", size = "md", disabled = false, 
 }
 
 /**
+ * A link in running text: the ink of the words around it, underlined, so it
+ * reads as a link by its line and not by colour (WCAG 1.4.1). Peach is kept for
+ * the one primary action; a prose link never borrows it.
+ */
+export function linkClass(className?: string): string {
+  return cx(
+    "rounded-sm font-semibold text-ink-primary underline decoration-ink-primary/45 decoration-1 underline-offset-[0.2em] transition-colors duration-150 motion-reduce:transition-none hover:decoration-ink-primary",
+    FOCUS_RING,
+    className,
+  );
+}
+
+/**
  * A pill: a filter toggle, or one link in a row of them. Pressed and current pills are ink. On a
  * touch screen even a one-word pill ("All") is a 44px square at least.
  */

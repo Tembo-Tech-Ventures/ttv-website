@@ -115,6 +115,13 @@ such as the clip finder's moments.
 
 For moving between spaces or whole sections, use the tab file instead.
 
+### BackLink and linkClass `#back-link`
+
+`BackLink` (`href`, children: the list's name, "Applications") is the way up
+from a detail page, above its title: a quiet link with an arrow hidden from
+screen readers, 44px on touch. `linkClass(className?)` is the recipe for a
+link in running text: `ink-primary`, underlined, the focus ring. Never peach.
+
 ## Labels and people
 
 ### Chip `#chip`
@@ -124,6 +131,17 @@ someone), `ring` (a mentor's part only), `success`, `warning`, `danger`
 (outcomes, always in words). Text truncates inside the chip.
 `CHIP_TONES` holds the tint and ink for each; every one is proven in
 `contrast.test.ts`.
+
+### StatusChip `#status-chip`
+
+`StatusChip domain status` draws a stored status as a `Chip` in its one name
+and tone. `statusTone(domain, status)` returns `{ label, tone }` for places a
+chip cannot go; `STATUSES` is the map. Domains: `application`, `access`,
+`feedback`, `theme`, `profile` (and blog posts), `project`, `recording`,
+`token`. `APPROVED` is "Accepted" in every domain. Waiting on a person is
+peach, an outcome takes a status tone, everything else is neutral; no status
+wears the mentor's ring. `status.test.ts` holds each domain to its schema
+column, so a new stored value cannot reach a page without a name.
 
 ### CountBadge `#count-badge`
 
@@ -164,6 +182,14 @@ without it, a read-only tally that never looks pressable.
 A raised surface on a sheet. `as` (`div`, `article`, `section`, `li`,
 `aside`), `padding` (`sm`, `md`). No cards in cards.
 
+### DescriptionList `#description-list`
+
+Facts about one thing, as name and value, in a real `<dl>` separated by
+hairlines. `items={[{ term, detail }]}` for plain text, or `DescriptionItem
+term` children for a detail that holds a link or a chip (both work from
+`.astro`). The name stacks above the fact on a phone and stands in a 12rem
+column beside it from 40rem; long values wrap.
+
 ### Sheet and TabFile `#tab-file`
 
 - `Sheet space={tone}`: a page in a space's tone, rounded at the head. Set
@@ -199,13 +225,26 @@ A message about the page or what just happened on it.
 
 The tone is said in words to screen readers ("Problem: …") and shown by an
 icon, not by colour alone. A field's own error goes under the field, not in
-a notice.
+a notice. From `.astro`, pass `actions` as `<Fragment slot="actions">`.
 
 ### EmptyState `#empty-state`
 
 `title` (what is missing), children (why, and what fills it), `action` (one
-next step), `mark` (decorative), `headingLevel` (2–4, default 3). It keeps
-the list's place so the page does not jump when the first item arrives.
+next step; from `.astro`, `<Fragment slot="action">`), `mark` (decorative),
+`headingLevel` (2–4, default 3). It keeps the list's place so the page does
+not jump when the first item arrives.
+
+### ConfirmStep `#confirm-step`
+
+The step before something destructive, with no script (the pattern is in
+patterns.md). `title` (the question, naming the thing), children (what
+happens), `confirmLabel` (the danger button's words), `cancelHref`, `fields`
+(hidden inputs the POST needs), `action` (where it posts; the page by
+default), `focusOnLoad` (default on; off only for an example). The address
+helpers are `confirmHref(url, action)`, `confirmingAction(url, offered)` and
+`withoutConfirm(url)`, on the `confirm` parameter (`CONFIRM_PARAM`). The
+buttons sit under the warning, not on its tint: a hovered danger button there
+falls below 4.5:1 on four of the six sheets.
 
 ## Forms
 
@@ -235,7 +274,7 @@ pattern.
 
 `recipes.ts` holds the strings the components are made of: `FOCUS_RING`
 (and `INSET_FOCUS_RING`, the same ring drawn inside the edge for rows that fill
-a menu or list), `BUTTON_VARIANTS`, `BUTTON_SIZES`, `buttonClass`, `pillClass`, `CONTROL`,
+a menu or list), `BUTTON_VARIANTS`, `BUTTON_SIZES`, `buttonClass`, `linkClass`, `pillClass`, `CONTROL`,
 `CONTROL_HEIGHT`, `CHOICE_BOX`, `LABEL`, `HINT`, `FIELD_ERROR`. `tones.ts`
 holds `CHIP_TONES` and `RAISED`. Use a recipe only where a component cannot
 go, and never restate one by hand.
