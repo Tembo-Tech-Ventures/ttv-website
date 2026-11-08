@@ -1,69 +1,77 @@
 ---
+/**
+ * Cohort → Sessions: the recordings of the cohorts this person belongs to, newest first. Each card
+ * opens the session viewer at its space path.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import Card from "@/components/common/Card.astro";
-import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
-import { getAccessibleProgramIds } from "@/lib/recordings/access";
+import { Card, EmptyState, FOCUS_RING, PageTitle, StatusChip, cx } from "@/components/platform/ui";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { formatDuration } from "@/lib/recordings/time-utils";
 import { formatMomentDate } from "@/lib/display-date";
 import { drizzle } from "drizzle-orm/d1";
-import { and, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
 
-const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
-const programIds = await getAccessibleProgramIds(db, user.id);
-const recordings =
-  programIds.length > 0
-    ? await db.query.recording.findMany({
-        where: and(inArray(schema.recording.programId, programIds)),
-        with: { program: true },
-        orderBy: (recording, { desc }) => [desc(recording.recordedAt)],
-      })
-    : [];
-const spaces = await resolveSpacePage(Astro.locals, "sessions");
-// In the shell, each session opens at its space path instead of through a redirect.
-const sessionsHref = spaces ? SPACE_PAGE_PATHS.sessions : "/dashboard/sessions";
+// The recordings wait only for the person's cohorts, read once per request (the space context shares
+// that read), never for the rest of the space context.
+const loadRecordings = async () => {
+  const programIds = (await requestCapabilities(db, Astro.locals)).cohortIds;
+  if (programIds.length === 0) return [];
+  return db.query.recording.findMany({
+    where: inArray(schema.recording.programId, programIds),
+    with: { program: true },
+    orderBy: (recording, { desc }) => [desc(recording.recordedAt)],
+  });
+};
+const recordingsRead = loadRecordings();
+const resolved = await resolveSpacePageWith(Astro.locals, "sessions", () => recordingsRead);
+const spaces = resolved?.[0] ?? null;
+// Without the spaces shell (a token, or a context that failed to load) the page still lists them.
+const recordings = resolved?.[1] ?? await recordingsRead;
+const sessionsHref = SPACE_PAGE_PATHS.sessions;
 ---
 
 <SpacePage context={spaces} title="Sessions">
-  <div class="space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Sessions</PageTitle>
-      <p class="mt-1 text-sm text-ink-muted">
+  <div class="flex flex-col gap-8">
+    <div class="flex flex-col gap-3">
+      <PageTitle>Sessions</PageTitle>
+      <p class="max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
         Watch recorded sessions and follow along with the transcript.
       </p>
     </div>
 
     {recordings.length === 0 ? (
-      <Card>
-        <div class="py-10 text-center text-ink-muted">
-          No session recordings are available for your cohorts yet.
-        </div>
-      </Card>
+      <EmptyState title="No recordings yet" headingLevel={2}>
+        Recordings of your cohort's sessions appear here after each session, once they're processed.
+      </EmptyState>
     ) : (
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3" data-session-list>
         {recordings.map((recording) => (
-          <a href={`${sessionsHref}/${recording.id}`} class="block">
-            <Card>
-              <div class="space-y-4">
+          <li class="flex">
+            <a
+              href={`${sessionsHref}/${recording.id}`}
+              class={cx("group flex w-full rounded-[1.125rem]", FOCUS_RING)}
+              data-session-card
+            >
+              <Card className="flex w-full flex-col gap-4 transition-colors duration-150 group-hover:border-ink-primary/30 motion-reduce:transition-none">
                 <div class="flex items-start justify-between gap-3">
-                  <h3 class="text-base font-semibold text-white">{recording.title}</h3>
-                  <ProcessingStatus status={recording.processingStatus} />
+                  <h2 class="m-0 text-base leading-snug text-ink-primary">{recording.title}</h2>
+                  <StatusChip domain="recording" status={recording.processingStatus} />
                 </div>
-                <p class="text-sm text-ink-muted">{recording.program?.name ?? "Cohort session"}</p>
-                <div class="flex items-center justify-between text-xs text-ink-muted">
+                <p class="m-0 text-sm text-ink-secondary">{recording.program?.name ?? "Cohort session"}</p>
+                <div class="mt-auto flex items-center justify-between text-xs text-ink-muted">
                   <span>{recording.recordedAt ? formatMomentDate(recording.recordedAt) : "No date"}</span>
                   <span>{formatDuration(recording.durationSeconds)}</span>
                 </div>
-              </div>
-            </Card>
-          </a>
+              </Card>
+            </a>
+          </li>
         ))}
-      </div>
+      </ul>
     )}
   </div>
 </SpacePage>
