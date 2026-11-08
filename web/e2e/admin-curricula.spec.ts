@@ -160,8 +160,7 @@ test.describe("admin curriculum management", () => {
       .getByRole("button", { name: "Create curriculum" })
       .click();
 
-    await expect(page.getByRole("alert")).toContainText("The curriculum wasn't created");
-    await expect(page.getByRole("alert")).toBeFocused();
+    await expect(page.getByRole("alert").filter({ hasText: "The curriculum wasn't created" })).toBeFocused();
     await expect(page).toHaveTitle(/^Error: /);
     await expect(page.getByText("Enter a curriculum title.")).toBeVisible();
     await expect(titleInput).toHaveAttribute("aria-invalid", "true");
