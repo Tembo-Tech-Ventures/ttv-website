@@ -1,9 +1,20 @@
 ---
+import { PiMapPin } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
+import {
+  BackLink,
+  Button,
+  Card,
+  Chip,
+  DescriptionItem,
+  DescriptionList,
+  Notice,
+  PageHeader,
+  StatusChip,
+  TextField,
+  linkClass,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
@@ -23,34 +34,45 @@ import {
   parsePostModerationAction,
 } from "@/lib/blog/moderation";
 import { postPath } from "@/lib/blog/feed";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { formatCalendarDate, formatMomentDate } from "@/lib/display-date";
 
+const LIST_PATH = "/admin/profiles";
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 
-if (!id) return Astro.redirect("/admin/profiles");
+if (!id) return Astro.redirect(LIST_PATH);
 
+const PROFILE_DONE = { publish: "Profile published", unpublish: "Profile unpublished", clear_flag: "Flag cleared" } as const;
 let actionError: string | undefined;
+// A rejected post action keeps the note typed for that post.
+let postedNote: { postId: string; note: string } | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   if (formData.get("_action") === "moderate-post") {
     const postId = formData.get("postId");
     const action = parsePostModerationAction(formData.get("postAction"));
+    const note = formData.get("adminNote");
+    if (typeof postId === "string" && typeof note === "string") postedNote = { postId, note };
     if (typeof postId !== "string" || !action) {
-      actionError = "Invalid post moderation request.";
+      actionError = "Choose suspend or restore for one of the posts below.";
       Astro.response.status = 400;
     } else {
       const result = await moderatePost(db, {
         profileId: id,
         postId,
         action,
-        adminNote: normalizeAdminNote(formData.get("adminNote")),
+        adminNote: normalizeAdminNote(note),
       });
       if (!result.success) {
-        actionError = result.error;
+        actionError = `${result.error} Its status below is the current one.`;
         Astro.response.status = 409;
       } else {
-        return Astro.redirect(`/admin/profiles/${id}#posts`);
+        return redirectWithFlash(Astro, `${Astro.url.pathname}#posts`, {
+          tone: "success",
+          title: action === "suspend" ? "Post suspended" : "Post restored",
+        });
       }
     }
   } else if (formData.get("_action") === "moderate-profile") {
@@ -70,9 +92,9 @@ if (Astro.request.method === "POST") {
       with: { user: { columns: { name: true, image: true } } },
     });
 
-    if (!current) return Astro.redirect("/admin/profiles");
+    if (!current) return Astro.redirect(LIST_PATH, 303);
     if (!action || expectedVersion === null) {
-      actionError = "Invalid profile moderation request.";
+      actionError = "Choose one of the publishing actions below.";
       Astro.response.status = 400;
     } else {
       const updated = await applyAdminProfileAction(
@@ -84,38 +106,38 @@ if (Astro.request.method === "POST") {
       );
 
       if (!updated) {
-        actionError =
-          "This profile changed while the action was running. Reload and try again.";
+        actionError = "The builder changed this profile while you were looking at it. Check it below before acting again.";
         Astro.response.status = 409;
       } else {
-        return Astro.redirect(`/admin/profiles/${id}`);
+        return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: PROFILE_DONE[action] });
       }
     }
   } else {
-    actionError = "Invalid moderation request.";
+    actionError = "Choose one of the actions on this page.";
     Astro.response.status = 400;
   }
 }
 
-const profile = await db.query.studentProfile.findFirst({
-  where: eq(schema.studentProfile.id, id),
-  with: {
-    user: true,
-    highlights: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
-    posts: { orderBy: (post, { desc }) => [desc(post.updatedAt)] },
-  },
-});
+// The profile, its leads and the Admin space are independent reads: one round trip, not three.
+const [profile, leadsResult, spaces] = await Promise.all([
+  db.query.studentProfile.findFirst({
+    where: eq(schema.studentProfile.id, id),
+    with: {
+      user: true,
+      highlights: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
+      posts: { orderBy: (post, { desc }) => [desc(post.updatedAt)] },
+    },
+  }),
+  db.select({ value: count() }).from(schema.profileContact).where(eq(schema.profileContact.profileId, id)),
+  resolveSpacePage(Astro.locals, "adminProfiles"),
+]);
 
-if (!profile) return Astro.redirect("/admin/profiles");
+if (!profile) return Astro.redirect(LIST_PATH);
 
 const cohorts = await getCompletedCohorts(db, profile.userId);
-
-const [leadsResult] = await db
-  .select({ value: count() })
-  .from(schema.profileContact)
-  .where(eq(schema.profileContact.profileId, profile.id));
-const leadsCount = leadsResult?.value ?? 0;
-
+const leadsCount = leadsResult[0]?.value ?? 0;
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const name = profile.publicName ?? profile.user?.name ?? profile.handle;
 const skills = parseSkillsJson(profile.skills);
 const moderationFlags = parseModerationFlags(profile.moderationFlags);
 const moderationOutcomeLabel = profile.moderationOutcome
@@ -125,315 +147,246 @@ const moderationOutcomeLabel = profile.moderationOutcome
       error: "Check unavailable",
     }[profile.moderationOutcome]
   : null;
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminProfiles");
+const NEW_TAB = " (opens in a new tab)";
+const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
 ---
 
-<AdminLayout title="Profile Detail" spaces={spaces}>
+<AdminLayout title={`${name} · profile`} titlePrefix={actionError ? "Error: " : ""} spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/profiles" class="text-sm text-primary hover:underline">
-      &larr; Back to Profiles
-    </a>
+    <BackLink href={LIST_PATH}>Profiles</BackLink>
 
+    <PageHeader title={name}>
+      <span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusChip domain="profile" status={profile.status} />
+        <span class="inline-flex flex-wrap items-center gap-x-1.5">Builder profile at <a href={`/talent/${profile.handle}`} class={ROW_LINK}>/talent/{profile.handle}</a></span>
+      </span>
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
+      <Notice tone="danger" focusOnLoad id="profile-failure" title="Nothing changed">
         {actionError}
-      </p>
+      </Notice>
     )}
-
-    <div class="flex items-center gap-3">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Profile</PageTitle>
-      <Badge
-        variant={
-          profile.status.toLowerCase() as
-            | "draft"
-            | "published"
-            | "suspended"
-        }
-      />
-    </div>
 
     {profile.moderationOutcome && (
       <Card>
-        <h3 class="mb-2 text-lg font-semibold text-white">Content check</h3>
-        <p class="text-sm text-ink-secondary">
-          Outcome: <span class="font-medium text-white">{moderationOutcomeLabel}</span>
-          {profile.moderationCheckedAt && (
-            <> · {new Date(profile.moderationCheckedAt).toLocaleString()}</>
-          )}
-        </p>
-        {moderationFlags.length > 0 ? (
-          <ul class="mt-3 space-y-2 text-sm text-ink-secondary">
-            {moderationFlags.map((flag) => (
-              <li>{PROFILE_MODERATION_MESSAGES[flag]}</li>
-            ))}
-          </ul>
-        ) : profile.moderationOutcome === "error" ? (
-          <p class="mt-3 text-sm text-ink-secondary">
-            The check was unavailable. The profile published automatically and was flagged for this review.
-          </p>
-        ) : null}
+        <div class="grid gap-4">
+          <h2 class="text-lg text-ink-primary">Content check</h2>
+          <DescriptionList>
+            <DescriptionItem term="Outcome">{moderationOutcomeLabel}</DescriptionItem>
+            {profile.moderationCheckedAt && (
+              <DescriptionItem term="Checked">{formatMomentDate(profile.moderationCheckedAt)}</DescriptionItem>
+            )}
+            {profile.moderationReviewRequired && <DescriptionItem term="Review">Waiting for an admin</DescriptionItem>}
+          </DescriptionList>
+          {moderationFlags.length > 0 ? (
+            <ul class="list-disc space-y-1 pl-5 text-sm text-ink-secondary">
+              {moderationFlags.map((flag) => (
+                <li>{PROFILE_MODERATION_MESSAGES[flag]}</li>
+              ))}
+            </ul>
+          ) : profile.moderationOutcome === "error" ? (
+            <p class="text-sm text-ink-secondary">
+              The check was unavailable. The profile published automatically and was flagged for this review.
+            </p>
+          ) : null}
+        </div>
       </Card>
     )}
 
     <div class="grid gap-6 lg:grid-cols-2">
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Owner</h3>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Name</dt>
-            <dd class="text-white">{profile.user?.name ?? "Unknown"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Email</dt>
-            <dd class="text-white">{profile.user?.email ?? "—"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">GitHub</dt>
-            <dd class="text-white">{profile.githubLogin ?? "—"}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Handle</dt>
-            <dd class="font-mono text-white">{profile.handle}</dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-secondary">Leads</dt>
-            <dd class="text-white">{leadsCount}</dd>
-          </div>
-        </dl>
+        <div class="grid gap-4">
+          <h2 class="text-lg text-ink-primary">Owner</h2>
+          <DescriptionList>
+            <DescriptionItem term="Name">
+              <a href={`/admin/users/${profile.userId}`} class={linkClass()}>{profile.user?.name ?? "Unknown"}</a>
+            </DescriptionItem>
+            <DescriptionItem term="Email">{profile.user?.email ?? "Not recorded"}</DescriptionItem>
+            <DescriptionItem term="GitHub">{profile.githubLogin ?? "Not connected"}</DescriptionItem>
+            <DescriptionItem term="Handle"><span class="font-mono">{profile.handle}</span></DescriptionItem>
+            <DescriptionItem term="Leads">{leadsCount}</DescriptionItem>
+          </DescriptionList>
+        </div>
       </Card>
 
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Completed Cohorts</h3>
-        {cohorts.length === 0 ? (
-          <p class="text-sm text-ink-muted">No completed cohorts.</p>
-        ) : (
-          <ul class="space-y-2 text-sm">
-            {cohorts.map((c) => (
-              <li class="text-white">
-                {c.program?.name ?? "Unknown program"}
-                {c.application.completedAt && (
-                  <span class="ml-2 text-ink-muted">
-                    completed{" "}
-                    {new Date(c.application.completedAt).toLocaleDateString()}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <div class="grid gap-4">
+          <h2 class="text-lg text-ink-primary">Completed cohorts</h2>
+          {cohorts.length === 0 ? (
+            <p class="text-sm text-ink-secondary">None yet. A cohort shows here once its application is marked completed.</p>
+          ) : (
+            <DescriptionList>
+              {cohorts.map((c) => (
+                <DescriptionItem term={c.program?.name ?? "Unknown cohort"}>
+                  {c.application.completedAt ? `Completed ${formatCalendarDate(c.application.completedAt)}` : "Completed"}
+                </DescriptionItem>
+              ))}
+            </DescriptionList>
+          )}
+        </div>
       </Card>
     </div>
 
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">
-        How this will appear publicly
-      </h3>
-
-      <div class="space-y-4">
-        {profile.headline && (
-          <p class="text-lg font-medium text-white">{profile.headline}</p>
+      <div class="grid gap-4">
+        <h2 class="text-lg text-ink-primary">How it appears publicly</h2>
+        {profile.headline && <p class="text-lg font-semibold text-ink-primary">{profile.headline}</p>}
+        {profile.bio && <p class="whitespace-pre-line text-sm text-ink-secondary">{profile.bio}</p>}
+        {(profile.location || profile.country) && (
+          <p class="inline-flex items-center gap-1.5 text-sm text-ink-secondary">
+            <PiMapPin className="size-4 shrink-0" aria-hidden="true" />
+            {[profile.location, profile.country].filter(Boolean).join(", ")}
+          </p>
         )}
-
-        {profile.bio && <p class="text-sm text-white/80">{profile.bio}</p>}
-
-        <div class="flex flex-wrap gap-4 text-sm text-ink-secondary">
-          {profile.location && <span>📍 {profile.location}</span>}
-          {profile.country && <span>{profile.country}</span>}
-        </div>
-
         {skills.length > 0 && (
-          <div class="flex flex-wrap gap-2">
+          <ul class="flex flex-wrap gap-2" aria-label="Skills">
             {skills.map((skill) => (
-              <span class="rounded-full bg-teal/20 px-3 py-1 text-xs font-medium text-white/80">
-                {skill}
-              </span>
+              <li><Chip>{skill}</Chip></li>
             ))}
-          </div>
+          </ul>
         )}
-
-        <div class="flex flex-wrap gap-4 text-sm text-ink-secondary">
-          {profile.openToFreelance && <span>Open to freelance</span>}
-          {profile.openToRoles && <span>Open to roles</span>}
-          {!profile.openToFreelance && !profile.openToRoles && (
-            <span>Availability not specified</span>
-          )}
-        </div>
-
-        <div class="flex flex-wrap gap-4 text-sm">
-          {profile.portfolioUrl && (
-            <a
-              href={profile.portfolioUrl}
-              class="text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Portfolio
-            </a>
-          )}
-          {profile.linkedinUrl && (
-            <a
-              href={profile.linkedinUrl}
-              class="text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              LinkedIn
-            </a>
-          )}
-        </div>
+        <p class="text-sm text-ink-secondary">
+          {profile.openToFreelance && profile.openToRoles
+            ? "Open to freelance work and to roles"
+            : profile.openToFreelance
+              ? "Open to freelance work"
+              : profile.openToRoles
+                ? "Open to roles"
+                : "Availability not given"}
+        </p>
+        {(profile.portfolioUrl || profile.linkedinUrl) && (
+          <p class="flex flex-wrap gap-x-6">
+            {profile.portfolioUrl && (
+              <a href={profile.portfolioUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
+                Portfolio<span class="sr-only">{NEW_TAB}</span>
+              </a>
+            )}
+            {profile.linkedinUrl && (
+              <a href={profile.linkedinUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
+                LinkedIn<span class="sr-only">{NEW_TAB}</span>
+              </a>
+            )}
+          </p>
+        )}
       </div>
     </Card>
 
     {profile.highlights.length > 0 && (
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">
-          Highlighted Projects
-        </h3>
-        <div class="space-y-4">
-          {profile.highlights.map((h) => (
-            <div class="rounded-md border border-teal/10 p-4">
-              <div class="flex items-start justify-between">
-                <a
-                  href={h.repoUrl}
-                  class="font-medium text-primary hover:underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {h.repoFullName}
-                </a>
-                <span class="text-xs text-ink-muted">
-                  {h.stars > 0 && `★ ${h.stars}`}
-                  {h.language && (
-                    <span class="ml-2">{h.language}</span>
-                  )}
-                </span>
-              </div>
-              {h.description && (
-                <p class="mt-1 text-sm text-ink-secondary">{h.description}</p>
-              )}
-              {h.blurb && (
-                <p class="mt-1 text-sm italic text-white/80">{h.blurb}</p>
-              )}
-            </div>
-          ))}
+        <div class="grid gap-2">
+          <h2 class="text-lg text-ink-primary">Highlighted projects</h2>
+          <ul class="divide-y divide-hairline" data-highlights>
+            {profile.highlights.map((h) => (
+              <li class="grid gap-1 py-3 first:pt-0 last:pb-0">
+                <div class="flex flex-wrap items-center justify-between gap-x-4">
+                  <a href={h.repoUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
+                    {h.repoFullName}<span class="sr-only">{NEW_TAB}</span>
+                  </a>
+                  <span class="text-xs text-ink-muted">
+                    {[h.stars > 0 ? `${h.stars} ${h.stars === 1 ? "star" : "stars"}` : null, h.language].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                {h.description && <p class="text-sm text-ink-secondary">{h.description}</p>}
+                {h.blurb && <p class="text-sm text-ink-primary">“{h.blurb}”</p>}
+              </li>
+            ))}
+          </ul>
         </div>
       </Card>
     )}
 
-    <div id="posts">
-      <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Posts</h3>
+    <Card>
+      <div class="grid gap-2" id="posts">
+        <h2 class="text-lg text-ink-primary">Posts</h2>
         {profile.posts.length === 0 ? (
-          <p class="text-sm text-ink-muted">No posts from this builder.</p>
+          <p class="text-sm text-ink-secondary">None yet. The builder's posts show here as they write them.</p>
         ) : (
-          <div class="space-y-4">
-            {profile.posts.map((post) => (
-              <section class="rounded-lg border border-teal/15 p-4" aria-label={post.title}>
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <h4 class="font-medium text-white">{post.title}</h4>
-                      <Badge
-                        variant={post.status.toLowerCase() as "draft" | "published" | "suspended"}
-                      />
+          <ul class="divide-y divide-hairline" data-posts>
+            {profile.posts.map((post) => {
+              const moderable = post.status === "PUBLISHED" || post.status === "SUSPENDED";
+              const note = postedNote?.postId === post.id ? postedNote.note : post.adminNote ?? "";
+              return (
+                <li class="py-4 first:pt-2 last:pb-0">
+                  <section aria-label={post.title} class="grid gap-3">
+                    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2">
+                        <h3 class="text-base text-ink-primary">{post.title}</h3>
+                        <StatusChip domain="profile" status={post.status} />
+                      </div>
+                      {post.status === "PUBLISHED" && (
+                        <a href={postPath(profile.handle, post.slug)} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
+                          View live<span class="sr-only"> {post.title}{NEW_TAB}</span>
+                        </a>
+                      )}
                     </div>
-                    <p class="mt-1 break-all font-mono text-xs text-ink-muted">
-                      /blog/{profile.handle}/{post.slug}
-                    </p>
-                    {post.adminNote && (
-                      <p class="mt-2 text-sm text-ink-secondary">
-                        Admin note: {post.adminNote}
-                      </p>
+                    <p class="break-all font-mono text-xs text-ink-muted">/blog/{profile.handle}/{post.slug}</p>
+                    {post.adminNote && <p class="text-sm text-ink-secondary">Admin note: {post.adminNote}</p>}
+                    {moderable && (
+                      <form method="POST" action={Astro.url.pathname} class="flex flex-col gap-3 sm:flex-row sm:items-end">
+                        <input type="hidden" name="_action" value="moderate-post" />
+                        <input type="hidden" name="postId" value={post.id} />
+                        <input type="hidden" name="postAction" value={post.status === "PUBLISHED" ? "suspend" : "restore"} />
+                        <TextField
+                          id={`admin-note-${post.id}`}
+                          name="adminNote"
+                          label="Admin note"
+                          optional
+                          maxLength={1000}
+                          defaultValue={note}
+                          className="min-w-0 flex-1"
+                        />
+                        <Button type="submit" variant="quiet">
+                          {post.status === "PUBLISHED" ? "Suspend post" : "Restore post"}
+                        </Button>
+                      </form>
                     )}
-                  </div>
-                  {post.status === "PUBLISHED" && (
-                    <a
-                      href={postPath(profile.handle, post.slug)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="shrink-0 text-sm font-medium text-primary hover:underline"
-                    >
-                      View live
-                    </a>
-                  )}
-                </div>
-
-                {(post.status === "PUBLISHED" || post.status === "SUSPENDED") && (
-                  <form method="POST" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <input type="hidden" name="_action" value="moderate-post" />
-                    <input type="hidden" name="postId" value={post.id} />
-                    <input
-                      type="hidden"
-                      name="postAction"
-                      value={post.status === "PUBLISHED" ? "suspend" : "restore"}
-                    />
-                    <label class="min-w-0 flex-1 text-xs font-medium uppercase tracking-wider text-ink-muted">
-                      Admin note <span class="normal-case tracking-normal">(optional)</span>
-                      <input
-                        name="adminNote"
-                        type="text"
-                        maxlength="1000"
-                        value={post.adminNote ?? ""}
-                        class="mt-1.5 block w-full rounded-md border border-teal/20 bg-dark px-3 py-2 text-sm font-normal normal-case tracking-normal text-white outline-none focus:border-primary"
-                      />
-                    </label>
-                    <button
-                      type="submit"
-                      class:list={[
-                        "shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors",
-                        post.status === "PUBLISHED"
-                          ? "bg-red-600 hover:bg-red-700"
-                          : "bg-green-700 hover:bg-green-800",
-                      ]}
-                    >
-                      {post.status === "PUBLISHED" ? "Suspend post" : "Restore post"}
-                    </button>
-                  </form>
-                )}
-              </section>
-            ))}
-          </div>
+                  </section>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </Card>
-    </div>
+      </div>
+    </Card>
 
     <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>
-      <div class="flex flex-wrap gap-2">
-        {profile.status !== "PUBLISHED" && (
-          <form method="POST">
-            <input type="hidden" name="_action" value="moderate-profile" />
-            <input type="hidden" name="profileAction" value="publish" />
-            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-            <button type="submit" class="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800">
-              {profile.status === "SUSPENDED" ? "Republish" : "Publish"}
-            </button>
-          </form>
-        )}
-        {profile.status !== "SUSPENDED" && (
-          <form method="POST">
-            <input type="hidden" name="_action" value="moderate-profile" />
-            <input type="hidden" name="profileAction" value="unpublish" />
-            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-            <button type="submit" class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-              Unpublish
-            </button>
-          </form>
-        )}
-        {profile.moderationReviewRequired && (
-          <form method="POST">
-            <input type="hidden" name="_action" value="moderate-profile" />
-            <input type="hidden" name="profileAction" value="clear_flag" />
-            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-            <button type="submit" class="rounded-md bg-teal/30 px-4 py-2 text-sm font-medium text-white hover:bg-teal/40">
-              Clear flag
-            </button>
-          </form>
-        )}
+      <div class="grid gap-4">
+        <h2 class="text-lg text-ink-primary">Publishing</h2>
+        <p class="text-sm text-ink-secondary">
+          {profile.status === "PUBLISHED"
+            ? "Anyone can read it now. Unpublishing hides it at once; publishing brings it back."
+            : profile.status === "SUSPENDED"
+              ? "It's hidden from the public. Republishing shows it again as it is now."
+              : "The builder hasn't published it yet."}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          {profile.status !== "PUBLISHED" && (
+            <form method="POST" action={Astro.url.pathname}>
+              <input type="hidden" name="_action" value="moderate-profile" />
+              <input type="hidden" name="profileAction" value="publish" />
+              <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+              <Button type="submit" variant="primary">{profile.status === "SUSPENDED" ? "Republish" : "Publish"}</Button>
+            </form>
+          )}
+          {profile.status !== "SUSPENDED" && (
+            <form method="POST" action={Astro.url.pathname}>
+              <input type="hidden" name="_action" value="moderate-profile" />
+              <input type="hidden" name="profileAction" value="unpublish" />
+              <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+              <Button type="submit" variant="quiet">Unpublish</Button>
+            </form>
+          )}
+          {profile.moderationReviewRequired && (
+            <form method="POST" action={Astro.url.pathname}>
+              <input type="hidden" name="_action" value="moderate-profile" />
+              <input type="hidden" name="profileAction" value="clear_flag" />
+              <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+              <Button type="submit" variant="quiet">Clear flag</Button>
+            </form>
+          )}
+        </div>
       </div>
     </Card>
   </div>
