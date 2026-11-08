@@ -579,16 +579,6 @@
 }
 
 /*
- * One display heading per screen: the page's h1. Section headings inside the
- * sheet, including the h2s of pages that moved in from the old dashboard, use
- * Maven Pro.
- */
-.spaces-shell__main h2 {
-  font-family: var(--font-body);
-  font-weight: 700;
-}
-
-/*
  * A full-height view (a chat, a workspace with its own scrolling) fills the
  * sheet instead of scrolling inside it.
  */

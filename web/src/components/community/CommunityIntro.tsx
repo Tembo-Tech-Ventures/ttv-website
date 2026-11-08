@@ -40,18 +40,18 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
           <ol className="mt-14 grid gap-px overflow-hidden rounded-xl border border-[color:var(--color-rule)] bg-[color:var(--color-rule)] md:grid-cols-3">
             {steps.map(([number, title, description]) => <li key={number} className="min-w-0 bg-dark p-7 sm:p-8">
               <span className="font-mono text-sm text-primary">{number}</span>
-              <h2 className="font-heading mt-6 text-2xl text-ink-primary">{title}</h2>
+              <h2 className="font-display mt-6 text-2xl text-ink-primary">{title}</h2>
               <p className="mt-4 leading-relaxed text-ink-secondary">{description}</p>
             </li>)}
           </ol>
           <div className="mt-12 grid gap-8 border-t border-[color:var(--color-rule)] pt-10 md:grid-cols-2">
             <section aria-labelledby="community-visibility-heading">
-              <h2 id="community-visibility-heading" className="font-heading text-2xl text-ink-primary">Know who can see your work.</h2>
+              <h2 id="community-visibility-heading" className="font-display text-2xl text-ink-primary">Know who can see your work.</h2>
               <p className="mt-4 leading-relaxed text-ink-secondary">Approved institutions can discover your saved community profile and the contributions you share. Mentors can review those shared contributions. Cohort recordings and internal records are not part of institutional discovery.</p>
               <p className="mt-4 leading-relaxed text-ink-muted">A contribution or mentor confirmation does not guarantee a job, placement, or introduction.</p>
             </section>
             <section id="institutions" aria-labelledby="community-institution-heading">
-              <h2 id="community-institution-heading" className="font-heading text-2xl text-ink-primary">Exploring talent for an opportunity?</h2>
+              <h2 id="community-institution-heading" className="font-display text-2xl text-ink-primary">Exploring talent for an opportunity?</h2>
               <p className="mt-4 leading-relaxed text-ink-secondary">Explore community members and their documented work.</p>
               <a href={communityEntryHref(isAuthenticated, true)} className="mt-5 inline-block font-semibold text-primary underline underline-offset-4">Continue to institutional access</a>
               <p className="mt-3 text-sm leading-relaxed text-ink-muted">Institutional access requires administrator approval after sign-in.</p>

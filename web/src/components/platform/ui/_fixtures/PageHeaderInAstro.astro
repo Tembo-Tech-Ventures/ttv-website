@@ -1,0 +1,11 @@
+---
+/** A page header written the way an `.astro` page writes one, for PageTitle.render.test.ts. */
+import { ButtonLink, PageHeader } from "@/components/platform/ui";
+---
+
+<PageHeader title="Programs" titleId="programs-title">
+  Every cohort, past and running.
+  <Fragment slot="action">
+    <ButtonLink variant="primary" href="/admin/programs/new">New program</ButtonLink>
+  </Fragment>
+</PageHeader>

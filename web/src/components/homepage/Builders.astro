@@ -25,7 +25,7 @@ const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
 ---
 
 <div class="hp-builders__intro">
-  <h2 id="hp-builders-title" class="hp-h2 font-heading tracking-heading">{BUILDERS.title}</h2>
+  <h2 id="hp-builders-title" class="hp-h2 font-display tracking-heading">{BUILDERS.title}</h2>
   <div class="hp-builders__aside">
     <p class="hp-lede">{total > 0 ? BUILDERS.summary : BUILDERS.empty}</p>
     <a class:list={["hp-arrow-link hp-builders__all", { "hp-builders__all--wide-only": total > PHONE_LIMIT }]} href={BUILDERS.all.href}>

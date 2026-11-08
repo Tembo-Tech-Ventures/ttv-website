@@ -12,6 +12,8 @@ import {
   EmptyState,
   IconButton,
   Notice,
+  PageHeader,
+  PageTitle,
   PersonMarker,
   PillNav,
   RoleBadge,
@@ -63,6 +65,57 @@ function Specimens({ children }: { children: ReactNode }) {
 }
 
 export const CATALOGUE: readonly CatalogueEntry[] = [
+  {
+    id: "page-header",
+    name: "PageHeader and PageTitle",
+    exports: ["PageHeader", "PageTitle"],
+    summary: "The top of a page: its one Mattone title, a sentence on what the page is for, and the action the page exists for.",
+    specimen: () => (
+      <Specimens>
+        <Row label="PageHeader">
+          <PageHeader
+            title="Mentor requests"
+            titleAs="p"
+            className="w-full"
+            action={
+              <ButtonLink href="#page-header" variant="primary" icon={<PiMagnifyingGlass />}>
+                Find a mentor
+              </ButtonLink>
+            }
+          >
+            The mentors you asked for time, and what each one said.
+          </PageHeader>
+        </Row>
+        <Row label="PageTitle alone">
+          <PageTitle as="p">Account</PageTitle>
+        </Row>
+      </Specimens>
+    ),
+    use: [
+      "Every page, once, at the top: PageHeader when there is a sentence or an action, PageTitle when the title says it all.",
+      "The action the page exists for, as its one primary: “New program”, “Find a mentor”.",
+      "Section headings below it as plain h2s: the base styles set them in Maven Pro bold.",
+    ],
+    avoid: [
+      "A second Mattone heading on the page, or Mattone for a section.",
+      "More than one action in the header. The others belong with what they act on.",
+      "A peach action that leads to an empty list. Lead with what fills it.",
+    ],
+    access: [
+      "The title is the page's only h1, so a screen reader's heading list starts with it.",
+      "Long words wrap rather than push the page sideways at 320px.",
+      "The action comes after the title and sentence in reading order at every width.",
+    ],
+    code: `---
+import { ButtonLink, PageHeader } from "@/components/platform/ui";
+---
+<PageHeader title="Mentor requests">
+  The people who asked you for time, newest first.
+  <Fragment slot="action">
+    <ButtonLink variant="primary" href="/dashboard/mentoring/availability">Set your availability</ButtonLink>
+  </Fragment>
+</PageHeader>`,
+  },
   {
     id: "button",
     name: "Button",

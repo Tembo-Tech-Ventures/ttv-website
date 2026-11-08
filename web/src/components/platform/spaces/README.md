@@ -27,8 +27,10 @@ const spaces = await resolveSpacePage(Astro.locals, "apply");
   admin mentor review opens in Admin for staff who are not mentors.
 - `SpacePage` renders `SpacesLayout` with the space's sidebar, or the
   unchanged `DashboardLayout`. With the flag off the HTML is the same as before.
-- `PageTitle` is the page's one Mattone h1 in the shell and the existing h2
-  (or h1) everywhere else.
+- `PageTitle` (this folder's) is the kit's `PageTitle` in the shell and the
+  existing h2 (or h1) everywhere else, while a page still has its flag-off
+  path. A page moved onto the style guide imports `PageHeader` or `PageTitle`
+  from `@/components/platform/ui` instead.
 - Full-height views (Ask Tembo) pass `fill`, so they size to the sheet.
 - Search and attention overlays (U-1.3) mount in `SpacePage`, the one place, so every space page has Ctrl K and the bell.
 

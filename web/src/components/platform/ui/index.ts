@@ -14,6 +14,8 @@ export { default as EmptyState } from "./EmptyState";
 export { Checkbox, ChoiceGroup, SelectField, TextAreaField, TextField, fieldAria, fieldId, type FieldOption } from "./Field";
 export { default as IconButton } from "./IconButton";
 export { default as Notice, type NoticeAnnounce, type NoticeTone } from "./Notice";
+export { default as PageHeader } from "./PageHeader";
+export { default as PageTitle } from "./PageTitle";
 export { default as PersonMarker, type PersonKind } from "./PersonMarker";
 export { default as Pill } from "./Pill";
 export { default as PillNav, type PillNavItem } from "./PillNav";
