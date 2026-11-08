@@ -1,56 +1,172 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import CommunityApp from "@/components/community/CommunityApp";
-import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
-import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
-import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
-import { PARTNER } from "@/components/platform/onboarding/copy";
-import { offersCohort } from "@/components/platform/onboarding/framing";
-import { resolveSpacePageWith, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
+/**
+ * Community's home (/dashboard/community): the caller's community profile and
+ * their journey of contributions, on the kit (style-guide rollout M15, D5).
+ * Server-rendered with no island: adding or revising a contribution and
+ * editing the profile are plain forms that post here and save through the
+ * community API's own handler (home-forms.ts), so all of it works without a
+ * script. Authentication is enforced by dashboard middleware; every read and
+ * write passes the API's own checks.
+ */
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
 import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astro";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
-import { loadJourneyInitial } from "@/components/community/journey-initial-server";
-// oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
-import "@/styles/discovery.css";
-// Authentication is enforced by dashboard middleware; every data API checks access.
+import { pickSpace, resolveSpacePageWith, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
+import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
+import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
+import { PARTNER } from "@/components/platform/onboarding/copy";
+import { offersCohort } from "@/components/platform/onboarding/framing";
+import { ButtonLink, DataList, EmptyState, Notice, PageHeader, linkClass } from "@/components/platform/ui";
+import ProfileCard from "@/components/community/home/ProfileCard.astro";
+import ProfileForm from "@/components/community/home/ProfileForm.astro";
+import ContributionForm from "@/components/community/home/ContributionForm.astro";
+import JourneyEntry from "@/components/community/home/JourneyEntry.astro";
+import { loadCommunityHome, sendCommunityWrite } from "@/components/community/home/home-data";
+import {
+  COMMUNITY_HOME_PATH, EMPTY_CONTRIBUTION, SAVED_FLASH, addHref, contributionValuesOf, editorFromUrl, handleCommunityHomePost,
+  profileValuesOf, type HomeEditor, type HomePostResult,
+} from "@/components/community/home/home-forms";
 
-// The journey view's own data, read with the page instead of after hydration (PERF-1 §3.8), and
-// started beside onboarding instead of after it (PERF-2).
-const resolved = await resolveSpacePageWith(Astro.locals, "journey", () => loadJourneyInitial(Astro.request, Astro.locals, env));
-const [spaces, initial] = resolved ?? [null, null];
-const journey = spaces ? await getStudentJourney(drizzle(env.DB, { schema }), spaces.me.user.id) : undefined;
-// A way into the community's channels while `channels` is on (QA2-16); the sidebar reuses the list.
-const { channels, shortcuts } = spaces ? await loadChannelShortcuts(spaces) : { channels: undefined, shortcuts: null };
+const { method } = Astro.request;
+const bare = (status: number, body: string | null = null, headers: Record<string, string> = {}) =>
+  new Response(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return bare(405, "Not allowed.", { Allow: "GET, HEAD, POST" });
+
+// The page's own reads start together, beside the space context and onboarding (PERF-2): the profile
+// and journey through the community API, the student journey the frame and the invitation share, and
+// the channel list for the "Channels" card, which the sidebar reuses (QA2-16).
+const [landing, journey, home] = await Promise.all([
+  resolveSpacePageWith(Astro.locals, "journey", (me) => loadChannelShortcuts({ me, space: pickSpace(me, "journey")!, page: "journey" })),
+  getStudentJourney(drizzle(env.DB, { schema }), Astro.locals.user!.id),
+  loadCommunityHome(Astro.request, Astro.locals, env),
+]);
+const spaces = landing?.[0] ?? null;
+const { channels, shortcuts } = landing?.[1] ?? { channels: undefined, shortcuts: null };
+const claims = home?.claims ?? [];
+
+let posted: Extract<HomePostResult, { kind: "render" }> | null = null;
+if (method === "POST") {
+  const result = await handleCommunityHomePost(Astro.request, claims, (write) => sendCommunityWrite(Astro.request, Astro.locals, env, write));
+  if (result.kind === "saved") return redirectWithFlash(Astro, COMMUNITY_HOME_PATH, { tone: "success", ...SAVED_FLASH[result.saved] });
+  if (result.kind === "refuse") return bare(result.status, result.status === 413 ? "That form was too large." : result.status === 403 ? "That request was refused." : "That form could not be read.", { "Content-Type": "text/plain; charset=utf-8" });
+  posted = result;
+  Astro.response.status = result.status;
+}
+Astro.response.headers.set("Cache-Control", "no-store");
+
+const flash = posted ? null : takeFlash(Astro);
+// After a refusal, the form that was sent stays open with what was typed; otherwise the address says which editor is open.
+const postedClaim = posted?.render.form === "contribution" && posted.render.claimId
+  ? claims.find((claim) => claim.id === (posted?.render.form === "contribution" ? posted.render.claimId : null)) ?? null
+  : null;
+const editor: HomeEditor | null = posted
+  ? posted.render.form === "profile" ? { kind: "profile" } : postedClaim ? { kind: "edit", claim: postedClaim } : { kind: "add" }
+  : editorFromUrl(Astro.url, claims);
+
 // With onboarding on, how the person said they take part frames this page (onboarding SPEC §3).
-// Without it (null), Community reads exactly as before: member framing for everyone.
-const framing = spaces?.onboarding?.framing;
+// Without it, Community reads exactly as before: member framing for everyone.
+const framing = spaces?.onboarding?.framing ?? "member";
 // Without a cohort there is no Cohort tab: the way to apply has to be here, on screen.
 // Mentors and organisations who did not choose to build and learn are not asked to apply.
 // A restricted synthetic identity that cannot follow the step gets no invitation (it is already on its journey).
-const step = spaces && !spaces.me.spaces.includes("cohort") && offersCohort(framing) ? journey?.nextStep : undefined;
+const step = spaces && !spaces.me.spaces.includes("cohort") && offersCohort(framing) ? journey.nextStep : undefined;
 const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), step) === step ? step : undefined;
+const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
 ---
-{
-  spaces ? (
-    <SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} journey={journey} channels={channels}>
-      {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class={invitation ? "mb-4" : "mb-10"} />}
+
+<SpacePage context={spaces} title={PARTNER.title} titlePrefix={posted ? "Error: " : ""} journey={journey} channels={channels}>
+  <div class="flex max-w-4xl flex-col gap-10">
+    <div class="flex flex-col gap-8">
+      <PageHeader title="Community">
+        Show what you made, what you learned, and the part that was yours.
+        {home && editor?.kind !== "add" && (
+          <Fragment slot="action">
+            {/* The page's one peach action, until an editor is open: then its own save is. */}
+            <ButtonLink href={addHref()} variant={editor ? "quiet" : "primary"} size="lg">Add a contribution</ButtonLink>
+          </Fragment>
+        )}
+      </PageHeader>
+      {/* Onboarding's cards follow the page's title, so its h1 comes first (QAO-05). */}
+      {spaces?.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class="" />}
       {invitation && <CohortInvitation step={invitation} />}
-      <CommunityApp client:load view="journey" embedded framing={framing} initial={initial} />
-      {/*
-        * The island draws the page's h1 and its primary action, so the channels card and the
-        * one-time card follow it: neither comes before the page's title (QAO-05, rollout S2).
-        */}
-      <ChannelShortcuts model={shortcuts} class="mt-10" />
-      <OnboardingPrompt view={spaces.onboarding} space={spaces.space} class="mt-10" />
-    </SpacePage>
-  ) : (
-    <BaseLayout title="Your community journey | TTV" noIndex>
-      <CommunityApp client:load view="journey" />
-    </BaseLayout>
-  )
-}
+      <OnboardingPrompt view={spaces?.onboarding} space={spaces?.space ?? "community"} />
+    </div>
+
+    {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
+
+    {home ? (
+      <>
+        {editor?.kind === "profile"
+          ? (
+            <ProfileForm
+              values={posted?.render.form === "profile" ? posted.render.values : profileValuesOf(home)}
+              errors={posted?.render.form === "profile" ? posted.render.errors : undefined}
+              failure={posted?.failure}
+            />
+          )
+          : <ProfileCard profile={home} />}
+
+        <section aria-labelledby="community-journey-title" class="flex flex-col gap-6" data-community-journey>
+          <div class="flex flex-col gap-3">
+            <h2 id="community-journey-title" class="text-2xl text-ink-primary">{journeyTitle}</h2>
+            <p class="max-w-prose text-base leading-relaxed text-ink-secondary">
+              Say what was yours. Link the work. Describe what changed. A mentor can confirm the specific work they
+              reviewed. A missing confirmation is an open question, not a mark against you.
+            </p>
+          </div>
+          <Notice tone="info" title="Who can discover this?">
+            Approved institutions can discover your saved community profile and the contributions you share. Mentors
+            can review those shared contributions. Private contributions remain visible only to you. Private calls,
+            recordings, and internal information do not belong here.
+          </Notice>
+
+          {editor?.kind === "add" && (
+            <ContributionForm
+              values={posted?.render.form === "contribution" ? posted.render.values : EMPTY_CONTRIBUTION}
+              errors={posted?.render.form === "contribution" ? posted.render.errors : undefined}
+              failure={posted?.failure}
+            />
+          )}
+
+          <DataList label={journeyTitle} isEmpty={claims.length === 0}>
+            {claims.map((claim) => editor?.kind === "edit" && editor.claim.id === claim.id
+              ? (
+                <li class="border-b border-hairline py-4 first:pt-0">
+                  <ContributionForm
+                    claim={claim}
+                    values={posted?.render.form === "contribution" ? posted.render.values : contributionValuesOf(claim)}
+                    errors={posted?.render.form === "contribution" ? posted.render.errors : undefined}
+                    failure={posted?.failure}
+                  />
+                </li>
+              )
+              : <JourneyEntry claim={claim} />)}
+            <Fragment slot="empty">
+              {/* Someone just looking around, a mentor or an organisation is not prompted like a student. */}
+              {framing === "member" && editor?.kind !== "add" && (
+                <EmptyState title="Your first contribution belongs here.">
+                  You do not need a finished portfolio. Start with one thing you made or learned.
+                </EmptyState>
+              )}
+            </Fragment>
+          </DataList>
+        </section>
+      </>
+    ) : (
+      <Notice tone="danger" title="We couldn't load your community profile">
+        Your profile and contributions are safe. Try again in a moment, or{" "}
+        <a href={`/auth/login?next=${encodeURIComponent(COMMUNITY_HOME_PATH)}`} class={linkClass()}>sign in again</a> if
+        you've been signed out.
+        <Fragment slot="actions"><ButtonLink href={COMMUNITY_HOME_PATH}>Try again</ButtonLink></Fragment>
+      </Notice>
+    )}
+
+    <ChannelShortcuts model={shortcuts} />
+  </div>
+</SpacePage>

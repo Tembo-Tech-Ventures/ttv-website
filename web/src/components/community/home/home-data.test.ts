@@ -2,8 +2,8 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCommunityService } from "@/lib/community/service";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
-import { loadAccess, loadOwnProfile } from "./community-client";
-import { loadJourneyInitial } from "./journey-initial-server";
+import { loadOwnProfile } from "../community-client";
+import { loadCommunityHome, sendCommunityWrite } from "./home-data";
 
 const runtime = vi.hoisted(() => ({ env: {} as Env, qa: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: runtime.env }));
@@ -60,20 +60,20 @@ afterEach(() => {
   runtime.qa.mockReset();
 });
 
-describe("the Community page's journey data", () => {
-  it.each(["wanjiru", "otieno", "akinyi"])("matches what the island loads from the API for %s", async (user) => {
+describe("the Community page's own data", () => {
+  it.each(["wanjiru", "otieno", "akinyi"])("matches what the API gives the browser for %s", async (user) => {
     const caller = locals(user);
-    const initial = await loadJourneyInitial(new Request(PAGE), caller, runtime.env);
+    const home = await loadCommunityHome(new Request(PAGE), caller, runtime.env);
     vi.stubGlobal("fetch", api(caller));
-    expect(initial).not.toBeNull();
-    expect(initial).toEqual({ access: await loadAccess(), profile: await loadOwnProfile() });
+    expect(home).not.toBeNull();
+    expect(home).toEqual(await loadOwnProfile());
   });
 
-  it("carries the member's own journey and their access", async () => {
-    const initial = await loadJourneyInitial(new Request(PAGE), locals("wanjiru"), runtime.env);
-    expect(initial?.access).toEqual({ isAdmin: false, isInstitution: false, isMentor: false });
-    expect(initial?.profile).toMatchObject({ id: "wanjiru", headline: "Builder", evidenceLoaded: true });
-    expect(initial?.profile.claims.map((claim) => claim.title)).toEqual(["Chama savings ledger"]);
+  it("carries the member's own profile, photo and journey", async () => {
+    sql.exec("UPDATE user SET image = 'https://avatars.example.test/wanjiru.png' WHERE id = 'wanjiru'");
+    const home = await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env);
+    expect(home).toMatchObject({ id: "wanjiru", name: "Wanjiru Kamau", image: "https://avatars.example.test/wanjiru.png", headline: "Builder", evidenceLoaded: true });
+    expect(home?.claims.map((claim) => claim.title)).toEqual(["Chama savings ledger"]);
   });
 
   it.each([
@@ -81,24 +81,51 @@ describe("the Community page's journey data", () => {
     ["a token lacks community:read", locals("wanjiru", { personalAccessToken: { scopes: ["community:write"] } } as never), undefined, 403],
     ["a session request carries an Authorization header", locals("wanjiru"), { Authorization: "Bearer forged" }, 401],
   ])("is null, as the API refuses, when %s", async (_case, caller, headers, status) => {
-    for (const path of ["access", "profile", "journey"]) expect((await api(caller, headers)(`/api/community/${path}`)).status).toBe(status);
-    expect(await loadJourneyInitial(new Request(PAGE, { headers }), caller, runtime.env)).toBeNull();
+    for (const path of ["profile", "journey"]) expect((await api(caller, headers)(`/api/community/${path}`)).status).toBe(status);
+    expect(await loadCommunityHome(new Request(PAGE, { headers }), caller, runtime.env)).toBeNull();
   });
 
-  it("is null when one read fails, so the island loads and reports it itself", async () => {
+  it("is null when one read fails, so the page says it couldn't load them", async () => {
     sql.exec("DROP TABLE communityConfirmation");
     expect((await api(locals("wanjiru"))("/api/community/journey")).status).toBe(500);
-    expect(await loadJourneyInitial(new Request(PAGE), locals("wanjiru"), runtime.env)).toBeNull();
+    expect(await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env)).toBeNull();
   });
 
   it("goes through the staging QA persona's checks when the request has one", async () => {
     const qa = { runId: "run", userId: "wanjiru", persona: "member", sessionId: "s", expiresAt: 1 };
     runtime.qa.mockResolvedValue(Response.json({ error: "Not available." }, { status: 403 }));
     const caller = locals("wanjiru", { stagingQa: qa } as never);
-    expect(await loadJourneyInitial(new Request(PAGE), caller, runtime.env)).toBeNull();
+    expect(await loadCommunityHome(new Request(PAGE), caller, runtime.env)).toBeNull();
     expect(runtime.qa.mock.calls.map(([request, path, identity]) => [new URL(request.url).pathname, path, identity])).toEqual(
-      ["access", "profile", "journey"].map((path) => [`/api/community/${path}`, path, qa]),
+      ["profile", "journey"].map((path) => [`/api/community/${path}`, path, qa]),
     );
-    expect((await api(caller)("/api/community/access")).status).toBe(403);
+  });
+});
+
+describe("a Community form's save", () => {
+  const post = (headers: HeadersInit = { Origin: ORIGIN }) => new Request(PAGE, { method: "POST", headers });
+
+  it("goes through the API's own handler as the browser's same-origin call", async () => {
+    const response = await sendCommunityWrite(post({ Origin: ORIGIN, Cookie: "session=1" }), locals("wanjiru"), runtime.env, {
+      path: "journey", method: "POST",
+      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", visibility: "institution" },
+    });
+    expect(response.status).toBe(201);
+    const home = await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env);
+    expect(home?.claims.map((claim) => claim.title)).toEqual(expect.arrayContaining(["Matatu fare splitter", "Chama savings ledger"]));
+  });
+
+  it("is refused, as the API refuses, without the page's own origin", async () => {
+    for (const headers of [{}, { Origin: "https://elsewhere.example" }]) {
+      const response = await sendCommunityWrite(post(headers), locals("wanjiru"), runtime.env, { path: "profile", method: "PUT", body: { headline: "Changed", bio: "", skills: [], opportunityGoals: "" } });
+      expect(response.status).toBe(403);
+    }
+    expect((await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env))?.headline).toBe("Builder");
+  });
+
+  it("keeps a token's scope: a read-only token cannot save", async () => {
+    const caller = locals("wanjiru", { personalAccessToken: { scopes: ["community:read"] } } as never);
+    const response = await sendCommunityWrite(post(), caller, runtime.env, { path: "profile", method: "PUT", body: { headline: "Changed", bio: "", skills: [], opportunityGoals: "" } });
+    expect(response.status).toBe(403);
   });
 });
