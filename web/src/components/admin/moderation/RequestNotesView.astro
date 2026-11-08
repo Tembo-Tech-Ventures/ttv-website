@@ -1,14 +1,13 @@
 ---
-import { PiInfoDuotone } from "react-icons/pi";
-import Avatar from "@/components/platform/ui/Avatar";
-import Button from "@/components/platform/ui/Button";
-import Chip from "@/components/platform/ui/Chip";
+import { PiInfo } from "react-icons/pi";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import {
+  Avatar, Button, Card, Chip, EmptyState, FOCUS_RING, Notice, PillNav, TextAreaField, type PillNavItem,
+} from "@/components/platform/ui";
 import { FORMAT_LABELS } from "@/components/platform/mentors/mentor-display";
-import ModerationTabs, { type ModerationTab } from "./ModerationTabs.astro";
 import { firstName, formatModerationTime } from "./case-model";
 import { REASON_MAX } from "./decision-form";
 import { caseCause, decidedStatus, requestNoteChoices, type RequestNotesViewProps } from "./request-notes";
-import { FOCUS_RING } from "@/components/platform/ui/recipes";
 
 /**
  * "Request notes" on /admin/moderation (U-4.1 on B-4.1's checks): one card per mentor request whose
@@ -17,22 +16,20 @@ import { FOCUS_RING } from "@/components/platform/ui/recipes";
  * text: Astro escapes each expression, and nothing here uses set:html.
  */
 type Props = RequestNotesViewProps & {
-  /** The page title's level: h1 in the spaces shell, where it is the screen's one display heading. */
-  titleTag?: "h1" | "h2";
   /** The message queue's tabs, so the whole page reads as one set of lists. */
-  queueTabs: ModerationTab[];
+  queueTabs: PillNavItem[];
   /** The admin reading: one who is party to a request can't decide it (B-4.1), so they get no form for it. */
   viewerId: string;
 };
 
-const { titleTag: Title = "h2", state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
-const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
-const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none";
+const { state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
+const PAGER_LINK = `inline-flex min-h-11 items-center rounded-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`;
+const LISTS = [["OPEN", "Waiting for a decision"], ["DECIDED", "Decided requests"]] as const;
 ---
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-request-notes data-state={state}>
   <header class="space-y-4">
-    <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</Title>
+    <PageTitle spaces>Moderation</PageTitle>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Requests for a mentor's time whose note Tembo's check held, or that a mentor reported. Keeping one sends it
       to its mentor as it was written, and takes one of their spots this month; removing it closes it, and the
@@ -40,35 +37,25 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
     </p>
   </header>
 
-  {notice && (
-    <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-request-notes-notice>{notice}</p>
-  )}
-  {failure && (
-    <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-request-notes-failure>{failure}</p>
-  )}
+  {notice && <Notice tone="success" focusOnLoad id="request-notes-notice">{notice}</Notice>}
+  {failure && <Notice tone="danger" focusOnLoad id="request-notes-failure">{failure}</Notice>}
 
-  <ModerationTabs tabs={queueTabs} />
-
-  <nav aria-label="Request notes" class="-mt-4">
-    <ul class="flex flex-wrap gap-1">
-      {([["OPEN", "Waiting for a decision"], ["DECIDED", "Decided requests"]] as const).map(([value, label]) => (
-        <li>
-          <a
-            href={tabHrefs[value]}
-            aria-current={value === state ? "page" : undefined}
-            class:list={[PILL, FOCUS_RING, value === state ? "bg-ink-primary/12 text-ink-primary" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary"]}
-          >{label}</a>
-        </li>
-      ))}
-    </ul>
-  </nav>
+  <div class="space-y-3">
+    <PillNav label="Moderation lists" countLabel="waiting" items={queueTabs} />
+    <PillNav
+      label="Request notes"
+      items={LISTS.map(([value, label]) => ({ label, href: tabHrefs[value], current: value === state }))}
+    />
+  </div>
 
   {items.length === 0 ? (
-    <p class="py-6 text-ink-secondary" data-request-notes-empty>
-      {state === "OPEN"
-        ? "Nothing needs a decision. Requests whose note Tembo's check holds, or that a mentor reports, appear here."
-        : "Nothing decided yet. Decisions appear here."}
-    </p>
+    state === "OPEN" ? (
+      <EmptyState title="Nothing needs a decision" headingLevel={2}>
+        Requests whose note Tembo's check holds, or that a mentor reports, appear here.
+      </EmptyState>
+    ) : (
+      <EmptyState title="Nothing decided yet" headingLevel={2}>Decisions appear here.</EmptyState>
+    )
   ) : (
     <ul class="space-y-4" aria-label={state === "OPEN" ? "Request notes waiting for a decision" : "Decided request notes"} data-request-notes-list={state}>
       {items.map((item) => {
@@ -77,39 +64,36 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
         const mentor = request.mentor;
         const headingId = `request-note-${item.id}`;
         const error = rowError?.id === item.id ? rowError.message : undefined;
-        const ids = {
-          reason: `request-note-${item.id}-reason`, hint: `request-note-${item.id}-hint`, error: `request-note-${item.id}-error`,
-          choices: `request-note-${item.id}-choices`,
-        };
+        const ids = { reason: `request-note-${item.id}-reason`, choices: `request-note-${item.id}-choices` };
         const choices = requestNoteChoices(item);
         // Every card has the same buttons, so each name says whose request it decides.
         const whose = `${asker.name}'s request to ${mentor.name}`;
         // Decided: where the request stands now, not what raised it (QA4-21). Open: what raised it.
         const status = item.state === "DECIDED" ? decidedStatus(item) : null;
         return (
-          <li class="rounded-2xl border border-hairline bg-ink-primary/4 p-4 sm:p-5" aria-labelledby={headingId} data-request-note={item.id} data-state={item.state}>
+          <Card as="li" aria-labelledby={headingId} data-request-note={item.id} data-state={item.state}>
             <div class="flex flex-wrap items-start gap-x-4 gap-y-2">
               <Avatar id={asker.id} name={asker.name} src={asker.avatarUrl ?? undefined} size="md" decorative />
               <div class="min-w-0 flex-1">
-                <h3 id={headingId} class="text-lg leading-snug font-bold break-words text-ink-primary">
+                <h2 id={headingId} class="font-body text-lg leading-snug font-bold break-words text-ink-primary">
                   {asker.name} asked {mentor.name}
-                </h3>
+                </h2>
                 <p class="text-sm text-ink-secondary">
                   {FORMAT_LABELS[request.format]} · opened {formatModerationTime(item.openedAt)}
                 </p>
               </div>
               <div class="order-last basis-full sm:order-none sm:basis-auto">
                 {status ? (
-                  <Chip tone="ring"><span data-request-note-status>{status}</span></Chip>
+                  <Chip tone={decision?.action === "remove" ? "danger" : "success"}><span data-request-note-status>{status}</span></Chip>
                 ) : (
-                  <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+                  <Chip tone={item.report ? "peach" : "neutral"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
                 )}
               </div>
             </div>
 
             <p class="mt-4 text-sm text-ink-secondary" data-request-note-cause>{caseCause(item)}</p>
             {item.report && (
-              <blockquote class="mt-2 border-l-2 border-primary/60 pl-3 text-sm leading-relaxed break-words text-ink-secondary">
+              <blockquote class="mt-2 border-l-2 border-hairline pl-3 text-sm leading-relaxed break-words text-ink-secondary">
                 <span class="sr-only">{firstName(mentor.name)} wrote: </span>{item.report.reason}
               </blockquote>
             )}
@@ -135,32 +119,31 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
             ) : (
               <form method="POST" action={formAction} class="mt-5 space-y-3" data-request-note-form>
                 <input type="hidden" name="requestId" value={item.id} />
-                <div class="space-y-1.5">
-                  <label for={ids.reason} class="block text-sm font-semibold text-ink-primary">
-                    Reason <span class="font-normal text-ink-muted" aria-hidden="true">(required)</span>
-                  </label>
-                  <textarea
-                    id={ids.reason} name="reason" rows="2" required aria-required="true" maxlength={REASON_MAX}
-                    aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
-                    aria-invalid={error ? "true" : undefined}
-                    class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS_RING}`}
-                  >{error ? rowError?.draft : ""}</textarea>
-                  <p id={ids.hint} class="text-xs text-ink-muted">Kept with your decision. Only admins see it.</p>
-                  {error && <p id={ids.error} role="alert" tabindex="-1" autofocus class={`text-sm text-danger-ink ${FOCUS_RING}`}>{error}</p>}
-                </div>
+                <TextAreaField
+                  id={ids.reason}
+                  name="reason"
+                  label="Reason"
+                  hint="Kept with your decision. Only admins see it."
+                  error={error}
+                  rows={2}
+                  required
+                  maxLength={REASON_MAX}
+                  defaultValue={error ? rowError?.draft : ""}
+                  autoFocus={Boolean(error)}
+                />
                 <div id={ids.choices} class="space-y-1 text-sm text-ink-secondary" data-request-note-choices>
                   <p data-request-note-keep>{choices.keep}</p>
                   {choices.remove && <p data-request-note-remove>{choices.remove}</p>}
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
                   <Button
-                    type="submit" name="action" value="keep" variant="quiet" className="h-11 w-full"
+                    type="submit" name="action" value="keep" size="lg" className="w-full"
                     aria-label={`${choices.keepLabel}, ${whose}`} aria-describedby={ids.choices}
                   >
                     {choices.keepLabel}
                   </Button>
                   <Button
-                    type="submit" name="action" value="remove" variant="quiet" className="h-11 w-full"
+                    type="submit" name="action" value="remove" variant="danger" size="lg" className="w-full"
                     aria-label={`${choices.removeLabel}, ${whose}`} aria-describedby={ids.choices}
                   >
                     {choices.removeLabel}
@@ -168,7 +151,7 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
                 </div>
               </form>
             )}
-          </li>
+          </Card>
         );
       })}
     </ul>
@@ -176,13 +159,13 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
 
   {(nextHref || paged) && (
     <nav aria-label="More request notes" class="flex flex-wrap gap-4 text-sm">
-      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>Back to the start</a>}
-      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>More</a>}
+      {paged && <a href={tabHrefs[state]} class={PAGER_LINK}>Back to the start</a>}
+      {nextHref && <a href={nextHref} class={PAGER_LINK}>{state === "OPEN" ? "More request notes" : "Older request notes"}</a>}
     </nav>
   )}
 
   <p class="flex gap-2 text-sm text-ink-secondary">
-    <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+    <PiInfo className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
     The person who asked sees only that their request is being checked, then whether it was sent. They never see who raised it, or why.
   </p>
 </div>

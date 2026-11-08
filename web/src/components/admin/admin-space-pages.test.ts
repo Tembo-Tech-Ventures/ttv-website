@@ -36,6 +36,13 @@ function section(path: string): AdminPageNavKey {
 
 const pages = files(PAGES).map((file) => ({ path: route(file), source: readFileSync(file, "utf8") }));
 
+/** Pages whose title is drawn by the views they render, which the moderation harness shares. */
+const TITLE_IN_VIEWS: Record<string, readonly string[]> = {
+  "/admin/moderation": ["moderation/ModerationQueueView.astro", "moderation/RequestNotesView.astro"],
+};
+const titleSources = (path: string, source: string) =>
+  TITLE_IN_VIEWS[path]?.map((view) => readFileSync(resolve(import.meta.dirname, view), "utf8")) ?? [source];
+
 describe("admin pages in the spaces shell", () => {
   it("covers every admin page", () => {
     expect(pages.length).toBeGreaterThanOrEqual(30);
@@ -46,6 +53,7 @@ describe("admin pages in the spaces shell", () => {
     describe(`${path}`, () => {
       it("resolves the Admin space under its own section's sidebar entry", () => {
         const calls = [...source.matchAll(/resolveSpacePage\(Astro\.locals, "(\w+)"\)/g)].map((match) => match[1]);
+        // One call, which a page may wrap to start it early on a GET (moderation).
         expect(calls).toEqual([ADMIN_SPACE_PAGES[section(path)]]);
       });
 
@@ -54,10 +62,12 @@ describe("admin pages in the spaces shell", () => {
       });
 
       it("draws its title as the h1 in the spaces shell, and as before (or as the same h1) in the existing admin shell", () => {
-        const pageTitle = /<PageTitle spaces=\{Boolean\(spaces\)\}/.test(source);
-        const switched = /const (Title|titleTag) = spaces \? "h1" : "h2";/.test(source);
-        const retired = /<PageTitle spaces>/.test(source);
-        expect(pageTitle || switched || retired).toBe(true);
+        for (const text of titleSources(path, source)) {
+          const pageTitle = /<PageTitle spaces=\{Boolean\(spaces\)\}/.test(text);
+          const switched = /const (Title|titleTag) = spaces \? "h1" : "h2";/.test(text);
+          const retired = /<PageTitle spaces>/.test(text);
+          expect(pageTitle || switched || retired).toBe(true);
+        }
       });
     });
   }

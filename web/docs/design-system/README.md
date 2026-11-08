@@ -103,7 +103,7 @@ line there.
 | `class="form-control"` | `TextField`, `TextAreaField`, `SelectField` |
 | hand-written red/green alert boxes | `Notice` |
 | hand-written "Nothing here" paragraphs | `EmptyState` |
-| link rows with `aria-current` (`ModerationTabs`) | `PillNav` |
+| link rows with `aria-current` (the old `ModerationTabs`) | `PillNav` |
 
 ## Adding to the kit
 
