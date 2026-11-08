@@ -88,10 +88,10 @@ test("a note Tembo's check held waits, unseen by its mentor, until an admin remo
   // A reason is needed, for the record: the browser asks for it before anything is sent (the server refuses too).
   await held.getByRole("button", { name: /^Remove: close it, Achieng Otieno's request/ }).click();
   await expect(held.getByRole("textbox", { name: "Reason" })).toHaveJSProperty("validity.valueMissing", true);
-  await expect(admin.locator("[data-request-notes-notice]")).toHaveCount(0);
+  await expect(admin.locator("#request-notes-notice")).toHaveCount(0);
   await noteCase(admin, "Achieng Otieno").getByRole("textbox", { name: "Reason" }).fill("The note isn't how we talk to each other.");
   await noteCase(admin, "Achieng Otieno").getByRole("button", { name: /^Remove: close it, Achieng Otieno's request/ }).click();
-  await expect(admin.locator("[data-request-notes-notice]")).toContainText("Removed.");
+  await expect(admin.locator("#request-notes-notice")).toContainText("Removed.");
   await expect(noteCase(admin, "Achieng Otieno")).toHaveCount(0);
   await admin.getByRole("link", { name: "Decided requests" }).click();
   await expect(noteCase(admin, "Achieng Otieno").locator("[data-request-note-decision=remove]")).toContainText("Removed by Amina Hassan");
@@ -147,7 +147,7 @@ test("a mentor reports a note; the person asking sees only that it's being check
   await expect(reported.locator("[data-request-note-remove]")).toContainText("Wanjiku sees “This request was closed” and can ask again");
   await reported.getByRole("textbox", { name: "Reason" }).fill("A fair question about the project.");
   await reported.getByRole("button", { name: /^Keep: back to David, Wanjiku Mwangi's request/ }).click();
-  await expect(admin.locator("[data-request-notes-notice]")).toContainText("Kept.");
+  await expect(admin.locator("#request-notes-notice")).toContainText("Kept.");
 
   await visit(david, REQUESTS);
   const back = david.locator("[data-mentor-request]").filter({ hasText: note });
@@ -182,7 +182,7 @@ test("a reported note an admin removes reads as closed to the person asking, nev
   const reported = admin.locator("[data-request-note]").filter({ hasText: note });
   await reported.getByRole("textbox", { name: "Reason" }).fill("Fictional: not how we talk to each other.");
   await reported.getByRole("button", { name: /^Remove: close it, Wanjiku Mwangi's request/ }).click();
-  await expect(admin.locator("[data-request-notes-notice]")).toContainText("Removed.");
+  await expect(admin.locator("#request-notes-notice")).toContainText("Removed.");
 
   await visit(wanjiku, DIRECTORY);
   const row = wanjiku.locator("[data-own-request][data-status=WITHDRAWN]").filter({ hasText: "This request was closed." });

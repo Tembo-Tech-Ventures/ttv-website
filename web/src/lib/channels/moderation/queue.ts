@@ -89,7 +89,15 @@ export const NOT_OWN_CONVERSATION = (viewerId: string) => `(ch.kind <> 'DIRECT'
  */
 export async function listModerationQueue(db: D1Database, viewer: ModerationViewer, query: ModerationQueueQuery): Promise<ModerationQueue> {
   if (!viewer.capabilities.isAdmin) throw new ChannelError("forbidden", "Only admins can see the moderation queue.", 403);
-  return queuePage(db, viewer.user.id, await listChannelsFor(drizzle(db, { schema }), viewer.user, viewer.capabilities), query);
+  return queuePage(db, viewer.user.id, await moderationChannels(db, viewer), query);
+}
+
+/**
+ * The channels whose messages this viewer may see in the queue (listChannelsFor), read once per GET
+ * (request-scope.ts), so /admin/moderation can start the read beside its flag checks (PERF-2).
+ */
+export function moderationChannels(db: D1Database, viewer: ModerationViewer): Promise<Channel[]> {
+  return requestScoped(`moderation-channels:${viewer.user.id}`, () => listChannelsFor(drizzle(db, { schema }), viewer.user, viewer.capabilities));
 }
 
 /**

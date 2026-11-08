@@ -22,28 +22,41 @@ import ModerationQueueView from "@/components/admin/moderation/ModerationQueueVi
 import RequestNotesView from "@/components/admin/moderation/RequestNotesView.astro";
 import { MODERATION_PATH, QUEUE_TABS } from "@/components/admin/moderation/case-model";
 import {
-  moderationView, REQUEST_NOTES_LABEL, requestNotesLink, requestNotesPaths, requestNotesRequest, type RequestNotesViewProps,
+  moderationView, REQUEST_NOTES_LABEL, REQUEST_NOTES_TAB, requestNotesLink, requestNotesPaths, requestNotesRequest, type RequestNotesViewProps,
 } from "@/components/admin/moderation/request-notes";
 import { mentoringRequest } from "@/lib/mentoring/http";
 import { ROUTES } from "@/lib/platform/contracts";
-import type { ModerationTab } from "@/components/admin/moderation/ModerationTabs.astro";
+import type { PillNavItem } from "@/components/platform/ui";
 import {
   moderationQueueGate, moderationQueueRequest, queuePaths, type QueueViewProps,
 } from "@/components/admin/moderation/page-flow";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { ChannelError } from "@/lib/channels/errors";
 import { decideModeration } from "@/lib/channels/moderation/actions";
-import { countPendingModeration, listModerationQueue } from "@/lib/channels/moderation/queue";
+import { countPendingModeration, listModerationQueue, moderationChannels } from "@/lib/channels/moderation/queue";
 import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 
 const { user, personalAccessToken, isAdmin } = Astro.locals;
+const flagContext = { db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals };
+const reading = Astro.request.method === "GET";
+const capabilities = user && !personalAccessToken ? requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) : null;
+// Awaited below once the gate passes; a request the gate turns away must not leave it unhandled.
+capabilities?.catch(() => {});
+// A GET of the queue starts its channels beside the flag reads, not after them (PERF-2). Nothing read
+// here is shown before the gate below passes, and the read is shared with the queue's own (request-scope.ts).
+if (user && capabilities && reading && Astro.url.searchParams.get("tab") !== REQUEST_NOTES_TAB) {
+  capabilities.then((caps) => moderationChannels(env.DB, { user, capabilities: caps })).catch(() => {});
+}
+const [channelsOn, requestNotesOn] = user
+  ? await Promise.all([isFlagEnabled(flagContext, "channels"), isFlagEnabled(flagContext, "mentor_requests")])
+  : [false, false];
 const gate = moderationQueueGate({
   signedIn: Boolean(user),
   personalAccessToken: Boolean(personalAccessToken),
-  channelsOn: Boolean(user) && await isFlagEnabled({ db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals }, "channels"),
+  channelsOn,
   method: Astro.request.method,
   sameOrigin: hasMatchingRequestOrigin(Astro.request),
 });
@@ -52,12 +65,15 @@ if (gate === "token") return new Response("Forbidden: personal access tokens can
 if (gate === "not-found") return new Response("Not found", { status: 404 });
 if (gate === "cross-origin") return new Response("Forbidden: same-origin request required.", { status: 403 });
 
-const flagContext = { db: env.DB, env, user, isAdmin, locals: Astro.locals };
-const requestNotesOn = await isFlagEnabled(flagContext, "mentor_requests");
+// In the Admin space while `spaces` is on for this admin (T02); the existing admin shell otherwise. It starts
+// beside the page's own reads on a GET; a POST resolves it after its decision.
+const resolveSpaces = () => resolveSpacePage(Astro.locals, "moderation");
+const spacesRead = reading ? resolveSpaces() : null;
+spacesRead?.catch(() => {});
 const paths = queuePaths(MODERATION_PATH);
 const notesPaths = requestNotesPaths(MODERATION_PATH);
 
-let notesView: (RequestNotesViewProps & { queueTabs: ModerationTab[]; viewerId: string }) | null = null;
+let notesView: (RequestNotesViewProps & { queueTabs: PillNavItem[]; viewerId: string }) | null = null;
 let queueView: (QueueViewProps & { requestNotesHref?: string; requestNotesCount?: number }) | null = null;
 let pendingCount = 0;
 let openChecks = 0;
@@ -91,7 +107,7 @@ if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") 
     ],
   };
 } else {
-  const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
+  const viewer = { user, capabilities: await (capabilities ?? requestCapabilities(drizzle(env.DB, { schema }), Astro.locals)) };
   const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
     list: (query) => listModerationQueue(env.DB, viewer, query),
     countPending: () => countPendingModeration(env.DB, user.id),
@@ -105,12 +121,10 @@ if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") 
   if (requestNotesHref) openChecks = await countOpenChecks(env.DB, user.id);
   queueView = { ...outcome.props, ...(requestNotesHref ? { requestNotesHref, requestNotesCount: openChecks } : {}) };
 }
-// In the Admin space while `spaces` is on for this admin (T02); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "moderation");
-const titleTag = spaces ? "h1" : "h2";
+const spaces = await (spacesRead ?? resolveSpaces());
 ---
 
 <AdminLayout title="Moderation" pendingModeration={pendingCount} pendingRequestNotes={openChecks} spaces={spaces}>
-  {notesView && <RequestNotesView {...notesView} titleTag={titleTag} />}
-  {queueView && <ModerationQueueView {...queueView} titleTag={titleTag} />}
+  {notesView && <RequestNotesView {...notesView} />}
+  {queueView && <ModerationQueueView {...queueView} />}
 </AdminLayout>

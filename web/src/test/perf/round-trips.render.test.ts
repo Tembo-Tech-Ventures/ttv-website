@@ -61,6 +61,8 @@ const PAGES = {
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
+  "admin moderation": { path: () => "/admin/moderation", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
+  "admin request notes": { path: () => "/admin/moderation?tab=request-notes", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
 } as const;
 type PageName = keyof typeof PAGES;
 
@@ -106,6 +108,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 3 },
   "admin feature flags": { d1: 14, depth: 3 },
+  // Depth 4 before the style-guide rollout: the queue's channels waited for the flag reads.
+  "admin moderation": { d1: 15, depth: 3 },
+  "admin request notes": { d1: 14, depth: 3 },
 };
 
 describe("D1 round trips per page (PERF-2)", () => {

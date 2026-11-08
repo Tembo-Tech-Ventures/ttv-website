@@ -70,7 +70,7 @@ test.describe("admin moderation queue", () => {
 
   test("lays the queue out as screens/08 does, clean under axe", async ({ page }, testInfo) => {
     await open(page, runFor("&reset"));
-    await expect(page.getByRole("heading", { level: 2, name: "Moderation" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Moderation" })).toBeVisible();
     await expect(page.getByText("Tembo hides only what is clearly abusive. Contact details are hidden from other members until you decide; everything else stays visible.")).toBeVisible();
     // Only a hide's reason reaches the author, and the form says so.
     await expect(card(page, PETER).getByRole("textbox", { name: "Reason" }))
@@ -81,7 +81,7 @@ test.describe("admin moderation queue", () => {
     const peter = card(page, PETER);
     await expect(peter.locator("[data-chip]")).toHaveText("Flagged by Tembo");
     await expect(peter.locator("[data-moderation-context]")).toHaveText("Community · #opportunities · contact details hidden from members");
-    await expect(peter.getByRole("heading", { level: 3, name: "Peter Njoroge" })).toBeVisible();
+    await expect(peter.getByRole("heading", { level: 2, name: "Peter Njoroge" })).toBeVisible();
     await expect(peter.locator("[data-moderation-reasons]")).toHaveText("Shares an email address");
     await expect(peter.getByRole("link", { name: "Open in #opportunities" })).toHaveAttribute("href", `/dashboard/community/c/opportunities?message=${PETER}`);
     await expect(peter.getByRole("button", { name: "Fine as is: Peter Njoroge's message in #opportunities" })).toBeVisible();
@@ -105,8 +105,11 @@ test.describe("admin moderation queue", () => {
     if (testInfo.project.name === "chromium") {
       await expect(page.locator('aside a[href="/admin/moderation"]')).toHaveAccessibleName(/^Moderation\s+4 waiting$/);
     }
-    // Every control is at least 44px tall, and nothing scrolls sideways.
-    for (const control of await page.locator("main button, main textarea, main summary, main [data-moderation-root] nav a").all()) {
+    // Every control is at least 44px tall, and nothing scrolls sideways. The lists are the kit's PillNav,
+    // whose pills reach 44px on a touch screen (Pixel 7) and stay compact under a mouse.
+    const coarse = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
+    const controls = `main button, main textarea, main summary${coarse ? ", main [data-moderation-root] nav a" : ""}`;
+    for (const control of await page.locator(controls).all()) {
       if (!(await control.isVisible())) continue;
       expect((await control.boundingBox())?.height ?? 0, await control.evaluate((node) => node.outerHTML.slice(0, 80))).toBeGreaterThanOrEqual(44);
     }
@@ -143,12 +146,12 @@ test.describe("admin moderation queue", () => {
     const collins = card(page, COLLINS);
     await press(collins.getByRole("button", { name: /^Hide/ }));
     await expect(reason(collins)).toBeFocused();
-    await expect(page.locator("[data-moderation-notice]")).toHaveCount(0);
+    await expect(page.locator("#moderation-notice")).toHaveCount(0);
 
     await reason(collins).fill("Promotion unrelated to the community.");
     await press(collins.getByRole("button", { name: /^Hide/ }));
-    const notice = page.locator("[data-moderation-notice]");
-    await expect(notice).toHaveText(/^Hidden\. Members no longer see the message\./);
+    const notice = page.locator("#moderation-notice");
+    await expect(notice).toHaveText(/^Done: Hidden\. Members no longer see the message\./);
     await expect(notice).toBeFocused();
     await expect(card(page, COLLINS)).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Needs a decision\s+3 waiting$/ })).toBeVisible();
@@ -158,11 +161,11 @@ test.describe("admin moderation queue", () => {
 
     await reason(card(page, PETER)).fill("An email in a jobs post is fine.");
     await press(card(page, PETER).getByRole("button", { name: /^Fine as is/ }));
-    await expect(notice).toHaveText(/^Kept as is\./);
+    await expect(notice).toHaveText(/^Done: Kept as is\./);
 
     await reason(card(page, DENNIS)).fill("Reworded critique of a common bug, not of a person.");
     await press(card(page, DENNIS).getByRole("button", { name: /^Restore/ }));
-    await expect(notice).toHaveText(/^Restored\./);
+    await expect(notice).toHaveText(/^Done: Restored\./);
     expect(loads, "decisions swap the queue in place").toBe(0);
 
     // Decided, newest decisions with who decided and why.
@@ -193,7 +196,7 @@ test.describe("admin moderation queue", () => {
     await expect(error).toBeFocused();
     await expect(reason(card(page, PETER))).toHaveValue("Looks like a scam.");
     await expect(reason(card(page, PETER))).toHaveAttribute("aria-invalid", "true");
-    await expect(page.locator("[data-moderation-notice]")).toHaveCount(0);
+    await expect(page.locator("#moderation-notice")).toHaveCount(0);
     await expect(card(page, PETER)).toHaveAttribute("data-state", "PENDING");
     await expect(page.getByRole("link", { name: /^Needs a decision\s+4 waiting$/ })).toBeVisible();
     await runAxe(page, testInfo, "moderation-refused", { include: ["main"] });
@@ -210,13 +213,13 @@ test.describe("admin moderation queue", () => {
     const error = peter.locator("[data-moderation-error]");
     await expect(error).toHaveText(/^TTV could not be reached, so this decision may not have been saved\./);
     await expect(error).toBeFocused();
-    await expect(page.locator("[data-moderation-notice]")).toHaveCount(0);
+    await expect(page.locator("#moderation-notice")).toHaveCount(0);
     await expect(peter.getByRole("button", { name: /^Fine as is/ })).not.toHaveAttribute("aria-disabled", "true");
 
     // Once the connection is back, the same press goes through.
     await page.unrouteAll();
     await press(peter.getByRole("button", { name: /^Fine as is/ }));
-    await expect(page.locator("[data-moderation-notice]")).toHaveText(/^Kept as is\./);
+    await expect(page.locator("#moderation-notice")).toHaveText(/^Done: Kept as is\./);
   });
 
   test("says a decision was saved when only the queue after it fails to load", async ({ page }) => {
@@ -250,7 +253,7 @@ test.describe("admin moderation queue", () => {
       await reason(peter).fill("An email in a jobs post is fine.");
       await press(peter.getByRole("button", { name: /^Fine as is/ }));
       await expect(page).toHaveURL(/decided=keep/);
-      await expect(page.locator("[data-moderation-notice]")).toHaveText(/^Kept as is\./);
+      await expect(page.locator("#moderation-notice")).toHaveText(/^Done: Kept as is\./);
       await expect(card(page, PETER)).toHaveCount(0);
 
       const refused = await page.goto(runFor("&fail=409"));
@@ -264,7 +267,7 @@ test.describe("admin moderation queue", () => {
       expect(response.status()).toBe(409);
       await expect(card(page, COLLINS).locator("[data-moderation-error]")).toHaveText(/^Nothing changed\./);
       await expect(reason(card(page, COLLINS))).toHaveValue("Promotion.");
-      await expect(page.locator("[data-moderation-notice]")).toHaveCount(0);
+      await expect(page.locator("#moderation-notice")).toHaveCount(0);
     });
   });
 });

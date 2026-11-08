@@ -1,9 +1,7 @@
 ---
-import { PiArrowSquareOutDuotone, PiChatCircleTextDuotone, PiClockCounterClockwiseDuotone } from "react-icons/pi";
-import Avatar from "@/components/platform/ui/Avatar";
-import Chip from "@/components/platform/ui/Chip";
+import { PiArrowSquareOut, PiChatCircleText, PiClockCounterClockwise } from "react-icons/pi";
+import { Avatar, Card, Chip, FOCUS_RING } from "@/components/platform/ui";
 import DecisionForm from "./DecisionForm.astro";
-import { FOCUS_RING } from "@/components/platform/ui/recipes";
 import {
   DIRECT_CASE_NOTE, EVIDENCE_CAUSE_LABEL, caseContext, channelReference, decisionLabel, decisionOptions, firstName,
   formatModerationTime, messageHref, sourceLabel, type ModerationCase,
@@ -33,143 +31,146 @@ const authorName = message.authorKind === "TEMBO" ? "Tembo" : author.name;
 const href = messageHref(channel, message);
 const options = decisionOptions(item);
 const pending = item.state === "PENDING";
-const flaggedTone = message.moderation?.state === "HIDDEN" || item.source === "REPORT" ? "peach" : "ring";
+// Peach when someone acted on it (hidden or reported); a flag that only waits is a neutral fact. Ring is a mentor's alone.
+const flaggedTone = message.moderation?.state === "HIDDEN" || item.source === "REPORT" ? "peach" : "neutral";
 const headingId = `moderation-${item.id}-author`;
 // Every case has the same buttons, so each name says whose message it decides.
 const where = channelReference(channel);
 const names = options.map((option) => `${option.label}: ${authorName}'s message in ${where}`);
 ---
 
-<li
-  class="grid gap-x-6 gap-y-4 rounded-2xl border border-hairline bg-ink-primary/4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)]"
+<Card
+  as="li"
   data-moderation-case={item.id}
   data-state={item.state}
   data-message-state={message.moderation?.state ?? "VISIBLE"}
   aria-labelledby={headingId}
 >
-  <div class="min-w-0 space-y-3">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-secondary">
-      <Chip tone={flaggedTone}>{sourceLabel(item)}</Chip>
-      <span class="min-w-0 break-words" data-moderation-context>
-        {caseContext(channel, message)}
-      </span>
-    </div>
-
-    <div class="flex items-center gap-3">
-      <Avatar id={author.id ?? `tembo-${item.id}`} name={authorName} src={author.avatarUrl ?? undefined} size="md" decorative />
-      <h3 id={headingId} class="min-w-0 text-base font-bold text-ink-primary">
-        {author.id && message.authorKind === "USER" ? (
-          <a href={`/admin/users/${encodeURIComponent(author.id)}`} class={`rounded-sm hover:underline ${FOCUS_RING}`}>{authorName}</a>
-        ) : (
-          authorName
-        )}
-      </h3>
-      <span class="text-xs text-ink-muted">{formatModerationTime(message.createdAt)}{message.edited && " · edited"}</span>
-    </div>
-
-    {message.deleted ? (
-      <p class="rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] italic text-ink-muted">
-        {item.evidence.length > 0
-          ? "The author deleted this message. The text it had is under Earlier text."
-          : "The author deleted this message."}
-      </p>
-    ) : (
-      <blockquote class="whitespace-pre-line break-words rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] leading-relaxed text-ink-primary" data-moderation-body>
-        {message.body}
-      </blockquote>
-    )}
-
-    <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-      <div class="flex min-w-0 gap-1.5">
-        <dt class="shrink-0 text-ink-muted">Why</dt>
-        <dd class="min-w-0 break-words text-ink-primary" data-moderation-reasons>{item.reasons.join(" · ")}</dd>
+  <div class="grid gap-x-6 gap-y-4 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)]">
+    <div class="min-w-0 space-y-3">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-secondary">
+        <Chip tone={flaggedTone}>{sourceLabel(item)}</Chip>
+        <span class="min-w-0 break-words" data-moderation-context>
+          {caseContext(channel, message)}
+        </span>
       </div>
-      {item.reportCount > 0 && item.source !== "REPORT" && (
+
+      <div class="flex items-center gap-3">
+        <Avatar id={author.id ?? `tembo-${item.id}`} name={authorName} src={author.avatarUrl ?? undefined} size="md" decorative />
+        <h2 id={headingId} class="min-w-0 font-body text-base font-bold text-ink-primary">
+          {author.id && message.authorKind === "USER" ? (
+            <a href={`/admin/users/${encodeURIComponent(author.id)}`} class={`rounded-sm hover:underline ${FOCUS_RING}`}>{authorName}</a>
+          ) : (
+            authorName
+          )}
+        </h2>
+        <span class="text-xs text-ink-muted">{formatModerationTime(message.createdAt)}{message.edited && " · edited"}</span>
+      </div>
+
+      {message.deleted ? (
+        <p class="rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] italic text-ink-muted">
+          {item.evidence.length > 0
+            ? "The author deleted this message. The text it had is under Earlier text."
+            : "The author deleted this message."}
+        </p>
+      ) : (
+        <blockquote class="whitespace-pre-line break-words rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] leading-relaxed text-ink-primary" data-moderation-body>
+          {message.body}
+        </blockquote>
+      )}
+
+      <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <div class="flex min-w-0 gap-1.5">
+          <dt class="shrink-0 text-ink-muted">Why</dt>
+          <dd class="min-w-0 break-words text-ink-primary" data-moderation-reasons>{item.reasons.join(" · ")}</dd>
+        </div>
+        {item.reportCount > 0 && item.source !== "REPORT" && (
+          <div class="flex gap-1.5">
+            <dt class="text-ink-muted">Reports</dt>
+            <dd class="text-ink-secondary">{item.reportCount}</dd>
+          </div>
+        )}
         <div class="flex gap-1.5">
-          <dt class="text-ink-muted">Reports</dt>
-          <dd class="text-ink-secondary">{item.reportCount}</dd>
+          <dt class="text-ink-muted">Raised</dt>
+          <dd class="text-ink-secondary">{formatModerationTime(item.createdAt)}</dd>
+        </div>
+      </dl>
+
+      {item.review && (
+        <div class="rounded-xl border border-hairline bg-ground/50 px-4 py-3 text-sm" data-moderation-review>
+          <p class="font-semibold text-ink-primary">
+            {firstName(authorName)} asked for a review <span class="font-normal text-ink-secondary">· {formatModerationTime(item.review.requestedAt)}</span>
+          </p>
+          {item.review.note ? (
+            <p class="mt-1 whitespace-pre-line break-words text-ink-secondary">{item.review.note}</p>
+          ) : (
+            <p class="mt-1 text-ink-muted">No note.</p>
+          )}
         </div>
       )}
-      <div class="flex gap-1.5">
-        <dt class="text-ink-muted">Raised</dt>
-        <dd class="text-ink-secondary">{formatModerationTime(item.createdAt)}</dd>
-      </div>
-    </dl>
 
-    {item.review && (
-      <div class="rounded-xl border border-ring/30 bg-ring/8 px-4 py-3 text-sm" data-moderation-review>
-        <p class="font-semibold text-ink-primary">
-          {firstName(authorName)} asked for a review <span class="font-normal text-ink-secondary">· {formatModerationTime(item.review.requestedAt)}</span>
-        </p>
-        {item.review.note ? (
-          <p class="mt-1 whitespace-pre-line break-words text-ink-secondary">{item.review.note}</p>
-        ) : (
-          <p class="mt-1 text-ink-muted">No note.</p>
-        )}
-      </div>
-    )}
+      {item.evidence.length > 0 && (
+        <details class="group rounded-xl border border-hairline" data-moderation-evidence>
+          <summary class={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-sm font-semibold text-ink-primary [&::-webkit-details-marker]:hidden ${FOCUS_RING}`}>
+            <PiClockCounterClockwise className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+            Earlier text ({item.evidence.length})
+            <span class="ml-auto text-xs font-normal text-ink-muted group-open:hidden">Show</span>
+            <span class="ml-auto hidden text-xs font-normal text-ink-muted group-open:inline">Hide</span>
+          </summary>
+          <ol class="space-y-3 border-t border-hairline px-4 py-3">
+            {item.evidence.map((version) => (
+              <li class="space-y-1">
+                <p class="text-xs text-ink-muted">{EVIDENCE_CAUSE_LABEL[version.cause]} · {formatModerationTime(version.capturedAt)}</p>
+                <p class="whitespace-pre-line break-words text-sm text-ink-secondary">{version.body}</p>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
 
-    {item.evidence.length > 0 && (
-      <details class="group rounded-xl border border-hairline" data-moderation-evidence>
-        <summary class={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-sm font-semibold text-ink-primary [&::-webkit-details-marker]:hidden ${FOCUS_RING}`}>
-          <PiClockCounterClockwiseDuotone className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
-          Earlier text ({item.evidence.length})
-          <span class="ml-auto text-xs font-normal text-ink-muted group-open:hidden">Show</span>
-          <span class="ml-auto hidden text-xs font-normal text-ink-muted group-open:inline">Hide</span>
-        </summary>
-        <ol class="space-y-3 border-t border-hairline px-4 py-3">
-          {item.evidence.map((version) => (
-            <li class="space-y-1">
-              <p class="text-xs text-ink-muted">{EVIDENCE_CAUSE_LABEL[version.cause]} · {formatModerationTime(version.capturedAt)}</p>
-              <p class="whitespace-pre-line break-words text-sm text-ink-secondary">{version.body}</p>
-            </li>
-          ))}
-        </ol>
-      </details>
-    )}
+      {href ? (
+        <a href={href} class={`inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`} data-moderation-link>
+          {message.parentId
+            ? <PiChatCircleText className="size-4 shrink-0" aria-hidden="true" />
+            : <PiArrowSquareOut className="size-4 shrink-0" aria-hidden="true" />}
+          {message.parentId ? `Open the thread in ${where}` : `Open in ${where}`}
+        </a>
+      ) : (
+        <p class="text-sm text-ink-secondary" data-moderation-direct>{DIRECT_CASE_NOTE}</p>
+      )}
+    </div>
 
-    {href ? (
-      <a href={href} class={`inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`} data-moderation-link>
-        {message.parentId
-          ? <PiChatCircleTextDuotone className="size-4 shrink-0" aria-hidden="true" />
-          : <PiArrowSquareOutDuotone className="size-4 shrink-0" aria-hidden="true" />}
-        {message.parentId ? `Open the thread in ${where}` : `Open in ${where}`}
-      </a>
-    ) : (
-      <p class="text-sm text-ink-secondary" data-moderation-direct>{DIRECT_CASE_NOTE}</p>
-    )}
+    <div class="min-w-0 space-y-3">
+      {item.decision && (
+        <div class="space-y-1 text-sm" data-moderation-decision>
+          <p class="text-ink-primary">
+            <span class="font-semibold">{decisionLabel({ ...item, decision: item.decision })}</span>
+            <span class="text-ink-secondary">
+              {item.decision.by && <> by {item.decision.by.name}</>} · {formatModerationTime(item.decision.decidedAt)}
+            </span>
+          </p>
+          <p class="whitespace-pre-line break-words text-ink-secondary">{item.decision.reason}</p>
+        </div>
+      )}
+
+      {options.length === 0 ? null : pending ? (
+        <DecisionForm caseId={item.id} action={action} options={options} names={names} error={error} draftReason={draftReason} />
+      ) : (
+        <details class="rounded-xl border border-hairline" data-moderation-change open={Boolean(error)}>
+          <summary class={`flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary ${FOCUS_RING}`}>
+            Change this decision
+          </summary>
+          <DecisionForm
+            caseId={item.id}
+            action={action}
+            options={options}
+            names={names}
+            error={error}
+            draftReason={draftReason}
+            class="border-t border-hairline px-4 py-3"
+          />
+        </details>
+      )}
+    </div>
   </div>
-
-  <div class="min-w-0 space-y-3">
-    {item.decision && (
-      <div class="space-y-1 text-sm" data-moderation-decision>
-        <p class="text-ink-primary">
-          <span class="font-semibold">{decisionLabel({ ...item, decision: item.decision })}</span>
-          <span class="text-ink-secondary">
-            {item.decision.by && <> by {item.decision.by.name}</>} · {formatModerationTime(item.decision.decidedAt)}
-          </span>
-        </p>
-        <p class="whitespace-pre-line break-words text-ink-secondary">{item.decision.reason}</p>
-      </div>
-    )}
-
-    {options.length === 0 ? null : pending ? (
-      <DecisionForm caseId={item.id} action={action} options={options} names={names} error={error} draftReason={draftReason} />
-    ) : (
-      <details class="rounded-xl border border-hairline" data-moderation-change open={Boolean(error)}>
-        <summary class={`flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary ${FOCUS_RING}`}>
-          Change this decision
-        </summary>
-        <DecisionForm
-          caseId={item.id}
-          action={action}
-          options={options}
-          names={names}
-          error={error}
-          draftReason={draftReason}
-          class="border-t border-hairline px-4 py-3"
-        />
-      </details>
-    )}
-  </div>
-</li>
+</Card>

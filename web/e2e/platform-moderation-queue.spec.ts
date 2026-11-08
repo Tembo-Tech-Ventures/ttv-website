@@ -68,7 +68,7 @@ async function open(page: Page, path = QUEUE) {
 
 const card = (page: Page, id: string) => page.locator(`[data-moderation-case="${id}"]`);
 const reason = (scope: Locator) => scope.getByRole("textbox", { name: "Reason" });
-const notice = (page: Page) => page.locator("[data-moderation-notice]");
+const notice = (page: Page) => page.locator("#moderation-notice");
 const evidence = (name: string) => `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 
 /** Pressed from the keyboard: the site's feedback pill can sit over the last row at 1440 x 900. */
@@ -172,8 +172,8 @@ test("never shows a decision someone else made first as made", async ({ page, co
   await other.close();
 
   await decide(page, STALE, /^Fine as is/, "Fine as it is.");
-  const failure = page.locator("[data-moderation-failure]");
-  await expect(failure).toHaveText(/^Nothing changed\./);
+  const failure = page.locator("#moderation-failure");
+  await expect(failure).toHaveText(/^Problem: Nothing changed\./);
   await expect(notice(page)).toHaveCount(0);
   await page.goto(`${QUEUE}?state=DECIDED`);
   await expect(card(page, STALE).locator("[data-moderation-decision]")).toContainText("Hidden by Amina Hassan");

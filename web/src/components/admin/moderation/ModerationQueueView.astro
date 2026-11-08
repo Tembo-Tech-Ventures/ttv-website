@@ -1,11 +1,11 @@
 ---
-import { PiInfoDuotone } from "react-icons/pi";
+import { PiInfo } from "react-icons/pi";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { ButtonLink, EmptyState, FOCUS_RING, Notice, PillNav } from "@/components/platform/ui";
 import ModerationCase from "./ModerationCase.astro";
-import ModerationTabs from "./ModerationTabs.astro";
 import { REQUEST_NOTES_LABEL } from "./request-notes";
 import { QUEUE_TABS } from "./case-model";
 import type { QueueViewProps } from "./page-flow";
-import { FOCUS_RING } from "@/components/platform/ui/recipes";
 
 /**
  * The admin moderation queue (U-2.4, screens/08), as /admin/moderation and its DEV harness render
@@ -18,17 +18,15 @@ type Props = QueueViewProps & {
   requestNotesHref?: string;
   /** Open checks on request notes this admin may decide, shown on that tab. */
   requestNotesCount?: number;
-  /** The page title's level: h1 in the spaces shell, where it is the screen's one display heading. */
-  titleTag?: "h1" | "h2";
 };
 
-const { titleTag: Title = "h2", state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
-const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
+const PAGER_LINK = `inline-flex min-h-11 items-center rounded-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`;
 ---
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-moderation-root data-state={state} data-pending-count={pendingCount}>
   <header class="space-y-4">
-    <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</Title>
+    <PageTitle spaces>Moderation</PageTitle>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Tembo hides only what is clearly abusive. Contact details are hidden from other members until you decide;
       everything else stays visible.
@@ -36,32 +34,35 @@ const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visib
   </header>
 
   {notice && (
-    <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-moderation-notice>
-      {noticeSubject && <span class="block font-semibold" data-moderation-notice-subject>{noticeSubject}</span>}
+    <Notice tone="success" focusOnLoad id="moderation-notice" title={noticeSubject}>
       {notice}
-      {" "}<a href={tabHrefs.DECIDED} class={`font-semibold text-peach-ink underline ${FOCUS_RING}`}>See decided cases</a>
-    </p>
+      <Fragment slot="actions">
+        <ButtonLink href={tabHrefs.DECIDED} variant="ghost" size="sm">See decided cases</ButtonLink>
+      </Fragment>
+    </Notice>
   )}
-  {failure && (
-    <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-moderation-failure>
-      {failure}
-    </p>
-  )}
+  {failure && <Notice tone="danger" focusOnLoad id="moderation-failure">{failure}</Notice>}
 
-  <ModerationTabs tabs={[
-    ...QUEUE_TABS.map((tab) => ({
-      label: tab.label, href: tabHrefs[tab.state], current: tab.state === state,
-      ...(tab.state === "PENDING" ? { count: pendingCount } : {}),
-    })),
-    ...(requestNotesHref ? [{ label: REQUEST_NOTES_LABEL, href: requestNotesHref, current: false, count: requestNotesCount }] : []),
-  ]} />
+  <PillNav
+    label="Moderation lists"
+    countLabel="waiting"
+    items={[
+      ...QUEUE_TABS.map((tab) => ({
+        label: tab.label, href: tabHrefs[tab.state], current: tab.state === state,
+        ...(tab.state === "PENDING" ? { count: pendingCount } : {}),
+      })),
+      ...(requestNotesHref ? [{ label: REQUEST_NOTES_LABEL, href: requestNotesHref, count: requestNotesCount }] : []),
+    ]}
+  />
 
   {items.length === 0 ? (
-    <p class="py-6 text-ink-secondary" data-moderation-empty>
-      {state === "PENDING"
-        ? "Nothing needs a decision. Messages Tembo flags, members report or a mentor hides appear here."
-        : "Nothing decided yet. Decisions appear here, newest first."}
-    </p>
+    state === "PENDING" ? (
+      <EmptyState title="Nothing needs a decision" headingLevel={2}>
+        Messages Tembo flags, members report or a mentor hides appear here.
+      </EmptyState>
+    ) : (
+      <EmptyState title="Nothing decided yet" headingLevel={2}>Decisions appear here, newest first.</EmptyState>
+    )
   ) : (
     <ul class="-mt-2 space-y-4" aria-label={state === "PENDING" ? "Cases that need a decision" : "Decided cases"} data-moderation-list={state}>
       {items.map((item) => (
@@ -77,13 +78,13 @@ const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visib
 
   {(nextHref || paged) && (
     <nav aria-label="More cases" class="flex flex-wrap gap-4 text-sm">
-      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>Back to the start</a>}
-      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>Older cases</a>}
+      {paged && <a href={tabHrefs[state]} class={PAGER_LINK}>Back to the start</a>}
+      {nextHref && <a href={nextHref} class={PAGER_LINK}>Older cases</a>}
     </nav>
   )}
 
   <p class="flex gap-2 text-sm text-ink-secondary">
-    <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+    <PiInfo className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
     Reports are counted, never named: no one here or in the channel sees who reported a message.
   </p>
 </div>
