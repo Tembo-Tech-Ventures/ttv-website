@@ -145,7 +145,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
   { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
-  { path: "/admin/recordings", heading: "Recordings", current: "Recordings" },
+  { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", legacy: null },
   { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
@@ -317,6 +317,20 @@ test.describe("every admin page", () => {
     await open(page, "/admin/projects?status=CLOSED");
     await expect(filters.getByRole("link", { name: /^Closed/ })).toHaveAttribute("aria-current", "page");
     for (const status of await page.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Closed");
+  });
+
+  test("recordings: one primary to upload, and each title opens its recording", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/recordings");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload recording"]);
+    await expect(main.getByRole("link", { name: "Import from Drive", exact: true })).toHaveAttribute("href", "/admin/recordings/import");
+    const table = page.getByRole("table", { name: "Recordings" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Recording", "Cohort", "Recorded", "Length", "Status"]);
+    expect(await page.locator("#spaces-main").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await table.getByRole("link", { name: "Week 4: SQL joins and indexes" }).click();
+    await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
   });
 
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
