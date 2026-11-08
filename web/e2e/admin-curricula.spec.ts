@@ -102,7 +102,8 @@ test.describe("admin curriculum management", () => {
       // The flash is said once: a rejected save next shows its error alone, not "saved" beside it.
       await titleInput.fill("   ");
       await page.getByRole("button", { name: "Save changes" }).click();
-      await expect(page.getByRole("alert")).toContainText("The curriculum wasn't saved");
+      // The page's own alert: the spaces shell keeps empty live regions of its own.
+      await expect(page.getByRole("alert").filter({ hasText: "The curriculum wasn't saved" })).toBeFocused();
       await expect(page.getByText("Enter a curriculum title.")).toBeVisible();
       await expect(page.getByText("Curriculum saved")).toHaveCount(0);
       await expect(page).toHaveTitle(/^Error: /);
