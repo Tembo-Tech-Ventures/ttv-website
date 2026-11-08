@@ -70,7 +70,7 @@ export function mentoringDatabase(fixture: Partial<CapabilityCase> & { conduct?:
     // The attention list shows what was written before the millisecond it reads in (service.ts listAttention),
     // and a real next request always comes later: so does the test's, or a fast run reads past its own notices.
     const written = Date.now();
-    while (Date.now() <= written) await new Promise((resolve) => setTimeout(resolve, 1));
+    while (Date.now() <= written) await new Promise((resolve) => { setTimeout(resolve, 1); });
   }
   async function call(operation: MentoringOperation, options: {
     id?: string; query?: string; body?: unknown; user?: string | null; origin?: string | null; locals?: Partial<App.Locals>;
