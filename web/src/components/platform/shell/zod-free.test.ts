@@ -3,14 +3,16 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /*
- * The spaces shell is on every signed-in page, so what it imports is what every page downloads. zod
+ * The spaces shell and its overlays island are on every signed-in page, so what they import is what every page downloads. zod
  * and the contract module (about 26 KB and 6 KB gzipped) stay on the server: the shell's client code
  * takes contract types only, and its runtime checks from space-order.ts and draft-keys.ts (S6).
  * This walks the shell's own static imports (type-only imports and dynamic import() excluded) and
  * fails if either comes back.
  */
 const SRC = path.resolve(__dirname, "../../..");
-const ENTRIES = ["components/platform/shell/SpacesShell.tsx"];
+// The shell and the overlays island: both are on every space page. The overlays' panels are import()ed
+// on demand (S7), so they are outside this walk, as they are outside the page's first download.
+const ENTRIES = ["components/platform/shell/SpacesShell.tsx", "components/platform/overlays/PlatformOverlays.tsx"];
 const FORBIDDEN = [/^zod(\/|$)/, /lib\/platform\/contracts(\.ts)?$/];
 
 function resolve(from: string, specifier: string): string | null {
@@ -68,6 +70,7 @@ describe("the spaces shell's client code", () => {
     expect(files).toEqual(expect.arrayContaining([
       "components/platform/shell/AccountMenu.tsx", "lib/platform/client/spaces.ts", "lib/platform/client/spaces-selection.ts",
       "lib/platform/client/draft-keys.ts", "lib/platform/space-order.ts",
+      "components/platform/overlays/PlatformOverlays.tsx", "components/platform/attention/attention-announcer.ts",
     ]));
   });
 });
