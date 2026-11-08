@@ -15,8 +15,7 @@ describe("the spaces PageTitle, kept for pages not yet on the kit", () => {
   it("draws the kit's PageTitle in the spaces shell, markup in the title included", async () => {
     const html = await container.renderToString(SpacesPageTitle, { props: { spaces: true }, slots: { default: "Cohort <em>05</em>" } });
     expect(html).toBe(
-      // The room above and below keeps the text's overhang off a link or tab beside it on these older pages.
-      '<h1 data-page-title="true" class="font-heading leading-[1.1] tracking-heading text-4xl text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl my-[0.2em]">Cohort <em>05</em></h1>',
+            '<h1 data-page-title="true" class="my-[0.2em] font-heading leading-[1.1] tracking-heading text-4xl text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl">Cohort <em>05</em></h1>',
     );
   });
 

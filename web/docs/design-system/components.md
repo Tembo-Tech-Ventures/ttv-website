@@ -16,7 +16,9 @@ target on touch screens.
 `PageTitle` is the page's one Mattone heading, its h1: 36–60px
 (`text-4xl sm:text-5xl lg:text-6xl`), `tracking-heading`, balanced lines,
 and a word too long for the line breaks rather than push the page sideways,
-even in a flex row (`wrap-anywhere`). `id` names a
+even in a flex row (`wrap-anywhere`). Line height 1.1 and 0.2em of room above
+and below: Mattone's line box is 1.43em, so tighter type overhangs the h1,
+and a browser hit-tests the overhang (it once took a back link's click). `id` names a
 region by it; `as="p"` is only for showing a title as an example, as the
 style guide does.
 
