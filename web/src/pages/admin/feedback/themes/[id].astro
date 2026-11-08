@@ -1,11 +1,14 @@
 ---
+import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import {
+  Button, Card, Chip, FOCUS_RING, Notice, PageTitle, SelectField, TextAreaField, TextField,
+} from "@/components/platform/ui";
+import { NOTE_STATUS_TONES, THEME_STATUS_TONES } from "@/components/feedback/status-tones";
 import { env } from "cloudflare:workers";
 import {
+  FEEDBACK_ADMIN_STATUS_LABELS,
   FEEDBACK_KIND_LABELS,
   FEEDBACK_KINDS,
   FEEDBACK_STATUSES,
@@ -19,37 +22,48 @@ import {
   FEEDBACK_THEME_CHANGES,
   FEEDBACK_THEME_STATUS_LABELS,
   FEEDBACK_THEME_STATUSES,
+  THEME_AGREEMENT_WINDOW_DAYS,
   assessTheme,
 } from "@/lib/feedback/themes";
 
+const THEMES_PATH = "/admin/feedback/themes";
 const id = Astro.params.id ?? "";
 let actionError = "";
 const saved = Astro.url.searchParams.get("saved") === "1";
+const FIELDS = ["title", "summary", "status", "kind", "change", "issueUrl", "prUrl", "studentMessage", "decisionNote"] as const;
+/** What the admin typed, kept when a save is refused so nothing they wrote is lost (patterns.md, Forms). */
+let posted: Record<(typeof FIELDS)[number], string> | null = null;
 
 if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
   try {
-    const update = themeUpdateFromForm(await Astro.request.formData());
+    const update = themeUpdateFromForm(form);
     const result = await updateTheme(env.DB, id, update.patch, {
       actorId: Astro.locals.user!.id,
       studentMessage: update.studentMessage,
     });
-    if (!result) return Astro.redirect("/admin/feedback/themes");
-    return Astro.redirect(`/admin/feedback/themes/${encodeURIComponent(id)}?saved=1`);
+    if (!result) return Astro.redirect(THEMES_PATH, 303);
+    return Astro.redirect(`${THEMES_PATH}/${encodeURIComponent(id)}?saved=1`, 303);
   } catch (error) {
     if (!(error instanceof FeedbackValidationError)) throw error;
     actionError = error.message;
+    posted = Object.fromEntries(FIELDS.map((name) => {
+      const value = form.get(name);
+      return [name, typeof value === "string" ? value : ""];
+    })) as Record<(typeof FIELDS)[number], string>;
     Astro.response.status = 400;
   }
 }
 
 const now = new Date();
-const theme = await getTheme(env.DB, id, now);
-if (!theme) return Astro.redirect("/admin/feedback/themes");
-const notes = await listFeedback(env.DB, {
-  statuses: FEEDBACK_STATUSES,
-  themeId: theme.id,
-  limit: 200,
-});
+// The theme, its notes and the Admin space are independent reads (the notes are keyed by the
+// address's id): one round trip, not three.
+const [theme, notes, spaces] = await Promise.all([
+  getTheme(env.DB, id, now),
+  listFeedback(env.DB, { statuses: FEEDBACK_STATUSES, themeId: id, limit: 200 }),
+  resolveSpacePage(Astro.locals, "adminFeedback"),
+]);
+if (!theme) return Astro.redirect(THEMES_PATH, 303);
 const assessment = assessTheme(
   {
     kind: theme.kind,
@@ -60,6 +74,17 @@ const assessment = assessTheme(
   },
   now
 );
+const values = posted ?? {
+  title: theme.title,
+  summary: theme.summary,
+  status: theme.status,
+  kind: theme.kind,
+  change: theme.change ?? "",
+  issueUrl: theme.issueUrl ?? "",
+  prUrl: theme.prUrl ?? "",
+  studentMessage: "",
+  decisionNote: theme.decisionNote ?? "",
+};
 const APPROVAL_LABELS = {
   owner: "Needs the owner's yes",
   default: "Proceeds after 7 days without an answer",
@@ -72,54 +97,43 @@ const CHANGE_LABELS = {
 } as const;
 const formatDate = (date: Date) =>
   date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const field =
-  "w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary";
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
+const SECTION = "mb-3 text-lg text-ink-primary";
+const TEXT_LINK = `rounded-sm text-peach-ink hover:underline ${FOCUS_RING}`;
 ---
 
 <AdminLayout title="Feedback theme" spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/feedback/themes" class="text-sm text-primary hover:underline">
-      &larr; Back to Themes
+    <a href={THEMES_PATH} class:list={["inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold", TEXT_LINK]}>
+      <PiArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+      Back to Themes
     </a>
 
-    {
-      actionError && (
-        <p role="alert" class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
-          {actionError}
-        </p>
-      )
-    }
-    {
-      saved && (
-        <p role="status" class="rounded-md border border-green-400/40 bg-green-500/15 px-4 py-3 text-sm text-green-100">
-          Saved. Students on this theme see the new status on their feedback page.
-        </p>
-      )
-    }
+    {actionError && (
+      <Notice tone="danger" focusOnLoad id="theme-failure" title="The theme wasn't saved">
+        {actionError} Everything you wrote is kept below.
+      </Notice>
+    )}
+    {saved && (
+      <Notice tone="success" id="theme-saved">Saved. Students on this theme see the new status on their feedback page.</Notice>
+    )}
 
-    <div class="flex flex-wrap items-center gap-3">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{theme.title}</PageTitle>
-      <FeedbackStatusPill theme={theme.status} />
-    </div>
+    <header class="space-y-3">
+      <PageTitle>{theme.title}</PageTitle>
+      <Chip tone={THEME_STATUS_TONES[theme.status]}>{FEEDBACK_THEME_STATUS_LABELS[theme.status]}</Chip>
+    </header>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div class="min-w-0 space-y-6">
-        <Card>
-          <h3 class="mb-3 text-lg font-semibold text-white">Where it stands</h3>
+        <Card as="section" aria-labelledby="theme-standing">
+          <h2 id="theme-standing" class={SECTION}>Where it stands</h2>
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt class="text-ink-muted">Students</dt>
-              <dd class="text-ink-primary">
-                {theme.stats.students} ({theme.stats.recentStudents} in the last 60 days)
-              </dd>
+              <dd class="text-ink-primary">{theme.stats.students} ({theme.stats.recentStudents} in the last {THEME_AGREEMENT_WINDOW_DAYS} days)</dd>
             </div>
             <div>
               <dt class="text-ink-muted">Last report</dt>
-              <dd class="text-ink-primary">
-                {theme.stats.lastReportAt ? formatDate(theme.stats.lastReportAt) : "—"}
-              </dd>
+              <dd class="text-ink-primary">{theme.stats.lastReportAt ? formatDate(theme.stats.lastReportAt) : "—"}</dd>
             </div>
             <div>
               <dt class="text-ink-muted">Triage rules</dt>
@@ -135,118 +149,72 @@ const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
           )}
         </Card>
 
-        <Card>
-          <h3 class="mb-3 text-lg font-semibold text-white">Notes on this theme</h3>
-          {
-            notes.length === 0 ? (
-              <p class="text-sm text-ink-secondary">No notes attached yet.</p>
-            ) : (
-              <ul class="space-y-3">
-                {notes.map((note) => (
-                  <li>
-                    <a
-                      href={`/admin/feedback/${encodeURIComponent(note.id)}`}
-                      class="block rounded-md border border-rule p-3 hover:border-primary/60"
-                    >
-                      <span class="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-                        <FeedbackStatusPill note={note.status} />
-                        {FEEDBACK_KIND_LABELS[note.kind]} · {note.user.name} ·{" "}
-                        {formatDate(note.createdAt)} · {feedbackPagePath(note.pageUrl)}
-                      </span>
-                      <span class="mt-1 block break-words text-sm text-ink-secondary">
-                        {note.message || "(screenshot only)"}
-                      </span>
+        <Card as="section" aria-labelledby="theme-notes">
+          <h2 id="theme-notes" class={SECTION}>Notes on this theme</h2>
+          {notes.length === 0 ? (
+            <p class="text-sm text-ink-secondary">No notes yet. A note joins this theme when someone picks it on the note's page in Feedback.</p>
+          ) : (
+            <ul class="divide-y divide-hairline" data-theme-notes>
+              {notes.map((note) => (
+                <li class="relative py-3 first:pt-0 last:pb-0">
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                    <Chip tone={NOTE_STATUS_TONES[note.status]}>{FEEDBACK_ADMIN_STATUS_LABELS[note.status]}</Chip>
+                    <a href={`/admin/feedback/${encodeURIComponent(note.id)}`} class:list={["rounded-sm text-sm font-semibold text-ink-primary after:absolute after:inset-0 hover:underline", FOCUS_RING]}>
+                      {note.user.name}
                     </a>
-                  </li>
-                ))}
-              </ul>
-            )
-          }
+                    <span>{FEEDBACK_KIND_LABELS[note.kind]} · {formatDate(note.createdAt)} · {feedbackPagePath(note.pageUrl)}</span>
+                  </div>
+                  <p class="mt-1 break-words text-sm text-ink-secondary">{note.message || "Screenshot only"}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 
       <div class="min-w-0 space-y-6">
-        <Card>
-          <h3 class="mb-4 text-lg font-semibold text-white">Update</h3>
+        <Card as="section" aria-labelledby="theme-update">
+          <h2 id="theme-update" class={SECTION}>Update</h2>
           <form method="POST" class="space-y-4">
-            <div>
-              <label for="title" class="mb-1 block text-sm text-ink-secondary"
-                >Title <span class="text-ink-muted">(may be published)</span></label
-              >
-              <input id="title" name="title" value={theme.title} maxlength="120" required class={field} />
-            </div>
-            <div>
-              <label for="summary" class="mb-1 block text-sm text-ink-secondary"
-                >Summary <span class="text-ink-muted">(may be published, never identifying)</span></label
-              >
-              <textarea id="summary" name="summary" rows="4" maxlength="4000" class={field}>{theme.summary}</textarea>
-            </div>
+            <TextField name="title" label="Title" hint="May be published." maxLength={120} required defaultValue={values.title} />
+            <TextAreaField name="summary" label="Summary" hint="May be published, so it never identifies a student." optional rows={4} maxLength={4000} defaultValue={values.summary} />
             <div class="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label for="status" class="mb-1 block text-sm text-ink-secondary">Status</label>
-                <select id="status" name="status" class={field}>
-                  {
-                    FEEDBACK_THEME_STATUSES.map((status) => (
-                      <option value={status} selected={status === theme.status}>
-                        {FEEDBACK_THEME_STATUS_LABELS[status]}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
-              <div>
-                <label for="kind" class="mb-1 block text-sm text-ink-secondary">Kind</label>
-                <select id="kind" name="kind" class={field}>
-                  {
-                    FEEDBACK_KINDS.map((kind) => (
-                      <option value={kind} selected={kind === theme.kind}>
-                        {FEEDBACK_KIND_LABELS[kind]}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
+              <SelectField
+                name="status"
+                label="Status"
+                defaultValue={values.status}
+                options={FEEDBACK_THEME_STATUSES.map((status) => ({ value: status, label: FEEDBACK_THEME_STATUS_LABELS[status] }))}
+              />
+              <SelectField
+                name="kind"
+                label="Kind"
+                defaultValue={values.kind}
+                options={FEEDBACK_KINDS.map((kind) => ({ value: kind, label: FEEDBACK_KIND_LABELS[kind] }))}
+              />
             </div>
-            <div>
-              <label for="change" class="mb-1 block text-sm text-ink-secondary">Change</label>
-              <select id="change" name="change" class={field}>
-                <option value="" selected={theme.change === null}>Not decided yet</option>
-                {
-                  FEEDBACK_THEME_CHANGES.map((change) => (
-                    <option value={change} selected={change === theme.change}>
-                      {CHANGE_LABELS[change]}
-                    </option>
-                  ))
-                }
-              </select>
-            </div>
-            <div>
-              <label for="issueUrl" class="mb-1 block text-sm text-ink-secondary">Public issue</label>
-              <input id="issueUrl" name="issueUrl" type="url" value={theme.issueUrl ?? ""} class={field} />
-            </div>
-            <div>
-              <label for="prUrl" class="mb-1 block text-sm text-ink-secondary">Pull request</label>
-              <input id="prUrl" name="prUrl" type="url" value={theme.prUrl ?? ""} class={field} />
-            </div>
-            <div>
-              <label for="studentMessage" class="mb-1 block text-sm text-ink-secondary"
-                >Message to students
-                <span class="text-ink-muted">(required to ship or decline; becomes every open note's reply)</span></label
-              >
-              <textarea id="studentMessage" name="studentMessage" rows="3" maxlength="2000" class={field}></textarea>
-            </div>
-            <div>
-              <label for="decisionNote" class="mb-1 block text-sm text-ink-secondary"
-                >Decision note <span class="text-ink-muted">(private)</span></label
-              >
-              <textarea id="decisionNote" name="decisionNote" rows="3" maxlength="5000" class={field}>{theme.decisionNote ?? ""}</textarea>
-            </div>
-            <button
-              type="submit"
-              class="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark hover:bg-primary/90"
-            >
-              Save
-            </button>
+            <SelectField
+              name="change"
+              label="Change"
+              defaultValue={values.change}
+              placeholder="Not decided yet"
+              options={FEEDBACK_THEME_CHANGES.map((change) => ({ value: change, label: CHANGE_LABELS[change] }))}
+            />
+            <TextField name="issueUrl" type="url" label="Public issue" optional defaultValue={values.issueUrl} />
+            <TextField name="prUrl" type="url" label="Pull request" optional defaultValue={values.prUrl} />
+            <TextAreaField
+              name="studentMessage"
+              label="Message to students"
+              hint="Needed to ship or decline the theme. It becomes the reply on every open note."
+              optional
+              rows={3}
+              maxLength={2000}
+              defaultValue={values.studentMessage}
+            />
+            <TextAreaField name="decisionNote" label="Decision note" hint="Private: staff and agents only." optional rows={3} maxLength={5000} defaultValue={values.decisionNote} />
+            <Notice tone="warning" title="Shipping or declining replies to every open note">
+              The message to students replaces the reply on each open note on this theme, and those students see it.
+            </Notice>
+            <Button type="submit" variant="primary" size="lg">Save theme</Button>
           </form>
         </Card>
       </div>

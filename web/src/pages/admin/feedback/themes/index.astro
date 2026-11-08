@@ -3,7 +3,8 @@ import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { Card, Chip, EmptyState, FOCUS_RING, PillNav, type ChipTone } from "@/components/platform/ui";
+import { Card, Chip, EmptyState, FOCUS_RING, PillNav } from "@/components/platform/ui";
+import { THEME_STATUS_TONES } from "@/components/feedback/status-tones";
 import { env } from "cloudflare:workers";
 import { FEEDBACK_KIND_LABELS, FeedbackValidationError } from "@/lib/feedback/model";
 import { listThemes } from "@/lib/feedback/theme-store";
@@ -15,7 +16,6 @@ import {
   THEME_AGREEMENT_WINDOW_DAYS,
   assessTheme,
   parseThemeStatusFilter,
-  type FeedbackThemeStatus,
 } from "@/lib/feedback/themes";
 
 const THEMES_PATH = "/admin/feedback/themes";
@@ -40,17 +40,6 @@ const tabs = [
 ];
 const all = requested === "all";
 
-// TODO(K2): StatusChip and statusTone("theme") replace this map once lane K's detail parts merge.
-// Peach is a theme waiting on the owner's yes; a shipped one is a success; the rest are facts.
-const THEME_TONES: Record<FeedbackThemeStatus, ChipTone> = {
-  COLLECTING: "neutral",
-  PROPOSED: "peach",
-  PLANNED: "neutral",
-  IN_PROGRESS: "neutral",
-  SHIPPED: "success",
-  DECLINED: "neutral",
-  DORMANT: "neutral",
-};
 const students = (count: number) => `${count} ${count === 1 ? "student" : "students"}`;
 ---
 
@@ -97,7 +86,7 @@ const students = (count: number) => `${count} ${count === 1 ? "student" : "stude
             return (
               <Card as="li" className="relative transition-colors hover:border-ink-primary/30 motion-reduce:transition-none">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <Chip tone={THEME_TONES[theme.status]}>{FEEDBACK_THEME_STATUS_LABELS[theme.status]}</Chip>
+                  <Chip tone={THEME_STATUS_TONES[theme.status]}>{FEEDBACK_THEME_STATUS_LABELS[theme.status]}</Chip>
                   <h2 class="min-w-0 font-body text-base font-bold text-ink-primary">
                     {/* The title is the row's link; it stretches over the card, so the whole card opens the theme. */}
                     <a
