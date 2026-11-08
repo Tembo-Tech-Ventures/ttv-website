@@ -892,6 +892,13 @@
   }
 }
 
+/* The box a thumb lands on is a full target, even while it holds one line. */
+@media (pointer: coarse) {
+  .channel-composer__input {
+    min-height: 2.75rem;
+  }
+}
+
 .channel-composer__input::placeholder {
   color: var(--color-ink-muted);
 }
