@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { PiVideoCamera, PiX } from "react-icons/pi";
 import type { MessageEmbed, SessionClipEmbed } from "@/lib/platform/contracts";
-import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import Button from "@/components/platform/ui/Button";
+import { TextField } from "@/components/platform/ui/Field";
+import IconButton from "@/components/platform/ui/IconButton";
+import { MENU_ITEM } from "@/components/platform/ui/Menu";
+import Notice from "@/components/platform/ui/Notice";
 import { sameEmbed } from "./actions";
 import { clipTime, plural } from "./channel-format";
 import { MAX_MOMENT_QUERY, createMomentSearch, type MomentFinder, type MomentSearchState } from "./moment-search";
@@ -30,7 +33,8 @@ function heading(state: MomentSearchState, count: number): string {
     case "found":
       return count > 0 ? `${plural(count, "moment")} ${count === 1 ? "mentions" : "mention"} “${state.query}”` : `No moment mentions “${state.query}”. Try other words.`;
     case "failed":
-      return "Couldn't search the sessions.";
+      // Said by the danger notice instead, with the way to try again.
+      return "";
   }
 }
 
@@ -74,7 +78,6 @@ export function useClipFinder(box: RefObject<HTMLTextAreaElement | null>) {
 function FinderPanel({ id, recent, find, attached, full, onPick, onClose }: Omit<ClipFinderProps, "open">) {
   const titleId = `${id}-title`;
   const panel = useRef<HTMLElement>(null);
-  const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [state, setState] = useState<MomentSearchState>({ status: "idle" });
   const [search] = useState(() => (find ? createMomentSearch(find, setState) : null));
@@ -82,9 +85,9 @@ function FinderPanel({ id, recent, find, attached, full, onPick, onClose }: Omit
 
   // Start where the person decides: the words, or with nothing to search, the first clip.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => (input.current ?? document.querySelector<HTMLElement>(`#${CSS.escape(id)} button[data-clip]`))?.focus());
+    const frame = requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("input, button[data-clip]")?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [id]);
+  }, []);
 
   const clips = state.status === "found" ? state.clips : state.status === "idle" ? recent : [];
   const status = heading(state, clips.length);
@@ -111,46 +114,43 @@ function FinderPanel({ id, recent, find, attached, full, onPick, onClose }: Omit
         <h3 id={titleId} className="channel-panel__title">
           Share a session clip
         </h3>
-        <button type="button" aria-label="Close" onClick={onClose} className={cx("channel-clips__close", FOCUS_RING)}>
-          <PiX aria-hidden="true" className="size-4" />
-        </button>
+        <IconButton label="Close session clips" icon={<PiX className="size-4" />} variant="ghost" size="md" onClick={onClose} />
       </div>
       {search && (
-        <div className="flex flex-col gap-1 px-1.5 pb-1.5">
-          <label htmlFor={`${id}-words`} className="text-sm font-semibold text-ink-primary">
-            Find a moment
-          </label>
-          <input
-            ref={input}
-            id={`${id}-words`}
-            type="search"
-            value={text}
-            maxLength={MAX_MOMENT_QUERY}
-            autoComplete="off"
-            aria-describedby={`${id}-hint`}
-            aria-controls={clips.length > 0 ? `${id}-clips` : undefined}
-            onChange={(event) => {
-              setText(event.target.value);
-              search.search(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              // Searching is already under way as the words are typed.
-              if (event.key === "Enter") event.preventDefault();
-            }}
-            className="channel-input h-11 w-full rounded-xl px-3"
-          />
-          <p id={`${id}-hint`} className="text-[0.8125rem] text-ink-secondary">
-            Words said in the session. The clip starts where they were said.
-          </p>
-        </div>
+        <TextField
+          id={`${id}-words`}
+          type="search"
+          label="Find a moment"
+          hint="Words said in the session. The clip starts where they were said."
+          value={text}
+          maxLength={MAX_MOMENT_QUERY}
+          autoComplete="off"
+          aria-controls={clips.length > 0 ? `${id}-clips` : undefined}
+          onChange={(event) => {
+            setText(event.target.value);
+            search.search(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            // Searching is already under way as the words are typed.
+            if (event.key === "Enter") event.preventDefault();
+          }}
+          className="px-1.5 pb-1.5"
+        />
       )}
       <p className="channel-clips__status" aria-live="polite" data-clip-status={state.status}>
         {status}
       </p>
       {state.status === "failed" && (
-        <Button size="sm" variant="quiet" className="mx-1.5 mb-1 self-start" onClick={() => search?.retry()}>
-          Try again
-        </Button>
+        <Notice
+          tone="danger"
+          title="Couldn't search the sessions"
+          className="mx-1.5 mb-1"
+          actions={
+            <Button size="sm" variant="quiet" onClick={() => search?.retry()}>
+              Try again
+            </Button>
+          }
+        />
       )}
       {clips.length > 0 && (
         <ul id={`${id}-clips`} aria-label="Session moments" className="channel-clips__list">
@@ -162,7 +162,7 @@ function FinderPanel({ id, recent, find, attached, full, onPick, onClose }: Omit
                   type="button"
                   disabled={already || full}
                   onClick={() => onPick(clip)}
-                  className={cx("channel-clips__option", FOCUS_RING)}
+                  className={MENU_ITEM}
                   data-clip={`${clip.recordingId}@${clip.startSeconds}`}
                 >
                   <PiVideoCamera aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-muted" />

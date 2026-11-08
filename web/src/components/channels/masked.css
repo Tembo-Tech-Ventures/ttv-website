@@ -1,7 +1,7 @@
 /* Contact details masked until a moderator checks the message (QA2-08): a note, not the member's words. */
 .channel-masked {
   padding: 0 0.3125rem;
-  border: 1px dashed rgb(255 255 255 / 0.35);
+  border: 1px dashed color-mix(in srgb, var(--color-ink-primary) 35%, transparent);
   border-radius: 0.3125rem;
   color: var(--color-ink-secondary);
   font-size: 0.875em;

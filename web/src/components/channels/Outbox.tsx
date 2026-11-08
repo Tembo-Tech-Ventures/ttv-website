@@ -3,6 +3,7 @@ import type { Composer, OutboxItem } from "@/lib/platform/client/composer";
 import { useOutbox } from "@/lib/platform/client/hooks/composer";
 import Avatar from "@/components/platform/ui/Avatar";
 import Button from "@/components/platform/ui/Button";
+import Spinner from "@/components/platform/ui/Spinner";
 import MessageBody from "./MessageBody";
 
 type OutboxProps = {
@@ -17,7 +18,7 @@ function Status({ item }: { item: OutboxItem }) {
   if (item.status === "sending") {
     return (
       <span className="inline-flex items-center gap-1.5">
-        <span className="channel-spinner" aria-hidden="true" /> Sending…
+        <Spinner /> Sending…
       </span>
     );
   }

@@ -1,6 +1,7 @@
 import type { AstroGlobal } from "astro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Channel, ConductAcknowledgement, Me } from "@/lib/platform/contracts";
+import type { ChannelPage } from "@/lib/channels/page";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { AGENT_SESSION_PREFIX } from "@/lib/agent-auth";
 import { channels, meByPersona, projects } from "@/lib/platform/fixtures";
@@ -9,6 +10,7 @@ import { CONDUCT_INTENT } from "./conduct-flow";
 const mocks = vi.hoisted(() => ({
   resolveSpacePage: vi.fn(),
   getRouteChannel: vi.fn(),
+  getRouteChannelPage: vi.fn(),
   getRouteChannelShareables: vi.fn(),
   list: vi.fn(),
   load: vi.fn(),
@@ -22,16 +24,19 @@ vi.mock("@/components/platform/spaces/space-page", () => ({
   },
 }));
 vi.mock("@/lib/platform/server/channel-context", () => ({
-  getRouteChannel: mocks.getRouteChannel, getRouteChannelShareables: mocks.getRouteChannelShareables,
+  getRouteChannel: mocks.getRouteChannel, getRouteChannelPage: mocks.getRouteChannelPage,
+  getRouteChannelShareables: mocks.getRouteChannelShareables,
 }));
 vi.mock("./server", () => ({
   channelsServer: () => ({ list: mocks.list, conduct: { load: mocks.load, acknowledge: mocks.acknowledge } }),
 }));
-import { loadRouteShareables, resolveChannelPage, resolveConductPage } from "./channel-page";
+import { loadRouteShareables, resolveChannelPage, resolveConductPage, resolveConversationPage } from "./channel-page";
 
 const ORIGIN = "https://ttv.test";
 const off = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
 const agreement: ConductAcknowledgement = { version: CONDUCT_VERSION, acknowledgedAt: 1, current: true };
+const firstPage = { initial: null, thread: null, read: null } as unknown as ChannelPage;
+const shareables = { projects: [projects.chamaLedger], clips: [] };
 
 interface Visit {
   path?: string;
@@ -56,6 +61,8 @@ function astro({ path = "/dashboard/community/c/help", method = "GET", agent = f
 function given({ me = meByPersona.lucy, channel = channels.help }: Visit = {}) {
   mocks.resolveSpacePage.mockResolvedValue({ me, space: "community", page: "communityChannel", onboarding: null });
   mocks.getRouteChannel.mockResolvedValue(channel);
+  mocks.getRouteChannelPage.mockImplementation(async () => (channel ? { channel, page: firstPage } : null));
+  mocks.getRouteChannelShareables.mockResolvedValue(shareables);
   mocks.list.mockResolvedValue([channels.introductions, channels.help]);
   mocks.load.mockResolvedValue(null);
   mocks.acknowledge.mockResolvedValue(agreement);
@@ -104,8 +111,27 @@ describe("a channel's page", () => {
     const page = await resolveChannelPage(astro({ path: "/dashboard/community/c/help?message=m1" }), "community");
     expect(page).toMatchObject({
       channel: channels.help, readable: [channels.introductions, channels.help], record: agreement, agreed: true, canAgree: true,
-      self: "/dashboard/community/c/help?message=m1",
+      self: "/dashboard/community/c/help?message=m1", first: { channel: channels.help, page: firstPage }, shareables,
     });
+  });
+
+  it("reads the first page and the attach tools with the frame, and none of it for a POST (PERF-2)", async () => {
+    given();
+    let release!: (channel: Channel) => void;
+    mocks.getRouteChannel.mockReturnValue(new Promise<Channel>((resolve) => { release = resolve; }));
+    const page = resolveChannelPage(astro(), "community");
+    await new Promise((resolve) => { setImmediate(resolve); });
+    expect(mocks.getRouteChannelPage).not.toHaveBeenCalled();
+    release(channels.help);
+    expect(await page).toMatchObject({ first: { channel: channels.help }, shareables });
+    expect(mocks.getRouteChannelPage).toHaveBeenCalledOnce();
+    expect(mocks.getRouteChannelShareables).toHaveBeenCalledOnce();
+
+    mocks.getRouteChannelPage.mockClear();
+    mocks.getRouteChannelShareables.mockClear();
+    await resolveChannelPage(astro({ method: "POST" }), "community");
+    expect(mocks.getRouteChannelPage).not.toHaveBeenCalled();
+    expect(mocks.getRouteChannelShareables).not.toHaveBeenCalled();
   });
 
   it("reads the agreement beside the channel on a GET, and never before a POST's own write (PERF-2)", async () => {
@@ -170,9 +196,28 @@ describe("a channel's page", () => {
   });
 });
 
+describe("a private conversation's page", () => {
+  const dm = { ...channels.help, id: "dm-1", kind: "DIRECT" } as Channel;
+  const path = "/dashboard/community/dm/dm-1";
+
+  it("reads its own header beside the conversation, for the conversation's channel", async () => {
+    given({ channel: dm });
+    const header = vi.fn(async (_me: Me, channel: Channel) => ({ with: channel.id }));
+    const page = await resolveConversationPage(astro({ path }), header);
+    expect(page).toMatchObject({ channel: dm, first: { channel: dm }, shareables, header: { with: "dm-1" } });
+    expect(header).toHaveBeenCalledExactlyOnceWith(meByPersona.lucy, dm);
+  });
+
+  it("is not found for a channel that is not a direct conversation, and reads no header for it", async () => {
+    given();
+    const header = vi.fn(async () => null);
+    expect(await status(await resolveConversationPage(astro({ path }), header))).toBe(404);
+    expect(header).not.toHaveBeenCalled();
+  });
+});
+
 describe("the composer's attach tools", () => {
   it("are what B-2.4 says the person can attach", async () => {
-    const shareables = { projects: [projects.chamaLedger], clips: [] };
     mocks.getRouteChannelShareables.mockResolvedValue(shareables);
     await expect(loadRouteShareables(astro())).resolves.toEqual(shareables);
   });

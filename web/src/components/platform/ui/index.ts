@@ -13,6 +13,7 @@ export { default as CountBadge } from "./CountBadge";
 export { default as EmptyState } from "./EmptyState";
 export { Checkbox, ChoiceGroup, SelectField, TextAreaField, TextField, fieldAria, fieldId, type FieldOption } from "./Field";
 export { default as IconButton } from "./IconButton";
+export { default as Menu, MenuItem, MenuSection, MenuSeparator } from "./Menu";
 export { default as Notice, type NoticeAnnounce, type NoticeTone } from "./Notice";
 export { default as PersonMarker, type PersonKind } from "./PersonMarker";
 export { default as Pill } from "./Pill";

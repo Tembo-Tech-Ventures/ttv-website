@@ -133,7 +133,7 @@ describe("reporting a message", () => {
     const send = $<HTMLButtonElement>("button[type=submit]", form)!;
     expect(send.disabled).toBe(false);
     await click(send);
-    const missing = $("[data-reason-missing]", form)!;
+    const missing = $("[data-field-error]", form)!;
     expect(missing.textContent).toBe("Choose what's wrong with it first.");
     expect(form.querySelector("fieldset")!.getAttribute("aria-describedby")).toBe(missing.id);
     expect(document.activeElement).toBe(form.querySelector("input[type=radio]"));
@@ -167,18 +167,20 @@ describe("reporting a message", () => {
     await click(await menuItem(messages.firstPr.id, "Report…"));
     const form = $<HTMLFormElement>("[data-panel=report]")!;
     await click([...form.querySelectorAll("label")].find((label) => label.textContent === "Something else"));
-    // The words become required, visibly and for assistive tech (QA2-19).
+    // The words become required, visibly (no longer "optional") and for assistive tech (QA2-19).
     const box = form.querySelector("textarea")!;
-    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Tell the moderators what's wrong (required)");
+    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Tell the moderators what's wrong");
+    expect(box.required).toBe(true);
     expect(box.getAttribute("aria-required")).toBe("true");
     await click($("button[type=submit]", form));
-    expect($("[data-reason-missing]", form)?.textContent).toBe("Write what's wrong first.");
+    const missing = $("[data-field-error]", form)!;
+    expect(missing.textContent).toBe("Write what's wrong first.");
     expect(box.getAttribute("aria-invalid")).toBe("true");
-    expect(box.getAttribute("aria-describedby")).toContain($("[data-reason-missing]", form)!.id);
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(missing.id);
     expect(document.activeElement).toBe(box);
     expect(client.moderation()).toEqual([]);
     await typeInto(box, "Posted my private notes without asking.");
-    expect($("[data-reason-missing]", form)).toBeNull();
+    expect($("[data-field-error]", form)).toBeNull();
     await click($("button[type=submit]", form));
     expect(client.moderation()).toEqual([{ kind: "report", messageId: messages.firstPr.id, reason: "Posted my private notes without asking." }]);
   });
@@ -191,7 +193,8 @@ describe("reporting a message", () => {
     const form = $<HTMLFormElement>("[data-panel=report]")!;
     await click(form.querySelector("label"));
     await click($("button[type=submit]", form));
-    expect($("[role=alert]", form)?.textContent).toBe("That's a lot at once. Try again in 4 seconds.");
+    // A danger notice, said as a problem.
+    expect($("[role=alert]", form)?.textContent).toBe("Problem: That's a lot at once. Try again in 4 seconds.");
     expect($("[data-panel=report]")).not.toBeNull();
     expect($("[data-reported]")).toBeNull();
     expect(client.moderation()).toEqual([]);
@@ -239,7 +242,7 @@ describe("reporting a message", () => {
     // With two people in it, "won't see who reported it" would be no promise, so it goes unsaid.
     expect(form.textContent).not.toContain("won't see who reported it");
     await click([...form.querySelectorAll("label")].find((label) => label.textContent === "Something else"));
-    expect(form.querySelector(`label[for="${form.querySelector("textarea")!.id}"]`)?.textContent).toBe("Tell TTV admins what's wrong (required)");
+    expect(form.querySelector(`label[for="${form.querySelector("textarea")!.id}"]`)?.textContent).toBe("Tell TTV admins what's wrong");
     await typeInto(form.querySelector("textarea")!, "Asked me to pay for the review.");
     await click($("button[type=submit]", form));
     await act(frame);
@@ -260,12 +263,12 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     expect(form.textContent).toContain("Brian will still see it, with your reason, and can ask for a review. An admin looks at every hide and can restore it.");
     const box = form.querySelector("textarea")!;
     expect(document.activeElement).toBe(box);
-    // The reason is required, said in the label; trying without one says why under the box (QA2-10).
-    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Why are you hiding it? (required)");
+    // The reason is required: the label has no "(optional)"; trying without one says why under the box (QA2-10).
+    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Why are you hiding it?");
     expect(box.getAttribute("aria-required")).toBe("true");
     expect($<HTMLButtonElement>("button[type=submit]", form)!.disabled).toBe(false);
     await click($("button[type=submit]", form));
-    const missing = $("[data-reason-missing]", form)!;
+    const missing = $("[data-field-error]", form)!;
     expect(missing.textContent).toBe("Write why you're hiding it first. The record keeps your reason.");
     expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(missing.id);
     expect(box.getAttribute("aria-invalid")).toBe("true");
@@ -276,11 +279,13 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
 
     expect(client.moderation()).toEqual([{ kind: "hide", messageId: messages.firstPr.id, reason: "Off-topic for this channel" }]);
     const note = $("[data-moderation=HIDDEN]", article(messages.firstPr.id));
-    // What happens next, and where the outcome shows (QA2-11).
-    expect(note?.querySelector("p")?.textContent).toBe(
-      "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
+    // What happens next, and where the outcome shows (QA2-11): a warning notice, its title and what follows.
+    expect(note?.querySelector("[data-notice=warning]")).not.toBeNull();
+    expect([...note!.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      "Hidden from members: Off-topic for this channel.",
+      "Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
       + "If an admin restores it, members see it here again.",
-    );
+    ]);
     // Until an admin decides, the hide is the mentor's to take back.
     expect(note?.querySelector("[data-undo-hide]")?.textContent).toBe("Undo hide");
     expect(announcer()).toBe("Message hidden from members. An admin will look at it.");
@@ -373,7 +378,7 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     await click(await menuItem(messages.firstPr.id, "Hide from members…"));
     await typeInto($<HTMLTextAreaElement>("[data-panel=hide] textarea")!, "Off-topic");
     await click($("[data-panel=hide] button[type=submit]"));
-    expect($("[data-panel=hide] [role=alert]")?.textContent).toBe("An admin has already decided on this message, or it has changed. Close this and look again.");
+    expect($("[data-panel=hide] [role=alert]")?.textContent).toBe("Problem: An admin has already decided on this message, or it has changed. Close this and look again.");
     expect($("[data-moderation]", article(messages.firstPr.id))).toBeNull();
   });
 });
@@ -384,7 +389,8 @@ describe("the author's own flagged and hidden messages", () => {
   it("lets the author of a hidden message ask for a review once, and says it was asked", async () => {
     const { client } = await mount(dennis);
     const message = article(messages.hidden.id);
-    expect($("[data-moderation=HIDDEN]", message)?.textContent).toContain("Hidden from the channel: Harsh, not about the work. Only you can see this message now.");
+    expect($("[data-moderation=HIDDEN]", message)?.textContent).toContain("Hidden from the channel: Harsh, not about the work.");
+    expect($("[data-moderation=HIDDEN]", message)?.textContent).toContain("Only you can see this message now.");
     await click($("[data-ask-review]", message));
     const form = $<HTMLFormElement>("[data-panel=review]")!;
     expect(document.activeElement).toBe(form.querySelector("textarea"));
@@ -414,7 +420,7 @@ describe("the author's own flagged and hidden messages", () => {
     const form = $<HTMLFormElement>("[data-panel=review]")!;
     await click($("button[type=submit]", form));
     await act(frame);
-    expect($("[role=alert]", form)?.textContent).toBe("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
+    expect($("[role=alert]", form)?.textContent).toBe("Problem: An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
     expect(client.moderation()).toEqual([]);
     expect($("[data-review-requested]", message)).toBeNull();
   });
@@ -444,6 +450,20 @@ describe("the author's own flagged and hidden messages", () => {
     const message = article(messages.hiddenReviewRequested.id);
     expect($("[data-moderation=HIDDEN]", message)).not.toBeNull();
     expect($("[data-review-requested]", message)).toBeNull();
+  });
+
+  it("shows one note under a message: asking to delete a hidden message stands in for its moderation note", async () => {
+    await mount(dennis);
+    const message = article(messages.hidden.id);
+    expect($("[data-moderation=HIDDEN]", message)).not.toBeNull();
+    await click(await menuItem(messages.hidden.id, "Delete…"));
+    expect($("[data-delete-confirm]", message)).not.toBeNull();
+    expect($("[data-moderation]", message)).toBeNull();
+    expect(message.querySelectorAll("[data-notice]")).toHaveLength(1);
+    await click($("[data-keep]", message));
+    await act(frame);
+    expect($("[data-moderation=HIDDEN]", message)).not.toBeNull();
+    expect($("[data-delete-confirm]", message)).toBeNull();
   });
 
   it("offers deleting a hidden message, not editing it", async () => {
@@ -477,7 +497,9 @@ describe("server rendering", () => {
       <ChannelSurface me={me} channel={channel} store={store} composer={composer} now={FIXTURE_NOW} shareables={null} moderation={moderation} />,
     );
     expect(html).not.toContain("channel-panel");
-    expect(html.replaceAll("<!-- -->", "")).toContain("Hidden from members: Harsh, not about the work.</strong> Moderators can still see it.");
+    const markup = html.replaceAll("<!-- -->", "");
+    expect(markup).toContain("Hidden from members: Harsh, not about the work.</p>");
+    expect(markup).toContain(">Moderators can still see it.");
   });
 });
 

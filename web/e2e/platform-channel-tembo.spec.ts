@@ -101,7 +101,7 @@ for (const viewport of [DESKTOP, PHONE]) {
     await box.press("Enter");
     const waiting = page.locator("[data-thread-rail] [data-tembo-question=pending]");
     await expect(waiting).toContainText("The answer will appear here.");
-    await expect(waiting.locator(".channel-ai-badge")).toHaveText("AI");
+    await expect(waiting.locator("[data-role-badge=AI]")).toHaveText("AI");
     await page.screenshot({ path: `${EVIDENCE_DIR}/03-thread-pending-${viewport.width}.png` });
     await runAxe(page, testInfo, `tembo-thread-pending-${viewport.width}`);
     await page.evaluate(() => window.__channelHarness!.answerTembo());

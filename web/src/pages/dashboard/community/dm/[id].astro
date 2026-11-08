@@ -14,15 +14,17 @@ import ConversationHeader from "@/components/platform/mentors/ConversationHeader
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { mentorsServer } from "@/components/platform/mentors/server";
 
-const page = await resolveConversationPage(Astro);
-if (page instanceof Response) return page;
 const now = Date.now();
-// The other member, and the accepted request that opened it (staff-opened ones have none). The request is
-// mentoring data, shown only while mentor requests are open; otherwise the header names the person alone.
-const conversation = await mentorsServer(Astro, env, page.context.me, now).conversation(page.channel.id).catch((error: unknown) => {
-  console.error("Conversation page: the conversation's header could not be read", error);
-  return null;
-});
+// The other member, and the accepted request that opened it (staff-opened ones have none), read beside the
+// conversation. The request is mentoring data, shown only while mentor requests are open; otherwise the
+// header names the person alone.
+const page = await resolveConversationPage(Astro, (me, channel) =>
+  mentorsServer(Astro, env, me, now).conversation(channel.id).catch((error: unknown) => {
+    console.error("Conversation page: the conversation's header could not be read", error);
+    return null;
+  }));
+if (page instanceof Response) return page;
+const conversation = page.header;
 const counterpart = conversation?.counterpart ?? null;
 const request = mentorRequestsOpen(page.context.me) ? conversation?.request ?? null : null;
 const viewerId = page.context.me.user.id;

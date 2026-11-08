@@ -158,19 +158,22 @@ export async function getRequest(ctx: MentoringContext, id: string): Promise<Men
  * The header of a direct conversation the caller is a member of (U-4.1's /dm/:id page): the other
  * member, with global badges, and the latest accepted request between them that points at it. null
  * for anyone else, and for a channel that is not a direct conversation, through the same reads. Two
- * statements: the membership and counterpart, then the request (only for a member).
+ * statements read together, the membership and counterpart beside the request: the request is read
+ * only by its parties, and is dropped unless the caller is a member, so it says nothing to anyone else.
  */
 export async function getConversation(ctx: MentoringContext, channelId: string): Promise<Conversation | null> {
-  const member = await ctx.db.prepare(`SELECT other.userId AS counterpartId, ${personColumns("u", "other.userId", "counterpart")}
-    FROM channel c JOIN channel_member mine ON mine.channelId = c.id AND mine.userId = ?2
-      LEFT JOIN channel_member other ON other.channelId = c.id AND other.userId <> ?2
-      LEFT JOIN "user" u ON u.id = other.userId
-    WHERE c.id = ?1 AND c.kind = 'DIRECT' ORDER BY u.name, other.userId LIMIT 1`)
-    .bind(channelId, ctx.viewerId).first<Record<string, unknown> & { counterpartId: string | null }>();
+  const [member, request] = await Promise.all([
+    ctx.db.prepare(`SELECT other.userId AS counterpartId, ${personColumns("u", "other.userId", "counterpart")}
+      FROM channel c JOIN channel_member mine ON mine.channelId = c.id AND mine.userId = ?2
+        LEFT JOIN channel_member other ON other.channelId = c.id AND other.userId <> ?2
+        LEFT JOIN "user" u ON u.id = other.userId
+      WHERE c.id = ?1 AND c.kind = 'DIRECT' ORDER BY u.name, other.userId LIMIT 1`)
+      .bind(channelId, ctx.viewerId).first<Record<string, unknown> & { counterpartId: string | null }>(),
+    ctx.db.prepare(`${REQUEST_SELECT}
+      WHERE r.channelId = ?1 AND r.status = 'ACCEPTED' AND ?2 IN (r.requesterId, r.mentorId)
+      ORDER BY r.acceptedAt DESC, r.id DESC LIMIT 1`).bind(channelId, ctx.viewerId).first<RequestRow>(),
+  ]);
   if (!member) return null;
-  const request = await ctx.db.prepare(`${REQUEST_SELECT}
-    WHERE r.channelId = ?1 AND r.status = 'ACCEPTED' AND ?2 IN (r.requesterId, r.mentorId)
-    ORDER BY r.acceptedAt DESC, r.id DESC LIMIT 1`).bind(channelId, ctx.viewerId).first<RequestRow>();
   return {
     counterpart: member.counterpartId === null ? null : personSummary(member.counterpartId, personRow(member, "counterpart")),
     request: request ? toRequest(request, ctx.viewerId) : null,

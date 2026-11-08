@@ -12,26 +12,22 @@
  * A page with its own header (a private conversation, U-4.1) passes it in the
  * `header` slot; otherwise the channel's own ChannelHeader shows.
  */
-import type { Channel } from "@/lib/platform/contracts";
-import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
-import { loadRouteShareables, type ChannelsPage } from "./channel-page";
+import type { ChannelPageView, ChannelsPage } from "./channel-page";
 import ChannelFrame from "./ChannelFrame.astro";
 import ChannelHeader from "./ChannelHeader.astro";
 import ChannelView from "./ChannelView";
 
 interface Props {
-  page: ChannelsPage & { channel: Channel };
+  page: ChannelsPage & ChannelPageView;
 }
 
 const { page } = Astro.props;
 const query = Astro.url.searchParams;
-// The first page, the `?thread=` replies and the read marker (B-2.3), so the channel reads without
-// JavaScript. Only once agreed: the habits come first. It never moves the read marker.
-const first = page.agreed ? await getRouteChannelPage(Astro) : null;
-// The work the composer can attach (B-2.4): the person's own projects, and session clips only in their
-// cohort's own channels. Null where they cannot post or they failed to load, and then the composer
-// offers no attach tools.
-const shareables = page.agreed ? await loadRouteShareables(Astro) : null;
+// Read with the page's frame (channel-page.ts). The first page, the `?thread=` replies and the read
+// marker (B-2.3), so the channel reads without JavaScript; it never moves the read marker. And the
+// work the composer can attach (B-2.4): the person's own projects, and session clips only in their
+// cohort's own channels, or null, and then the composer offers no attach tools.
+const { first, shareables } = page;
 const threadId = first?.page.thread ? query.get("thread") : null;
 const ownHeader = Astro.slots.has("header");
 ---
@@ -55,10 +51,10 @@ const ownHeader = Astro.slots.has("header");
       </div>
     </ChannelView>
   ) : ownHeader ? (
-    <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self}>
+    <ChannelFrame channel={page.channel} canAgree={page.canAgree} action={page.self}>
       <slot name="header" slot="header" />
     </ChannelFrame>
   ) : (
-    <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
+    <ChannelFrame channel={page.channel} canAgree={page.canAgree} action={page.self} />
   )
 }

@@ -1,8 +1,9 @@
 import type { AstroGlobal } from "astro";
 import { env } from "cloudflare:workers";
-import type { Channel, ChannelShareables, ConductAcknowledgement } from "@/lib/platform/contracts";
+import type { Channel, ChannelShareables, ConductAcknowledgement, Me } from "@/lib/platform/contracts";
+import type { ChannelPage } from "@/lib/channels/page";
 import { isAgentSession } from "@/lib/agent-auth";
-import { getRouteChannel, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
+import { getRouteChannel, getRouteChannelPage, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import type { ChannelSpace } from "@/lib/platform/server/space-routes";
 import { resolveSpacePageWith, type SpacePageContext } from "@/components/platform/spaces/space-page";
 import type { SpacePageKey } from "@/components/platform/spaces/sidebar";
@@ -50,17 +51,28 @@ export interface ChannelsPage {
   self: string;
 }
 
+/**
+ * What a conversation shows once its habits are agreed, read with the page's frame rather than after
+ * it (PERF-2): the first page of messages (null when it is not this person's to read) and what the
+ * composer can attach (null hides the attach tools).
+ */
+export interface ChannelPageView {
+  channel: Channel;
+  first: { channel: Channel; page: ChannelPage } | null;
+  shareables: ChannelShareables | null;
+}
+
 async function resolve<T extends object>(
   astro: AstroGlobal,
   page: SpacePageKey,
-  find: () => Promise<T | null>,
+  find: (me: Me) => Promise<T | null>,
 ): Promise<(ChannelsPage & T) | Response> {
   const { method } = astro.request;
   const allowed = method === "GET" || method === "HEAD" || method === "POST";
   // Started beside onboarding once `channels` is known to be on (PERF-2). A GET also reads the
   // person's own agreement, which says nothing about this channel; a POST reads it after its write.
   const resolved = await resolveSpacePageWith(astro.locals, page, (me) => me.flags.channels && allowed
-    ? Promise.all([channelsServer(env.DB, me).list(), find(), method === "POST" ? null : channelsServer(env.DB, me).conduct.load()])
+    ? Promise.all([channelsServer(env.DB, me).list(), find(me), method === "POST" ? null : channelsServer(env.DB, me).conduct.load()])
     : Promise.resolve(null));
   if (!resolved?.[0].me.flags.channels) return respond(404);
   const [context, loaded] = resolved;
@@ -80,22 +92,39 @@ async function resolve<T extends object>(
   return { context, readable, record, agreed: conductAgreed(record), canAgree, self, ...found };
 }
 
+/**
+ * The route channel's view, once it is known to belong on this page. Its reads chain off the one
+ * cached channel lookup, so they run beside the conduct record and onboarding: on a first visit, when
+ * the habits show instead, they are simply not rendered. A POST only agrees and redirects.
+ */
+async function loadView(astro: AstroGlobal, channel: Channel): Promise<ChannelPageView> {
+  if (astro.request.method === "POST") return { channel, first: null, shareables: null };
+  const [first, shareables] = await Promise.all([getRouteChannelPage(astro), loadRouteShareables(astro)]);
+  return { channel, first, shareables };
+}
+
 /** A channel's page in its space: `/dashboard/community/c/:slug` or `/dashboard/cohort/c/:slug`. */
-export async function resolveChannelPage(astro: AstroGlobal, space: ChannelSpace): Promise<(ChannelsPage & { channel: Channel }) | Response> {
+export async function resolveChannelPage(astro: AstroGlobal, space: ChannelSpace): Promise<(ChannelsPage & ChannelPageView) | Response> {
   return resolve(astro, space === "cohort" ? "cohortChannel" : "communityChannel", async () => {
     const channel = await getRouteChannel(astro);
-    return channel && channelSpace(channel) === space ? { channel } : null;
+    return channel && channelSpace(channel) === space ? loadView(astro, channel) : null;
   });
 }
 
 /**
  * A private conversation's page, `/dashboard/community/dm/:id` (U-4.1): only a DIRECT channel this
- * person is a member of; any other id is not found, exactly like one that does not exist.
+ * person is a member of; any other id is not found, exactly like one that does not exist. `header`
+ * reads what the page's own header shows (who it is with), beside the view.
  */
-export async function resolveConversationPage(astro: AstroGlobal): Promise<(ChannelsPage & { channel: Channel }) | Response> {
-  return resolve(astro, "conversation", async () => {
+export async function resolveConversationPage<H>(
+  astro: AstroGlobal,
+  header: (me: Me, channel: Channel) => Promise<H>,
+): Promise<(ChannelsPage & ChannelPageView & { header: H }) | Response> {
+  return resolve(astro, "conversation", async (me) => {
     const channel = await getRouteChannel(astro);
-    return channel?.kind === "DIRECT" ? { channel } : null;
+    if (channel?.kind !== "DIRECT") return null;
+    const [view, read] = await Promise.all([loadView(astro, channel), header(me, channel)]);
+    return { ...view, header: read };
   });
 }
 

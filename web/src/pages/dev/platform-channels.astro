@@ -32,6 +32,7 @@ import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { spaceSidebar, type SidebarModel, type SpacePageKey } from "@/components/platform/spaces/sidebar";
 import ChannelFrame from "@/components/channels/ChannelFrame.astro";
+import ChannelHeader from "@/components/channels/ChannelHeader.astro";
 import ConductArticle from "@/components/channels/ConductArticle.astro";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
 import { AGENT_REFUSAL } from "@/components/channels/channel-page";
@@ -117,7 +118,19 @@ const title = viewing ? `#${viewing.name}` : conductView ? CONDUCT_TITLE : SPACE
   <SpaceSidebar slot="sidebar" model={harnessModel} />
   {
     viewing ? (
-      <ChannelFrame channel={viewing} agreed={agreed} canAgree={!agent} action={self} />
+      agreed ? (
+        <div class="flex min-h-full flex-col" data-channel-frame={viewing.slug} data-channel-kind={viewing.kind}>
+          <ChannelHeader channel={viewing} />
+          <section aria-labelledby="channel-not-open" data-channel-not-open class="mt-8 max-w-xl">
+            <h2 id="channel-not-open" class="font-body text-lg font-bold text-ink-primary">Conversations aren’t open yet</h2>
+            <p class="mt-2 text-[0.9375rem] leading-relaxed text-ink-secondary">
+              The harness has no messages: on a real page, #{viewing.name}’s conversation shows here.
+            </p>
+          </section>
+        </div>
+      ) : (
+        <ChannelFrame channel={viewing} canAgree={!agent} action={self} />
+      )
     ) : conductView ? (
       <ConductArticle record={record} canAgree={!agent} action={self} />
     ) : (

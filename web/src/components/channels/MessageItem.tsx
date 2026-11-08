@@ -1,8 +1,8 @@
 import { memo, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { AuthorSummary, Message, ReactionKind } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
+import { buttonClass } from "@/components/platform/ui/recipes";
 import RoleBadge from "@/components/platform/ui/RoleBadge";
 import TemboMark from "@/components/platform/ui/TemboMark";
 import TextReaction, { REACTIONS } from "@/components/platform/ui/TextReaction";
@@ -13,7 +13,7 @@ import MessageBody from "./MessageBody";
 import { DeleteConfirm, EditForm } from "./MessageEdit";
 import MessageMenu, { hasMenu } from "./MessageMenu";
 import {
-  ModerationNote, ModerationPanel, moderationRights, ReportedNote, useModeration, useUndoHide, type ModerationMode, type ReturnFocus,
+  ModerationNote, ModerationPanel, moderationRights, useModeration, useUndoHide, type ModerationMode, type ReturnFocus,
 } from "./MessageModeration";
 import { citationIcon, TemboAnswerFoot } from "./TemboAnswer";
 
@@ -42,11 +42,13 @@ type MessageItemProps = {
 
 const MAX_FACES = 3;
 
+/** The time as the list shows it, and in full for a screen reader: never only in a tooltip. */
 function TimeStamp({ at, now, withDay }: { at: number; now: number; withDay: boolean }) {
   const text = withDay && dayKey(at) !== dayKey(now) ? `${dayLabel(at, now)} ${clock(at)}` : clock(at);
   return (
-    <time dateTime={new Date(at).toISOString()} title={fullTime(at)} className="tabular-nums">
-      {text}
+    <time dateTime={new Date(at).toISOString()} className="tabular-nums">
+      <span aria-hidden="true">{text}</span>
+      <span className="sr-only">{fullTime(at)}</span>
     </time>
   );
 }
@@ -67,7 +69,7 @@ function TemboContent({ message, names }: { message: Message; names: readonly st
         <ol className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
           {message.citations.map((citation, index) => (
             <li key={citation.href}>
-              <a href={citation.href} className={cx("channel-cite", FOCUS_RING)} data-cite={index + 1}>
+              <a href={citation.href} className={buttonClass({ variant: "quiet", size: "sm", className: "channel-cite" })} data-cite={index + 1}>
                 <span className="channel-cite__n" aria-hidden="true">{index + 1}</span>
                 <span className="sr-only">Source {index + 1}: </span>
                 {citationIcon(citation)}
@@ -132,7 +134,7 @@ function ThreadLink({ message, now, people, open, href, onOpen }: {
       data-thread-trigger={message.id}
       aria-current={open ? "true" : undefined}
       onClick={click}
-      className={cx("channel-thread-link", FOCUS_RING)}
+      className={buttonClass({ variant: "ghost", size: "sm", className: "channel-thread-link" })}
     >
       <ThreadFaces message={message} people={people} />
       <span className="channel-thread-link__count">{summary.replies}</span>
@@ -211,7 +213,7 @@ function MessageItem({
   threadHref, onOpenThread, announce,
 }: MessageItemProps) {
   const [mode, setMode] = useState<Mode>("read");
-  const menuButton = useRef<HTMLButtonElement>(null);
+  const menuButton = useRef<HTMLButtonElement | null>(null);
   const article = useRef<HTMLElement>(null);
   const nameId = useId();
   const moderation = useModeration();
@@ -306,15 +308,22 @@ function MessageItem({
           <MessageContent message={message} names={names} compact={variant === "parent"} />
         )}
 
-        <ModerationNote
-          message={message}
-          viewerId={viewerId}
-          onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined}
-          onUndo={undo.run}
-          undoing={undo.pending}
-        />
-        {mode === "delete" && <DeleteConfirm onDelete={remove} onKeep={backToMenu} />}
-        {mode !== "report" && <ReportedNote message={message} />}
+        {/*
+          One notice under a message at a time: asking to delete stands in for the message's own note. A form
+          opened from the message (report, hide, restore, review) sits under that note, which keeps saying what
+          state the message is in, also when the form is refused.
+        */}
+        {mode === "delete" ? (
+          <DeleteConfirm onDelete={remove} onKeep={backToMenu} />
+        ) : (
+          <ModerationNote
+            message={message}
+            viewerId={viewerId}
+            onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined}
+            onUndo={undo.run}
+            undoing={undo.pending}
+          />
+        )}
         <ModerationPanel mode={mode} message={message} announce={announce} onBack={back} />
         <Reactions message={message} onReact={can.react ? (kind, active) => void react(kind, active) : undefined} />
         {can.thread && (
