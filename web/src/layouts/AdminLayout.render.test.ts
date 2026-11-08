@@ -36,6 +36,12 @@ describe("AdminLayout without a spaces context (T14)", () => {
     expect(after).not.toContain("data-admin-space");
   });
 
+  it("says a rejected submit in the tab title when the page passes titlePrefix", async () => {
+    const page = { request: request(), locals: admin, slots: { default: "<p>Users table</p>" } };
+    const html = await container.renderToString(AdminLayout, { ...page, props: { title: "Users", titlePrefix: "Error: " } });
+    expect(html).toMatch(/<title>Error: Users \| TTV Admin\b[^<]*<\/title>/);
+  });
+
   it("still sends a non-admin away before drawing anything", async () => {
     const locals = { user: { id: "synthetic-member" }, isAdmin: false } as unknown as App.Locals;
     const response = await container.renderToResponse(AdminLayout, { request: request(), locals, props: { title: "Users", spaces: null } });

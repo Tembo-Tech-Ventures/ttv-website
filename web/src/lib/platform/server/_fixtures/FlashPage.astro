@@ -1,0 +1,13 @@
+---
+/** A page that saves on POST and says so once after the 303, for flash.render.test.ts. */
+import { Notice } from "@/components/platform/ui";
+import { redirectWithFlash, takeFlash } from "../flash";
+
+if (Astro.request.method === "POST") {
+  return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: "Cohort updated", message: "Wanjiku sees the new dates." });
+}
+const flash = takeFlash(Astro);
+---
+
+{flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+<p>Cohort 05</p>

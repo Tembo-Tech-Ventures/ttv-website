@@ -126,6 +126,18 @@ describe("Notice", () => {
     expect(renderToStaticMarkup(<Notice tone="danger" announce="none">Earlier failure.</Notice>)).not.toContain("role=");
   });
 
+  it("is a region named by its title when it is part of the page, and an alert keeps no name that would replace its words", () => {
+    expect(renderToStaticMarkup(<Notice tone="warning" title="This channel is read-only" focusOnLoad />)).toContain('role="region" aria-label="This channel is read-only"');
+    // A notice that is simply part of the page adds no landmark.
+    expect(renderToStaticMarkup(<Notice tone="warning" title="This channel is read-only" />)).not.toContain("role=");
+    const labelled = renderToStaticMarkup(<Notice id="limits" title={<>Read-only <em>after</em> the cohort</>} />);
+    expect(labelled).toContain('role="region" aria-labelledby="limits-title"');
+    expect(labelled).toContain('<p id="limits-title"');
+    const alert = renderToStaticMarkup(<Notice tone="danger" title="We couldn't send that" />);
+    expect(alert).toContain('role="alert"');
+    expect(alert).not.toMatch(/aria-label(ledby)?=/);
+  });
+
   it("says its tone in words, so the icon's colour is never the only signal", () => {
     const root = dom(renderToStaticMarkup(<Notice tone="warning" title="This can't be undone" />));
     expect(root.querySelector(".sr-only")!.textContent).toBe("Warning: ");

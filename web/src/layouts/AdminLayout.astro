@@ -12,6 +12,8 @@
  *   const spaces = await resolveSpacePage(Astro.locals, "moderation");
  *   <AdminLayout title="Moderation" spaces={spaces}>…</AdminLayout>
  *
+ * After a rejected submit, `titlePrefix="Error: "` puts the failure in the tab title too.
+ *
  * The page draws its own title: an h1 in the spaces shell (its one display heading), the h2 it
  * always had in the existing shell.
  */
@@ -23,6 +25,8 @@ import { loadAdminNavFacts } from "@/components/admin/admin-nav-server";
 
 interface Props {
   title?: string;
+  /** Said before the title in the tab: "Error: " after a rejected submit, so the tab says it too. */
+  titlePrefix?: string;
   /** The queue page already holds the open-request count; every other page reads it here. */
   pendingAccessRequests?: number;
   /** The moderation page (channels on) already holds its waiting count; every other page reads it here. */
@@ -33,7 +37,7 @@ interface Props {
   spaces?: SpacePageContext | null;
 }
 
-const { title = "Admin", spaces = null } = Astro.props;
+const { title = "Admin", titlePrefix = "", spaces = null } = Astro.props;
 
 // Defense-in-depth: redirect if middleware didn't set isAdmin
 if (!Astro.locals.isAdmin) {
@@ -50,13 +54,13 @@ const inSpaces = spaces?.space === "admin";
 
 {
   inSpaces ? (
-    <SpacePage context={spaces} title={title} admin={nav}>
+    <SpacePage context={spaces} title={title} titlePrefix={titlePrefix} admin={nav}>
       <div class="pb-16" data-admin-space data-request-notes={nav.pendingRequestNotes}>
         <slot />
       </div>
     </SpacePage>
   ) : (
-    <BaseLayout title={`${title} | TTV Admin`}>
+    <BaseLayout title={`${titlePrefix}${title} | TTV Admin`}>
       <AdminShell
         client:load
         currentPath={Astro.url.pathname}

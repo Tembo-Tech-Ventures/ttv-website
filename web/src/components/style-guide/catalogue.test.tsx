@@ -41,6 +41,11 @@ describe("the public catalogue", () => {
     expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
   });
 
+  it("never takes focus on load, so the guide's own page keeps it", () => {
+    const html = CATALOGUE.map((entry) => renderToStaticMarkup(<>{entry.specimen()}</>)).join("");
+    expect(html).not.toContain("autofocus");
+  });
+
   it("names each tab-file navigation uniquely, so landmarks can be told apart", () => {
     const html = CATALOGUE.map((entry) => renderToStaticMarkup(<>{entry.specimen()}</>)).join("");
     const labels = [...html.matchAll(/<nav aria-label="([^"]+)"/g)].map((match) => match[1]);

@@ -15,7 +15,7 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
         <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-end">
           <div>
             <p className="font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">TTV Community</p>
-            <Heading id="community-heading" className="font-heading tracking-heading mt-5 text-4xl leading-tight text-ink-primary sm:text-5xl lg:text-6xl">
+            <Heading id="community-heading" className="font-display tracking-heading mt-5 text-4xl leading-tight text-ink-primary sm:text-5xl lg:text-6xl">
               People, with the work<br className="hidden sm:block" /> to tell their story.
             </Heading>
           </div>
