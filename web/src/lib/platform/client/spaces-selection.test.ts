@@ -114,6 +114,6 @@ describe("plain last-space cookie", () => {
     "ignores malformed, encoded and ambiguous values %j", header => expect(readLastSpaceCookie(header)).toBeNull(),
   );
   it("validates serialized data rather than allowing cookie injection", () => {
-    expect(() => serializeLastSpaceCookie("profile; HttpOnly" as SpaceId, true)).toThrow(/Invalid option/);
+    expect(() => serializeLastSpaceCookie("profile; HttpOnly" as SpaceId, true)).toThrow(/Not a space/);
   });
 });

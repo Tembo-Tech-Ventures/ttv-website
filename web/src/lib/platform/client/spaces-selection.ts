@@ -1,4 +1,5 @@
-import { type Intent, SPACE_ORDER, SpaceId } from "../contracts";
+import type { Intent } from "../contracts";
+import { isSpaceId, SPACE_ORDER, type SpaceId } from "../space-order";
 
 export const LAST_SPACE_COOKIE = "ttv-last-space";
 export const LAST_SPACE_MAX_AGE = 31_536_000;
@@ -27,8 +28,7 @@ export function selectDefaultSpace(
   { explicitSpace, lastSpace, preferred }: { explicitSpace?: unknown; lastSpace?: unknown; preferred?: unknown } = {},
 ): SpaceId | null {
   for (const candidate of [explicitSpace, lastSpace, preferred]) {
-    const parsed = SpaceId.safeParse(candidate);
-    if (parsed.success && spaces.includes(parsed.data)) return parsed.data;
+    if (isSpaceId(candidate) && spaces.includes(candidate)) return candidate;
   }
   return SPACE_ORDER.find(space => spaces.includes(space)) ?? null;
 }
@@ -40,10 +40,11 @@ export function readLastSpaceCookie(header: string | null | undefined): SpaceId 
     .map(part => part.slice(LAST_SPACE_COOKIE.length + 1));
   // Ambiguous cookies can result from an old, differently scoped preference.
   if (values.length !== 1) return null;
-  const parsed = SpaceId.safeParse(values[0]);
-  return parsed.success ? parsed.data : null;
+  return isSpaceId(values[0]) ? values[0] : null;
 }
 
 export function serializeLastSpaceCookie(space: SpaceId, secure: boolean): string {
-  return `${LAST_SPACE_COOKIE}=${SpaceId.parse(space)}; Path=/dashboard; SameSite=Lax; Max-Age=${LAST_SPACE_MAX_AGE}${secure ? "; Secure" : ""}`;
+  // Never write anything but the enum, whatever a caller passes at runtime.
+  if (!isSpaceId(space)) throw new TypeError("Not a space");
+  return `${LAST_SPACE_COOKIE}=${space}; Path=/dashboard; SameSite=Lax; Max-Age=${LAST_SPACE_MAX_AGE}${secure ? "; Secure" : ""}`;
 }
