@@ -26,7 +26,6 @@ const STUDENT = "synthetic-wanjiku";
 const ADMIN = "synthetic-amina";
 const MENTOR = "synthetic-david";
 const DIRECT = "synthetic-direct";
-const MENTOR = "synthetic-david";
 const databases: { close(): void }[] = [];
 afterEach(() => databases.splice(0).forEach((database) => database.close()));
 
@@ -48,12 +47,8 @@ function seeded() {
       ('${MENTOR}','Backend engineer','Reviews APIs.','["Code review"]','["WRITTEN_REVIEW"]',3,0);
     INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
     UPDATE feature_flag SET audience='ALL';`);
-  // A mentor with one request waiting, for the Mentoring space's Requests page.
-  sqlite.exec(`INSERT INTO user(id,name,email) VALUES ('${MENTOR}','David Kamau','david@example.test');
-    INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MENTOR}',id FROM Roles WHERE name='MENTOR';
-    INSERT INTO mentor_profile(userId,headline,areas,formats,monthlyCapacity,paused,createdAt,updatedAt)
-      VALUES ('${MENTOR}','Backend engineer','["Code review"]','["WRITTEN_REVIEW"]',3,0,1,1);
-    INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
+  // One request waiting for the mentor, for the Mentoring space's Requests page.
+  sqlite.exec(`INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
   const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
   // The student has agreed to the habits, so their channel pages show the conversation; the admin has
   // not, so theirs show the habits first. One message in each conversation, so its authors are read.
