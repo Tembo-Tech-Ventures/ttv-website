@@ -194,3 +194,22 @@ test("stacks a data table on a phone, each fact said with its column, and never 
   await expect(table.getByRole("checkbox", { name: "Select Wanjiku Mwangi" })).toBeVisible();
   await expect(table.getByRole("link", { name: "Review Wanjiku Mwangi" })).toBeVisible();
 });
+
+test("makes the link that names a row a 44px target on a touch screen, without moving the row", async ({ page }, testInfo) => {
+  const touch = testInfo.project.name.includes("mobile");
+  await open(page, "/style-guide/components");
+  const name = page.locator("#data-table td[data-primary] a").first();
+  const measured = await name.evaluate((link) => {
+    const row = link.closest("tr")!;
+    const pressable = { link: link.getBoundingClientRect().height, row: row.getBoundingClientRect().height };
+    // The same row with the press area taken away: it must be exactly as tall.
+    link.style.padding = "0";
+    link.style.margin = "0";
+    const without = { link: link.getBoundingClientRect().height, row: row.getBoundingClientRect().height };
+    link.style.padding = "";
+    link.style.margin = "";
+    return { link: Math.round(pressable.link), text: Math.round(without.link), row: Math.round(pressable.row), bareRow: Math.round(without.row) };
+  });
+  expect(measured.link).toBe(touch ? Math.max(44, measured.text) : measured.text);
+  expect(measured.row).toBe(measured.bareRow);
+});

@@ -93,7 +93,10 @@ type DataCellProps = {
   /** The column's name, said beside the value when the row stacks on a phone. */
   label: string;
   children?: ReactNode;
-  /** The cell that names the row: first, and bold once the row stacks. */
+  /**
+   * The cell that names the row: first, and bold once the row stacks. A link in it is a 44px target
+   * on a touch screen without moving the row (data-table.css).
+   */
   primary?: boolean;
   align?: "start" | "end";
   className?: string;

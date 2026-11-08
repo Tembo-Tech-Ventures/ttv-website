@@ -203,7 +203,8 @@ Many things side by side. Composed, so it works from `.astro`:
 Below 40rem each row stacks into a block that names each fact (`data-table.css`),
 so nothing scrolls sideways at 320px; the table roles are written out so it is
 still a table to a screen reader. Rows lift on hover; nothing in a row uses the
-muted ink, which falls below 4.5:1 on that lift.
+muted ink, which falls below 4.5:1 on that lift. On a touch screen the link in the `primary` cell is a
+44px target, its press area handed back by a negative margin so no row moves.
 
 ### DataList `#data-list`
 
