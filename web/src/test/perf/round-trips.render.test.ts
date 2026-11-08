@@ -46,6 +46,7 @@ function seeded() {
     INSERT INTO mentor_profile(userId,headline,bio,areas,formats,monthlyCapacity,paused) VALUES
       ('${MENTOR}','Backend engineer','Reviews APIs.','["Code review"]','["WRITTEN_REVIEW"]',3,0);
     INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
+    INSERT INTO feedback_theme(id,title,summary,kind,status,createdAt,updatedAt) VALUES ('theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',0,0);
     UPDATE feature_flag SET audience='ALL';`);
   const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
   // The student has agreed to the habits, so their channel pages show the conversation; the admin has
@@ -80,6 +81,7 @@ const PAGES = {
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
   "admin feedback detail": { path: () => "/admin/feedback/feedback", page: () => import("@/pages/admin/feedback/[id].astro"), user: ADMIN, id: "feedback" },
+  "admin feedback theme": { path: () => "/admin/feedback/themes/theme", page: () => import("@/pages/admin/feedback/themes/[id].astro"), user: ADMIN, id: "theme" },
   "admin feedback themes": { path: () => "/admin/feedback/themes", page: () => import("@/pages/admin/feedback/themes/index.astro"), user: ADMIN },
   "admin feedback": { path: () => "/admin/feedback", page: () => import("@/pages/admin/feedback/index.astro"), user: ADMIN },
   "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
@@ -148,6 +150,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin curricula": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
   "admin feedback detail": { d1: 16, depth: 3 },
+  "admin feedback theme": { d1: 15, depth: 3 },
   "admin feedback themes": { d1: 14, depth: 3 },
   // With the seed's one note listed, its attachments are read too (one query, same depth).
   "admin feedback": { d1: 16, depth: 3 },

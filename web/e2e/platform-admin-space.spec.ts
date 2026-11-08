@@ -136,7 +136,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/feedback", heading: "Feedback", current: "Feedback", retired: true },
   { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback", retired: true },
   { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback", retired: true },
-  { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback" },
+  { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback", retired: true },
   { path: "/admin/projects", heading: "Client projects", current: "Client projects", legacy: "Client Projects" },
   { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects" },
   { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
