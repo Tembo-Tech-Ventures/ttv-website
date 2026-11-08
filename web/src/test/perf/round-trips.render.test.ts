@@ -98,6 +98,7 @@ const PAGES = {
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
+  "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
@@ -212,6 +213,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin cohort": { d1: 17, depth: 2 },
   // Depth 4 before the style-guide rollout: every recording with its cohort, then the space.
   "admin recordings": { d1: 15, depth: 2 },
+  // Depth 4 before the style-guide rollout: the tokens, then the space.
+  "admin tokens": { d1: 14, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count for each status (which
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },

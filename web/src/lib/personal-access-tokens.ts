@@ -98,6 +98,20 @@ export interface AuthenticatedPersonalAccessToken {
   user: AuthUser;
 }
 
+/**
+ * A token request the rules refuse, as opposed to a failure: its message is
+ * written for the person, and `field` names the form field it is about, if any.
+ */
+export class PersonalAccessTokenInputError extends Error {
+  constructor(
+    message: string,
+    readonly field: "label" | "access" | "duration" | null = null
+  ) {
+    super(message);
+    this.name = "PersonalAccessTokenInputError";
+  }
+}
+
 interface CreatePersonalAccessTokenOptions {
   db: D1Database;
   userId: string;
@@ -111,11 +125,12 @@ interface CreatePersonalAccessTokenOptions {
 export function normalizePersonalAccessTokenLabel(value: string): string {
   const label = value.trim().replace(/\s+/g, " ");
   if (!label || label.length > 50) {
-    throw new Error("Token label must be between 1 and 50 characters.");
+    throw new PersonalAccessTokenInputError("Token label must be between 1 and 50 characters.", "label");
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9 ._-]*$/.test(label)) {
-    throw new Error(
-      "Token label may contain letters, numbers, spaces, dots, underscores, and hyphens."
+    throw new PersonalAccessTokenInputError(
+      "Token label may contain letters, numbers, spaces, dots, underscores, and hyphens.",
+      "label"
     );
   }
   return label;
@@ -130,7 +145,7 @@ export function parsePersonalAccessTokenDuration(
       hours as PersonalAccessTokenDuration
     )
   ) {
-    throw new Error("Choose a supported token duration.");
+    throw new PersonalAccessTokenInputError("Choose a supported token duration.", "duration");
   }
   return hours as PersonalAccessTokenDuration;
 }
@@ -141,7 +156,7 @@ export function parsePersonalAccessTokenScopes(
   if (typeof value === "string" && Object.hasOwn(ADMIN_PAGE_ACCESS, value)) {
     return [...ADMIN_PAGE_ACCESS[value as keyof typeof ADMIN_PAGE_ACCESS]];
   }
-  throw new Error("Choose read-only or read/write access to admin or channels.");
+  throw new PersonalAccessTokenInputError("Choose read-only or read/write access to admin or channels.", "access");
 }
 
 /** The one family a token's scopes belong to; null when they mix families. */
@@ -231,16 +246,16 @@ export async function createPersonalAccessToken({
   if (!userId) throw new Error("An authenticated user is required.");
   const label = normalizePersonalAccessTokenLabel(untrustedLabel);
   if (!PERSONAL_ACCESS_TOKEN_DURATIONS.includes(durationHours)) {
-    throw new Error("Choose a supported token duration.");
+    throw new PersonalAccessTokenInputError("Choose a supported token duration.", "duration");
   }
   const validatedScopes = parseStoredScopes(JSON.stringify(scopes));
-  if (!validatedScopes) throw new Error("Choose supported token scopes.");
+  if (!validatedScopes) throw new PersonalAccessTokenInputError("Choose supported token scopes.", "access");
   const family = personalAccessTokenFamily(validatedScopes);
   if (!family) {
-    throw new Error("Admin, community and channel token scopes cannot be combined.");
+    throw new PersonalAccessTokenInputError("Admin, community and channel token scopes cannot be combined.", "access");
   }
   if (!validatedScopes.includes(FAMILY_READ_SCOPE[family])) {
-    throw new Error("Every token must include admin:read, community:read or channels:read access.");
+    throw new PersonalAccessTokenInputError("Every token must include admin:read, community:read or channels:read access.", "access");
   }
 
   const nowSeconds = Math.floor(now.getTime() / 1_000);
@@ -253,7 +268,7 @@ export async function createPersonalAccessToken({
     .bind(userId, nowSeconds)
     .first<{ count: number }>();
   if (Number(active?.count ?? 0) >= MAX_ACTIVE_PERSONAL_ACCESS_TOKENS) {
-    throw new Error(
+    throw new PersonalAccessTokenInputError(
       `Revoke an existing token before creating more than ${MAX_ACTIVE_PERSONAL_ACCESS_TOKENS}.`
     );
   }

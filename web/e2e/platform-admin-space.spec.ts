@@ -151,7 +151,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations" },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
-  { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", legacy: "Personal Access Tokens" },
+  { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
   { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
   { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", legacy: "Agent Access" },
 ];
