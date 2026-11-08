@@ -120,11 +120,13 @@ interface AdminPage {
   current: string;
   /** The title the existing admin shell shows, as an h2, or null where it drew none. */
   legacy?: string | null;
+  /** On the style guide, with its flag-off path retired (D1): the same h1 in either frame. */
+  retired?: true;
 }
 
 /** Every admin page T14 moved, with a seeded record behind each detail page (platform-personas.local.sql). */
 const MOVED: readonly AdminPage[] = [
-  { path: "/admin/access-requests", heading: "Access requests", current: "Access requests" },
+  { path: "/admin/access-requests", heading: "Access requests", current: "Access requests", retired: true },
   { path: "/admin/users", heading: "Users", current: "Users" },
   { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users" },
   { path: "/admin/applications", heading: "Applications", current: "Applications" },
@@ -184,6 +186,10 @@ test.describe("every admin page", () => {
         await open(page, moved.path);
         await expect(page.locator(".spaces-shell")).toHaveCount(0);
         await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
+        if (moved.retired) {
+          await expect(page.getByRole("heading", { level: 1, name: moved.heading, exact: true })).toBeVisible();
+          return;
+        }
         await expect(page.locator("main h1")).toHaveCount(0);
         const legacy = moved.legacy === undefined ? moved.heading : moved.legacy;
         if (legacy !== null) await expect(page.getByRole("heading", { level: 2, name: legacy, exact: true })).toBeVisible();

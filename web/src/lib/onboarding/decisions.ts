@@ -5,6 +5,7 @@ import {
   AccessRequestQueueState, AccessRole, AdminAccessRequest, AdminAccessRequestList, Id, Timestamp, WebLink,
   type AccessDecision, type AdminAccessRequestQuery, type PersonSummary,
 } from "@/lib/platform/contracts";
+import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { OnboardingError } from "./service";
 
 /**
@@ -158,13 +159,17 @@ const PAGE_QUERIES: Record<AccessRequestQueueState, string> = {
     ORDER BY a.decidedAt DESC, a.id DESC LIMIT ?3`,
 };
 
-/** One page and the open-request count for the Admin sidebar, read in parallel. */
+/**
+ * One page and the open-request count for the Admin sidebar, read in parallel. The count is the
+ * sidebar's own read (countPendingAccessRequests), shared for the request, so the queue page and its
+ * navigation count once.
+ */
 export async function listAccessRequests(db: D1Database, query: AdminAccessRequestQuery): Promise<AdminAccessRequestList> {
   const state = query.status ?? "PENDING";
   const cursor = query.cursor ? decodeCursor(query.cursor, state) : null;
   const [{ results }, pending] = await Promise.all([
     db.prepare(PAGE_QUERIES[state]).bind(cursor?.at ?? null, cursor?.id ?? null, ACCESS_REQUEST_PAGE_SIZE + 1).all<AdminRow>(),
-    db.prepare("SELECT count(*) AS count FROM access_request WHERE status = 'PENDING'").first<{ count: number }>(),
+    countPendingAccessRequests(db),
   ]);
   const page = results.slice(0, ACCESS_REQUEST_PAGE_SIZE);
   const last = page.at(-1);
@@ -173,6 +178,6 @@ export async function listAccessRequests(db: D1Database, query: AdminAccessReque
     items: page.map(adminRequest),
     nextCursor: results.length > ACCESS_REQUEST_PAGE_SIZE && last && typeof at === "number"
       ? encodeCursor({ v: 1, state, at, id: last.id }) : null,
-    pendingCount: pending?.count ?? 0,
+    pendingCount: pending,
   });
 }
