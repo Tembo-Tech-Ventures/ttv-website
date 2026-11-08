@@ -3,8 +3,8 @@
  * Dev-only harness for mentor connections (U-4.1/S-4.1).
  *
  * The real pages are /dashboard/community/mentors, /dashboard/mentoring/requests and
- * /dashboard/mentoring/availability. This page renders the same islands inside SpacesLayout,
- * with the real sidebar model, over the stateful mentoring mock, for any synthetic person:
+ * /dashboard/mentoring/availability. This page renders the same islands and forms inside
+ * SpacesLayout, with the real sidebar model, over the stateful mentoring mock, for any synthetic person:
  *
  *   ?persona=wanjiku&view=directory&area=Career&format=CALL_30_MIN&available=true&ask=<mentorId>
  *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
@@ -19,7 +19,9 @@
  *
  * The drawer's form posts here without JavaScript, through the real page's `handleRequestPost`, with
  * the mock standing in for the API. Its action keeps only the directory's own params, so the harness
- * settings above ride along in a dev-only cookie.
+ * settings above ride along in a dev-only cookie. The availability form (no island) posts here too,
+ * through the real page's `handleAvailabilityPost`; the mock is fresh on each request, so a save lands
+ * on "Availability saved" over the fixture's values, not the ones sent.
  *
  * Nothing is reachable outside `astro dev`; `e2e/platform-mentors.spec.ts` holds the contract.
  */
@@ -33,6 +35,8 @@ import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
 import { spaceSidebar, type SpacePageKey } from "@/components/platform/spaces/sidebar";
 import HarnessMentors from "@/components/platform/mentors/harness/HarnessMentors";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
+import AvailabilityForm from "@/components/platform/mentors/AvailabilityForm.astro";
+import { handleAvailabilityPost, valuesOf, type AvailabilityPostResult } from "@/components/platform/mentors/availability-post";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { handleRequestPost, isRequestPost, type RequestPostResult } from "@/components/platform/mentors/request-post";
 import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
@@ -81,8 +85,19 @@ if (check) mock.check(check.requestId, check.check, check.status);
 const filters = parseDirectoryUrl(Astro.url.searchParams);
 const directory = { area: filters.area, format: filters.format, available: filters.available };
 
+let availabilityPosted: Extract<AvailabilityPostResult, { kind: "render" }> | null = null;
+if (Astro.request.method === "POST" && view === "availability") {
+  const result = await handleAvailabilityPost(Astro.request, (body) => mock.fetch(new URL(ROUTES.updateMentorAvailability.path, Astro.url), {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }));
+  if (result.kind === "saved") return Astro.redirect(`${Astro.url.pathname}?saved=1`, 303);
+  if (result.kind === "refuse") return new Response(null, { status: result.status });
+  availabilityPosted = result;
+  Astro.response.status = result.status;
+}
+
 let posted: Extract<RequestPostResult, { kind: "render" }> | null = null;
-if (Astro.request.method === "POST") {
+if (Astro.request.method === "POST" && view !== "availability") {
   if (!(await isRequestPost(Astro.request))) {
     // Agreeing to the habits from the drawer: as the real page does, record it and come back, drawer open.
     remember({ conduct: "agreed" });
@@ -150,7 +165,8 @@ const harness = view === "directory"
         return { initial, mentors: mentors.items, availability, anotherLook, now };
       })(),
     } as const
-    : { view, props: { initial: await mock.api.call(ROUTES.getMentorAvailability), now } } as const;
+    : null;
+const availability = view === "availability" ? await mock.api.call(ROUTES.getMentorAvailability) : null;
 
 const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-shell?persona=${persona}&space=${id}`])) as Record<SpaceId, string>;
 ---
@@ -159,13 +175,23 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
   me={me}
   space={space}
   title={view === "directory" ? "Mentors" : view === "requests" ? "Requests" : "Availability"}
-  titlePrefix={posted ? "Error: " : ""}
+  titlePrefix={posted || availabilityPosted ? "Error: " : ""}
   overlays={[]}
   harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }, spaceHrefs }}
 >
   <SpaceSidebar slot="sidebar" model={sidebar} />
   <MentorPageIntro page={view === "directory" ? "mentors" : view} />
-  <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
+  {harness && <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />}
+  {availability && (
+    <AvailabilityForm
+      saved={availability}
+      values={availabilityPosted?.values ?? valuesOf(availability)}
+      errors={availabilityPosted?.errors}
+      failure={availabilityPosted?.failure}
+      justSaved={!availabilityPosted && Astro.url.searchParams.get("saved") === "1"}
+      now={now}
+    />
+  )}
 </SpacesLayout>
 
 <style is:global>

@@ -10,7 +10,6 @@ import type { MentorRequestCheck, MentorRequestStatus, PersonSummary } from "@/l
 import { createMentoringMock, type MentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import { agreeToConduct } from "../agree-conduct";
-import AvailabilityEditor, { type AvailabilityEditorProps } from "../AvailabilityEditor";
 import MentorRequestsQueue, { type MentorRequestsQueueProps } from "../MentorRequestsQueue";
 import MentorsDirectory, { type MentorsDirectoryProps } from "../MentorsDirectory";
 
@@ -29,8 +28,7 @@ declare global {
 
 type Harness =
   | { view: "directory"; props: Omit<MentorsDirectoryProps, "api"> }
-  | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> }
-  | { view: "availability"; props: Omit<AvailabilityEditorProps, "api"> };
+  | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> };
 
 export default function HarnessMentors({ viewer, conductAgreed, check = null, latencyMs = 250, harness }: {
   viewer: PersonSummary;
@@ -70,6 +68,5 @@ export default function HarnessMentors({ viewer, conductAgreed, check = null, la
     };
     return <MentorsDirectory {...harness.props} conduct={{ ...conduct, agree }} api={mock.api} />;
   }
-  if (harness.view === "requests") return <MentorRequestsQueue {...harness.props} api={mock.api} />;
-  return <AvailabilityEditor {...harness.props} api={mock.api} />;
+  return <MentorRequestsQueue {...harness.props} api={mock.api} />;
 }

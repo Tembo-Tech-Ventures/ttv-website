@@ -3,7 +3,7 @@ import { runAxe } from "./platform-axe";
 
 /**
  * Mentor connections (U-4.1 / S-4.1) on the DEV-only harness `/dev/platform-mentors`: the real
- * directory, request drawer, mentor queue and availability editor inside SpacesLayout, over the
+ * directory, request drawer, mentor queue and availability form inside SpacesLayout, over the
  * stateful mentoring mock (S-4.1). Screens 05 and 06 at 390 and 1440, axe, the keyboard path,
  * optimistic moves that roll back, the drawer without JavaScript, an organisation account asking as
  * itself, and the flag off. `platform-mentor-requests.spec.ts` runs the same journeys against B-4.1.
@@ -177,19 +177,34 @@ for (const viewport of [DESKTOP, PHONE]) {
     await expect(look.getByRole("link", { name: /^Review revision 3 of / })).toHaveAttribute("href", "/dashboard/mentoring/confirm");
   });
 
-  test(`availability editor at ${viewport.width}px`, async ({ page }, testInfo) => {
+  // A plain form with no island; the page's own save is platform-mentor-requests.spec.ts.
+  test(`availability form at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
-    await open(page, harness({ persona: "david", view: "availability" }));
-    const editor = page.locator("[data-availability-editor]");
-    await expect(editor).toBeVisible();
+    await page.goto(harness({ persona: "david", view: "availability" }));
+    const form = page.locator("[data-availability-form]");
+    await expect(form.getByRole("textbox", { name: "Headline" })).toHaveValue("Backend engineer · fintech");
+    await expect(page.locator("[data-listing]")).toContainText("Listed");
     expect(await horizontalOverflow(page)).toBe(0);
     await page.screenshot({ path: `${EVIDENCE_DIR}/06-availability-${viewport.width}.png`, fullPage: true });
     await runAxe(page, testInfo, `availability-${viewport.width}`);
 
-    await editor.getByRole("switch", { name: "Pause new requests" }).check();
-    await editor.getByRole("button", { name: "Save availability" }).click();
-    await expect(editor.locator("[data-availability-saved]")).toBeVisible();
-    await expect(editor.locator("[data-listing]")).toContainText("Not in the mentor directory");
+    // An area twice comes back with everything kept, the reason under the field and focus on the notice.
+    await form.getByRole("textbox", { name: "Areas you help with" }).fill("Code review\ncode review");
+    await form.getByRole("checkbox", { name: "Pause new requests" }).check();
+    await form.getByRole("button", { name: "Save availability" }).click();
+    await expect(page).toHaveTitle(/^Error: /);
+    await expect(page.locator("#availability-errors")).toBeFocused();
+    await expect(page.locator("#availability-errors")).toContainText("One thing to fix before this can be saved");
+    await expect(page.locator("#areas-error")).toHaveText("List up to 20 areas, each once and up to 40 characters.");
+    await expect(form.getByRole("textbox", { name: "Areas you help with" })).toHaveValue("Code review\ncode review");
+    await expect(form.getByRole("checkbox", { name: "Pause new requests" })).toBeChecked();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/06-availability-error-${viewport.width}.png`, fullPage: true });
+
+    await form.getByRole("textbox", { name: "Areas you help with" }).fill("Code review");
+    await form.getByRole("button", { name: "Save availability" }).click();
+    await expect(page).toHaveURL(/[?&]saved=1$/);
+    await expect(page.locator("#availability-saved")).toContainText("Availability saved");
+    await expect(page.locator("#availability-saved")).toBeFocused();
   });
 }
 

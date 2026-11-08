@@ -1,7 +1,7 @@
 import type { APIContext } from "astro";
 import type {
   Conversation, CreateMentorRequest, Me, MentorAvailability, MentorDirectory, MentorDirectoryQuery, MentorRequestList,
-  MentorRequestListQuery, ProjectEmbed, WorthAnotherLook,
+  MentorRequestListQuery, ProjectEmbed, UpdateMentorAvailability, WorthAnotherLook,
 } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
 import { listOwnProjects } from "@/lib/channels/embeds";
@@ -29,6 +29,8 @@ export interface MentorsServer {
   anotherLook(): Promise<WorthAnotherLook>;
   /** Asks for time without JavaScript, through the API's own handler (request-post.ts). */
   create(body: CreateMentorRequest): Promise<Response>;
+  /** Saves this mentor's availability without JavaScript, through the API's own handler (availability-post.ts). */
+  saveAvailability(body: UpdateMentorAvailability): Promise<Response>;
 }
 
 export function mentorsServer(
@@ -52,6 +54,15 @@ export function mentorsServer(
         body: JSON.stringify(body),
       });
       return mentoringRequest("createMentorRequest", { request, locals: context.locals, params: {} }, env);
+    },
+    saveAvailability(body) {
+      // The same handler as PUT /api/mentoring/availability, from the page's own same-origin post.
+      const request = new Request(new URL(ROUTES.updateMentorAvailability.path, context.url), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Origin: context.url.origin },
+        body: JSON.stringify(body),
+      });
+      return mentoringRequest("updateMentorAvailability", { request, locals: context.locals, params: {} }, env);
     },
   };
 }

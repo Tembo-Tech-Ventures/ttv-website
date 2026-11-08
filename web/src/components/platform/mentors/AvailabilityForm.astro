@@ -1,0 +1,123 @@
+---
+import { Button, Card, Checkbox, ChoiceGroup, Chip, FOCUS_RING, Notice, TextAreaField, TextField, cx } from "@/components/platform/ui";
+import { MAX_MONTHLY_CAPACITY, MentorRequestFormat, type MentorAvailability } from "@/lib/platform/contracts";
+import { capacityView, FORMAT_HINTS, FORMAT_LABELS, listingNote, MENTORS_PATH } from "./mentor-display";
+import { MAX_AREA, MAX_AREAS, MAX_BIO, type AvailabilityErrors, type AvailabilityFailure, type AvailabilityValues } from "./availability-post";
+
+/**
+ * Mentoring → Availability (screen 06's rail, in full): what members read
+ * about this mentor and how much time they give. A plain form that posts to
+ * its page (availability-post.ts), built from the kit with no island, so it
+ * saves without JavaScript. The listing card always says what is saved; the
+ * fields show what was posted when a save was refused, so nothing typed is lost.
+ */
+interface Props {
+  saved: MentorAvailability;
+  values: AvailabilityValues;
+  errors?: AvailabilityErrors;
+  failure?: AvailabilityFailure | null;
+  /** The redirect after a save landed here: say so, and what members now see. */
+  justSaved?: boolean;
+  now: number;
+}
+
+const { saved, values, errors = {}, failure = null, justSaved = false, now } = Astro.props;
+const count = Object.keys(errors).length;
+const formats = MentorRequestFormat.options.map((format) => ({ value: format, label: FORMAT_LABELS[format], hint: FORMAT_HINTS[format] }));
+---
+
+<div class="flex max-w-3xl flex-col gap-8" data-availability>
+  {justSaved && (
+    <Notice tone="success" focusOnLoad id="availability-saved" title="Availability saved">
+      {saved.listed
+        ? "Members see these details in the mentor directory now."
+        : "Members don't see you in the mentor directory right now: your listing below says why."}
+    </Notice>
+  )}
+
+  <Card className="flex flex-col gap-2" data-listing={saved.listed ? "listed" : "unlisted"}>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <p class="text-[0.9375rem] font-semibold text-ink-primary">Your listing</p>
+      <Chip tone={saved.listed ? "success" : "neutral"}>{saved.listed ? "Listed" : "Not listed"}</Chip>
+    </div>
+    <p class="text-sm leading-relaxed text-ink-secondary">{listingNote(saved)}</p>
+    {saved.listed && (
+      <p class="text-sm text-ink-secondary">
+        This month: {capacityView(saved.capacity, now).text}.{" "}
+        <a href={MENTORS_PATH} class={cx("rounded-sm font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>See the directory</a>
+      </p>
+    )}
+  </Card>
+
+  <form method="POST" class="flex flex-col gap-7" data-availability-form>
+    {count > 0 && (
+      <Notice tone="danger" focusOnLoad id="availability-errors" title={`${count === 1 ? "One thing" : `${count} things`} to fix before this can be saved`}>
+        Everything you wrote is still here.
+      </Notice>
+    )}
+    {failure && (
+      <Notice tone="danger" focusOnLoad id="availability-failure" title={failure.title}>{failure.detail}</Notice>
+    )}
+
+    <TextField
+      name="headline"
+      label="Headline"
+      hint="What you do, in a line. Members see it under your name."
+      placeholder="Backend engineer · fintech"
+      defaultValue={values.headline}
+      error={errors.headline}
+      required
+    />
+    <TextAreaField
+      name="areas"
+      label="Areas you help with"
+      hint={`One a line. Up to ${MAX_AREAS}, each up to ${MAX_AREA} characters. Members filter the directory by area.`}
+      rows={5}
+      defaultValue={values.areas}
+      error={errors.areas}
+    />
+    <ChoiceGroup
+      name="formats"
+      type="checkbox"
+      label="How you help"
+      hint="Offer at least one."
+      options={formats}
+      defaultValue={values.formats}
+      error={errors.formats}
+    />
+    <TextField
+      type="number"
+      name="monthlyCapacity"
+      label="Requests a month"
+      hint={`From 0 to ${MAX_MONTHLY_CAPACITY}. Each waiting request and each one you accept this month takes a spot; the count starts again on the 1st.`}
+      inputMode="numeric"
+      min={0}
+      max={MAX_MONTHLY_CAPACITY}
+      step={1}
+      defaultValue={values.monthlyCapacity}
+      error={errors.monthlyCapacity}
+      required
+      className="max-w-xs"
+    />
+    <TextAreaField
+      name="bio"
+      label="About you"
+      optional
+      hint={`A sentence or two on what you like reviewing. Up to ${MAX_BIO} characters.`}
+      defaultValue={values.bio}
+      error={errors.bio}
+    />
+    <Checkbox
+      id="paused"
+      name="paused"
+      label="Pause new requests"
+      hint="While paused you're not in the directory and nobody can send you a new request. Requests already waiting stay with you."
+      defaultChecked={values.paused}
+    />
+
+    <div class="flex flex-wrap items-center gap-3">
+      <Button type="submit" variant="primary" size="lg">Save availability</Button>
+      <Button type="reset" size="lg">Undo changes</Button>
+    </div>
+  </form>
+</div>

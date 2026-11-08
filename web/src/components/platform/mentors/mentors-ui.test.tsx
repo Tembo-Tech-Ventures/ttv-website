@@ -11,7 +11,6 @@ import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-dire
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import { MASKED_NOTE } from "@/components/channels/MaskedText";
-import AvailabilityEditor from "./AvailabilityEditor";
 import MentorRequestsQueue from "./MentorRequestsQueue";
 import { isRecent, RECENT_DAYS } from "./OwnRequests";
 import MentorsDirectory, { menuAlignment, splitAreas, standings, TOP_AREAS, type MentorsDirectoryProps } from "./MentorsDirectory";
@@ -670,40 +669,6 @@ describe("a mentor's requests", () => {
     await settle();
     expect(request(pendingMentorRequest.id).dataset.status).toBe("WITHDRAWN");
     expect(request(pendingMentorRequest.id).textContent).toContain("Wanjiku withdrew this request.");
-  });
-});
-
-describe("the availability editor", () => {
-  it("saves a change, says whether the mentor is listed, and undoes unsaved changes", async () => {
-    const mock = createMentoringMock({ viewer: people.david });
-    await act(async () => root.render(<AvailabilityEditor initial={mock.availability(people.david.id)} now={FIXTURE_NOW} api={mock.api} />));
-    expect(q("[data-availability-editor] [data-listing]")!.dataset.listing).toBe("listed");
-    const save = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Save availability")!;
-    expect(save.disabled).toBe(true);
-    const pause = q<HTMLInputElement>("input[role=switch]")!;
-    await act(async () => pause.click());
-    expect(pause.getAttribute("aria-checked")).toBe("true");
-    expect(save.disabled).toBe(false);
-    await act(async () => q<HTMLFormElement>("[data-availability-editor]")!.requestSubmit());
-    await settle();
-    expect(q("[data-listing]")!.dataset.listing).toBe("unlisted");
-    expect(text("[data-listing]")).toContain("Paused.");
-    expect(q("[data-availability-saved]")).not.toBeNull();
-    expect(mock.availability(people.david.id).paused).toBe(true);
-  });
-
-  it("focuses the first field to fix", async () => {
-    const mock = createMentoringMock({ viewer: people.peter });
-    await act(async () => root.render(<AvailabilityEditor initial={mock.availability(people.peter.id)} now={FIXTURE_NOW} api={mock.api} />));
-    expect(text("[data-listing]")).toContain("Not listed yet");
-    const capacity = q<HTMLInputElement>("input[type=number]")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(capacity, "2");
-      capacity.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () => q<HTMLFormElement>("[data-availability-editor]")!.requestSubmit());
-    expect(document.activeElement?.id).toMatch(/-headline$/);
-    expect(document.activeElement?.getAttribute("aria-invalid")).toBe("true");
   });
 });
 
