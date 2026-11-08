@@ -465,7 +465,7 @@ test.describe("the channel view", () => {
     await edited.getByRole("button", { name: /Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Delete…" }).click();
     await expect(page.getByRole("button", { name: "Keep it" })).toBeFocused();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await page.getByRole("button", { name: "Delete message", exact: true }).click();
     await expect(page.locator("[data-channel-announcer]")).toHaveText("Message deleted.");
     await expect(scroller(page)).toBeFocused();
 
@@ -607,7 +607,7 @@ test.describe("on a real channel page", () => {
     // And the author can take it back.
     await mine.getByRole("button", { name: /Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Delete…" }).click();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await page.getByRole("button", { name: "Delete message", exact: true }).click();
     await expect(page.locator("[data-message]").filter({ hasText: words })).toHaveCount(0);
   });
 });

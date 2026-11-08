@@ -24,6 +24,7 @@ const { tracePerf } = await import("@/lib/observability/perf-trace");
 
 const STUDENT = "synthetic-wanjiku";
 const ADMIN = "synthetic-amina";
+const DIRECT = "synthetic-direct";
 const databases: { close(): void }[] = [];
 afterEach(() => databases.splice(0).forEach((database) => database.close()));
 
@@ -40,7 +41,14 @@ function seeded() {
     INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','${ADMIN}',id FROM Roles WHERE name='ADMIN';
     UPDATE feature_flag SET audience='ALL';`);
-  const cohortChannel = sqlite.prepare("SELECT slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { slug: string };
+  const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
+  // The student has agreed to the habits, so their channel pages show the conversation; the admin has
+  // not, so theirs show the habits first. One message in each conversation, so its authors are read.
+  sqlite.exec(`INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES ('${STUDENT}',1,0);
+    INSERT INTO channel(id,kind,slug,name) VALUES ('${DIRECT}','DIRECT','dm','Amina Hassan');
+    INSERT INTO channel_member(channelId,userId) VALUES ('${DIRECT}','${STUDENT}'),('${DIRECT}','${ADMIN}');
+    INSERT INTO channel_message(id,channelId,seq,changeSeq,authorId,body) VALUES
+      ('cohort-hello','${cohortChannel.id}',1,1,'${STUDENT}','Habari, cohort'),('direct-hello','${DIRECT}',1,1,'${ADMIN}','Karibu');`);
   return { db: withRoundTrips(withRaw(sqlite, db)), cohortChannel: cohortChannel.slug };
 }
 
@@ -52,6 +60,8 @@ beforeAll(async () => {
 const PAGES = {
   "cohort overview": { path: () => "/dashboard/cohort", page: () => import("@/pages/dashboard/index.astro"), user: STUDENT },
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
+  "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
+  conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
@@ -76,14 +86,15 @@ async function visit(name: PageName) {
   const { default: Page } = await page();
   const url = new URL(path(cohortChannel), "https://ttv.invalid");
   const locals = {} as App.Locals;
+  const params = { slug: cohortChannel, id: DIRECT };
   const context = {
-    url, request: new Request(url), locals, params: { slug: cohortChannel },
+    url, request: new Request(url), locals, params,
     cookies: { get: () => undefined, set: () => {} },
     redirect: (location: string, status = 302) => new Response(null, { status, headers: { location } }),
   };
   const { result, summary } = await tracePerf(db, async () => {
     const response = await onRequest(context as never, async () =>
-      container.renderToResponse(Page, { request: new Request(url), locals, params: { slug: cohortChannel } })) as Response;
+      container.renderToResponse(Page, { request: new Request(url), locals, params })) as Response;
     return { status: response.status, body: await response.text() };
   });
   return { ...result, summary };
@@ -95,7 +106,12 @@ async function visit(name: PageName) {
  */
 const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "cohort overview": { d1: 16, depth: 3 },
-  "cohort channel": { d1: 16, depth: 4 },
+  // The conversation's reads chain off the route channel, which the router reads beside the space
+  // context (page-channels: 6, 4 and 8 deep before). A first visit reads the view too, unrendered,
+  // rather than wait for the habits' answer.
+  "cohort channel": { d1: 20, depth: 3 },
+  "cohort channel, first visit": { d1: 17, depth: 3 },
+  conversation: { d1: 23, depth: 3 },
   // Two more than PERF-2 measured: the journey's profile and entries, read with the page since PERF-3
   // (#330) in place of three API calls after hydration, each with its own middleware and auth reads.
   community: { d1: 18, depth: 3 },

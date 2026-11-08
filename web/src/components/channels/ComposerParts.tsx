@@ -1,23 +1,27 @@
-import { Menu, MenuButton, MenuHeading, MenuItem, MenuItems, MenuSection } from "@headlessui/react";
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { PiAt, PiFolderSimple, PiPaperPlaneRightFill, PiPlus, PiSparkle, PiVideoCamera, PiX } from "react-icons/pi";
 import type { MessageEmbed, TemboUsage } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
+import Button from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
+import IconButton from "@/components/platform/ui/IconButton";
+import Menu, { MenuItem, MenuSection } from "@/components/platform/ui/Menu";
+import RoleBadge from "@/components/platform/ui/RoleBadge";
 import TemboMark from "@/components/platform/ui/TemboMark";
+import { RAISED } from "@/components/platform/ui/tones";
 import { sameEmbed, type Shareables } from "./actions";
 import { clipTime, type ComposerTools } from "./channel-format";
 import type { MentionCandidate } from "./mentions";
-import { MENU_ITEM } from "./MessageMenu";
 
 export const MAX_EMBEDS = 5;
 
 /** What "Ask Tembo here" does, unlike the private Ask Tembo page (QA3-03, QA3-15). */
 export const ASK_HERE = "Adds @tembo to your message. Everyone who can read this channel sees the question and Tembo's answer.";
+/** The same, in one line under a narrow composer. */
+export const ASK_HERE_SHORT = "Ask Tembo here: everyone in this channel sees it.";
 
-const TOOL =
-  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:h-11 pointer-coarse:min-w-11";
+/** Tembo's badge, as the server words it on Tembo's own messages. */
+const AI_BADGE = { kind: "AI", label: "AI" } as const;
 
 export function embedLabel(embed: MessageEmbed): string {
   return embed.type === "project" ? `${embed.title} · rev ${embed.version}` : `${embed.title} · ${clipTime(embed.startSeconds)}`;
@@ -34,24 +38,19 @@ type PickProps = { attached: readonly MessageEmbed[]; onPick: (embed: MessageEmb
 
 function AttachSection({ title, items, empty, attached, onPick }: PickProps & { title: string; items: readonly MessageEmbed[]; empty: string }) {
   return (
-    <MenuSection>
-      <MenuHeading className="px-3 pt-1.5 pb-1 text-xs font-semibold text-ink-muted">{title}</MenuHeading>
-      {items.length === 0 && (
-        <MenuItem disabled>
-          <span className={MENU_ITEM}>{empty}</span>
-        </MenuItem>
-      )}
+    <MenuSection heading={title}>
+      {items.length === 0 && <MenuItem disabled>{empty}</MenuItem>}
       {items.map((embed) => {
         const already = attached.some((item) => sameEmbed(item, embed));
         return (
-          <MenuItem key={embedKey(embed)} disabled={already || attached.length >= MAX_EMBEDS}>
-            <button type="button" className={MENU_ITEM} onClick={() => onPick(embed)}>
-              <EmbedIcon embed={embed} className="mt-0.5 size-4 shrink-0 text-ink-muted" />
-              <span className="min-w-0">
-                {embedLabel(embed)}
-                {already && <span className="text-ink-muted"> (attached)</span>}
-              </span>
-            </button>
+          <MenuItem
+            key={embedKey(embed)}
+            disabled={already || attached.length >= MAX_EMBEDS}
+            icon={<EmbedIcon embed={embed} />}
+            onSelect={() => onPick(embed)}
+          >
+            {embedLabel(embed)}
+            {already && <span className="text-ink-muted"> (attached)</span>}
           </MenuItem>
         );
       })}
@@ -64,27 +63,18 @@ const ProjectSection = ({ shareables, ...pick }: PickProps & { shareables: Share
 );
 /** In the narrow composer's "+" menu: the way to the clip finder, which needs room for its words. */
 const ClipSection = ({ onFindClip }: { onFindClip: () => void }) => (
-  <MenuSection>
-    <MenuHeading className="px-3 pt-1.5 pb-1 text-xs font-semibold text-ink-muted">Share a session clip</MenuHeading>
-    <MenuItem>
-      <button type="button" className={MENU_ITEM} onClick={onFindClip} data-find-clip>
-        <PiVideoCamera aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-muted" />
-        Find a moment…
-      </button>
+  <MenuSection heading="Share a session clip">
+    <MenuItem icon={<PiVideoCamera className="size-4" />} onSelect={onFindClip} data-find-clip>
+      Find a moment…
     </MenuItem>
   </MenuSection>
 );
 
+/** A composer tool that opens a menu above the box. */
 function ToolMenu({ label, icon, children, iconOnly = false }: { label: string; icon: ReactNode; children: ReactNode; iconOnly?: boolean }) {
   return (
-    <Menu>
-      <MenuButton aria-label={iconOnly ? label : undefined} className={cx(TOOL, FOCUS_RING)}>
-        <span aria-hidden="true" className="inline-flex">{icon}</span>
-        {!iconOnly && label}
-      </MenuButton>
-      <MenuItems anchor={{ to: "top start", gap: 6 }} className="channel-menu">
-        {children}
-      </MenuItems>
+    <Menu label={label} icon={icon} iconOnly={iconOnly} variant="ghost" size="sm" placement="top">
+      {children}
     </Menu>
   );
 }
@@ -98,6 +88,8 @@ type ToolbarProps = PickProps & {
   canSend: boolean;
   /** The clip finder is open; it belongs to the box with this id. */
   clipFinder: { open: boolean; id: string };
+  /** The visible line under the box that says what "Ask Tembo here" does. */
+  askHereId: string;
   onFindClip: (trigger: HTMLElement | null) => void;
   onMention: () => void;
   onAskTembo: () => void;
@@ -106,10 +98,12 @@ type ToolbarProps = PickProps & {
 /**
  * Share project and, in cohort channels only, Session clip; on a narrow
  * composer both fold under "+". Then @, Ask Tembo (only while
- * `tembo_channels` is on) and Send, which is always visible.
+ * `tembo_channels` is on) and Send, which is always visible. Send is the
+ * view's one peach action, and only once there is something to send.
  */
-export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, clipFinder, onFindClip, onMention, onAskTembo, ...pick }: ToolbarProps) {
-  const askHereId = useId();
+export function ComposerToolbar({
+  tools, shareables, attachments, thread, canSend, clipFinder, askHereId, onFindClip, onMention, onAskTembo, ...pick
+}: ToolbarProps) {
   return (
     <div className="channel-composer__bar">
       {attachments && (
@@ -126,47 +120,36 @@ export function ComposerToolbar({ tools, shareables, attachments, thread, canSen
               <ProjectSection shareables={shareables} {...pick} />
             </ToolMenu>
             {tools.sessionClip && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<PiVideoCamera className="size-4.5" />}
                 aria-expanded={clipFinder.open}
                 aria-controls={clipFinder.open ? clipFinder.id : undefined}
                 onClick={(event) => onFindClip(event.currentTarget)}
-                className={cx(TOOL, FOCUS_RING)}
                 data-find-clip
               >
-                <PiVideoCamera aria-hidden="true" className="size-4.5" />
                 Session clip
-              </button>
+              </Button>
             )}
           </div>
         </>
       )}
-      <button type="button" aria-label="Mention someone" onClick={onMention} className={cx(TOOL, FOCUS_RING)}>
-        <PiAt aria-hidden="true" className="size-4.5" />
-      </button>
+      <IconButton label="Mention someone" icon={<PiAt className="size-4.5" />} variant="ghost" size="sm" onClick={onMention} />
       {tools.askTembo && (
-        // "here", unlike the private Ask Tembo page: this one posts in the channel (QA3-03).
-        <button
-          type="button"
-          onClick={onAskTembo}
-          title={ASK_HERE}
-          aria-describedby={askHereId}
-          className={cx(TOOL, "text-peach-ink hover:text-peach-ink", FOCUS_RING)}
-          data-ask-tembo
-        >
-          <PiSparkle aria-hidden="true" className="size-4.5" />
+        // "here", unlike the private Ask Tembo page: this one posts in the channel (QA3-03), as the line under the box says.
+        <Button variant="ghost" size="sm" icon={<PiSparkle className="size-4.5" />} onClick={onAskTembo} aria-describedby={askHereId} data-ask-tembo>
           Ask Tembo here
-        </button>
+        </Button>
       )}
-      {tools.askTembo && <span id={askHereId} hidden>{ASK_HERE}</span>}
-      <button
+      <IconButton
         type="submit"
-        aria-label={thread ? "Send reply" : "Send message"}
+        label={thread ? "Send reply" : "Send message"}
+        icon={<PiPaperPlaneRightFill className="size-4.5" />}
+        variant={canSend ? "primary" : "quiet"}
         aria-disabled={!canSend || undefined}
-        className={cx("channel-composer__send", canSend && "channel-composer__send--ready", FOCUS_RING)}
-      >
-        <PiPaperPlaneRightFill aria-hidden="true" className="size-4.5" />
-      </button>
+        className="ml-auto aria-disabled:cursor-not-allowed"
+      />
     </div>
   );
 }
@@ -177,17 +160,13 @@ export function AttachedList({ attached, onRemove }: { attached: readonly Messag
   return (
     <ul className="flex flex-wrap gap-1.5 px-1 pb-1" aria-label="Attached">
       {attached.map((embed) => (
-        <li key={embedKey(embed)} className="channel-attached">
+        <li
+          key={embedKey(embed)}
+          className={cx("channel-attached flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-hairline pl-2.5 text-[0.8125rem] text-ink-primary", RAISED)}
+        >
           <EmbedIcon embed={embed} />
-          <span className="truncate">{embedLabel(embed)}</span>
-          <button
-            type="button"
-            aria-label={`Remove ${embedLabel(embed)}`}
-            onClick={() => onRemove(embed)}
-            className={cx("channel-attached__remove", FOCUS_RING)}
-          >
-            <PiX aria-hidden="true" className="size-3.5" />
-          </button>
+          <span className="min-w-0 truncate">{embedLabel(embed)}</span>
+          <IconButton label={`Remove ${embedLabel(embed)}`} icon={<PiX className="size-3.5" />} variant="ghost" size="sm" onClick={() => onRemove(embed)} />
         </li>
       ))}
     </ul>
@@ -236,7 +215,7 @@ export function MentionList({ listId, candidates, active, scope, usage, onChoose
             <span className="min-w-0">
               <span className="block font-semibold text-ink-primary">
                 {candidate.label}
-                {candidate.kind === "tembo" && <span className="channel-ai-badge">AI</span>}
+                {candidate.kind === "tembo" && <RoleBadge badge={AI_BADGE} className="ml-2 align-middle" />}
               </span>
               <span className="block text-[0.8125rem] text-ink-secondary">{candidate.description}</span>
             </span>

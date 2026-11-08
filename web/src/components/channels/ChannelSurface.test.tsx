@@ -10,7 +10,8 @@ import type { MockOptions } from "@/lib/platform/client/mockTransport";
 import { channels, FIXTURE_NOW, fixtureIds, meByPersona, messages, people } from "@/lib/platform/fixtures";
 import ChannelSurface from "./ChannelSurface";
 import ChannelView from "./ChannelView";
-import { dayKey } from "./channel-format";
+import { dayKey, fullTime } from "./channel-format";
+import { ASK_HERE, ASK_HERE_SHORT } from "./ComposerParts";
 import { channelFor, channelPage, momentsFor, shareablesFor, threadPage } from "./harness/fixture-pages";
 import { createHarnessClient } from "./harness/harness-client";
 import { MOMENT_SEARCH_DEBOUNCE_MS, shareablesFinder } from "./moment-search";
@@ -188,6 +189,25 @@ describe("reading without JavaScript", () => {
     expect(badges(messages.deleted.id)).toEqual([]);
   });
 
+  it("says each message's full time in words, not in a tooltip", () => {
+    serverHtml(wanjiku, community);
+    const time = $(`[data-message="${messages.projectPost.id}"] time`)!;
+    expect(time.hasAttribute("title")).toBe(false);
+    expect(time.querySelector(".sr-only")?.textContent).toBe(fullTime(messages.projectPost.createdAt));
+    expect(time.getAttribute("datetime")).toBe(new Date(messages.projectPost.createdAt).toISOString());
+  });
+
+  it("always shows each message's actions, as a quiet kit button", () => {
+    serverHtml(wanjiku, community);
+    const buttons = $$("button.channel-message__more");
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    for (const button of buttons) {
+      expect(button.dataset.variant).toBe("ghost");
+      expect(button.getAttribute("aria-haspopup")).toBe("menu");
+      expect(button.className).toContain("pointer-coarse:size-11");
+    }
+  });
+
   it("shows deleted messages as a placeholder with nothing of the original", () => {
     serverHtml(wanjiku, community);
     const deleted = $(`[data-message="${messages.deleted.id}"]`)!;
@@ -228,9 +248,14 @@ describe("reading without JavaScript", () => {
       expect.arrayContaining(["Share project", "Session clip", "Ask Tembo here"]),
     );
     // Named apart from the private Ask Tembo page, and saying what it does: it posts here (QA3-03, QA3-15).
+    // In words under the box that anyone can read, never only in a tooltip.
     const ask = $("[data-ask-tembo]")!;
-    expect(container.querySelector(`[id="${ask.getAttribute("aria-describedby")}"]`)?.textContent)
-      .toBe("Adds @tembo to your message. Everyone who can read this channel sees the question and Tembo's answer.");
+    expect(ask.hasAttribute("title")).toBe(false);
+    const said = container.querySelector(`[id="${ask.getAttribute("aria-describedby")}"]`)!;
+    // In full, and in one line for a narrow composer (channels.css shows one of them).
+    expect([...said.children].map((part) => part.textContent)).toEqual([ASK_HERE, ASK_HERE_SHORT]);
+    expect(ASK_HERE).toBe("Adds @tembo to your message. Everyone who can read this channel sees the question and Tembo's answer.");
+    expect(said.matches("[data-ask-here]:not([hidden]):not(.sr-only)")).toBe(true);
     serverHtml(wanjiku, community);
     expect($$("[data-composer=channel] button").map((b) => b.textContent)).not.toContain("Session clip");
     const noTembo: Me = { ...wanjiku, flags: { ...wanjiku.flags, tembo_channels: false } };
@@ -258,7 +283,9 @@ describe("reading without JavaScript", () => {
     const announcements = channelFor("c04-announcements", wanjiku)!;
     serverHtml(wanjiku, announcements);
     expect($("[data-composer]")).toBeNull();
-    expect(text("[data-posting]")).toBe("Only the TTV team posts here. You can read everything they share.");
+    // An info notice where the composer would be: it says the limit, not a failure.
+    expect($("[data-posting] [data-notice=info]")).not.toBeNull();
+    expect(text("[data-posting]")).toBe("Note: Only the TTV team posts here. You can read everything they share.");
   });
 
   it("introduces an empty channel with its name and topic", () => {
@@ -269,9 +296,12 @@ describe("reading without JavaScript", () => {
 
   it("shows the author their hidden message and why; others never get it", () => {
     serverHtml(meByPersona.dennis, community);
-    expect(text(`[data-message="${messages.hidden.id}"] [data-moderation]`)).toBe(
-      "Hidden from the channel: Harsh, not about the work. Only you can see this message now.",
-    );
+    const note = $(`[data-message="${messages.hidden.id}"] [data-moderation]`)!;
+    expect(note.querySelector("[data-notice=warning]")).not.toBeNull();
+    expect([...note.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      "Hidden from the channel: Harsh, not about the work.",
+      "Only you can see this message now.",
+    ]);
     serverHtml(wanjiku, community);
     expect($(`[data-message="${messages.hidden.id}"]`)).toBeNull();
   });
@@ -404,6 +434,42 @@ describe("live behaviour", () => {
     await typeInto(box, "@");
     expect($$("[data-mention-option=tembo]")).toHaveLength(0);
     expect($$("[data-mention-option=person]").length).toBeGreaterThan(0);
+  });
+
+  it("has one peach action: Send, and only once there is something to send", async () => {
+    await mount(wanjiku, cohort);
+    const primaries = () => $$("[data-composer=channel] [data-variant=primary]").map((button) => button.getAttribute("aria-label") ?? button.textContent);
+    const send = $("[data-composer=channel] [type=submit]")!;
+    expect(primaries()).toEqual([]);
+    expect(send.getAttribute("aria-disabled")).toBe("true");
+    await typeInto($<HTMLTextAreaElement>("[data-composer=channel] textarea")!, "Hello");
+    expect(primaries()).toEqual(["Send message"]);
+    expect(send.getAttribute("aria-disabled")).toBeNull();
+    // Ask Tembo here is a ghost tool like the rest: Tembo's own mark carries the colour.
+    expect($("[data-ask-tembo]")!.dataset.variant).toBe("ghost");
+    expect($("[data-ask-tembo]")!.className).not.toMatch(/\b(?:text-peach-ink|bg-primary)\b/);
+  });
+
+  it("asks before deleting your own message, naming what goes, with Keep it focused", async () => {
+    await mount();
+    const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
+    await typeInto(box, "Mine to take back");
+    await key(box, "Enter");
+    await act(() => tick(10));
+    const mine = $$("[data-own]").at(-1)!;
+    await click(mine.querySelector("button[aria-label^='Actions for']"));
+    await click($$("[role=menuitem]").find((item) => item.textContent === "Delete…")!);
+    await act(frame);
+    const confirm = mine.querySelector<HTMLElement>("[data-delete-confirm]")!;
+    expect(confirm.querySelector("[data-notice=warning]")).not.toBeNull();
+    expect(container.querySelector(`[id="${confirm.getAttribute("aria-labelledby")}"]`)?.textContent).toBe("Delete this message?");
+    expect([...confirm.querySelectorAll("button")].map((button) => [button.textContent, button.dataset.variant])).toEqual([
+      ["Delete message", "danger"],
+      ["Keep it", "ghost"],
+    ]);
+    expect(document.activeElement?.textContent).toBe("Keep it");
+    await click([...confirm.querySelectorAll("button")][0]);
+    expect($("[data-channel-announcer]")?.textContent).toBe("Message deleted.");
   });
 
   it("Ask Tembo addresses the message to Tembo once", async () => {

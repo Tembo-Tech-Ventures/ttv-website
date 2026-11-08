@@ -1,5 +1,5 @@
-import { PiLockSimple } from "react-icons/pi";
 import type { Channel } from "@/lib/platform/contracts";
+import Notice from "@/components/platform/ui/Notice";
 import { postingFor } from "./channel-format";
 
 const COPY = {
@@ -13,9 +13,8 @@ export function PostingNote({ channel }: { channel: Channel }) {
   const posting = postingFor(channel);
   if (posting === "open") return null;
   return (
-    <p className="channel-posting-note" data-posting={posting}>
-      <PiLockSimple aria-hidden="true" className="size-4 shrink-0" />
-      {COPY[posting]}
-    </p>
+    <div className="channel-posting" data-posting={posting}>
+      <Notice tone="info">{COPY[posting]}</Notice>
+    </div>
   );
 }

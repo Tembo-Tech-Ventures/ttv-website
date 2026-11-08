@@ -4,7 +4,7 @@
  * the page it is on (conduct-flow.ts), so it works without JavaScript and the
  * person lands where they were going. The version is the words they read.
  */
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
+import { Button, Notice } from "@/components/platform/ui";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { CONDUCT_ACCEPT, CONDUCT_AGENT_NOTE } from "./conduct";
 import { CONDUCT_INTENT } from "./conduct-flow";
@@ -24,21 +24,11 @@ const { action, canAgree = true } = Astro.props;
     <form method="post" action={action} class="mt-8" data-conduct-agree>
       <input type="hidden" name="intent" value={CONDUCT_INTENT} />
       <input type="hidden" name="version" value={CONDUCT_VERSION} />
-      <button
-        type="submit"
-        class:list={[
-          "inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold",
-          "transition-colors duration-150 motion-reduce:transition-none",
-          BUTTON_VARIANTS.primary,
-          FOCUS_RING,
-        ]}
-      >
-        {CONDUCT_ACCEPT}
-      </button>
+      <Button type="submit" variant="primary" size="lg">{CONDUCT_ACCEPT}</Button>
     </form>
   ) : (
-    <p class="mt-8 max-w-xl text-sm text-ink-muted" data-conduct-agent-note>
-      {CONDUCT_AGENT_NOTE}
-    </p>
+    <Notice tone="info" title="Only the person can agree" className="mt-8 max-w-xl">
+      <span data-conduct-agent-note>{CONDUCT_AGENT_NOTE}</span>
+    </Notice>
   )
 }

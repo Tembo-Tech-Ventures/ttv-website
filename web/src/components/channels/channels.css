@@ -59,7 +59,7 @@
   .channel-rail {
     grid-area: 1 / 2;
     border-left: 1px solid var(--color-hairline);
-    background-image: linear-gradient(rgb(1 33 31 / 0.16), rgb(1 33 31 / 0.16));
+    background-image: linear-gradient(color-mix(in srgb, var(--color-ground) 16%, transparent), color-mix(in srgb, var(--color-ground) 16%, transparent));
   }
 }
 
@@ -111,11 +111,6 @@
 
   .channel-view__header [data-channel-header] ul {
     gap: 0.375rem;
-  }
-
-  .channel-view__header [data-channel-chip] {
-    padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
   }
 
   .channel-view__header [data-channel-header] p {
@@ -170,11 +165,6 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-  }
-
-  .channel-view__header [data-conversation-privacy] > summary {
-    padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
   }
 }
 
@@ -249,7 +239,7 @@
 }
 
 .channel-new::before {
-  background: rgb(242 141 104 / 0.55);
+  background: color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 /* A row is the message's hover and highlight surface; it bleeds into the gutter so text stays aligned. */
@@ -261,14 +251,15 @@
 }
 
 .channel-row:hover {
-  background-color: rgb(255 248 242 / 0.03);
+  background-color: color-mix(in srgb, var(--color-ink-primary) 3%, transparent);
 }
 
+/* The open thread's first message: a peach tint, and a peach bar down its edge. */
 .channel-row[data-highlight] {
   --channel-row-surface: color-mix(in srgb, var(--color-primary) 7%, var(--channel-surface));
 
-  background-color: rgb(242 141 104 / 0.07);
-  box-shadow: inset 3px 0 0 var(--color-primary);
+  background-color: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  background-image: linear-gradient(to right, var(--color-primary) 3px, transparent 3px);
 }
 
 .channel-message {
@@ -317,50 +308,41 @@
   font-size: 0.8125rem;
 }
 
+@media (pointer: coarse) {
+  .channel-meta {
+    padding-right: 2.75rem;
+  }
+}
+
 .channel-author {
   color: var(--color-ink-primary);
   font-size: 0.9375rem;
   font-weight: 700;
 }
 
-.channel-message__more {
+/*
+ * The actions button (the kit's ghost IconButton, 44px on touch) sits in the corner, centred on the
+ * name line. Always there, in the muted ink: nothing is only on hover.
+ */
+.channel-message__actions {
   position: absolute;
   top: -0.125rem;
   right: -0.25rem;
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.5rem;
-  color: var(--color-ink-secondary);
-  opacity: 0;
-  transition: opacity 120ms ease, background-color 120ms ease;
 }
 
-/* A 44px target around a quiet 32px button. */
-.channel-message__more::before {
-  content: "";
-  position: absolute;
-  inset: -0.375rem;
-}
-
-.channel-message__more:hover {
-  background-color: rgb(255 248 242 / 0.07);
-  color: var(--color-ink-primary);
-}
-
-.channel-row:hover .channel-message__more,
-.channel-message:focus-within .channel-message__more,
-.channel-message__more[data-open],
-.channel-message__more:focus-visible {
-  opacity: 1;
-}
-
-/* Touch has no hover: the actions are always there. */
 @media (pointer: coarse) {
-  .channel-message__more {
-    opacity: 1;
+  .channel-message__actions {
+    top: -0.5rem;
   }
+}
+
+.channel-message__more {
+  color: var(--color-ink-muted);
+}
+
+.channel-message__more:hover,
+.channel-message__more[aria-expanded="true"] {
+  color: var(--color-ink-primary);
 }
 
 .channel-body {
@@ -383,7 +365,7 @@
 .channel-mention {
   padding: 0 0.1875rem;
   border-radius: 0.3125rem;
-  background: rgb(242 141 104 / 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-peach-ink);
   font-weight: 600;
 }
@@ -391,7 +373,7 @@
 .channel-code {
   padding: 0.0625rem 0.3125rem;
   border-radius: 0.375rem;
-  background: rgb(1 33 31 / 0.5);
+  background: color-mix(in srgb, var(--color-ground) 50%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.875em;
 }
@@ -412,33 +394,16 @@
   list-style: none;
 }
 
+/* The way into a thread: the kit's small ghost button, its faces flush with the words above, in peach ink. */
 .channel-thread-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2rem;
-  margin: 0.375rem 0 0 -0.375rem;
-  padding: 0.125rem 0.5rem 0.125rem 0.375rem;
-  border-radius: 0.75rem;
+  margin: 0.375rem 0 0 -0.5rem;
+  padding-left: 0.5rem;
   color: var(--color-peach-ink);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.channel-thread-link:hover {
-  background-color: rgb(255 248 242 / 0.06);
 }
 
 .channel-thread-link__last {
   color: var(--color-ink-muted);
   font-weight: 500;
-}
-
-@media (pointer: coarse) {
-  .channel-thread-link {
-    min-height: 2.75rem;
-  }
 }
 
 .channel-faces {
@@ -454,18 +419,16 @@
 }
 
 .channel-faces [data-avatar] {
-  box-shadow: 0 0 0 2px var(--channel-row-surface, var(--channel-surface));
+  outline: 2px solid var(--channel-row-surface, var(--channel-surface));
 }
 
 /* ---- Shared work ---------------------------------------------------------- */
 
+/* A card (RAISED, a hairline) drawn in EmbedCard.tsx; here, its size and spacing. */
 .channel-embed {
   max-width: 38rem;
   margin-top: 0.75rem;
   padding: 1rem 1.125rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 1.125rem;
-  background-color: rgb(255 248 242 / 0.04);
 }
 
 .channel-embed__kind {
@@ -505,35 +468,12 @@
   font-size: 0.8125rem;
 }
 
+/* The way in (the kit's small ghost button) stands at the foot's far end. */
 .channel-embed__go {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  min-height: 2rem;
   margin-left: auto;
-  padding-inline: 0.25rem;
-  border-radius: 0.5rem;
-  color: var(--color-peach-ink);
-  font-weight: 700;
-  text-decoration: none;
 }
 
-.channel-embed__go:hover {
-  text-decoration: underline;
-}
-
-@media (pointer: coarse) {
-  .channel-embed__go {
-    min-height: 2.75rem;
-  }
-}
-
-/* Shared work the reader can no longer open: the same footprint, drawn as an outline. */
-.channel-embed--gone {
-  border-style: dashed;
-  background-color: transparent;
-}
-
+/* Shared work the reader can no longer open: the same footprint, drawn as an outline (EmbedCard.tsx). */
 .channel-embed--gone .channel-embed__title {
   color: var(--color-ink-secondary);
   font-size: 0.9375rem;
@@ -554,7 +494,7 @@
   aspect-ratio: 16 / 10;
   border-radius: 0.875rem;
   background:
-    radial-gradient(circle at 35% 30%, rgb(242 141 104 / 0.32), transparent 62%),
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--color-primary) 32%, transparent), transparent 62%),
     linear-gradient(140deg, var(--color-teal), var(--color-ground));
 }
 
@@ -575,7 +515,7 @@
   left: 0.5rem;
   padding: 0.125rem 0.5rem;
   border-radius: 0.375rem;
-  background: rgb(1 33 31 / 0.85);
+  background: color-mix(in srgb, var(--color-ground) 85%, transparent);
   color: var(--color-ink-primary);
   font-size: 0.75rem;
   font-weight: 700;
@@ -610,27 +550,24 @@
   max-width: 38rem;
   margin-top: 0.5rem;
   padding: 0.875rem 1rem;
-  border: 1px solid rgb(242 141 104 / 0.28);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
   border-radius: 1.125rem;
-  background-color: rgb(1 33 31 / 0.28);
+  background-color: color-mix(in srgb, var(--color-ground) 28%, transparent);
 }
 
+/* A source: the kit's small quiet button, whose title may wrap rather than run off a phone. */
 .channel-cite {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  min-height: 1.75rem;
-  padding: 0 0.625rem;
-  border-radius: 0.5rem;
-  background-color: rgb(1 33 31 / 0.5);
-  color: var(--color-ink-secondary);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-decoration: none;
+  height: auto;
+  min-height: 2rem;
+  padding-block: 0.25rem;
+  white-space: normal;
+  text-align: left;
 }
 
-.channel-cite:hover {
-  color: var(--color-ink-primary);
+@media (pointer: coarse) {
+  .channel-cite {
+    min-height: 2.75rem;
+  }
 }
 
 /* A chip's number, the one its sentences carry (QA3-02). */
@@ -663,9 +600,21 @@
   background-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
+/*
+ * On touch, a 44px target around the raised digit: padding grows what a finger can hit (vertical padding
+ * on an inline box takes no room in the line), and negative margins give back the width, so the sentence
+ * stays where it was. The tint keeps to the digit.
+ */
 @media (pointer: coarse) {
-  .channel-cite {
-    min-height: 2.75rem;
+  .channel-cite-ref {
+    margin-left: -0.8125rem;
+    margin-right: -1.125rem;
+    padding: 0.875rem 1rem;
+    background-clip: content-box;
+  }
+
+  .channel-cite-ref + .channel-cite-ref {
+    margin-left: calc(4px - 0.8125rem);
   }
 }
 
@@ -686,31 +635,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.channel-tembo__choice {
-  min-height: 2rem;
-  padding: 0 0.625rem;
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  color: var(--color-ink-secondary);
-  font-weight: 600;
-}
-
-.channel-tembo__choice:hover {
-  color: var(--color-ink-primary);
-}
-
-.channel-tembo__choice[aria-pressed="true"] {
-  border-color: rgb(242 141 104 / 0.45);
-  background-color: rgb(242 141 104 / 0.12);
-  color: var(--color-peach-ink);
-}
-
-@media (pointer: coarse) {
-  .channel-tembo__choice {
-    min-height: 2.75rem;
-  }
 }
 
 /* A question on its way: a placeholder in the thread, a line under the question in the channel. */
@@ -738,9 +662,9 @@
   max-width: 38rem;
   margin-top: 0.5rem;
   padding: 0.75rem 1rem;
-  border: 1px dashed rgb(242 141 104 / 0.4);
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 40%, transparent);
   border-radius: 1.125rem;
-  background-color: rgb(1 33 31 / 0.2);
+  background-color: color-mix(in srgb, var(--color-ground) 20%, transparent);
 }
 
 .channel-tembo-wait__dots {
@@ -778,59 +702,17 @@
   }
 }
 
-.channel-ai-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 1.25rem;
-  margin-left: 0.5rem;
-  padding: 0 0.375rem;
-  border-radius: 0.375rem;
-  background: rgb(242 141 104 / 0.12);
-  color: var(--color-peach-ink);
-  font-size: 0.71875rem;
-  font-weight: 700;
-  vertical-align: 0.1em;
-}
-
 /* ---- Moderation, edit and delete ----------------------------------------- */
 
+/* A moderation note (the kit's Notice): focus returns here, or inside it, clear of "Jump to latest". */
 .channel-moderation {
-  /* Focus returns here, or inside it, clear of "Jump to latest". */
   scroll-margin-block: 0.75rem var(--channel-jump-clearance);
-  display: flex;
-  gap: 0.5rem;
-  max-width: 38rem;
-  margin-top: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 0.75rem;
-  background-color: rgb(1 33 31 / 0.35);
-  color: var(--color-ink-secondary);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-.channel-moderation[data-moderation="HIDDEN"] {
-  border-color: rgb(255 179 166 / 0.4);
 }
 
 /* The author's own hidden words: still theirs to read, set apart by a rule rather than faded. */
 .channel-message__hidden {
   padding-left: 0.75rem;
-  border-left: 2px dashed rgb(255 179 166 / 0.5);
-}
-
-.channel-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  max-width: 38rem;
-  margin-top: 0.5rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid rgb(255 179 166 / 0.4);
-  border-radius: 0.75rem;
-  background-color: rgb(255 179 166 / 0.06);
+  border-left: 2px dashed color-mix(in srgb, var(--color-danger-ink) 50%, transparent);
 }
 
 /* A report, a hide or restore, or a review request: a form that opens in place under the message. */
@@ -845,11 +727,19 @@
   padding: 0.875rem 1rem 1rem;
   border: 1px solid var(--color-hairline);
   border-radius: 1rem;
-  background-color: rgb(1 33 31 / 0.45);
+  background-color: color-mix(in srgb, var(--color-ground) 45%, transparent);
+}
+
+/*
+ * The form's box starts two lines tall rather than the kit's four, and grows as the person writes
+ * (resize-y): a report, choices and all, fits in the list on a 390x844 phone.
+ */
+.channel-panel textarea {
+  min-height: 4rem;
 }
 
 .channel-panel[data-panel="hide"] {
-  border-color: rgb(255 179 166 / 0.4);
+  border-color: color-mix(in srgb, var(--color-danger-ink) 40%, transparent);
 }
 
 /* Where the person decides: always brought into view, even when the whole form cannot be. */
@@ -862,48 +752,6 @@
   font-size: 0.9375rem;
   font-weight: 700;
   line-height: 1.35;
-}
-
-.channel-panel__error {
-  color: var(--color-danger-ink);
-  font-size: 0.875rem;
-  line-height: 1.45;
-}
-
-.channel-choice {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  min-height: 2rem;
-  padding-inline: 0.25rem;
-  border-radius: 0.5rem;
-  color: var(--color-ink-primary);
-  font-size: 0.875rem;
-  line-height: 1.35;
-  cursor: pointer;
-}
-
-.channel-choice:hover {
-  background-color: rgb(255 248 242 / 0.04);
-}
-
-.channel-choice__input {
-  flex-shrink: 0;
-  width: 1.125rem;
-  height: 1.125rem;
-  margin: 0;
-  accent-color: var(--color-primary);
-}
-
-.channel-choice__input:focus-visible {
-  outline: 2px solid var(--color-peach-ink);
-  outline-offset: 2px;
-}
-
-@media (pointer: coarse) {
-  .channel-choice {
-    min-height: 2.75rem;
-  }
 }
 
 .channel-reported {
@@ -925,50 +773,6 @@
   font-weight: 600;
 }
 
-.channel-moderation__asked:focus-visible {
-  border-radius: 0.375rem;
-  outline: 2px solid var(--color-peach-ink);
-  outline-offset: 2px;
-}
-
-.channel-input {
-  border: 1px solid var(--color-hairline);
-  background-color: rgb(1 33 31 / 0.45);
-  color: var(--color-ink-primary);
-  font-size: 1rem;
-  line-height: 1.5;
-}
-
-.channel-input:focus {
-  outline: 2px solid var(--color-peach-ink);
-  outline-offset: 1px;
-}
-
-@media (min-width: 40rem) {
-  .channel-input {
-    font-size: 0.9375rem;
-  }
-}
-
-.channel-menu {
-  z-index: 60;
-  min-width: 13rem;
-  max-width: min(22rem, calc(100vw - 2rem));
-  padding: 0.375rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 1rem;
-  background-color: var(--color-sheet-community);
-  background-image: linear-gradient(rgb(255 248 242 / 0.05), rgb(255 248 242 / 0.05));
-  box-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.6);
-  outline: none;
-}
-
-.channel-menu__rule {
-  height: 1px;
-  margin: 0.25rem 0.5rem;
-  background: var(--color-hairline);
-}
-
 /* ---- States --------------------------------------------------------------- */
 
 .channel-status {
@@ -980,64 +784,23 @@
   font-size: 0.875rem;
 }
 
-.channel-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  max-width: 34rem;
-  padding: 2.5rem 0 1rem;
-}
-
-.channel-empty__title {
-  color: var(--color-ink-primary);
-  font-size: 1.125rem;
-  font-weight: 700;
-}
-
-.channel-spinner {
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 999px;
-  animation: channel-spin 800ms linear infinite;
-}
-
-@keyframes channel-spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
 /*
  * "Jump to latest" stands on the list's bottom edge at its end, half over the composer's empty top
  * corner (T10): out of the middle of the messages, where it covered words and the titles of shared work.
+ * It is the kit's quiet button; floating over the list, it takes the sheet behind its tint, so words
+ * scrolling under it never show through. No shadow: it is inside the sheet.
  */
 .channel-jump {
   position: absolute;
   right: calc(var(--channel-gutter) + 0.75rem);
   bottom: -1.125rem;
   z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  background: var(--color-ink-primary);
-  box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.6);
-  color: var(--color-dark);
-  font-size: 0.8125rem;
-  font-weight: 700;
+  background-color: var(--channel-surface);
+  background-image: linear-gradient(color-mix(in srgb, var(--color-ink-primary) 8%, transparent), color-mix(in srgb, var(--color-ink-primary) 8%, transparent));
 }
 
-@media (pointer: coarse) {
-  .channel-jump {
-    height: 2.75rem;
-  }
+.channel-jump:hover {
+  background-image: linear-gradient(color-mix(in srgb, var(--color-ink-primary) 12%, transparent), color-mix(in srgb, var(--color-ink-primary) 12%, transparent));
 }
 
 /*
@@ -1053,7 +816,7 @@
  * it would float over the form's buttons, and the person is busy with this message, not the newest.
  * It also stays under the phone's open menu, which it would otherwise float above.
  */
-.channel-list:has(.channel-panel, .channel-edit, .channel-confirm) .channel-jump,
+.channel-list:has(.channel-panel, .channel-edit, [data-delete-confirm]) .channel-jump,
 .spaces-shell[data-drawer="open"] .channel-jump {
   display: none;
 }
@@ -1085,17 +848,10 @@
   }
 }
 
-.channel-posting-note {
-  display: flex;
+/* Where the composer would be, the note that says why not (the kit's Notice). */
+.channel-posting {
   flex-shrink: 0;
-  align-items: center;
-  gap: 0.5rem;
   margin: 0.5rem var(--channel-gutter) 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 1rem;
-  color: var(--color-ink-secondary);
-  font-size: 0.875rem;
 }
 
 /* ---- The composer ------------------------------------------------------- */
@@ -1110,19 +866,9 @@
   padding-inline: 1rem;
 }
 
+/* The box is the field, framed by the kit's control recipe (Composer.tsx); here, the room inside it. */
 .channel-composer__box {
   padding: 0.5rem 0.5rem 0.375rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 1.25rem;
-  background-color: rgb(1 33 31 / 0.45);
-  transition: border-color 150ms ease;
-}
-
-/* The box is the field: it carries the focus ring while you type. */
-.channel-composer__box:has(.channel-composer__input:focus) {
-  border-color: transparent;
-  outline: 2px solid var(--color-peach-ink);
-  outline-offset: 1px;
 }
 
 .channel-composer__input {
@@ -1143,6 +889,13 @@
 @media (min-width: 40rem) {
   .channel-composer__input {
     font-size: 0.9375rem;
+  }
+}
+
+/* The box a thumb lands on is a full target, even while it holds one line. */
+@media (pointer: coarse) {
+  .channel-composer__input {
+    min-height: 2.75rem;
   }
 }
 
@@ -1181,38 +934,6 @@
   }
 }
 
-.channel-composer__send {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  margin-left: auto;
-  border-radius: 0.75rem;
-  background-color: rgb(255 248 242 / 0.08);
-  color: var(--color-ink-muted);
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.channel-composer__send[aria-disabled="true"] {
-  cursor: not-allowed;
-}
-
-.channel-composer__send--ready {
-  background-color: var(--color-primary);
-  color: var(--color-dark);
-}
-
-.channel-composer__send--ready:hover {
-  background-color: var(--color-peach-ink);
-}
-
-@media (pointer: coarse) {
-  .channel-composer__send {
-    width: 2.75rem;
-    height: 2.75rem;
-  }
-}
-
 .channel-composer__note {
   margin-top: 0.375rem;
   padding-inline: 0.5rem;
@@ -1220,8 +941,8 @@
 }
 
 /*
- * What Tembo reads here. A narrow composer says it shorter, but still says it, so "Ask Tembo" never
- * addresses a question with no word on what it sees (QA4-08).
+ * What Tembo reads here, and what "Ask Tembo here" does. A narrow composer says each shorter, but
+ * still says it, so "Ask Tembo" never addresses a question with no word on what it sees (QA4-08).
  */
 .channel-composer__scope {
   margin-top: 0.375rem;
@@ -1231,7 +952,8 @@
   line-height: 1.4;
 }
 
-.channel-composer__scope-wide {
+.channel-composer__scope-wide,
+.channel-composer__ask-wide {
   display: none;
 }
 
@@ -1242,52 +964,14 @@
     line-height: 1.45;
   }
 
-  .channel-composer__scope-wide {
+  .channel-composer__scope-wide,
+  .channel-composer__ask-wide {
     display: inline;
   }
 
-  .channel-composer__scope-narrow {
+  .channel-composer__scope-narrow,
+  .channel-composer__ask-narrow {
     display: none;
-  }
-}
-
-.channel-attached {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  max-width: 100%;
-  height: 2rem;
-  padding: 0 0.25rem 0 0.625rem;
-  border: 1px solid var(--color-hairline);
-  border-radius: 0.625rem;
-  background-color: rgb(255 248 242 / 0.06);
-  color: var(--color-ink-primary);
-  font-size: 0.8125rem;
-}
-
-.channel-attached__remove {
-  display: grid;
-  flex-shrink: 0;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 0.375rem;
-  color: var(--color-ink-secondary);
-}
-
-.channel-attached__remove:hover {
-  background-color: rgb(255 248 242 / 0.08);
-  color: var(--color-ink-primary);
-}
-
-@media (pointer: coarse) {
-  .channel-attached {
-    height: 2.75rem;
-  }
-
-  .channel-attached__remove {
-    width: 2.75rem;
-    height: 2.75rem;
   }
 }
 
@@ -1304,9 +988,9 @@
   overflow: hidden;
   border: 1px solid var(--color-hairline);
   border-radius: 1.25rem;
+  /* The sheet with a card's lift, opaque over the messages it covers; no shadow inside a sheet. */
   background-color: var(--channel-surface);
-  background-image: linear-gradient(rgb(255 248 242 / 0.05), rgb(255 248 242 / 0.05));
-  box-shadow: 0 -18px 40px -16px rgb(0 0 0 / 0.55);
+  background-image: linear-gradient(color-mix(in srgb, var(--color-ink-primary) 5%, transparent), color-mix(in srgb, var(--color-ink-primary) 5%, transparent));
 }
 
 /* The suggestions scroll; what Tembo can see stays in view under them. */
@@ -1331,7 +1015,7 @@
 }
 
 .channel-mentions__option[aria-selected="true"] {
-  background-color: rgb(255 248 242 / 0.08);
+  background-color: color-mix(in srgb, var(--color-ink-primary) 8%, transparent);
 }
 
 .channel-mentions__scope {
@@ -1354,21 +1038,6 @@
   appearance: none;
 }
 
-.channel-clips__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 0.75rem;
-  color: var(--color-ink-secondary);
-}
-
-.channel-clips__close:hover {
-  background-color: rgb(255 248 242 / 0.08);
-  color: var(--color-ink-primary);
-}
-
 .channel-clips__status {
   padding: 0.25rem 0.375rem;
   color: var(--color-ink-secondary);
@@ -1382,26 +1051,6 @@
   gap: 0.125rem;
   min-height: 0;
   overflow-y: auto;
-}
-
-.channel-clips__option {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.625rem;
-  width: 100%;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.625rem;
-  border-radius: 0.875rem;
-  font-size: 0.875rem;
-  text-align: left;
-}
-
-.channel-clips__option:hover:not(:disabled) {
-  background-color: rgb(255 248 242 / 0.08);
-}
-
-.channel-clips__option:disabled {
-  cursor: default;
 }
 
 .channel-clips__quote {
@@ -1445,18 +1094,6 @@
   color: var(--color-ink-muted);
   font-size: 0.8125rem;
   font-weight: 500;
-}
-
-.channel-rail__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-  padding-inline: 0.25rem 0.5rem;
-  border-radius: 0.625rem;
-  color: var(--color-ink-primary);
-  font-size: 1rem;
-  font-weight: 700;
 }
 
 .channel-rail__count {
@@ -1536,15 +1173,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .channel-row,
-  .channel-message__more,
-  .channel-composer__box,
-  .channel-composer__send {
+  .channel-row {
     transition: none;
-  }
-
-  .channel-spinner {
-    animation-duration: 2.4s;
   }
 }
 
@@ -1574,8 +1204,4 @@
     opacity: 0;
     transform: translateY(0.375rem);
   }
-}
-
-.channel-meta .channel-ai-badge {
-  margin-left: 0;
 }

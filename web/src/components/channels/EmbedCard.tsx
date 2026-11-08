@@ -1,9 +1,10 @@
 import { PiArrowRight, PiFolderSimple, PiPlayFill, PiVideoCamera } from "react-icons/pi";
 import type { MessageEmbedView, ProjectConfirmation, ProjectEmbed, SessionClipEmbed, UnavailableEmbed } from "@/lib/platform/contracts";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
 import Chip from "@/components/platform/ui/Chip";
 import { cx } from "@/components/platform/ui/cx";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { buttonClass } from "@/components/platform/ui/recipes";
+import { RAISED } from "@/components/platform/ui/tones";
 import { clipTime, firstName } from "./channel-format";
 
 /** Where a session clip plays: the cohort's session page, at the moment. */
@@ -12,6 +13,11 @@ export function clipHref(clip: Pick<SessionClipEmbed, "recordingId" | "startSeco
 }
 
 const isExternal = (href: string) => /^https?:/i.test(href);
+
+/** A card's frame: the kit's raised surface and hairline. Work that is gone keeps the footprint as an outline. */
+const CARD = "channel-embed rounded-[1.125rem] border border-hairline";
+/** The way in: a small ghost button, at the card's foot. */
+const GO = buttonClass({ variant: "ghost", size: "sm", className: "channel-embed__go" });
 
 /**
  * The confirmations worth showing: one per mentor, the one on this revision
@@ -47,7 +53,7 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
   const external = link !== null && isExternal(link);
   const confirmations = shownConfirmations(embed);
   return (
-    <div className="channel-embed" data-embed="project">
+    <div className={cx(CARD, RAISED)} data-embed="project">
       <p className="channel-embed__kind">
         <PiFolderSimple aria-hidden="true" className="size-4 shrink-0" />
         Project · revision {embed.version}
@@ -83,7 +89,7 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
             <a
               href={link}
               {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className={cx("channel-embed__go", FOCUS_RING)}
+              className={GO}
             >
               Open<span className="sr-only"> {embed.title}{external ? " (opens in a new tab)" : ""}</span>
               <PiArrowRight aria-hidden="true" className="size-3.5" />
@@ -98,7 +104,7 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
 function ClipCard({ embed, compact }: { embed: SessionClipEmbed; compact: boolean }) {
   const at = clipTime(embed.startSeconds);
   return (
-    <div className="channel-embed channel-embed--clip" data-embed="sessionClip">
+    <div className={cx(CARD, RAISED, "channel-embed--clip")} data-embed="sessionClip">
       {/* A larger target for pointers; keyboards and screen readers use "Watch from" below, the same link. */}
       <a href={clipHref(embed)} tabIndex={-1} aria-hidden="true" className="channel-clip__poster">
         <span className="channel-clip__play">
@@ -114,7 +120,7 @@ function ClipCard({ embed, compact }: { embed: SessionClipEmbed; compact: boolea
         <p className="channel-embed__title">{embed.title}</p>
         {!compact && <blockquote className="channel-clip__quote">“{embed.quote}”</blockquote>}
         <div className="channel-embed__foot">
-          <a href={clipHref(embed)} className={cx("channel-embed__go", FOCUS_RING)}>
+          <a href={clipHref(embed)} className={GO}>
             Watch from {at}
             <span className="sr-only">, {embed.title}</span>
             <PiArrowRight aria-hidden="true" className="size-3.5" />
@@ -130,7 +136,7 @@ function UnavailableCard({ embed }: { embed: UnavailableEmbed }) {
   const project = embed.was === "project";
   const Icon = project ? PiFolderSimple : PiVideoCamera;
   return (
-    <div className="channel-embed channel-embed--gone" data-embed="unavailable" data-embed-was={embed.was}>
+    <div className={cx(CARD, "channel-embed--gone border-dashed")} data-embed="unavailable" data-embed-was={embed.was}>
       <p className="channel-embed__kind">
         <Icon aria-hidden="true" className="size-4 shrink-0" />
         {project ? "Project" : "Session clip"}

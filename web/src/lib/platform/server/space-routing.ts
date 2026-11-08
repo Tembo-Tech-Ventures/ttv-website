@@ -10,7 +10,7 @@ import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import {
   acknowledgedRole, grantedHintSpace, parseWelcomeHint, selectLandingSpace, WELCOME_LEGACY_PATHS, welcomeDue,
 } from "./onboarding-routing";
-import { getRouteChannel } from "./channel-context";
+import { getRouteChannel, startRouteChannel } from "./channel-context";
 import { getSpaceContext } from "./space-context";
 import {
   canonicalSpacePath, channelRoute, conversationRoute, isAvailableSpacePath, isChannelPagePath, isMentorPagePath, isNewSpacePath,
@@ -162,6 +162,8 @@ export async function routeSpaceRequest(context: APIContext, next: MiddlewareNex
     return next();
   }
 
+  // A channel page's channel is read beside the context, rather than after it (pageMissing).
+  startRouteChannel(context);
   let me;
   try {
     me = await getSpaceContext(context);

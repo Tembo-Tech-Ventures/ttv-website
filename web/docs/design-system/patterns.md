@@ -25,6 +25,15 @@ reach the island, overlays, the sheet transition) are in
 - Nothing only on hover: every action and fact is reachable by keyboard and
   touch. No information in tooltips or `title` attributes.
 
+**Conversations are the one exception to the Mattone h1.** A channel or a
+private conversation (`/dashboard/cohort/c/…`, `/dashboard/community/c/…`,
+`/dashboard/community/dm/…`) is titled by the channel's or the person's name,
+as a Maven Pro h1 (`font-body`, bold), and the page has no Mattone heading. The
+name is a label people glance back at between messages, not the screen's
+display moment: the conversation is. Its sections, such as the habits on a
+first visit, are Maven h2s as on any page. (Decision D3, 2026-11-08;
+`ChannelHeader` and `ConversationHeader`.)
+
 ## Forms
 
 Server-rendered forms that post (`<form method="POST">`, handled in the
@@ -112,3 +121,9 @@ script. Menus are `<details>`; the sidebar drawer opens through its own link
 (`:target`); views live in the address. A kit component in an `.astro` file
 with no `client:` directive is HTML only. Hydrate only what must respond to a
 press, and prefer `client:visible` below the fold.
+
+The channel view is the documented exception. A conversation reads without a
+script (its first page, thread and read marker are rendered on the server) and
+agreeing to its habits is a plain form, but posting, editing, reacting,
+reporting and moderating happen in the `ChannelView` island, and the composer
+says so in a `<noscript>`.

@@ -129,6 +129,11 @@ describe("a Tembo answer (U-3.1)", () => {
     expect(answer().querySelector("fieldset legend")?.textContent).toBe("Did this answer help?");
     await act(async () => choice("helpful").click());
     expect(choice("helpful").getAttribute("aria-pressed")).toBe("true");
+    // The kit's pill: pressed is ink, never a second peach in the view.
+    expect(choice("helpful").hasAttribute("data-pill")).toBe(true);
+    expect(choice("helpful").className).toContain("bg-ink-primary text-dark");
+    expect(choice("helpful").className).not.toMatch(/\b(?:text-peach-ink|bg-primary)\b/);
+    expect(choice("not_quite").className).not.toContain("bg-ink-primary text-dark");
     await settle();
     expect(client.tembo().feedback).toEqual([{ messageId: messages.communityAnswer.id, feedback: "helpful" }]);
 
@@ -206,6 +211,8 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     const waiting = $("[data-thread-rail] [data-tembo-question=pending]")!;
     expect(waiting.textContent).toContain("Looking through this channel, projects shared in it and public builder profiles. The answer will appear here.");
     expect(waiting.querySelector(".channel-meta")?.textContent).toBe("TemboAI");
+    // The kit's role badge, as on Tembo's own messages.
+    expect(waiting.querySelector("[data-role-badge=AI]")?.textContent).toBe("AI");
 
     client.answerTembo();
     await poll();

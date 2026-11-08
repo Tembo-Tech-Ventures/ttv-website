@@ -1,4 +1,5 @@
-import { MASKED_CONTACT, type Channel, type EffectiveFlags, type Message, type ModerationState, type TemboScope } from "@/lib/platform/contracts";
+import type { Channel, EffectiveFlags, Message, ModerationState, TemboScope } from "@/lib/platform/contracts";
+import { MASKED_CONTACT } from "./masked-contact";
 
 /*
  * Pure display rules for the channel view (U-2.1): days, times, message

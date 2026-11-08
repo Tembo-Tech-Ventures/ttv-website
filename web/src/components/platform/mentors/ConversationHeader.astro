@@ -2,8 +2,8 @@
 /**
  * A private conversation's header (U-4.1): who it is with, that only the two
  * of them read it, and, when a mentor request opened it, which request. The
- * h1 is Maven Pro, as a channel's is: a name is a label, not the screen's
- * display moment. The note and the attached work are the conversation's
+ * h1 is Maven Pro, as a channel's is (the conversation-title exception in
+ * patterns.md): a name is a label, not the screen's display moment. The note and the attached work are the conversation's
  * first message, so the header does not repeat them.
  *
  * Who reads it is a disclosure, not a label (QA4-08): "Only you and David can
@@ -14,10 +14,7 @@
  */
 import { PiCaretDown, PiLockSimple } from "react-icons/pi";
 import type { MentorRequest, PersonSummary } from "@/lib/platform/contracts";
-import { Avatar } from "@/components/platform/ui";
-import { CHIP_TONES } from "@/components/platform/ui/tones";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { fullTime } from "@/components/channels/channel-format";
+import { Avatar, FOCUS_RING, buttonClass } from "@/components/platform/ui";
 import {
   CONVERSATION_ADMIN_NOTE, CONVERSATION_READERS_HREF, conversationReaders, conversationTimeline,
 } from "@/components/channels/conversation-privacy";
@@ -60,12 +57,12 @@ const iso = (timestamp: number) => new Date(timestamp).toISOString();
         request && timeline && (
           <p class="mt-0.5 text-sm text-ink-muted" data-conversation-timeline>
             {timeline.sameDay ? (
-              <time datetime={iso(request.updatedAt)} title={fullTime(request.updatedAt)}>{timeline.text}</time>
+              <time datetime={iso(request.updatedAt)}>{timeline.text}</time>
             ) : (
               <>
-                <time datetime={iso(request.createdAt)} title={fullTime(request.createdAt)}>{timeline.asked}</time>
+                <time datetime={iso(request.createdAt)}>{timeline.asked}</time>
                 {" · "}
-                <time datetime={iso(request.updatedAt)} title={fullTime(request.updatedAt)}>{timeline.accepted}</time>
+                <time datetime={iso(request.updatedAt)}>{timeline.accepted}</time>
               </>
             )}
           </p>
@@ -74,20 +71,14 @@ const iso = (timestamp: number) => new Date(timestamp).toISOString();
     </div>
   </div>
   <details data-conversation-privacy class="group min-w-0 sm:max-w-xs">
-    <summary
-      class:list={[
-        "inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-semibold [&::-webkit-details-marker]:hidden",
-        CHIP_TONES.neutral,
-        FOCUS_RING,
-      ]}
-    >
+    <summary class={buttonClass({ variant: "quiet", size: "sm", className: "cursor-pointer list-none [&::-webkit-details-marker]:hidden" })}>
       <PiLockSimple aria-hidden className="size-4 shrink-0" />
       {conversationReaders(counterpart?.name ?? null)}
-      <PiCaretDown aria-hidden className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+      <PiCaretDown aria-hidden className="size-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
     </summary>
     <p class="mt-2 text-[0.8125rem] leading-snug text-ink-secondary" data-conversation-admins>
       {CONVERSATION_ADMIN_NOTE}{" "}
-      <a href={CONVERSATION_READERS_HREF} class="font-semibold text-peach-ink underline underline-offset-2">Who reads what</a>
+      <a href={CONVERSATION_READERS_HREF} class:list={["font-semibold text-peach-ink underline underline-offset-2", FOCUS_RING]}>Who reads what</a>
     </p>
   </details>
 </header>

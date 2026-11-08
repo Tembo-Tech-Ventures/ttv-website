@@ -7,6 +7,9 @@ import { useOutbox } from "@/lib/platform/client/hooks/composer";
 import { useScrollAnchoring } from "@/lib/platform/client/hooks/scroll";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
+import EmptyState from "@/components/platform/ui/EmptyState";
+import Notice from "@/components/platform/ui/Notice";
+import Spinner from "@/components/platform/ui/Spinner";
 import { channelTitle, groupByDay, postingFor } from "./channel-format";
 import MessageItem from "./MessageItem";
 import { ChannelQuestion } from "./TemboAnswer";
@@ -65,7 +68,18 @@ function OlderControls({ state, store }: { state: ChannelState; store: ChannelSt
           </Button>
         </div>
       )}
-      {state.olderError && <p className="channel-status">Couldn't load earlier messages. Try again.</p>}
+      {state.olderError && (
+        <Notice
+          tone="danger"
+          title="Couldn't load earlier messages"
+          className="mb-2"
+          actions={
+            <Button size="sm" onClick={() => void store.loadOlder()}>
+              Try again
+            </Button>
+          }
+        />
+      )}
       {state.olderTrimmed && !state.hasOlder && (
         <p className="channel-status">Earlier messages were put away to keep this page light. Jump to latest to page back through them.</p>
       )}
@@ -79,32 +93,35 @@ function ListState({ state, channel, retry }: { state: ChannelState; channel: Ch
   if (state.status === "idle" || state.status === "loading") {
     return (
       <output className="channel-status">
-        <span className="channel-spinner" aria-hidden="true" /> Loading messages…
+        <Spinner /> Loading messages…
       </output>
     );
   }
   if (state.status === "error") {
-    return (
-      <div className="channel-empty">
-        <output className="channel-empty__title">
-          {state.terminal ? "This channel isn't available to you right now." : "Couldn't load messages."}
-        </output>
-        {!state.terminal && (
-          <Button size="sm" variant="quiet" onClick={retry}>
+    return state.terminal ? (
+      <Notice tone="warning" title="This channel isn't available to you right now" className="my-6" />
+    ) : (
+      <Notice
+        tone="danger"
+        title="Couldn't load messages"
+        className="my-6"
+        actions={
+          <Button size="sm" onClick={retry}>
             Try again
           </Button>
-        )}
-      </div>
+        }
+      />
     );
   }
   if (state.hasOlder) return null;
   const copy = emptyCopy(channel);
   return (
-    <div className="channel-empty" data-channel-empty>
-      <PiChatsCircle aria-hidden="true" className="size-8 text-peach-ink" />
-      <p className="channel-empty__title">{copy.title}</p>
-      {channel.topic && <p className="text-ink-secondary">{channel.topic}</p>}
-      <p className="text-ink-secondary">{copy.detail}</p>
+    <div className="mt-6 max-w-136" data-channel-empty>
+      {/* An h2: with no messages there is no "Messages" heading above it. */}
+      <EmptyState title={copy.title} headingLevel={2} mark={<PiChatsCircle className="size-8 text-peach-ink" />}>
+        {channel.topic && <p className="m-0">{channel.topic}</p>}
+        <p className="m-0">{copy.detail}</p>
+      </EmptyState>
     </div>
   );
 }
@@ -261,10 +278,10 @@ export default function MessageList({
       </section>
 
       {showJump && (
-        <button type="button" onClick={() => void jumpToLatest()} className={cx("channel-jump", FOCUS_RING)} data-jump-latest>
-          <PiArrowDown aria-hidden="true" className="size-4 shrink-0" />
+        // A kit button; channels.css only places it and gives it the sheet behind it, since it floats over the list.
+        <Button size="sm" icon={<PiArrowDown className="size-4" />} onClick={() => void jumpToLatest()} className="channel-jump" data-jump-latest>
           <span className="channel-jump__label">Jump to latest</span>
-        </button>
+        </Button>
       )}
     </div>
   );

@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PiChatsCircle, PiFolderSimple, PiUserCircle, PiVideoCamera } from "react-icons/pi";
 import { cx } from "@/components/platform/ui/cx";
-import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
+import Button from "@/components/platform/ui/Button";
+import Pill from "@/components/platform/ui/Pill";
+import RoleBadge from "@/components/platform/ui/RoleBadge";
 import TemboMark from "@/components/platform/ui/TemboMark";
 import type { Channel, Citation, Message, TemboFeedbackKind, TemboUsage } from "@/lib/platform/contracts";
 import { unaskedForToday, type TemboQuestion, type TemboState, type TemboStore } from "@/lib/platform/client/tembo";
@@ -52,6 +54,9 @@ export function useTemboUsage(fallback: TemboUsage): TemboUsage {
 
 const FEEDBACK: Record<TemboFeedbackKind, string> = { helpful: "Helpful", not_quite: "Not quite" };
 
+/** Tembo's badge on a placeholder, as the server words it on Tembo's own messages. */
+const AI_BADGE = { kind: "AI", label: "AI" } as const;
+
 /**
  * The line under a Tembo answer: what it could see (from the scope the server
  * stored with it) and "Helpful / Not quite". Today's questions are not here: a
@@ -77,16 +82,10 @@ export function TemboAnswerFoot({ message }: { message: Message }) {
         <fieldset aria-busy={saving || undefined} className="channel-tembo__rate">
           <legend className="sr-only">Did this answer help?</legend>
           {(Object.keys(FEEDBACK) as TemboFeedbackKind[]).map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              aria-pressed={choice === kind}
-              onClick={() => store.sendFeedback(message.id, kind).catch(() => undefined)}
-              className={cx("channel-tembo__choice", FOCUS_RING)}
-              data-tembo-feedback={kind}
-            >
+            // A pill: pressed is the kit's ink, so a choice never adds a second peach to the view.
+            <Pill key={kind} pressed={choice === kind} onClick={() => store.sendFeedback(message.id, kind).catch(() => undefined)} data-tembo-feedback={kind}>
               {FEEDBACK[kind]}
-            </button>
+            </Pill>
           ))}
         </fieldset>
       )}
@@ -164,7 +163,7 @@ export function TemboWaiting({ question, channel, where }: { question: TemboQues
         {asTembo && (
           <p className="channel-meta">
             <span className="channel-author">Tembo</span>
-            <span className="channel-ai-badge">AI</span>
+            <RoleBadge badge={AI_BADGE} />
           </p>
         )}
         <p className={cx("channel-tembo-wait__text", asTembo && "channel-tembo-wait__card")}>

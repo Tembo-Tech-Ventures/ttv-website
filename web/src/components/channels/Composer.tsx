@@ -3,11 +3,14 @@ import type { AuthorSummary, Channel, Me, MessageEmbed, TemboUsage } from "@/lib
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import { useComposer, useDraft as useStoredDraft } from "@/lib/platform/client/hooks/composer";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
+import ButtonLink from "@/components/platform/ui/ButtonLink";
 import { cx } from "@/components/platform/ui/cx";
+import Notice from "@/components/platform/ui/Notice";
+import { CONTROL, FIELD_ERROR } from "@/components/platform/ui/recipes";
 import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
 import { composerTools, mentionsTembo, temboReach, temboScope, type ComposerTools } from "./channel-format";
 import ClipFinder, { useClipFinder } from "./ClipFinder";
-import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList, TemboScopeNote } from "./ComposerParts";
+import { AttachedList, ASK_HERE, ASK_HERE_SHORT, ComposerToolbar, MAX_EMBEDS, MentionList, TemboScopeNote } from "./ComposerParts";
 import { insertMention, mentionCandidates, mentionQuery, type MentionCandidate } from "./mentions";
 import type { MomentFinder } from "./moment-search";
 import { useEnterSends } from "./useEnterSends";
@@ -104,6 +107,52 @@ function useMentionPicker(text: string, caret: number, options: Parameters<typeo
   };
 }
 
+/** The box's hint, and past the limit its error: read with it, and the box marked invalid. */
+function boxAria(id: string, errorId: string, tooLong: boolean) {
+  return {
+    "aria-describedby": tooLong ? `${id}-hint ${errorId}` : `${id}-hint`,
+    "aria-invalid": tooLong || undefined,
+  };
+}
+
+/**
+ * What is said under the box: how far over the limit the words are (the box's own error, read with it),
+ * that the code of conduct comes first, and what "Ask Tembo here" does, in words anyone can see.
+ */
+function ComposerNotes({ errorId, over, conductRequired, askHereId, askTembo }: {
+  errorId: string; over: number; conductRequired: boolean; askHereId: string; askTembo: boolean;
+}) {
+  return (
+    <>
+      {over > 0 && (
+        <p id={errorId} className={cx(FIELD_ERROR, "channel-composer__note")}>
+          {over} characters over the limit.
+        </p>
+      )}
+      {conductRequired && (
+        <div className="channel-composer__note" data-conduct-required>
+          <Notice
+            tone="warning"
+            title="Before you post, agree to how we talk to each other."
+            actions={
+              <ButtonLink href={CONDUCT_PATH} size="sm">
+                Read it and agree
+              </ButtonLink>
+            }
+          />
+        </div>
+      )}
+      {askTembo && (
+        // A narrow composer says it in one line, so a phone keeps its room for the messages.
+        <p id={askHereId} className="channel-composer__note text-ink-muted" data-ask-here>
+          <span className="channel-composer__ask-wide">{ASK_HERE}</span>
+          <span className="channel-composer__ask-narrow">{ASK_HERE_SHORT}</span>
+        </p>
+      )}
+    </>
+  );
+}
+
 /**
  * Write a message or a reply. Enter sends with a keyboard and adds a line on
  * a touch screen; the send button is always there. `@` offers Tembo (when it
@@ -129,6 +178,8 @@ export default function Composer({
   const id = useId();
   const listId = `${id}-mentions`;
   const finderId = `${id}-clips`;
+  const askHereId = `${id}-ask-here`;
+  const errorId = `${id}-error`;
   const thread = variant === "thread";
   // One source for Tembo's reach: the @tembo option, the line under it and the scope line agree.
   const scope = temboScope(channel);
@@ -155,6 +206,7 @@ export default function Composer({
   const body = draft.text.trim();
   const tooLong = draft.text.length > MAX_BODY;
   const canSend = hydrated && body.length > 0 && !tooLong;
+  const shown = toolbarTools(tools, usage);
 
   function replace(next: string, at: number) {
     draft.replace(next, at);
@@ -250,8 +302,13 @@ export default function Composer({
       <noscript>
         <p className="channel-composer__note text-ink-secondary">Posting needs JavaScript. Everything here can still be read.</p>
       </noscript>
+      {/* The box is the field: the control's frame, carrying the focus ring while you type. */}
       <form
-        className="channel-composer__box"
+        className={cx(
+          CONTROL,
+          "channel-composer__box focus-within:border-peach-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-peach-ink",
+          "has-[[aria-invalid=true]]:border-danger-ink",
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           send();
@@ -268,7 +325,7 @@ export default function Composer({
           placeholder={thread ? "Reply in thread…" : `${label}…`}
           enterKeyHint={enterSends ? "send" : "enter"}
           disabled={!hydrated}
-          aria-describedby={`${id}-hint`}
+          {...boxAria(id, errorId, tooLong)}
           aria-controls={picker.open ? listId : undefined}
           aria-activedescendant={picker.open ? `${listId}-${picker.active}` : undefined}
           onChange={(event) => draft.type(event.target.value, event.target.selectionStart)}
@@ -280,12 +337,13 @@ export default function Composer({
         />
         <AttachedList attached={attached} onRemove={(embed) => setAttached((list) => list.filter((item) => !sameEmbed(item, embed)))} />
         <ComposerToolbar
-          tools={toolbarTools(tools, usage)}
+          tools={shown}
           shareables={offered}
           attachments={!thread && shareables !== null}
           thread={thread}
           canSend={canSend}
           clipFinder={{ open: finder.open, id: finderId }}
+          askHereId={askHereId}
           onFindClip={finder.toggle}
           attached={attached}
           onPick={attach}
@@ -300,15 +358,13 @@ export default function Composer({
       <p className="sr-only" aria-live="polite">
         {picker.open ? `${picker.candidates.length} ${picker.candidates.length === 1 ? "suggestion" : "suggestions"}. Up and down to choose, Enter to insert, Escape to close.` : ""}
       </p>
-      {tooLong && <p className="channel-composer__note text-danger-ink">{draft.text.length - MAX_BODY} characters over the limit.</p>}
-      {conductRequired && (
-        <p className="channel-composer__note text-ink-secondary" data-conduct-required>
-          Before you post, agree to how we talk to each other.{" "}
-          <a href={CONDUCT_PATH} className="font-semibold text-peach-ink underline underline-offset-2">
-            Read it and agree
-          </a>
-        </p>
-      )}
+      <ComposerNotes
+        errorId={errorId}
+        over={Math.max(0, draft.text.length - MAX_BODY)}
+        conductRequired={conductRequired}
+        askHereId={askHereId}
+        askTembo={shown.askTembo}
+      />
       {!thread && tools.askTembo && <TemboScopeNote scope={scope} reach={temboReach(channel)} usage={usage} />}
     </div>
   );

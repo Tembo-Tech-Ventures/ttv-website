@@ -664,12 +664,16 @@ describe("channel pages (B-2.2)", () => {
   it("refuse personal access tokens and admit agent sessions only to what their person can read", async () => {
     setupChannels({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const own = `/dashboard/cohort/c/${slug("cohort:cohort-a:main")}`;
+    const prepare = vi.spyOn(mocks.env.DB as D1Database, "prepare");
     for (const path of [own, "/dashboard/community/c/help", CONDUCT_PATH]) {
       const { ctx, next } = context(path);
       ctx.locals.personalAccessToken = { scopes: ["admin:read"] } as never;
       expect((await routeSpaceRequest(ctx, next)).status).toBe(403);
       expect(next).not.toHaveBeenCalled();
     }
+    // The channel is looked up beside the context, but never for a token: nothing about it is read.
+    expect(prepare.mock.calls.filter(([sql]) => /\bchannel\b/.test(String(sql)))).toEqual([]);
+    prepare.mockRestore();
     for (const [path, status] of [[own, 200], [`/dashboard/cohort/c/${slug("cohort:cohort-b:main")}`, 404]] as const) {
       const { ctx, next } = context(path);
       ctx.locals.session = { userAgent: `${AGENT_SESSION_PREFIX}synthetic persona` } as never;

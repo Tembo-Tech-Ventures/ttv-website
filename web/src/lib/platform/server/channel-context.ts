@@ -12,32 +12,52 @@ import { channelRoute, conversationRoute, normalizeSpacePath } from "./space-rou
 const resolved = new WeakMap<App.Locals, { user: App.Locals["user"]; path: string; channel: Promise<Channel | null> }>();
 
 /**
+ * The lookup behind getRouteChannel, started at most once per request and path: the channel the path
+ * names, if this caller can read it, from their capabilities alone. It does not wait for the rest of
+ * the space context, so it runs beside it (PERF-2); only getRouteChannel hands its result out, once
+ * that context allows channels. Never for a personal access token, which is refused before any
+ * capability is read for it (me.ts).
+ */
+function lookUp(context: Pick<APIContext, "locals" | "url">): Promise<Channel | null> | null {
+  const { locals, url } = context;
+  const path = normalizeSpacePath(url.pathname);
+  const route = channelRoute(path);
+  const conversation = route ? null : conversationRoute(path);
+  const user = locals.user;
+  if ((!route && !conversation) || !user || locals.personalAccessToken) return null;
+  let cached = resolved.get(locals);
+  if (!cached || cached.user !== user || cached.path !== path) {
+    const db = drizzle(env.DB, { schema });
+    const channel = requestCapabilities(db, locals).then(async (capabilities) => {
+      if (route) return findReadableChannel(db, user, route, capabilities);
+      const found = conversation && await findChannelById(db, user, conversation.id, capabilities);
+      return found?.kind === "DIRECT" ? found : null;
+    });
+    // Awaited later, or never when the context refuses the caller: an early failure is not unhandled.
+    channel.catch(() => {});
+    cached = { user, path, channel };
+    resolved.set(locals, cached);
+  }
+  return cached.channel;
+}
+
+/** Starts the route channel's lookup beside the space context, for the router to await afterwards. */
+export function startRouteChannel(context: Pick<APIContext, "locals" | "url">): void {
+  lookUp(context);
+}
+
+/**
  * The channel a `/dashboard/<space>/c/<slug>` or `/dashboard/community/dm/<id>` request names, for the
  * router and the page frontmatter alike: null unless `channels` is on for the caller and they can read
  * it. A conversation path opens direct conversations only. One lookup per request. Like
  * getSpaceContext, it throws that function's Response denials and lets database errors propagate.
  */
 export async function getRouteChannel(context: Pick<APIContext, "locals" | "url">): Promise<Channel | null> {
-  const { locals, url } = context;
-  const path = normalizeSpacePath(url.pathname);
-  const route = channelRoute(path);
-  const conversation = route ? null : conversationRoute(path);
-  if ((!route && !conversation) || !locals.user) return null;
+  const path = normalizeSpacePath(context.url.pathname);
+  if ((!channelRoute(path) && !conversationRoute(path)) || !context.locals.user) return null;
+  const channel = lookUp(context);
   const me = await getSpaceContext(context);
-  if (!me.flags.channels) return null;
-  let cached = resolved.get(locals);
-  if (!cached || cached.user !== locals.user || cached.path !== path) {
-    const db = drizzle(env.DB, { schema });
-    const user = locals.user;
-    const channel = requestCapabilities(db, locals).then(async (capabilities) => {
-      if (route) return findReadableChannel(db, user, route, capabilities);
-      const found = conversation && await findChannelById(db, user, conversation.id, capabilities);
-      return found?.kind === "DIRECT" ? found : null;
-    });
-    cached = { user, path, channel };
-    resolved.set(locals, cached);
-  }
-  return cached.channel;
+  return me.flags.channels && channel ? channel : null;
 }
 
 /**

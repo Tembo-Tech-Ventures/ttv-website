@@ -6,7 +6,10 @@ import type { Composer as ChannelComposer } from "@/lib/platform/client/composer
 import { useOutbox } from "@/lib/platform/client/hooks/composer";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
+import EmptyState from "@/components/platform/ui/EmptyState";
 import IconButton from "@/components/platform/ui/IconButton";
+import Notice from "@/components/platform/ui/Notice";
+import Spinner from "@/components/platform/ui/Spinner";
 import type { Shareables } from "./actions";
 import { channelTitle, plural } from "./channel-format";
 import Composer from "./Composer";
@@ -141,10 +144,9 @@ export default function ThreadRail({
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the rail from anywhere inside it
     <aside aria-labelledby="channel-thread-title" className="channel-rail" data-thread-rail={thread.parentId} onKeyDown={onKeyDown}>
       <div className="channel-rail__head">
-        <button type="button" onClick={onClose} className={cx("channel-rail__back", FOCUS_RING)}>
-          <PiArrowBendUpLeft aria-hidden="true" className="size-5" />
+        <Button variant="ghost" size="lg" icon={<PiArrowBendUpLeft className="size-5" />} onClick={onClose} className="channel-rail__back">
           Back to channel
-        </button>
+        </Button>
         <PiChatsCircle aria-hidden="true" className="channel-rail__icon size-5 shrink-0 text-ink-secondary" />
         <h2 id="channel-thread-title" ref={headingRef} tabIndex={-1} className="channel-rail__title">
           Thread
@@ -188,18 +190,26 @@ export default function ThreadRail({
         )}
         {thread.status === "loading" && replies.length === 0 && (
           <output className="channel-status">
-            <span className="channel-spinner" aria-hidden="true" /> Loading replies…
+            <Spinner /> Loading replies…
           </output>
         )}
         {thread.status === "error" && (
-          <div className="channel-status flex flex-col items-start gap-2">
-            <p>Couldn't load the replies.</p>
-            <Button size="sm" onClick={onRetry}>Try again</Button>
-          </div>
+          <Notice
+            tone="danger"
+            title="Couldn't load the replies"
+            className="my-3"
+            actions={
+              <Button size="sm" onClick={onRetry}>
+                Try again
+              </Button>
+            }
+          />
         )}
-        {thread.status === "removed" && <p className="channel-status">This thread is no longer available.</p>}
+        {thread.status === "removed" && <Notice tone="info" title="This thread is no longer available" className="my-3" />}
         {thread.status === "ready" && replies.length === 0 && (
-          <p className="channel-status">No replies yet.{posting ? " Start the thread below." : ""}</p>
+          <EmptyState title="No replies yet" className="my-3">
+            {posting && <p className="m-0">Start the thread below.</p>}
+          </EmptyState>
         )}
 
         {replies.length > 0 && (

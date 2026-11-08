@@ -1,7 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
-import { PiCheckCircle, PiEyeSlash, PiFlag, PiLockSimple } from "react-icons/pi";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { PiCheckCircle, PiFlag, PiLockSimple } from "react-icons/pi";
 import type { Message } from "@/lib/platform/contracts";
 import Button from "@/components/platform/ui/Button";
+import { cx } from "@/components/platform/ui/cx";
+import { ChoiceGroup, TextAreaField } from "@/components/platform/ui/Field";
+import Notice from "@/components/platform/ui/Notice";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 import type { InPlaceModeration, ModerationActions } from "./actions";
 import {
   firstName, MAX_REASON, moderationFailure, moderationNotice, REPORT_REASONS, reportReason, reviewState, type ReportReasonKey,
@@ -87,24 +91,36 @@ export function moderationRights(message: Message, viewerId: string | null, cont
  * here while the server says it is reviewable, once; after that the note says
  * it was asked, and once an admin's decision is final, that it is. The
  * moderator who hid it can take the hide back from here until an admin decides.
+ * With nothing to say about moderation, it says whether this reader reported the
+ * message: one note under a message, never two.
  */
 export function ModerationNote({ message, viewerId, onAskReview, onUndo, undoing = false }: {
   message: Message; viewerId: string | null; onAskReview?: () => void; onUndo?: () => void; undoing?: boolean;
 }) {
   const { canRestore, direct } = useModeration();
   const notice = moderationNotice(message, viewerId, { admin: canRestore, direct });
-  if (!notice) return null;
-  const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
+  if (!notice) return <ReportedNote message={message} />;
   // The server says so on every read, and a confirmed request updates the cached message at once.
   const review = reviewState(message);
+  const actions = (review === "available" && onAskReview) || onUndo ? (
+    <>
+      {review === "available" && onAskReview && (
+        <Button size="sm" variant="quiet" onClick={onAskReview} data-ask-review>
+          Ask for review
+        </Button>
+      )}
+      {onUndo && (
+        <Button size="sm" variant="quiet" onClick={onUndo} loading={undoing} data-undo-hide>
+          Undo hide
+        </Button>
+      )}
+    </>
+  ) : undefined;
   return (
     // Focusable from script only: where focus lands when a moderator's hide leaves the message with no actions.
-    <div className="channel-moderation" data-moderation={notice.state} tabIndex={-1}>
-      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <div className="min-w-0">
-        <p>
-          <strong className="font-semibold text-ink-primary">{notice.title}.</strong> {notice.detail}
-        </p>
+    <div className={cx("channel-moderation mt-2 max-w-152 rounded-xl", FOCUS_RING)} data-moderation={notice.state} tabIndex={-1}>
+      <Notice tone={notice.state === "HIDDEN" ? "warning" : "info"} title={`${notice.title}.`} actions={actions}>
+        <p className="m-0">{notice.detail}</p>
         {review === "final" && (
           <p className="channel-moderation__asked" data-review-final>
             <PiLockSimple aria-hidden="true" className="size-4 shrink-0" />
@@ -112,22 +128,12 @@ export function ModerationNote({ message, viewerId, onAskReview, onUndo, undoing
           </p>
         )}
         {review === "requested" && (
-          <p className="channel-moderation__asked" tabIndex={-1} data-review-requested>
+          <p className={cx("channel-moderation__asked rounded-md", FOCUS_RING)} tabIndex={-1} data-review-requested>
             <PiCheckCircle aria-hidden="true" className="size-4 shrink-0" />
             Review requested. An admin will look at it again.
           </p>
         )}
-        {review === "available" && onAskReview && (
-          <Button size="sm" variant="quiet" className="mt-2" onClick={onAskReview} data-ask-review>
-            Ask for review
-          </Button>
-        )}
-        {onUndo && (
-          <Button size="sm" variant="quiet" className="mt-2" onClick={onUndo} loading={undoing} data-undo-hide>
-            Undo hide
-          </Button>
-        )}
-      </div>
+      </Notice>
     </div>
   );
 }
@@ -263,13 +269,10 @@ function Panel({ title, children, error, submitLabel, submitting, danger = false
         {title}
       </p>
       {children}
-      {error && (
-        <p role="alert" className="channel-panel__error">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="danger" announce="assertive" title={error} />}
       <div ref={buttons} className="channel-panel__actions flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" variant={danger ? "danger" : "primary"} loading={submitting}>
+        {/* Quiet, or danger for a hide: the view's one peach action stays the composer's Send. */}
+        <Button type="submit" size="sm" variant={danger ? "danger" : "quiet"} loading={submitting}>
           {submitLabel}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -290,59 +293,42 @@ function tallerThanItsList(element: HTMLElement): boolean {
 }
 
 /**
- * A labelled box for a reason or a note, with the server's limit. A required box says so in its label
- * and to assistive tech; `missing` is what to write when it was left empty, shown under the box once
+ * A labelled box for a reason or a note, with the server's limit. A required box drops "(optional)" and
+ * says so to assistive tech; `missing` is what to write when it was left empty, shown under the box once
  * the person tried to send (the form has `noValidate`, so this is the only message).
  */
-function ReasonBox({ label, hint, value, onChange, required = false, missing = null, boxRef }: {
-  label: string; hint?: string; value: string; onChange: (value: string) => void; required?: boolean;
-  missing?: string | null; boxRef?: Ref<HTMLTextAreaElement>;
+function ReasonBox({ id, label, hint, value, onChange, required = false, missing = null }: {
+  id: string; label: string; hint?: string; value: string; onChange: (value: string) => void; required?: boolean;
+  missing?: string | null;
 }) {
-  const id = useId();
-  const described = [hint && `${id}-hint`, missing && `${id}-missing`].filter(Boolean).join(" ");
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-semibold text-ink-primary">
-        {label}
-        <span className="font-normal text-ink-secondary">{required ? " (required)" : " (optional)"}</span>
-      </label>
-      {hint && (
-        <p id={`${id}-hint`} className="text-[0.8125rem] text-ink-secondary">
-          {hint}
-        </p>
-      )}
-      <textarea
-        ref={boxRef}
-        id={id}
-        value={value}
-        rows={2}
-        maxLength={MAX_REASON}
-        aria-required={required || undefined}
-        aria-invalid={missing ? true : undefined}
-        aria-describedby={described || undefined}
-        onChange={(event) => onChange(event.target.value)}
-        className="channel-input min-h-16 w-full resize-y rounded-xl px-3 py-2"
-      />
-      {missing && (
-        <p id={`${id}-missing`} className="channel-panel__error" data-reason-missing>
-          {missing}
-        </p>
-      )}
-    </div>
+    <TextAreaField
+      id={id}
+      label={label}
+      hint={hint}
+      optional={!required}
+      required={required}
+      aria-required={required || undefined}
+      error={missing ?? undefined}
+      value={value}
+      rows={2}
+      maxLength={MAX_REASON}
+      onChange={(event) => onChange(event.target.value)}
+    />
   );
 }
 
 /** A field left empty: what to say under it once the person tries to send, and where to put them back. */
 function useMissing() {
   const [tried, setTried] = useState(false);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const id = useId();
   return {
     tried,
-    box,
+    id,
     /** Call on submit with whether the field is filled; false focuses it and shows the message. */
     check(filled: boolean): boolean {
       setTried(!filled);
-      if (!filled) box.current?.focus();
+      if (!filled) document.getElementById(id)?.focus();
       return filled;
     },
   };
@@ -356,9 +342,7 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = useId();
-  const choiceError = useId();
   const [choiceMissing, setChoiceMissing] = useState(false);
-  const firstChoice = useRef<HTMLInputElement>(null);
   const words = useMissing();
   const reason = choice === null ? null : reportReason(choice, details);
 
@@ -366,7 +350,7 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
     if (!actions) return;
     if (choice === null) {
       setChoiceMissing(true);
-      firstChoice.current?.focus();
+      document.getElementById(`${name}-${REPORT_REASONS[0].key}`)?.focus();
       return;
     }
     if (!words.check(reason !== null) || reason === null) return;
@@ -395,38 +379,30 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
-      <fieldset className="flex flex-col gap-1" aria-describedby={choiceMissing ? choiceError : undefined}>
-        <legend className="mb-1 text-sm font-semibold text-ink-primary">What's wrong with it?</legend>
-        {REPORT_REASONS.map((option, index) => (
-          <label key={option.key} className="channel-choice">
-            <input
-              ref={index === 0 ? firstChoice : undefined}
-              type="radio"
-              name={name}
-              value={option.key}
-              checked={choice === option.key}
-              onChange={() => {
-                setChoice(option.key);
-                setChoiceMissing(false);
-              }}
-              className="channel-choice__input"
-            />
-            {option.label}
-          </label>
-        ))}
-        {choiceMissing && (
-          <p id={choiceError} className="channel-panel__error" data-reason-missing>
-            Choose what's wrong with it first.
-          </p>
-        )}
-      </fieldset>
+      {/* The kit's radios, unchanged in the DOM; the form reads the choice as it changes. */}
+      <div
+        onChange={(event) => {
+          const target = event.target as HTMLInputElement;
+          if (target.name !== name) return;
+          setChoice(target.value as ReportReasonKey);
+          setChoiceMissing(false);
+        }}
+      >
+        <ChoiceGroup
+          name={name}
+          label="What's wrong with it?"
+          options={REPORT_REASONS.map((option) => ({ value: option.key, label: option.label }))}
+          error={choiceMissing ? "Choose what's wrong with it first." : undefined}
+          required
+        />
+      </div>
       <ReasonBox
+        id={words.id}
         label={choice === "other" ? `Tell ${direct ? "TTV admins" : "the moderators"} what's wrong` : "Add details"}
         value={details}
         onChange={setDetails}
         required={choice === "other"}
         missing={words.tried && choice === "other" && !details.trim() ? "Write what's wrong first." : null}
-        boxRef={words.box}
       />
       {direct ? (
         // True of the server: an admin outside the conversation reads the reported message alone (QA4-01).
@@ -507,13 +483,13 @@ export function ModerateForm({ message, action, onDone, onCancel, announce }: Pa
       onCancel={onCancel}
     >
       <ReasonBox
+        id={missing.id}
         label={copy.label}
         hint={hint}
         value={reason}
         onChange={setReason}
         required
         missing={missing.tried && !reason.trim() ? copy.missing : null}
-        boxRef={missing.box}
       />
     </Panel>
   );
@@ -522,6 +498,7 @@ export function ModerateForm({ message, action, onDone, onCancel, announce }: Pa
 /** The author asks an admin to look again at their hidden message. */
 export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) {
   const { actions } = useModeration();
+  const noteId = useId();
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -550,7 +527,7 @@ export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) 
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
-      <ReasonBox label="Anything the reviewer should know" value={note} onChange={setNote} />
+      <ReasonBox id={noteId} label="Anything the reviewer should know" value={note} onChange={setNote} />
     </Panel>
   );
 }

@@ -93,14 +93,14 @@ test.describe("moderation in a channel", () => {
       // QA2-10 / QA2-19: sent empty, the form says what it needs and takes focus there.
       const send = form.getByRole("button", { name: "Send report" });
       await send.click();
-      await expect(form.locator("[data-reason-missing]")).toHaveText("Choose what's wrong with it first.");
+      await expect(form.locator("[data-field-error]")).toHaveText("Choose what's wrong with it first.");
       await expect(form.getByRole("radio").first()).toBeFocused();
       await form.getByLabel(/Something else/).check();
       await send.click();
       const details = form.getByLabel(/Tell the moderators what's wrong/);
       await expect(details).toBeFocused();
       await expect(details).toHaveAttribute("aria-required", "true");
-      await expect(form.locator("[data-reason-missing]")).toHaveText("Write what's wrong first.");
+      await expect(form.locator("[data-field-error]")).toHaveText("Write what's wrong first.");
       await runAxe(page, testInfo, `report-form-missing-${viewport.width}`);
 
       await form.getByLabel("Spam or unrelated promotion").check();
@@ -137,7 +137,7 @@ test.describe("moderation in a channel", () => {
 
       // QA2-10: sent empty, the box says what it needs and takes focus back.
       await form.getByRole("button", { name: "Hide message" }).click();
-      const missing = form.locator("[data-reason-missing]");
+      const missing = form.locator("[data-field-error]");
       await expect(missing).toHaveText("Write why you're hiding it first. The record keeps your reason.");
       await expect(reason).toBeFocused();
       await expect(reason).toHaveAttribute("aria-invalid", "true");
@@ -149,9 +149,10 @@ test.describe("moderation in a channel", () => {
       await expect(form).toHaveCount(0);
       const note = message(page, FIRST_PR).locator("[data-moderation=HIDDEN]");
       // QA2-11: a moderator who is not an admin reads what comes next.
-      await expect(note.locator("p").first()).toHaveText(
-        "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
-      );
+      await expect(note.locator("p")).toHaveText([
+        "Hidden from members: Off-topic for this channel.",
+        "Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
+      ]);
       // Until an admin decides, the hide is the mentor's to take back.
       await expect(note.getByRole("button", { name: "Undo hide" })).toBeVisible();
       await expect(announcer(page)).toHaveText("Message hidden from members. An admin will look at it.");
@@ -197,7 +198,7 @@ test.describe("moderation in a channel", () => {
       await page.setViewportSize(viewport);
       await open(page, harness({ persona: "dennis" }));
       const own = message(page, HIDDEN);
-      await expect(own.locator("[data-moderation=HIDDEN]")).toContainText("Hidden from the channel: Harsh, not about the work. Only you can see this message now.");
+      await expect(own.locator("[data-moderation=HIDDEN] p")).toHaveText(["Hidden from the channel: Harsh, not about the work.", "Only you can see this message now."]);
       await own.getByRole("button", { name: "Ask for review" }).click();
       const form = page.locator("[data-panel=review]");
       await expect(form.getByLabel(/Anything the reviewer should know/)).toBeFocused();
@@ -219,11 +220,11 @@ test.describe("moderation in a channel", () => {
     await open(page, harness({ persona: "wanjiku" }));
     await actions(page, FIRST_PR).focus();
     await page.keyboard.press("Enter");
-    // The menu keeps focus and marks the active item (Headless UI's menu pattern).
-    await expect(page.getByRole("menuitem").first()).toHaveAttribute("data-focus", "");
+    // Opened from the keyboard, focus starts on the first item (the kit's Menu moves focus through the items).
+    await expect(page.getByRole("menuitem").first()).toBeFocused();
     // The report item sits at the end of the menu.
     await page.keyboard.press("End");
-    await expect(page.getByRole("menuitem", { name: "Report…" })).toHaveAttribute("data-focus", "");
+    await expect(page.getByRole("menuitem", { name: "Report…" })).toBeFocused();
     await page.keyboard.press("Enter");
     const form = page.locator("[data-panel=report]");
     await expect(form.getByRole("radio", { name: "Unkind or disrespectful" })).toBeFocused();
@@ -366,7 +367,7 @@ test.describe("moderation in a channel", () => {
     const form = page.locator("[data-panel=hide]");
     await form.getByLabel("Why are you hiding it?").fill("Off-topic");
     await form.getByRole("button", { name: "Hide message" }).click();
-    await expect(form.getByRole("alert")).toHaveText("An admin has already decided on this message, or it has changed. Close this and look again.");
+    await expect(form.getByRole("alert")).toContainText("An admin has already decided on this message, or it has changed. Close this and look again.");
     await expect(form.getByLabel("Why are you hiding it?")).toHaveValue("Off-topic");
     await expect(message(page, FIRST_PR).locator("[data-moderation]")).toHaveCount(0);
     expect(await records(page)).toEqual([]);
@@ -381,7 +382,7 @@ test.describe("moderation in a channel", () => {
     const form = page.locator("[data-panel=report]");
     await form.getByRole("radio", { name: "Unkind or disrespectful" }).check();
     await form.getByRole("button", { name: "Send report" }).click();
-    await expect(form.getByRole("alert")).toHaveText("That's a lot at once. Try again in 4 seconds.");
+    await expect(form.getByRole("alert")).toContainText("That's a lot at once. Try again in 4 seconds.");
     await expect(form.getByRole("button", { name: "Send report" })).toBeEnabled();
     await expect(message(page, FIRST_PR).locator("[data-reported]")).toHaveCount(0);
     expect(await records(page)).toEqual([]);
@@ -396,7 +397,7 @@ test.describe("moderation in a channel", () => {
     const form = page.locator("[data-panel=restore]");
     await form.getByLabel("Why can it come back?").fill("Fine on reflection");
     await form.getByRole("button", { name: "Restore message" }).click();
-    await expect(form.getByRole("alert")).toHaveText("An admin has already decided on this message, or it has changed. Close this and look again.");
+    await expect(form.getByRole("alert")).toContainText("An admin has already decided on this message, or it has changed. Close this and look again.");
     await expect(message(page, HIDDEN).locator("[data-moderation=HIDDEN]")).toHaveCount(1);
     expect(await records(page)).toEqual([]);
   });
@@ -411,7 +412,7 @@ test.describe("moderation in a channel", () => {
     const form = page.locator("[data-panel=review]");
     await expect(form.getByLabel(/Anything the reviewer should know/)).toBeFocused();
     await form.getByRole("button", { name: "Ask for review" }).press("Enter");
-    await expect(form.getByRole("alert")).toHaveText("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
+    await expect(form.getByRole("alert")).toContainText("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
     await form.getByRole("button", { name: "Cancel" }).click();
     await expect(ask).toBeFocused();
     await expect(message(page, HIDDEN).locator("[data-review-requested]")).toHaveCount(0);

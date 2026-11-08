@@ -51,6 +51,32 @@ one) and is the whole accessible name.
 | `badge` | a number (99+ past 99) or `"dot"`; joined into the name ("Attention, 4 waiting") |
 | `badgeLabel`, `detail` | what the badge counts; extra words after it |
 
+### Menu `#menu`
+
+A few actions behind one button: a message's "more", a composer's "Share
+project". The ARIA menu button, placed with CSS alone (no portal, no
+floating library).
+
+| Prop | Use |
+|---|---|
+| `label`, `icon`, `iconOnly` | the button: a ghost `Button` with words, or an `IconButton` named by `label` |
+| `variant`, `size` | `ghost` (default) or `quiet`; `sm` (default) or `md` |
+| `placement`, `align` | opens `bottom` (default) or `top`, lined up with the button's `start` or `end`; turns over when the box it scrolls in has no room |
+| `triggerRef` | the button, for a caller that returns focus to it later |
+
+`MenuItem` (`onSelect`, `disabled`, `icon`, `tone="danger"`) is one action;
+`MenuSection heading` names a group of them, `MenuSeparator` is a hairline
+between parts. Choosing an item closes the menu and returns focus to its
+button before `onSelect` runs, so the action can move focus on. `MENU_ITEM`
+(from `ui/Menu`) is the same look for an option in a list that is not a menu,
+such as the clip finder's moments.
+
+- Arrows, Home and End move; Enter or Space chooses; Escape closes and
+  returns to the button; Tab or a press outside closes. Opened from the
+  keyboard, the first item takes focus. Disabled items are read and skipped.
+- The button is always visible: never revealed on hover.
+- The list is the sheet's colour with a card's lift and a hairline: no shadow.
+
 ### Pill and PillNav `#pill`
 
 - `Pill` (`pressed`, `count`) toggles a filter over what is already on the page.

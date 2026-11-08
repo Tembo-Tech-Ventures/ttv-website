@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { PiArrowRight, PiBellSimple, PiCheck, PiMagnifyingGlass, PiPaperPlaneTilt, PiPushPin, PiTrash } from "react-icons/pi";
+import { PiArrowRight, PiBellSimple, PiCheck, PiDotsThreeBold, PiFolderSimple, PiMagnifyingGlass, PiPaperPlaneTilt, PiPushPin, PiTrash } from "react-icons/pi";
 import {
   Avatar,
   Button,
@@ -11,6 +11,10 @@ import {
   CountBadge,
   EmptyState,
   IconButton,
+  Menu,
+  MenuItem,
+  MenuSection,
+  MenuSeparator,
   Notice,
   PersonMarker,
   PillNav,
@@ -165,6 +169,55 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
       "A badge joins the name, “Attention, 4 waiting”, because a badge inside a labelled button is never read.",
     ],
     code: `<IconButton label="Attention" icon={<PiBellSimple />} badge={count} badgeLabel="waiting" />`,
+  },
+  {
+    id: "menu",
+    name: "Menu",
+    exports: ["Menu", "MenuItem", "MenuSection", "MenuSeparator"],
+    summary: "A few actions behind one button: a message's “more”, a composer's “Share project”. Its list opens under the button, or above it from the foot of the screen.",
+    specimen: () => (
+      <Specimens>
+        <Row>
+          <Menu id="guide-menu-more" label="Actions for Wanjiku's message" icon={<PiDotsThreeBold className="size-5" />} iconOnly align="end">
+            <MenuItem>Reply in thread</MenuItem>
+            <MenuSeparator />
+            <MenuSection heading="React">
+              <MenuItem>Useful</MenuItem>
+              <MenuItem>Thanks</MenuItem>
+            </MenuSection>
+          </Menu>
+          <Menu id="guide-menu-share" label="Share project" icon={<PiFolderSimple className="size-4.5" />}>
+            <MenuSection heading="Share a project">
+              <MenuItem>Chama ledger · rev 3</MenuItem>
+              <MenuItem disabled>Fare splitter · rev 1 (attached)</MenuItem>
+            </MenuSection>
+          </Menu>
+        </Row>
+      </Specimens>
+    ),
+    use: [
+      "Actions on one thing that would crowd it as a row of buttons: reply, react, edit, report.",
+      "Picking one of a few things to attach, under a tool in a toolbar.",
+      "Sections with a heading where the list has parts, a hairline between them.",
+    ],
+    avoid: [
+      "The one action someone came for. Show it as a Button.",
+      "Moving between pages or views: links in the page, a PillNav or the tab file.",
+      "Choosing a value for a form: that is a SelectField or a ChoiceGroup.",
+    ],
+    access: [
+      "The button says it opens a menu and whether it is open; the list is named by the button.",
+      "Arrow keys, Home and End move through the items, Escape closes it and returns to the button, Tab or a press outside closes it.",
+      "Opened from the keyboard, focus starts on the first item. A disabled item is still read, and the arrows pass over it.",
+      "No hover reveals it: the button is always there, 44px on a touch screen.",
+    ],
+    code: `<Menu label={\`Actions for \${name}'s message\`} icon={<PiDotsThreeBold />} iconOnly align="end">
+  <MenuItem onSelect={reply}>Reply in thread</MenuItem>
+  <MenuSeparator />
+  <MenuSection heading="React">
+    <MenuItem onSelect={() => react("useful")}>Useful</MenuItem>
+  </MenuSection>
+</Menu>`,
   },
   {
     id: "pill",

@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { MASKED_CONTACT } from "@/lib/platform/contracts";
+import { MASKED_CONTACT } from "./masked-contact";
 // oxlint-disable-next-line import/no-unassigned-import -- The masked note's style, wherever stored text shows.
 import "./masked.css";
 
