@@ -23,7 +23,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/admin/recordings/import.astro",
     "pages/admin/recordings/upload.astro",
     "pages/dashboard/apply.astro",
-    "pages/dashboard/leads.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
     "pages/dashboard/writing/index.astro",
@@ -38,7 +37,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/admin/recordings/upload.astro",
     "pages/dashboard/application/[id].astro",
     "pages/dashboard/apply.astro",
-    "pages/dashboard/leads.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
     "pages/dashboard/writing/index.astro",
@@ -48,7 +46,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     pattern: /common\/Badge(\.astro)?["']/,
     files: [
     "pages/dashboard/application/[id].astro",
-    "pages/dashboard/leads.astro",
     "pages/dashboard/opportunities.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/writing/index.astro",

@@ -142,12 +142,13 @@ someone), `ring` (a mentor's part only), `success`, `warning`, `danger`
 and tone. `statusTone(domain, status)` returns `{ label, tone }` for places a
 chip cannot go; `STATUSES` is the map. Domains: `application`, `access`,
 `feedback`, `theme`, `studentFeedback` (a note as its author sees it, from
-`studentFeedbackState`), `profile` (and blog posts), `project`, `recording`,
-`token`. `APPROVED` is "Accepted" in every domain. Waiting on a person is
-peach, an outcome takes a status tone, everything else is neutral; no status
-wears the mentor's ring. `status.test.ts` holds each domain to its schema
-column (`studentFeedback` to every state the note and theme columns can
-make), so a new stored value cannot reach a page without a name.
+`studentFeedbackState`), `profile` (and blog posts), `contact` (a visitor's
+message), `project`, `recording`, `token`. `APPROVED` is "Accepted" in every
+domain. Waiting on a person is peach, an outcome takes a status tone,
+everything else is neutral; no status wears the mentor's ring. `status.test.ts`
+holds each domain to its schema column (`studentFeedback` to every state the
+note and theme columns can make), so a new stored value cannot reach a page
+without a name.
 
 ### CountBadge `#count-badge`
 

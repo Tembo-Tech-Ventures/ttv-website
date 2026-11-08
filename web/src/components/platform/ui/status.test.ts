@@ -12,6 +12,7 @@ const COLUMNS: Record<Exclude<StatusDomain, "token" | "studentFeedback">, readon
   theme: schema.feedbackTheme.status.enumValues,
   profile: schema.studentProfile.status.enumValues,
   project: schema.clientProject.status.enumValues,
+  contact: schema.profileContact.status.enumValues,
   recording: schema.recording.processingStatus.enumValues,
 };
 
