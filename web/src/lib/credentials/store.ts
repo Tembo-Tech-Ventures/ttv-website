@@ -1,7 +1,15 @@
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import type { CredentialCipher } from "./crypto";
+
+/** A change to a credential that isn't stored (any more): someone removed it meanwhile. */
+export class MissingCredentialError extends Error {
+  constructor(provider: string) {
+    super(`No credential found for provider "${provider}".`);
+    this.name = "MissingCredentialError";
+  }
+}
 
 export async function setIntegrationCredential(
   db: Database,
@@ -68,7 +76,7 @@ export async function updateIntegrationCredentialConfig(
     .returning({ id: schema.integrationCredential.id });
 
   if (result.length === 0) {
-    throw new Error(`No credential found for provider "${options.provider}".`);
+    throw new MissingCredentialError(options.provider);
   }
 
   await db.insert(schema.credentialAuditLog).values({
@@ -103,36 +111,6 @@ export async function getIntegrationCredentialSecret(
   }
 
   return { secret: plaintext, config: row.config };
-}
-
-export async function getIntegrationCredentialStatus(
-  db: Database,
-  provider: string,
-): Promise<{
-  configured: boolean;
-  displayMetadata: string | null;
-  config: string | null;
-  updatedAt: Date;
-  updatedBy: string | null;
-} | null> {
-  const row = await db.query.integrationCredential.findFirst({
-    where: eq(schema.integrationCredential.provider, provider),
-    columns: {
-      displayMetadata: true,
-      config: true,
-      updatedAt: true,
-      updatedByUserId: true,
-    },
-  });
-  if (!row) return null;
-
-  return {
-    configured: true,
-    displayMetadata: row.displayMetadata,
-    config: row.config,
-    updatedAt: row.updatedAt,
-    updatedBy: row.updatedByUserId,
-  };
 }
 
 export async function deleteIntegrationCredential(
@@ -171,20 +149,3 @@ export async function recordCredentialTest(
   });
 }
 
-export async function getRecentAuditEntries(
-  db: Database,
-  provider: string,
-  limit = 10,
-) {
-  return db
-    .select({
-      action: schema.credentialAuditLog.action,
-      outcome: schema.credentialAuditLog.outcome,
-      actorUserId: schema.credentialAuditLog.actorUserId,
-      createdAt: schema.credentialAuditLog.createdAt,
-    })
-    .from(schema.credentialAuditLog)
-    .where(eq(schema.credentialAuditLog.provider, provider))
-    .orderBy(desc(schema.credentialAuditLog.createdAt))
-    .limit(limit);
-}

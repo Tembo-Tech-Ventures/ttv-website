@@ -66,16 +66,18 @@ test.describe("admin integrations page", () => {
     await page.goto("/admin/settings/integrations");
 
     // A prior failed attempt can leave a credential configured; reset first
-    // so retries always start from the unconfigured state. Exact matching
-    // keeps audit-log rows (e.g. "remove Credential removed.") out of scope.
-    if (
-      (await page.getByText("Remove credential", { exact: true }).count()) > 0
-    ) {
-      await page.getByText("Remove credential", { exact: true }).click();
-      await page.getByRole("button", { name: /confirm removal/i }).click();
+    // so retries always start from the unconfigured state. Removing asks first,
+    // on the page itself (?confirm=remove).
+    const removeCredential = async () => {
+      await page.getByRole("link", { name: "Remove credential" }).click();
+      await expect(page).toHaveURL(/\?confirm=remove$/);
+      await page.getByRole("button", { name: "Remove credential" }).click();
       await expect(
-        page.getByText("Google Drive credential removed.")
+        page.getByRole("status").filter({ hasText: "Google Drive credential removed" })
       ).toBeVisible();
+    };
+    if ((await page.getByRole("link", { name: "Remove credential" }).count()) > 0) {
+      await removeCredential();
     }
 
     const saJson = generateThrowawayServiceAccountJson();
@@ -84,7 +86,7 @@ test.describe("admin integrations page", () => {
     await page.getByRole("button", { name: /save credential/i }).click();
 
     await expect(
-      page.getByText("Google Drive credential saved.")
+      page.getByRole("status").filter({ hasText: "Google Drive credential saved" })
     ).toBeVisible();
     await expect(
       page.getByText("e2e-test@e2e-test-project.iam.gserviceaccount.com")
@@ -105,30 +107,25 @@ test.describe("admin integrations page", () => {
       fullPage: true,
     });
 
-    await page.getByText("Replace credential", { exact: true }).click();
+    await page.locator("summary", { hasText: "Replace credential" }).click();
     const replacementJson = generateThrowawayServiceAccountJson();
     await page
       .locator('details:has(input[value="replace"]) textarea[name="serviceAccountJson"]')
       .fill(replacementJson);
     await page
       .locator('details:has(input[value="replace"])')
-      .getByRole("button", { name: /replace/i })
+      .getByRole("button", { name: "Replace credential" })
       .click();
 
     await expect(
-      page.getByText("Google Drive credential replaced.")
+      page.getByRole("status").filter({ hasText: "Google Drive credential replaced" })
     ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-integrations-replaced"),
       fullPage: true,
     });
 
-    await page.getByText("Remove credential", { exact: true }).click();
-    await page.getByRole("button", { name: /confirm removal/i }).click();
-
-    await expect(
-      page.getByText("Google Drive credential removed.")
-    ).toBeVisible();
+    await removeCredential();
     await expect(
       page.locator('textarea[name="serviceAccountJson"]')
     ).toBeVisible();

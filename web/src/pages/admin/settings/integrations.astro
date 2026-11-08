@@ -1,412 +1,327 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
+import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { env } from "cloudflare:workers";
-import * as schema from "@/lib/db/schema";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  Chip,
+  ConfirmStep,
+  DataCell,
+  DataRow,
+  DataTable,
+  DescriptionItem,
+  DescriptionList,
+  Notice,
+  PageHeader,
+  TextAreaField,
+  TextField,
+  buttonClass,
+  confirmHref,
+  confirmingAction,
+  linkClass,
+  withoutConfirm,
+} from "@/components/platform/ui";
+import { CREDENTIAL_ACTION_LABEL, INTEGRATIONS_PATH, readIntegrationsPage } from "@/lib/admin/integrations";
 import { createCredentialCipher } from "@/lib/credentials/crypto";
-import {
-  saveGoogleDriveCredential,
-  getGoogleDriveCredentialStatus,
-  getGoogleDriveCredentials,
-  GOOGLE_DRIVE_PROVIDER,
-} from "@/lib/credentials/google-drive";
-import {
-  updateIntegrationCredentialConfig,
-  deleteIntegrationCredential,
-  getRecentAuditEntries,
-  recordCredentialTest,
-} from "@/lib/credentials/store";
+import { GOOGLE_DRIVE_PROVIDER, ServiceAccountInputError, getGoogleDriveCredentials, saveGoogleDriveCredential } from "@/lib/credentials/google-drive";
+import { MissingCredentialError, deleteIntegrationCredential, recordCredentialTest, updateIntegrationCredentialConfig } from "@/lib/credentials/store";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDateTime } from "@/lib/display-date";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import { testGoogleDriveConnection } from "@/lib/recordings/google-drive";
 
+/*
+ * Third-party credentials, encrypted at rest and never shown after saving:
+ * today the Google Drive service account that session recordings import
+ * with. Save, replace, change the impersonated user or test it, each a 303
+ * back here with a flash; removing it takes a confirm step first. The facts
+ * and recent activity are one read, beside the Admin space.
+ */
 Astro.response.headers.set("Cache-Control", "no-store");
 
 const userId = Astro.locals.user?.id;
 if (!userId) return Astro.redirect("/auth/login");
+// A personal access token is delegated: it never sets or removes another credential. Agent sessions stay
+// allowed: they exist only on isolated previews, whose admin-integrations spec drives this page with one.
+if (Astro.locals.personalAccessToken) {
+  return new Response("Forbidden: delegated credentials cannot manage integration credentials.", { status: 403 });
+}
 
 const encryptionAvailable = Boolean(env.CREDENTIALS_ENCRYPTION_KEY);
 const db = drizzle(env.DB, { schema });
+const UNAVAILABLE = "The database didn't answer, so nothing changed. Try again in a moment.";
 
-let error = "";
-let success = "";
+type Form = "save" | "replace" | "update-config";
+let actionError: string | undefined;
+// The form a refusal came from, its reason and the impersonated user typed; the JSON is a secret, so it is never echoed back.
+let refused: { form: Form; json?: string; user?: string; impersonatedUser: string } | undefined;
 
-if (Astro.request.method === "POST" && encryptionAvailable) {
-  try {
-    const cipher = createCredentialCipher(env);
-    const formData = await Astro.request.formData();
-    const action = String(formData.get("action") ?? "");
-
-    if (action === "save" || action === "replace") {
-      const serviceAccountJson = String(formData.get("serviceAccountJson") ?? "");
-      const impersonatedUser = String(formData.get("impersonatedUser") ?? "").trim();
-      if (!serviceAccountJson.trim()) {
-        throw new Error("Service account JSON is required.");
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = String(formData.get("action") ?? "");
+  const impersonatedUser = String(formData.get("impersonatedUser") ?? "").trim();
+  if (!encryptionAvailable) {
+    actionError = "Credential storage isn't set up in this environment, so nothing changed.";
+    Astro.response.status = 403;
+  } else if (action === "save" || action === "replace") {
+    const serviceAccountJson = String(formData.get("serviceAccountJson") ?? "");
+    if (!serviceAccountJson.trim()) {
+      refused = { form: action, json: "Paste the service account's JSON key file.", impersonatedUser };
+      Astro.response.status = 400;
+    } else {
+      try {
+        await saveGoogleDriveCredential(db, createCredentialCipher(env), { serviceAccountJson, impersonatedUser: impersonatedUser || undefined, actorUserId: userId });
+        return redirectWithFlash(Astro, INTEGRATIONS_PATH, { tone: "success", title: action === "save" ? "Google Drive credential saved" : "Google Drive credential replaced" });
+      } catch (caught) {
+        if (caught instanceof ServiceAccountInputError) {
+          refused = { form: action, json: `${caught.message} Paste the whole key file again.`, impersonatedUser };
+          Astro.response.status = 400;
+        } else {
+          actionError = UNAVAILABLE;
+          Astro.response.status = 503;
+        }
       }
-      await saveGoogleDriveCredential(db, cipher, {
-        serviceAccountJson,
-        impersonatedUser: impersonatedUser || undefined,
-        actorUserId: userId,
-      });
-      success = action === "save"
-        ? "Google Drive credential saved."
-        : "Google Drive credential replaced.";
-    } else if (action === "update-config") {
-      const impersonatedUser = String(formData.get("impersonatedUser") ?? "").trim();
+    }
+    if (refused) actionError = "Check the field marked below.";
+  } else if (action === "update-config") {
+    try {
       await updateIntegrationCredentialConfig(db, {
         provider: GOOGLE_DRIVE_PROVIDER,
         config: JSON.stringify({ impersonatedUser: impersonatedUser || null }),
         actorUserId: userId,
       });
-      success = "Impersonated user updated.";
-    } else if (action === "test") {
-      const credentials = await getGoogleDriveCredentials(db, cipher);
+      return redirectWithFlash(Astro, INTEGRATIONS_PATH, { tone: "success", title: impersonatedUser ? "Impersonated user changed" : "Impersonated user cleared" });
+    } catch (caught) {
+      if (caught instanceof MissingCredentialError) {
+        return redirectWithFlash(Astro, INTEGRATIONS_PATH, { tone: "info", title: "There's no credential to change", message: "It was removed meanwhile. Save a new one below." });
+      }
+      actionError = UNAVAILABLE;
+      Astro.response.status = 503;
+    }
+  } else if (action === "test") {
+    try {
+      const credentials = await getGoogleDriveCredentials(db, createCredentialCipher(env));
       if (!credentials) {
-        throw new Error("No credential is configured to test.");
+        return redirectWithFlash(Astro, INTEGRATIONS_PATH, { tone: "info", title: "There's no credential to test", message: "Save one below first." });
       }
       const sources = await db.query.recordingImportSource.findMany({
         where: eq(schema.recordingImportSource.enabled, true),
         columns: { driveFolderId: true },
       });
-      const folderIds = sources.map((s) => s.driveFolderId);
-      const results = await testGoogleDriveConnection({ credentials, folderIds });
-      const allOk = results.every((r) => r.ok);
-      const detail = results
-        .map((r) => r.ok ? `${r.folderId || "API"}: ok` : `${r.folderId || "API"}: ${r.errorCode}`)
-        .join("; ");
-      await recordCredentialTest(db, {
-        provider: GOOGLE_DRIVE_PROVIDER,
-        actorUserId: userId,
-        ok: allOk,
-        detail,
-      });
-      success = allOk
-        ? "Connection test passed."
-        : `Connection test failed: ${detail}`;
-    } else if (action === "remove") {
-      await deleteIntegrationCredential(db, {
-        provider: GOOGLE_DRIVE_PROVIDER,
-        actorUserId: userId,
-      });
-      success = "Google Drive credential removed.";
-    } else {
-      throw new Error("Unknown action.");
+      const results = await testGoogleDriveConnection({ credentials, folderIds: sources.map((source) => source.driveFolderId) });
+      const ok = results.every((result) => result.ok);
+      const detail = results.map((result) => `${result.folderId || "API"}: ${result.ok ? "ok" : result.errorCode}`).join("; ");
+      await recordCredentialTest(db, { provider: GOOGLE_DRIVE_PROVIDER, actorUserId: userId, ok, detail });
+      return redirectWithFlash(
+        Astro,
+        INTEGRATIONS_PATH,
+        ok ? { tone: "success", title: "Connection test passed" } : { tone: "warning", title: "Connection test failed", message: detail },
+      );
+    } catch {
+      actionError = "The test couldn't run, so nothing was recorded. Try again in a moment.";
+      Astro.response.status = 503;
     }
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : "Operation failed.";
+  } else if (action === "remove") {
+    const removed = await deleteIntegrationCredential(db, { provider: GOOGLE_DRIVE_PROVIDER, actorUserId: userId }).then(
+      () => true,
+      () => false,
+    );
+    if (removed) return redirectWithFlash(Astro, INTEGRATIONS_PATH, { tone: "success", title: "Google Drive credential removed" });
+    actionError = UNAVAILABLE;
+    Astro.response.status = 503;
+  } else {
+    actionError = "Choose one of the actions on this page.";
+    Astro.response.status = 400;
   }
 }
 
-const status = encryptionAvailable
-  ? await getGoogleDriveCredentialStatus(db)
-  : null;
-const auditEntries = encryptionAvailable
-  ? await getRecentAuditEntries(db, GOOGLE_DRIVE_PROVIDER)
-  : [];
-
-let metadata: { clientEmail?: string; projectId?: string; privateKeyIdFingerprint?: string } = {};
-if (status?.displayMetadata) {
-  try {
-    metadata = JSON.parse(status.displayMetadata);
-  } catch { /* non-fatal */ }
-}
-
-let config: { impersonatedUser?: string | null } = {};
-if (status?.config) {
-  try {
-    config = JSON.parse(status.config);
-  } catch { /* non-fatal */ }
-}
-
-let updatedByName: string | null = null;
-if (status?.updatedBy) {
-  const updater = await db.query.user.findFirst({
-    where: eq(schema.user.id, status.updatedBy),
-    columns: { name: true },
-  });
-  updatedByName = updater?.name ?? null;
-}
-
-const actorNames = new Map<string, string>();
-for (const entry of auditEntries) {
-  if (entry.actorUserId && !actorNames.has(entry.actorUserId)) {
-    const actor = await db.query.user.findFirst({
-      where: eq(schema.user.id, entry.actorUserId),
-      columns: { name: true },
-    });
-    actorNames.set(entry.actorUserId, actor?.name ?? "Unknown");
-  }
-}
-
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminIntegrations");
+const flash = takeFlash(Astro);
+const [page, spaces] = await Promise.all([encryptionAvailable ? readIntegrationsPage(db) : Promise.resolve(null), resolveSpacePage(Astro.locals, "adminIntegrations")]);
+const credential = page?.credential ?? null;
+const activity = page?.activity ?? [];
+const removing = confirmingAction(Astro.url, credential ? ["remove"] : []) === "remove";
+const keptUser = (form: Form) => (refused?.form === form ? refused.impersonatedUser : (credential?.impersonatedUser ?? ""));
+const externalLink = linkClass();
 ---
 
-<AdminLayout title="Integrations" spaces={spaces}>
-  <div class="max-w-4xl space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Integrations</PageTitle>
-      <p class="mt-2 text-sm text-ink-secondary">
-        Manage third-party service credentials. Secrets are encrypted at rest
-        and are never displayed after saving.
-      </p>
-    </div>
+<AdminLayout title="Integrations" titlePrefix={actionError ? "Error: " : undefined} spaces={spaces}>
+  <div class="flex max-w-4xl flex-col gap-8">
+    <PageHeader title="Integrations">
+      Credentials for the services the platform reads from. Each is encrypted before it's stored and never shown again, only replaced or removed.
+    </PageHeader>
 
-    {!encryptionAvailable ? (
-      <div class="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 text-amber-100">
-        Credential storage is not available in this environment. The{" "}
-        <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">CREDENTIALS_ENCRYPTION_KEY</code>{" "}
-        secret is not configured.
-      </div>
-    ) : (
-      <>
-        {success && (
-          <div class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-            {success}
-          </div>
-        )}
-        {error && (
-          <div class="rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100">
-            {error}
-          </div>
-        )}
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
 
-        <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
-          <h3 class="text-lg font-semibold text-white">Google Drive</h3>
-          <p class="mt-1 text-sm text-ink-secondary">
-            Service-account credential for importing session recordings from
-            Google Drive.
-          </p>
+    {
+      !encryptionAvailable ? (
+        <Notice tone="warning" title="Credential storage isn't set up here">
+          This environment has no <code class="font-mono">CREDENTIALS_ENCRYPTION_KEY</code> secret, so it can't store a credential.
+        </Notice>
+      ) : (
+        <>
+          <Card as="section" aria-labelledby="google-drive" className="flex flex-col gap-5">
+            <div class="flex flex-col gap-1">
+              <h2 id="google-drive" class="text-lg text-ink-primary">Google Drive</h2>
+              <p class="max-w-prose text-sm text-ink-secondary">The service account that session recordings are imported from Google Drive with.</p>
+            </div>
 
-          <details
-            class="mt-4 rounded-md border border-teal/20 bg-dark/50 p-4"
-            open={!status}
-          >
-            <summary class="cursor-pointer text-sm font-medium text-white/90">
-              Where to get this credential
-            </summary>
-            <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/70">
-              <li>
-                In Google Cloud Console, pick (or create) a project and enable
-                the{" "}
-                <a
-                  href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="font-medium text-primary hover:underline"
-                >Google Drive API</a>.
-              </li>
-              <li>
-                Create a{" "}
-                <a
-                  href="https://console.cloud.google.com/iam-admin/serviceaccounts"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="font-medium text-primary hover:underline"
-                >service account</a>{" "}
-                — it needs no project roles.
-              </li>
-              <li>
-                On the service account, open{" "}
-                <span class="text-white/90">Keys &rarr; Add key &rarr; Create new key &rarr; JSON</span>{" "}
-                and download the key file.
-              </li>
-              <li>
-                In Google Drive, share the Meet-recordings folder with the
-                service account&rsquo;s email (the{" "}
-                <code class="rounded bg-black/20 px-1 py-0.5 text-xs">client_email</code>{" "}
-                in the JSON) as <span class="text-white/90">Viewer</span>. The
-                importer only ever reads.
-              </li>
-              <li>
-                Paste the entire JSON file below and save. It is encrypted
-                before it is stored and can never be viewed again — only
-                replaced or removed.
-              </li>
-            </ol>
-            <p class="mt-3 text-xs text-ink-muted">
-              If Workspace policy blocks sharing with service accounts, a
-              Workspace super admin can instead grant the service account
-              domain-wide delegation for the scope{" "}
-              <code class:list={["rounded bg-black/20 px-1 py-0.5", spaces && "break-all"]}>https://www.googleapis.com/auth/drive.readonly</code>{" "}
-              — then set &ldquo;Impersonated user&rdquo; to a Workspace user
-              who can read the folder.
-            </p>
-          </details>
+            <details open={!credential} class="group rounded-xl border border-hairline p-4">
+              <summary class="cursor-pointer rounded-sm text-sm font-semibold text-ink-primary">Where to get this credential</summary>
+              <ol class="mt-3 flex list-decimal flex-col gap-2 pl-5 text-sm text-ink-secondary">
+                <li>
+                  In Google Cloud Console, pick or create a project and turn on the{" "}
+                  <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer" class={externalLink}>Google Drive API</a>.
+                </li>
+                <li>
+                  Create a{" "}
+                  <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener noreferrer" class={externalLink}>service account</a>.
+                  It needs no project roles.
+                </li>
+                <li>On the service account, open Keys, then Add key, Create new key, JSON, and download the key file.</li>
+                <li>
+                  In Google Drive, share the Meet recordings folder with the service account's email (the <code class="font-mono">client_email</code> in the
+                  JSON) as a Viewer. The importer only ever reads.
+                </li>
+                <li>Paste the whole JSON file below and save it. It's encrypted before it's stored and can't be viewed again, only replaced or removed.</li>
+              </ol>
+              <p class="mt-3 text-sm text-ink-secondary">
+                If your Workspace blocks sharing with service accounts, a Workspace super admin can give the service account domain-wide delegation for{" "}
+                <code class="font-mono break-all">https://www.googleapis.com/auth/drive.readonly</code> instead. Then set the impersonated user to someone
+                in your Workspace who can read the folder.
+              </p>
+            </details>
 
-          {!status ? (
-            <form method="POST" class="mt-5 space-y-4">
-              <input type="hidden" name="action" value="save" />
-              <label class="flex flex-col gap-1.5 text-sm text-white/80">
-                Service account JSON
-                <textarea
-                  name="serviceAccountJson"
-                  required
-                  rows={6}
-                  placeholder="Paste the full service-account JSON key file here"
-                  class="form-control font-mono text-xs placeholder:text-ink-muted"
-                />
-              </label>
-              <label class="flex flex-col gap-1.5 text-sm text-white/80">
-                Impersonated user (optional)
-                <input
-                  name="impersonatedUser"
-                  type="email"
-                  placeholder="user@example.com"
-                  class="form-control placeholder:text-ink-muted"
-                />
-              </label>
-              <Button type="submit">Save credential</Button>
-            </form>
-          ) : (
-            <div class="mt-5 space-y-5">
-              <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
-                {metadata.clientEmail && (
-                  <>
-                    <dt class="font-medium text-ink-secondary">Client email</dt>
-                    <dd class="text-white">{metadata.clientEmail}</dd>
-                  </>
-                )}
-                {metadata.projectId && (
-                  <>
-                    <dt class="font-medium text-ink-secondary">Project ID</dt>
-                    <dd class="text-white">{metadata.projectId}</dd>
-                  </>
-                )}
-                {metadata.privateKeyIdFingerprint && (
-                  <>
-                    <dt class="font-medium text-ink-secondary">Key fingerprint</dt>
-                    <dd class="font-mono text-white">{metadata.privateKeyIdFingerprint}...</dd>
-                  </>
-                )}
-                {config.impersonatedUser && (
-                  <>
-                    <dt class="font-medium text-ink-secondary">Impersonated user</dt>
-                    <dd class="text-white">{config.impersonatedUser}</dd>
-                  </>
-                )}
-                <dt class="font-medium text-ink-secondary">Last updated</dt>
-                <dd class="text-white">
-                  {formatDate(status.updatedAt)}
-                  {updatedByName && <span class="text-ink-secondary"> by {updatedByName}</span>}
-                </dd>
-              </dl>
-
-              <div class="flex flex-wrap gap-3 border-t border-teal/20 pt-4">
-                <details class="group">
-                  <summary class="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
-                    Replace credential
-                  </summary>
-                  <form method="POST" class="mt-3 space-y-3">
-                    <input type="hidden" name="action" value="replace" />
-                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
-                      New service account JSON
-                      <textarea
-                        name="serviceAccountJson"
-                        required
-                        rows={4}
-                        placeholder="Paste the replacement JSON key file"
-                        class="form-control font-mono text-xs placeholder:text-ink-muted"
-                      />
-                    </label>
-                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
-                      Impersonated user (optional)
-                      <input
-                        name="impersonatedUser"
-                        type="email"
-                        value={config.impersonatedUser ?? ""}
-                        class="form-control placeholder:text-ink-muted"
-                      />
-                    </label>
-                    <Button type="submit">Replace</Button>
-                  </form>
-                </details>
-
-                <details class="group">
-                  <summary class="cursor-pointer rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary">
-                    Update impersonated user
-                  </summary>
-                  <form method="POST" class="mt-3 space-y-3">
-                    <input type="hidden" name="action" value="update-config" />
-                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
-                      Impersonated user
-                      <input
-                        name="impersonatedUser"
-                        type="email"
-                        value={config.impersonatedUser ?? ""}
-                        placeholder="user@example.com (leave empty to clear)"
-                        class="form-control placeholder:text-ink-muted"
-                      />
-                    </label>
-                    <Button variant="secondary" type="submit">Update</Button>
-                  </form>
-                </details>
-
-                <form method="POST">
-                  <input type="hidden" name="action" value="test" />
-                  <Button variant="secondary" type="submit">Test connection</Button>
+            {
+              !credential ? (
+                <form method="POST" action={INTEGRATIONS_PATH} class="flex flex-col gap-4">
+                  <input type="hidden" name="action" value="save" />
+                  <TextAreaField
+                    label="Service account JSON"
+                    name="serviceAccountJson"
+                    required
+                    rows={6}
+                    error={refused?.form === "save" ? refused.json : undefined}
+                    hint="The whole key file, as downloaded."
+                  />
+                  <TextField
+                    label="Impersonated user"
+                    name="impersonatedUser"
+                    type="email"
+                    optional
+                    defaultValue={keptUser("save")}
+                    hint="Only with domain-wide delegation: a Workspace user who can read the folder."
+                  />
+                  <div>
+                    <Button type="submit" variant="primary">Save credential</Button>
+                  </div>
                 </form>
+              ) : (
+                <>
+                  <DescriptionList>
+                    {credential.facts.clientEmail && <DescriptionItem term="Client email">{credential.facts.clientEmail}</DescriptionItem>}
+                    {credential.facts.projectId && <DescriptionItem term="Project">{credential.facts.projectId}</DescriptionItem>}
+                    {credential.facts.privateKeyIdFingerprint && (
+                      <DescriptionItem term="Key starts with">
+                        <code class="font-mono">{credential.facts.privateKeyIdFingerprint}</code>
+                      </DescriptionItem>
+                    )}
+                    <DescriptionItem term="Impersonated user">{credential.impersonatedUser ?? "None"}</DescriptionItem>
+                    <DescriptionItem term="Last changed">
+                      {formatMomentDateTime(credential.updatedAt)}
+                      {credential.updatedByName && <span class="text-ink-secondary"> by {credential.updatedByName}</span>}
+                    </DescriptionItem>
+                  </DescriptionList>
 
-                <details class="group">
-                  <summary class="cursor-pointer rounded-md border border-red-400/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-400/10">
-                    Remove credential
-                  </summary>
-                  <form method="POST" class="mt-3 space-y-3">
-                    <input type="hidden" name="action" value="remove" />
-                    <p class="text-sm text-red-200">
-                      This will permanently delete the stored credential.
-                      Recording imports that depend on it will stop working.
-                    </p>
-                    <Button variant="danger" type="submit">Confirm removal</Button>
-                  </form>
-                </details>
-              </div>
-            </div>
+                  {removing ? (
+                    <ConfirmStep
+                      title="Remove the Google Drive credential?"
+                      confirmLabel="Remove credential"
+                      cancelHref={withoutConfirm(Astro.url)}
+                      action={INTEGRATIONS_PATH}
+                      fields={{ action: "remove" }}
+                    >
+                      It's deleted for good, and recording imports from Google Drive stop until you save a new one.
+                    </ConfirmStep>
+                  ) : (
+                    <div class="flex flex-col gap-3 border-t border-hairline pt-4">
+                      <details open={refused?.form === "replace"} class="group">
+                        <summary class={buttonClass({ variant: "quiet", className: "cursor-pointer list-none" })}>Replace credential</summary>
+                        <form method="POST" action={INTEGRATIONS_PATH} class="mt-3 flex flex-col gap-4">
+                          <input type="hidden" name="action" value="replace" />
+                          <TextAreaField
+                            label="New service account JSON"
+                            name="serviceAccountJson"
+                            required
+                            rows={4}
+                            error={refused?.form === "replace" ? refused.json : undefined}
+                            hint="The whole replacement key file."
+                          />
+                          <TextField label="Impersonated user" name="impersonatedUser" id="replace-impersonated-user" type="email" optional defaultValue={keptUser("replace")} />
+                          <div>
+                            <Button type="submit" variant="primary">Replace credential</Button>
+                          </div>
+                        </form>
+                      </details>
+
+                      <details class="group">
+                        <summary class={buttonClass({ variant: "quiet", className: "cursor-pointer list-none" })}>Change impersonated user</summary>
+                        <form method="POST" action={INTEGRATIONS_PATH} class="mt-3 flex flex-col gap-4">
+                          <input type="hidden" name="action" value="update-config" />
+                          <TextField
+                            label="Impersonated user"
+                            name="impersonatedUser"
+                            id="config-impersonated-user"
+                            type="email"
+                            optional
+                            defaultValue={keptUser("update-config")}
+                            hint="Leave it empty to stop impersonating anyone."
+                          />
+                          <div>
+                            <Button type="submit" variant="quiet">Save impersonated user</Button>
+                          </div>
+                        </form>
+                      </details>
+
+                      <div class="flex flex-wrap gap-2">
+                        <form method="POST" action={INTEGRATIONS_PATH}>
+                          <input type="hidden" name="action" value="test" />
+                          <Button type="submit" variant="quiet">Test connection</Button>
+                        </form>
+                        <ButtonLink variant="danger" href={confirmHref(Astro.url, "remove")}>Remove credential</ButtonLink>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            }
+          </Card>
+
+          {activity.length > 0 && (
+            <section aria-labelledby="recent-activity" class="flex flex-col gap-4">
+              <h2 id="recent-activity" class="text-lg text-ink-primary">Recent activity</h2>
+              <DataTable caption="Recent activity" columns={[{ label: "What happened" }, { label: "Result" }, { label: "By" }, { label: "When", align: "end" }]}>
+                {activity.map((entry) => (
+                  <DataRow>
+                    <DataCell label="What happened" primary>
+                      <Chip tone="neutral">{CREDENTIAL_ACTION_LABEL[entry.action]}</Chip>
+                    </DataCell>
+                    <DataCell label="Result">{entry.outcome ?? "Not recorded"}</DataCell>
+                    <DataCell label="By">{entry.by}</DataCell>
+                    <DataCell label="When" align="end">
+                      {formatMomentDateTime(entry.createdAt)}
+                    </DataCell>
+                  </DataRow>
+                ))}
+              </DataTable>
+            </section>
           )}
-        </section>
-
-        {auditEntries.length > 0 && (
-          <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
-            <h3 class="text-lg font-semibold text-white">Recent activity</h3>
-            <div class="mt-4 overflow-x-auto">
-              <table class="w-full text-left text-sm">
-                <thead class="border-b border-teal/20 text-ink-muted">
-                  <tr>
-                    <th class="pb-2 pr-4 font-medium">Action</th>
-                    <th class="pb-2 pr-4 font-medium">Outcome</th>
-                    <th class="pb-2 pr-4 font-medium">By</th>
-                    <th class="pb-2 font-medium">When (UTC)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditEntries.map((entry) => (
-                    <tr class="border-b border-teal/10 text-white/80">
-                      <td class="py-2.5 pr-4">
-                        <span class="rounded-full bg-teal/20 px-2 py-0.5 text-xs font-medium text-white/90">
-                          {entry.action}
-                        </span>
-                      </td>
-                      <td class="py-2.5 pr-4">{entry.outcome}</td>
-                      <td class="py-2.5 pr-4">
-                        {entry.actorUserId ? actorNames.get(entry.actorUserId) ?? "Unknown" : "System"}
-                      </td>
-                      <td class="py-2.5">{formatDate(entry.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-      </>
-    )}
+        </>
+      )
+    }
   </div>
 </AdminLayout>
