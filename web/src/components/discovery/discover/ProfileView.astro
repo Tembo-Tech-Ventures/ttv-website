@@ -1,0 +1,262 @@
+---
+/**
+ * One person in Discover: their profile, the work behind it with its sources
+ * and what mentors checked, and two ways to explore it with Tembo: ask about
+ * the work, or assess the documented evidence against your own criteria.
+ * Both are forms that post here, so they work without a script; the search
+ * this came from travels with them in hidden fields, never in the address.
+ */
+import { PiArrowLeft } from "react-icons/pi";
+import {
+  Avatar, BackLink, Button, Card, Chip, DataList, DataListItem, EmptyState, Notice, TextAreaField, TextField, linkClass,
+} from "@/components/platform/ui";
+import { formatCalendarDate } from "@/lib/display-date";
+import { assessmentSource, type EvidenceAssessment } from "@/components/community/assessment-contract";
+import type { CommunityProfile, EvidenceAnswer } from "../types";
+import ConfirmationList from "../ConfirmationList.astro";
+import SourceLinks from "../SourceLinks.astro";
+import CarriedFields from "./CarriedFields.astro";
+import { DISCOVER_PATH, MAX_CRITERIA, QUESTION_MAX, type Carried, type CriterionRow, type Problem } from "./discover-state";
+import { entryCountLabel, lookupResultsHref, profileHref } from "./discover-display";
+
+interface Props {
+  carried: Carried;
+  profile: CommunityProfile;
+  question: string;
+  answer: EvidenceAnswer | null;
+  askProblem: Problem | null;
+  rows: CriterionRow[];
+  rowsError: string | null;
+  assessment: EvidenceAssessment | null;
+  assessProblem: Problem | null;
+}
+
+const { carried, profile, question, answer, askProblem, rows, rowsError, assessment, assessProblem } = Astro.props;
+const scouted = !carried.lookup && Boolean(carried.context || carried.skills || carried.query);
+const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00Z`));
+const SUGGESTIONS = ["What evidence supports their skills?", "What should I ask them next?"];
+const SCALE = [
+  "Minimal but relevant specific claim.",
+  "Partial concrete account with important gaps.",
+  "Detailed direct contribution tied to the criterion.",
+  "Detailed support with consistent independent corroboration.",
+  "Unusually complete, attributable support with corroboration and clear limitations.",
+];
+const STATUS_TEXT = (criterion: EvidenceAssessment["criteria"][number]) =>
+  criterion.status === "assessed" ? `Evidence support ${criterion.rating}/5`
+  : criterion.status === "insufficient" ? "Insufficient evidence · Not scored"
+  : criterion.status === "uncertain" ? "Uncertain evidence · Not scored"
+  : "Contradictory evidence · Not scored";
+---
+
+<div class="flex flex-col gap-10" data-discover-profile={profile.id}>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    {scouted ? (
+      <form method="POST" action={DISCOVER_PATH}>
+        <input type="hidden" name="form" value="scout" />
+        <CarriedFields carried={carried} />
+        <Button type="submit" variant="ghost" size="sm"><PiArrowLeft aria-hidden="true" className="size-4" /> Back to people</Button>
+      </form>
+    ) : carried.lookup && carried.query ? (
+      <BackLink href={lookupResultsHref(carried.query)}>Back to people</BackLink>
+    ) : (
+      <BackLink href={DISCOVER_PATH}>Discover</BackLink>
+    )}
+    <p class="text-sm text-ink-muted">
+      <a href={profileHref(profile.id)} class={linkClass()}>Link to this profile</a> · Requires approved institutional access
+    </p>
+  </div>
+
+  <Card as="section" aria-labelledby="discover-person-name" className="flex flex-col gap-5">
+    <div class="flex flex-wrap items-start gap-x-5 gap-y-4">
+      <Avatar id={profile.id} name={profile.name} src={profile.image ?? undefined} size="xl" decorative />
+      <div class="min-w-0 flex-1 basis-56">
+        <h2 id="discover-person-name" class="text-xl leading-snug break-words text-ink-primary">{profile.name}</h2>
+        {profile.headline && <p class="mt-1 text-base leading-relaxed text-ink-secondary">{profile.headline}</p>}
+        {profile.location && <p class="mt-1 text-sm text-ink-muted">{profile.location}</p>}
+      </div>
+    </div>
+    {profile.about && <p class="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink-secondary">{profile.about}</p>}
+    <div class="border-t border-hairline pt-4">
+      <h3 class="text-[0.9375rem] leading-snug text-ink-primary">Opportunity goals</h3>
+      <p class="mt-1 max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink-secondary">{profile.goal || "Not written yet."}</p>
+    </div>
+  </Card>
+
+  <section aria-labelledby="discover-work-title" class="flex flex-col gap-5">
+    <div class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-center gap-3">
+        <h2 id="discover-work-title" class="text-2xl text-ink-primary">The work behind the profile</h2>
+        <Chip>{entryCountLabel(profile.claims.length)}</Chip>
+      </div>
+      <p class="max-w-prose text-sm leading-relaxed text-ink-secondary">
+        Member contributions and the sources behind them. Confirmations apply to the named work only.
+      </p>
+    </div>
+    <DataList label="The work behind the profile" isEmpty={profile.claims.length === 0}>
+      {profile.claims.map((claim) => (
+        <DataListItem title={claim.title} headingLevel={3}>
+          <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
+          <div class="flex flex-col gap-3">
+            <p class="break-words whitespace-pre-line">{claim.description}</p>
+            {claim.skills.length > 0 && (
+              <ul class="m-0 flex list-none flex-wrap gap-2 p-0" aria-label={`Skills in ${claim.title}`}>
+                {claim.skills.map((skill) => <li><Chip>{skill}</Chip></li>)}
+              </ul>
+            )}
+            {claim.evidence.length > 0
+              ? <SourceLinks sources={claim.evidence} label={`Sources for ${claim.title}`} />
+              : <p class="text-ink-muted">No supporting source attached yet. This is missing evidence, not a negative assessment.</p>}
+            <ConfirmationList claim={claim} />
+          </div>
+        </DataListItem>
+      ))}
+      <Fragment slot="empty">
+        <EmptyState title="No journey evidence yet">This member has not added journey evidence yet.</EmptyState>
+      </Fragment>
+    </DataList>
+  </section>
+
+  <section aria-labelledby="discover-ask-title" class="flex flex-col gap-5" data-discover-ask>
+    <div class="flex flex-col gap-2">
+      <h2 id="discover-ask-title" class="text-2xl text-ink-primary">Ask about the work</h2>
+      <p class="max-w-prose text-sm leading-relaxed text-ink-secondary">
+        Ask Tembo about this person's contributions, sources, and what still needs a conversation.
+      </p>
+    </div>
+    <form method="POST" action={DISCOVER_PATH} class="flex max-w-3xl flex-col gap-5">
+      <input type="hidden" name="form" value="ask" />
+      <input type="hidden" name="profile" value={profile.id} />
+      <CarriedFields carried={carried} />
+      {askProblem && <Notice tone="danger" focusOnLoad title={askProblem.title}>{askProblem.detail}</Notice>}
+      <TextAreaField
+        name="question"
+        label="Your question"
+        placeholder="What did they contribute to this project?"
+        rows={4}
+        maxLength={QUESTION_MAX}
+        defaultValue={question}
+      />
+      <div class="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="primary" size="lg" data-busy-label="Looking at the evidence…">Explore evidence</Button>
+      </div>
+      <div class="flex flex-col gap-2">
+        <p class="text-sm text-ink-secondary">Or ask one of these:</p>
+        <div class="flex flex-wrap gap-2">
+          {SUGGESTIONS.map((suggestion) => (
+            <Button type="submit" size="sm" name="suggestion" value={suggestion}>{suggestion}</Button>
+          ))}
+        </div>
+      </div>
+    </form>
+    {answer && (
+      <Card as="section" aria-labelledby="discover-answer-title" className="flex max-w-3xl flex-col gap-3" data-discover-answer>
+        <h3 id="discover-answer-title" class="text-lg text-ink-primary">{question.trim()}</h3>
+        <p class="text-sm leading-relaxed whitespace-pre-line text-ink-secondary">{answer.text}</p>
+        {answer.limited && (
+          <Notice tone="warning">The available evidence or response was limited. Narrow your question before drawing conclusions.</Notice>
+        )}
+        {answer.references && answer.references.length > 0 && (
+          <ul class="m-0 list-disc pl-5 text-sm text-ink-secondary" aria-label="Cited community evidence">
+            {answer.references.map((reference) => <li>{reference}</li>)}
+          </ul>
+        )}
+        <SourceLinks sources={answer.sources} label="Sources Tembo cited" />
+      </Card>
+    )}
+    <p class="max-w-prose text-sm text-ink-muted">
+      Tembo's answer is not a mentor confirmation. Check the linked sources and ask about what is missing.
+    </p>
+  </section>
+
+  <section aria-labelledby="discover-assess-title" class="flex flex-col gap-5" data-discover-assess>
+    <div class="flex flex-col gap-2">
+      <h2 id="discover-assess-title" class="text-2xl text-ink-primary">Assess evidence against your criteria</h2>
+      <p id="assessment-help" class="max-w-prose text-sm leading-relaxed text-ink-secondary">
+        Add criteria to assess documented evidence, not ability. This does not change your search.
+      </p>
+      <details class="max-w-prose text-sm text-ink-secondary">
+        <summary class={linkClass("w-fit cursor-pointer")}>What the 1–5 scale means</summary>
+        <ol class="mt-2 list-decimal pl-5">{SCALE.map((step) => <li>{step}</li>)}</ol>
+        <p class="mt-2">
+          Missing, uncertain or conflicting evidence is not scored. A mentor title or the number of entries does not
+          automatically increase a rating.
+        </p>
+      </details>
+    </div>
+    <form method="POST" action={DISCOVER_PATH} class="flex max-w-3xl flex-col gap-5" aria-describedby="assessment-help">
+      {/* Enter in a field assesses; it never removes a criterion, the first button in the form otherwise. */}
+      <button type="submit" name="intent" value="assess" class="sr-only" tabindex="-1" aria-hidden="true">Assess evidence</button>
+      <input type="hidden" name="form" value="assess" />
+      <input type="hidden" name="profile" value={profile.id} />
+      <input type="hidden" name="rows" value={String(rows.length)} />
+      <CarriedFields carried={carried} />
+      {rowsError && <Notice tone="danger" focusOnLoad title="Check your criteria">{rowsError}</Notice>}
+      {assessProblem && <Notice tone="danger" focusOnLoad title={assessProblem.title}>{assessProblem.detail}</Notice>}
+      {rows.map((row, index) => (
+        <fieldset class="m-0 flex flex-col gap-4 border-0 border-t border-hairline p-0 pt-4 first-of-type:border-t-0 first-of-type:pt-0">
+          <legend class="sr-only">Criterion {index + 1}</legend>
+          <TextField name={`label-${index}`} id={`criterion-${index}-label`} label={`Criterion ${index + 1}`} placeholder="For example, accessible interface design" maxLength={200} defaultValue={row.label} />
+          <TextField
+            name={`terms-${index}`}
+            id={`criterion-${index}-terms`}
+            label={`Supporting terms ${index + 1}`}
+            hint="Separate 1–10 terms with commas, 2–80 characters each."
+            placeholder="keyboard navigation, accessibility"
+            maxLength={818}
+            defaultValue={row.terms}
+          />
+          {rows.length > 1 && (
+            <div><Button type="submit" variant="ghost" size="sm" name="intent" value={`remove-${index}`}>Remove criterion {index + 1}</Button></div>
+          )}
+        </fieldset>
+      ))}
+      <div class="flex flex-wrap items-center gap-3">
+        <Button type="submit" size="lg" name="intent" value="assess" data-busy-label="Assessing evidence…">Assess evidence</Button>
+        {rows.length < MAX_CRITERIA && <Button type="submit" variant="ghost" size="lg" name="intent" value="add-criterion">Add criterion</Button>}
+      </div>
+    </form>
+    {assessment && (
+      <Card as="section" aria-label="Evidence assessment results" className="flex max-w-3xl flex-col gap-4" data-discover-assessment={assessment.status}>
+        {assessment.status !== "completed" ? (
+          <Notice tone="warning" title={assessment.status === "unavailable" ? "Assessment service unavailable" : "Assessment response could not be validated"}>
+            No evidence ratings were produced. This is a service issue, not a judgment about this person's work. You can try again later.
+          </Notice>
+        ) : (
+          <>
+            <p class="text-sm font-semibold text-ink-primary">{assessment.model ? "Evidence support, assessed by Tembo" : "Evidence availability"}</p>
+            {!assessment.model && <p class="text-sm text-ink-secondary">No published evidence was available, so Tembo ran no assessment.</p>}
+            <p class="text-[0.8125rem] text-ink-muted">Criteria revision {assessment.rubric.version} · Profile revision {assessment.subject.profileVersion}</p>
+            {assessment.criteria.map((criterion) => (
+              <section aria-label={criterion.label} class="flex flex-col gap-2 border-t border-hairline pt-4">
+                <h3 class="text-base text-ink-primary">{criterion.label}</h3>
+                <p class="text-sm font-semibold text-ink-primary">{STATUS_TEXT(criterion)}</p>
+                <p class="text-sm leading-relaxed text-ink-secondary">{criterion.explanation}</p>
+                {criterion.citations.length > 0 && (
+                  <ul class="m-0 flex list-none flex-col gap-2 p-0 text-sm text-ink-secondary" aria-label={`Sources for ${criterion.label}`}>
+                    {criterion.citations.map((citation) => {
+                      const source = assessmentSource(profile, citation);
+                      return (
+                        <li class="flex flex-col gap-1">
+                          <span>{source?.label ?? "Source no longer matches this profile. Refresh before using this assessment."}</span>
+                          {citation.quote && <blockquote class="border-l-2 border-hairline pl-3 italic">{citation.quote}</blockquote>}
+                          {source && <SourceLinks sources={source.sources} label={`Links for ${source.label}`} />}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            ))}
+            <p class="text-[0.8125rem] leading-relaxed text-ink-muted">
+              Ratings describe support in the documented evidence, not ability, verification or a hiring recommendation.
+              Check sources and discuss gaps with the person. Assessments use profile text and skills, published
+              contribution text, and current review notes. Linked artifacts are not fetched.
+              {assessment.model && ` Model: ${assessment.model}.`}
+            </p>
+          </>
+        )}
+      </Card>
+    )}
+  </section>
+</div>

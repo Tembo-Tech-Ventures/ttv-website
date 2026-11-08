@@ -1,27 +1,109 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import CommunityApp from "@/components/community/CommunityApp";
+/**
+ * Discover (/dashboard/discover): approved institutions find community
+ * builders through their work. Rebuilt on the kit with no island (style-guide
+ * rollout M16, D5): scouting, looking someone up, opening a person, asking
+ * Tembo about their work and assessing it are plain forms and links, handled
+ * here through the community API's own handler (discover-state.ts), so all of
+ * it works without a script. No profile data is serialised for a script; the
+ * institutional API authorises every read.
+ */
+import { env } from "cloudflare:workers";
+import { communityFetch } from "@/lib/community/in-process";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
-// oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
-import "@/styles/discovery.css";
-// No profile data is serialized here. Institutional APIs authorize every request.
+import { Notice, PageHeader, PillNav, linkClass } from "@/components/platform/ui";
+import CriteriaForm from "@/components/discovery/discover/CriteriaForm.astro";
+import PersonResults from "@/components/discovery/discover/PersonResults.astro";
+import ProfileView from "@/components/discovery/discover/ProfileView.astro";
+import {
+  DISCOVER_PATH, discoverAccess, readDiscoverGet, readDiscoverPost, runDiscover, type DiscoverOutcome,
+} from "@/components/discovery/discover/discover-state";
+import { lookupFormHref } from "@/components/discovery/discover/discover-display";
 
-const spaces = await resolveSpacePage(Astro.locals, "discover");
----
-{
-  spaces ? (
-    <SpacePage context={spaces} title="Discover people">
-      {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
-      <CommunityApp client:load view="scout" embedded />
-      {/* The island draws the page's title and its primary action, so the one-time card follows it. */}
-      <OnboardingPrompt view={spaces.onboarding} space={spaces.space} class="mt-10" />
-    </SpacePage>
-  ) : (
-    <BaseLayout title="Discover community builders | TTV" noIndex>
-      <CommunityApp client:load view="scout" />
-    </BaseLayout>
-  )
+const { method } = Astro.request;
+const bare = (status: number, body: string, headers: Record<string, string> = {}) =>
+  new Response(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", "Content-Type": "text/plain; charset=utf-8", ...headers } });
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return bare(405, "Not allowed.", { Allow: "GET, HEAD, POST" });
+
+const fetcher = communityFetch(Astro.request, Astro.locals, env);
+// Who may scout is the API's decision, read beside the space context and onboarding (PERF-2).
+const [spaces, allowed] = await Promise.all([
+  resolveSpacePageWith(Astro.locals, "discover", async () => null).then((resolved) => resolved?.[0] ?? null),
+  discoverAccess(fetcher),
+]);
+
+let outcome: DiscoverOutcome | null = null;
+if (allowed) {
+  const posted = method === "POST" ? await readDiscoverPost(Astro.request) : null;
+  if (posted && !posted.ok) return bare(posted.status, posted.status === 413 ? "That form was too large." : posted.status === 403 ? "That request was refused." : "That form could not be read.");
+  outcome = await runDiscover(posted?.ok ? posted.request : readDiscoverGet(Astro.url), fetcher);
+  Astro.response.status = outcome.status;
+} else if (allowed === false) {
+  Astro.response.status = 403;
+} else {
+  Astro.response.status = 503;
 }
+Astro.response.headers.set("Cache-Control", "no-store");
+
+const view = outcome?.view ?? null;
+const lookup = view?.carried.lookup ?? false;
+const refused = Astro.response.status >= 400;
+---
+
+<SpacePage context={spaces} title="Discover people" titlePrefix={refused ? "Error: " : ""}>
+  <div class="flex max-w-5xl flex-col gap-10">
+    <div class="flex flex-col gap-8">
+      <PageHeader title="Discover">Find community builders through their work.</PageHeader>
+      {/* Onboarding's cards follow the page's title, so its h1 comes first (QAO-05, the #344 review). */}
+      {spaces?.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class="" />}
+      <OnboardingPrompt view={spaces?.onboarding} space={spaces?.space ?? "discover"} />
+      {view && view.kind !== "profile" && view.kind !== "unavailable" && (
+        <PillNav
+          label="How to discover people"
+          items={[
+            { label: "Scout by criteria", href: DISCOVER_PATH, current: !lookup },
+            { label: "Find someone you know", href: lookupFormHref(), current: lookup },
+          ]}
+        />
+      )}
+    </div>
+
+    {allowed === false && (
+      <Notice tone="info" title="Institutional access needs approval">
+        Signing in gives you a community profile. An administrator must approve institutional access before you can
+        discover people here.
+      </Notice>
+    )}
+    {allowed === null && (
+      <Notice tone="danger" title="We couldn't open Discover">Please try again in a moment.</Notice>
+    )}
+    {view?.kind === "criteria" && <CriteriaForm carried={view.carried} errors={view.errors} problem={view.problem} />}
+    {view?.kind === "results" && <PersonResults carried={view.carried} profiles={view.profiles} />}
+    {view?.kind === "profile" && (
+      <ProfileView
+        carried={view.carried} profile={view.profile} question={view.question} answer={view.answer} askProblem={view.askProblem}
+        rows={view.rows} rowsError={view.rowsError} assessment={view.assessment} assessProblem={view.assessProblem}
+      />
+    )}
+    {view?.kind === "unavailable" && (
+      <Notice tone="danger" title={view.problem.title}>
+        {view.problem.detail} <a href={DISCOVER_PATH} class={linkClass()}>Start a new discovery</a>.
+      </Notice>
+    )}
+  </div>
+</SpacePage>
+
+<script>
+  // With a script, a long Tembo search says it is working and can't be sent twice. Without one, the browser's own progress shows.
+  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-busy-label]")) {
+    button.form?.addEventListener("submit", (event) => {
+      if ((event as SubmitEvent).submitter !== button) return;
+      button.textContent = button.dataset.busyLabel ?? button.textContent;
+      button.setAttribute("aria-disabled", "true");
+      button.form?.addEventListener("submit", (again) => again.preventDefault(), { once: true });
+    });
+  }
+</script>

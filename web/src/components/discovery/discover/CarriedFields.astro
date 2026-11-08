@@ -1,0 +1,19 @@
+---
+/**
+ * The search a page came from, as hidden fields, so the next form (open a
+ * person, ask, assess, back to people) can run it again. The opportunity
+ * stays in the POST body: it never enters an address (discover-state.ts).
+ */
+import type { Carried } from "./discover-state";
+
+interface Props {
+  carried: Carried;
+}
+
+const { carried } = Astro.props;
+---
+
+<input type="hidden" name="context" value={carried.context} />
+<input type="hidden" name="skills" value={carried.skills} />
+<input type="hidden" name="query" value={carried.query} />
+{carried.lookup && <input type="hidden" name="lookup" value="1" />}

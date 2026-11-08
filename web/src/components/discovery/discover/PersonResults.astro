@@ -1,0 +1,109 @@
+---
+/**
+ * The people a search found, each a kit card: who they are, their skills, how
+ * the evidence matched the criteria, what is attached, and a quiet way to
+ * explore their work. From a scouting search that is a form, so the
+ * opportunity travels in the POST body; from a lookup, a link.
+ */
+import { Avatar, Button, ButtonLink, Card, Chip, EmptyState } from "@/components/platform/ui";
+import { getFirstName } from "@/lib/display-name";
+import { currentConfirmations, type CommunityProfile } from "../types";
+import CarriedFields from "./CarriedFields.astro";
+import { DISCOVER_PATH, type Carried } from "./discover-state";
+import { entryCountLabel, lookupFormHref, MATCH_LABEL, profileHref } from "./discover-display";
+
+interface Props {
+  carried: Carried;
+  profiles: readonly CommunityProfile[];
+}
+
+const { carried, profiles } = Astro.props;
+const counts = profiles[0]?.discovery;
+const builders = `${profiles.length} ${profiles.length === 1 ? "builder" : "builders"} to get to know`;
+---
+
+<section aria-labelledby="discover-results-title" class="flex flex-col gap-6" data-discover-results>
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="flex min-w-0 flex-col gap-1">
+      <h2 id="discover-results-title" class="text-2xl text-ink-primary">{builders}</h2>
+      <p class="text-sm text-ink-secondary">
+        {carried.lookup ? `Name: ${carried.query}` : `${carried.skills || "All skills"}${carried.query ? ` · ${carried.query}` : ""}`}
+      </p>
+    </div>
+    {carried.lookup ? (
+      <ButtonLink href={lookupFormHref(carried.query)}>Edit search</ButtonLink>
+    ) : (
+      <form method="POST" action={DISCOVER_PATH}>
+        <input type="hidden" name="form" value="edit" />
+        <CarriedFields carried={carried} />
+        <Button type="submit">Edit criteria</Button>
+      </form>
+    )}
+  </div>
+  {!carried.lookup && carried.context && (
+    <p class="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink-secondary">
+      <strong class="text-ink-primary">Your opportunity:</strong> {carried.context}
+    </p>
+  )}
+  <p class="max-w-prose text-sm leading-relaxed text-ink-muted">
+    {carried.lookup
+      ? "Up to 50 matching profiles, alphabetical. Open a profile to explore its evidence."
+      : `Tembo compares published evidence against your criteria.${counts ? ` ${counts.evaluated} candidates assessed from ${counts.searched} eligible profiles.` : ""} This shortlist is not exhaustive. Missing evidence stays unknown; people make the hiring decision.`}
+  </p>
+
+  {profiles.length === 0 ? (
+    <EmptyState title="No profiles match those filters yet.">
+      Try fewer skills or a broader name search. Missing a match says nothing about someone's potential.
+    </EmptyState>
+  ) : (
+    <ul class="m-0 grid list-none gap-4 p-0 md:grid-cols-2" aria-label="People">
+      {profiles.map((profile) => {
+        const sources = profile.claims.flatMap((claim) => claim.evidence).length;
+        const confirmed = profile.claims.filter((claim) => currentConfirmations(claim).length > 0).length;
+        const explore = `Explore ${getFirstName(profile.name)}'s work`;
+        return (
+          <li class="flex">
+            <Card as="article" aria-labelledby={`person-${profile.id}`} className="flex flex-1 flex-col gap-4" data-person={profile.id}>
+              <div class="flex items-start gap-4">
+                <Avatar id={profile.id} name={profile.name} src={profile.image ?? undefined} size="lg" decorative />
+                <div class="min-w-0">
+                  <h3 id={`person-${profile.id}`} class="text-lg leading-snug break-words text-ink-primary">{profile.name}</h3>
+                  {profile.headline && <p class="mt-1 text-sm leading-relaxed text-ink-secondary">{profile.headline}</p>}
+                </div>
+              </div>
+              {profile.skills.length > 0 && (
+                <ul class="m-0 flex list-none flex-wrap gap-2 p-0" aria-label={`${profile.name}'s skills`}>
+                  {profile.skills.map((skill) => <li><Chip>{skill}</Chip></li>)}
+                </ul>
+              )}
+              {profile.matches && profile.matches.length > 0 && (
+                <ul class="m-0 flex list-none flex-col gap-1 p-0 text-sm text-ink-secondary" aria-label={`Evidence match for ${profile.name}`}>
+                  {profile.matches.map((match) => (
+                    <li><strong class="text-ink-primary">{match.criterion.text}</strong> ({match.criterion.importance}): {MATCH_LABEL[match.status]}</li>
+                  ))}
+                </ul>
+              )}
+              <p class="text-[0.8125rem] text-ink-muted">
+                {profile.evidenceLoaded === false
+                  ? "Open this profile to inspect its sources and confirmations."
+                  : `${sources} ${sources === 1 ? "source" : "sources"} attached · ${entryCountLabel(confirmed, true)}`}
+              </p>
+              <div class="mt-auto">
+                {carried.lookup ? (
+                  <ButtonLink href={profileHref(profile.id, carried)}>{explore}</ButtonLink>
+                ) : (
+                  <form method="POST" action={DISCOVER_PATH}>
+                    <input type="hidden" name="form" value="open" />
+                    <input type="hidden" name="profile" value={profile.id} />
+                    <CarriedFields carried={carried} />
+                    <Button type="submit">{explore}</Button>
+                  </form>
+                )}
+              </div>
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</section>
