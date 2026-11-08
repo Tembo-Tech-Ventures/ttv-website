@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { slug } from "github-slugger";
 import { describe, expect, it } from "vitest";
 import {
   SCREENSHOT_DIRECTORY,
   SHOTS,
   VIEWPORTS,
+  localOrigin,
   localSessionCookie,
   personaToken,
 } from "./readme-shots.mjs";
@@ -34,10 +36,8 @@ function prose(markdown) {
   return markdown.replace(/^```[\s\S]*?^```$/gm, "").replace(/`[^`\n]*`/g, "");
 }
 
-/** GitHub's heading anchor: lower case, punctuation dropped, spaces to hyphens. */
-function headingSlug(heading) {
-  return heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s/g, "-");
-}
+/** GitHub's anchor for a heading. */
+const headingSlug = (heading) => slug(heading.trim());
 
 function markdownLinks(markdown) {
   return [...prose(markdown).matchAll(/(!?)\[([^\]]*)\]\(([^)\s]+)\)/g)].map(([, bang, text, target]) => ({
@@ -94,7 +94,7 @@ describe("README links", () => {
   it("lists every second-level section in its contents", () => {
     const sections = [...prose(readme).matchAll(/^##\s+(.+)$/gm)].map(([, heading]) => heading.trim());
     const contents = readme.slice(readme.indexOf("## Contents"), readme.indexOf("\n## ", readme.indexOf("## Contents") + 1));
-    const listed = [...contents.matchAll(/\]\(#([^)]+)\)/g)].map(([, slug]) => slug);
+    const listed = [...contents.matchAll(/\]\(#([^)]+)\)/g)].map(([, anchor]) => anchor);
 
     expect(listed).toEqual(sections.filter((section) => section !== "Contents").map(headingSlug));
   });
@@ -176,7 +176,7 @@ describe("README screenshots", () => {
   });
 });
 
-describe("localSessionCookie", () => {
+describe("local-only screenshots", () => {
   it("signs the session token the way Better Auth does", () => {
     // better-call's serializeSignedCookie("better-auth.session_token", "tok", "sec") gives
     // tok.sTUSNW0UA9JEmqLnNpIU8EWfDTwIy3QrCv9P5XquNvU%3D
@@ -197,8 +197,13 @@ describe("localSessionCookie", () => {
     "http://192.168.1.20:4321",
     "http://localhost.example.com:4321",
     "https://127.0.0.1:4321",
-  ])("refuses to sign in on %s", (origin) => {
+  ])("refuses %s", (origin) => {
+    expect(() => localOrigin(origin)).toThrow(/only on a local build/);
     expect(() => localSessionCookie(origin, "tok", "sec")).toThrow(/only on a local build/);
+  });
+
+  it.each(["http://127.0.0.1:4321/", "http://localhost:4330", "http://[::1]:4321"])("accepts %s", (origin) => {
+    expect(localOrigin(origin)).toBe(new URL(origin).origin);
   });
 
   it("asks for the build's secret instead of signing with none", () => {

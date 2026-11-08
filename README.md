@@ -43,7 +43,8 @@ The screenshots come from a local build seeded only with fictional people (see
 - Community pages for members, mentors and institutions (`/community`), and a directory of cohort
   graduates with public builder profiles (`/talent`).
 - `/hire`, where organisations share a project and connect with TTV builders.
-- The blog, written by students and alumni in the platform's own editor.
+- The blog, written by alumni (cohort graduates with a published profile) in the platform's own
+  editor.
 - Certificates that anyone can verify at `/certificate/<id>`.
 - The style guide (`/style-guide`), which renders the real UI kit.
 
@@ -92,8 +93,7 @@ npm run db:migrate:local
 CLOUDFLARE_VITE_FORCE_LOCAL=true npm run dev
 ```
 
-The site is then at <http://localhost:4321>. The dev server runs in the background: `npx astro dev
-logs` shows its output and `npx astro dev stop` stops it.
+The site is then at <http://localhost:4321>. Press Ctrl+C to stop the dev server.
 
 - **Local Cloudflare.** Wrangler emulates D1 and R2 on your machine; the database lives in
   `web/.wrangler/`. `CLOUDFLARE_VITE_FORCE_LOCAL=true` keeps every binding local. Workers AI and
@@ -123,7 +123,7 @@ logs` shows its output and `npx astro dev stop` stops it.
 | `npm run preview` | Serve the production build locally |
 | `npm test` | Unit tests, then `.astro` render tests (Vitest) |
 | `npm run test:watch` | Vitest in watch mode |
-| `npm run test:e2e` | Playwright against a deployed preview (CI runs this) |
+| `npm run test:e2e` | Playwright against a deployed environment (the preview and production workflows run this) |
 | `npm run test:e2e:list` | List the Playwright tests without running them |
 | `npm run lint` | Oxlint, then ESLint |
 | `npm run lint:fix` | Apply the automatic lint fixes |
@@ -226,8 +226,8 @@ Many feature folders also have their own README, for example
 3. Add an automated test with every behaviour change, in the same commit.
 4. Run `npm test`, `npm run lint` and `npm run typecheck` in `web/` before you push. New lint
    warnings aren't accepted.
-5. Open a pull request using the [template](.github/pull_request_template.md). It merges once CI
-   and its preview deploy are green.
+5. Open a pull request using the [template](.github/pull_request_template.md). It can merge once
+   CI and its preview deploy are green.
 
 AI agents working in this repository start with [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md).
 
@@ -235,7 +235,7 @@ AI agents working in this repository start with [AGENTS.md](AGENTS.md) and [CLAU
 
 ## Screenshots
 
-The images in this README are real pages from a local production build of `main`, taken with
+The images in this README are real pages from a local production build, taken with
 `web/scripts/readme-shots.mjs`. Its database held only the fictional people in
 `web/e2e/platform-personas.local.sql`, never staging or production data. The script's header
 describes how to retake them.

@@ -47,22 +47,28 @@ export const SHOTS = Object.freeze([
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
+/** The origin of a build on this machine, or an error for any other: README shots are local only. */
+export function localOrigin(baseURL) {
+  const url = new URL(baseURL);
+  if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error(`README screenshots are taken only on a local build, not ${url.origin}.`);
+  }
+  return url.origin;
+}
+
 /**
  * Better Auth's signed session cookie (better-call signCookieValue) for a session the local seed
  * already holds, the same cookie e2e/platform-personas.ts sets. Refuses any origin but this
  * machine's.
  */
 export function localSessionCookie(baseURL, token, secret) {
-  const url = new URL(baseURL);
-  if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error(`README screenshots sign in only on a local build, not ${url.origin}.`);
-  }
+  const origin = localOrigin(baseURL);
   if (!secret) throw new Error("Set PLATFORM_PERSONAS_LOCAL_SECRET to the build's BETTER_AUTH_SECRET.");
   const signature = createHmac("sha256", secret).update(token).digest("base64");
   return {
     name: "better-auth.session_token",
     value: encodeURIComponent(`${token}.${signature}`),
-    url: url.origin,
+    url: origin,
     httpOnly: true,
     secure: false,
     sameSite: "Lax",
@@ -75,6 +81,11 @@ export function personaToken(persona) {
 }
 
 async function capture({ baseURL, secret, outputDirectory }) {
+  // Checked before the first shot, so a remote page never overwrites a README image.
+  localOrigin(baseURL);
+  if (SHOTS.some((shot) => shot.persona) && !secret) {
+    throw new Error("Set PLATFORM_PERSONAS_LOCAL_SECRET to the build's BETTER_AUTH_SECRET.");
+  }
   const { chromium } = await import("@playwright/test");
   const browser = await chromium.launch();
   try {
