@@ -13,7 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { listAttention } from "@/lib/attention/service";
-import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import AttentionPage from "@/components/platform/attention/AttentionPage";
@@ -24,23 +24,31 @@ import PlatformOverlays from "@/components/platform/overlays/PlatformOverlays";
 import { cohortSearchLabel } from "@/components/platform/spaces/cohort-heading";
 import { loadCohortHeading } from "@/components/platform/spaces/space-page";
 
+const db = drizzle(env.DB, { schema });
+const user = Astro.locals.user;
+// The first page and the cohort's name need only the person's capabilities, which the space context
+// reads first and shares (request-capabilities.ts): start both beside it rather than after it. They
+// are shown only if the page exists for this person.
+const capabilities = user ? requestCapabilities(db, Astro.locals) : null;
+const listRead = user && capabilities ? capabilities.then((caps) => listAttention(db, user.id, { filter: "all" }, caps)) : null;
+// Search names the person's one cohort here too, as on every space page (T07).
+const cohortRead = user && capabilities
+  ? capabilities.then((caps) => caps.spaces.includes("cohort") ? loadCohortHeading(db, { user: { id: user.id }, capabilities: caps }) : null)
+    .catch((error: unknown) => {
+      void recordError(env.DB, { source: "request", route: ATTENTION_PAGE_HREF, error, level: "warning" });
+      return null;
+    })
+  : Promise.resolve(null);
+listRead?.catch(() => { /* attentionPageData decides: without a list, the island loads it. */ });
+
 const data = await attentionPageData({
   context: () => getSpaceContext(Astro),
   cookie: Astro.request.headers.get("cookie"),
-  async list(me) {
-    const db = drizzle(env.DB, { schema });
-    return listAttention(db, me.user.id, { filter: "all" }, await capabilitiesFor(db, Astro.locals.user!));
-  },
+  list: () => listRead ?? Promise.reject(new Error("No signed-in person")),
 });
 if (data.kind === "missing") return new Response(null, { status: 404 });
 const { me, space, initialList } = data;
-// Search names the person's one cohort here too, as on every space page (T07).
-const cohortLabel = me.spaces.includes("cohort")
-  ? cohortSearchLabel(me, await loadCohortHeading(drizzle(env.DB, { schema }), me).catch((error: unknown) => {
-    void recordError(env.DB, { source: "request", route: ATTENTION_PAGE_HREF, error, level: "warning" });
-    return null;
-  }))
-  : null;
+const cohortLabel = me.spaces.includes("cohort") ? cohortSearchLabel(me, await cohortRead) : null;
 ---
 
 <SpacesLayout me={me} space={space} outsideSpaces title="Attention" overlays={["search", "attention"]}>

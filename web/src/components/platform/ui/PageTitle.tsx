@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import { cx } from "./cx";
 
 type PageTitleProps = {
@@ -10,6 +10,8 @@ type PageTitleProps = {
    */
   as?: "h1" | "p";
   className?: string;
+  /** -1 where something moves focus to the title, as the attention page does when the bell is pressed. */
+  tabIndex?: -1;
 };
 
 /**
@@ -27,10 +29,12 @@ type PageTitleProps = {
  * and the title brings 0.2em of room above and below, so nothing pressable
  * beside it is ever under its text.
  */
-export default function PageTitle({ children, id, as: Tag = "h1", className }: PageTitleProps) {
+const PageTitle = forwardRef<HTMLHeadingElement, PageTitleProps>(function PageTitle({ children, id, as: Tag = "h1", className, tabIndex }, ref) {
   return (
     <Tag
+      ref={ref}
       id={id}
+      tabIndex={tabIndex}
       data-page-title
       className={cx(
         "my-[0.2em] font-heading leading-[1.1] tracking-heading text-[clamp(1.75rem,9vw,2.25rem)] text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl",
@@ -40,4 +44,6 @@ export default function PageTitle({ children, id, as: Tag = "h1", className }: P
       {children}
     </Tag>
   );
-}
+});
+
+export default PageTitle;

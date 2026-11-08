@@ -170,10 +170,12 @@ describe("the attention page on the server", () => {
     expect(container.querySelector(".channel-masked[role=note]")!.textContent).toBe(MASKED_NOTE);
   });
 
-  it("is honest about an empty inbox", () => {
+  it("says an empty inbox once, as one empty state, without a summary or Mark all read to repeat it", () => {
     const html = renderToString(<AttentionPage me={{ ...wanjiku, unreadCounts: count([]).unreadCounts }} initialList={{ ...attention, items: [] }} />);
-    expect(html).toContain("You&#x27;re all caught up.");
-    expect(html).toContain("Nothing needs you right now.");
+    expect(html.match(/You&#x27;re all caught up\./g)).toHaveLength(1);
+    expect(html).toMatch(/data-attention-empty[\s\S]*?<h3[^>]*>You&#x27;re all caught up\.<\/h3>[\s\S]*?Mentions, answers to your requests and updates show here as they arrive\./);
+    expect(html).not.toContain("data-attention-total");
+    expect(html).not.toContain("data-attention-mark-all");
   });
 
   it("never tells a mentor nothing needs them while shared work waits for their confirmation, or when that is unknown", () => {
@@ -183,7 +185,6 @@ describe("the attention page on the server", () => {
     const waiting = render({ ...meByPersona.david, mentoring: { awaitingConfirmation: 4 } });
     expect(waiting).not.toContain("Nothing needs you right now.");
     expect(waiting).not.toContain("all caught up");
-    expect(waiting).toContain("Nothing new.");
     expect(waiting).toContain("No new notifications.");
     expect(waiting).toContain('data-attention-awaiting="4"');
     expect(waiting).toContain("4 shared contributions are waiting for your confirmation.");
@@ -194,8 +195,7 @@ describe("the attention page on the server", () => {
     expect(unknown).not.toContain("data-attention-awaiting");
 
     const clear = render({ ...meByPersona.david, mentoring: { awaitingConfirmation: 0 } });
-    expect(clear).toContain("Nothing needs you right now.");
-    expect(clear).toContain("You&#x27;re all caught up.");
+    expect(clear.match(/You&#x27;re all caught up\./g)).toHaveLength(1);
     expect(clear).not.toContain("data-attention-awaiting");
   });
 });

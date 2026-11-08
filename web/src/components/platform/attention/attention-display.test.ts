@@ -42,7 +42,7 @@ describe("attentionEmpty", () => {
   const before = { admin: false, onboarding: false, mentor: false };
 
   it("says nothing needs you only when no confirmation is known to be waiting", () => {
-    expect(attentionEmpty("all", 0, member)).toBe("Nothing needs you right now.");
+    expect(attentionEmpty("all", 0, member)).toBe("You're all caught up.");
     expect(attentionEmpty("all", 3, member)).toBe("No new notifications.");
     expect(attentionEmpty("all", null, member)).toBe("No new notifications.");
   });

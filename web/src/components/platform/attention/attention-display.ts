@@ -6,7 +6,7 @@ import { CONVERSATION_PATH } from "@/lib/platform/server/space-routes";
 export const ATTENTION_PAGE_HREF = "/dashboard/attention";
 
 export const ATTENTION_FILTERS: readonly { filter: AttentionFilter; label: string; empty: string }[] = [
-  { filter: "all", label: "All", empty: "Nothing needs you right now." },
+  { filter: "all", label: "All", empty: "You're all caught up." },
   { filter: "mentions", label: "Mentions", empty: "No mentions, replies or Tembo answers yet." },
   { filter: "requests", label: "Requests", empty: "Answers to requests you send to mentors show here." },
   { filter: "updates", label: "Updates", empty: "No updates yet." },
@@ -39,14 +39,19 @@ export interface AttentionViewer {
 }
 
 /**
- * The empty list's line. Attention holds notifications only; shared work
+ * The empty list's title. Attention holds notifications only; shared work
  * waiting for a mentor's confirmation is derived elsewhere (Me.mentoring), so
- * "Nothing needs you" is said only when nothing is known to be waiting there.
+ * "all caught up" is said only when nothing is known to be waiting there.
  */
 export function attentionEmpty(filter: AttentionFilter, awaiting: number | null, viewer: AttentionViewer): string {
   if (filter === "all" && awaiting !== 0) return "No new notifications.";
   if (filter === "requests") return requestsEmpty(viewer);
   return (ATTENTION_FILTERS.find((entry) => entry.filter === filter) ?? ATTENTION_FILTERS[0]!).empty;
+}
+
+/** What an empty "all" list adds below its title: where new things will appear. Other lists say it all in the title. */
+export function attentionEmptyDetail(filter: AttentionFilter, awaiting: number | null): string | null {
+  return filter === "all" && awaiting === 0 ? "Mentions, answers to your requests and updates show here as they arrive." : null;
 }
 
 /** The viewer from Me: an administrator has the Admin space. */

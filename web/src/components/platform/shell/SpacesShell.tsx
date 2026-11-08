@@ -326,7 +326,7 @@ export default function SpacesShell({
       <a href={`#${MAIN_ID}`} className={cx("spaces-shell__skip", FOCUS_RING)}>
         Skip to content
       </a>
-      <SpaceFile className="spaces-shell__file" tabs={tabs} active={space} person={person} start={start} end={tools}>
+      <SpaceFile className="spaces-shell__file" tabs={tabs} active={space} activeIsPage={!outsideSpaces} person={person} start={start} end={tools}>
         <div className="spaces-shell__body">
           {sidebar && (
             <>

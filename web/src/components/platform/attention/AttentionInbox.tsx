@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent, type Ref } from "react";
 import type { AttentionFilter, AttentionItem, Me } from "@/lib/platform/contracts";
 import { useAttention, type AttentionFailure } from "@/lib/platform/client/attention";
-import { Button, cx, FOCUS_RING, Pill } from "@/components/platform/ui";
+import { Button, cx, EmptyState, FOCUS_RING, Pill } from "@/components/platform/ui";
 import { signInHref } from "@/components/platform/overlays/sign-in";
 import {
   attentionProblem,
@@ -13,7 +13,7 @@ import {
 } from "./attention-client";
 import { awaitingConfirmation, awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { ATTENTION_FILTERS, attentionEmpty, attentionViewer, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
+import { ATTENTION_FILTERS, attentionEmpty, attentionEmptyDetail, attentionViewer, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
 import AttentionItemRow from "./AttentionItemRow";
 
 /** How long opening an item waits for its mark-read before following the link anyway. */
@@ -278,9 +278,9 @@ export default function AttentionInbox({ owner, me, headingId, now, initialFocus
           />
         )}
         {settled && items.length === 0 && (
-          <p className="attention-inbox__status" data-attention-empty>
-            {empty}
-          </p>
+          <div data-attention-empty>
+            <EmptyState title={empty}>{attentionEmptyDetail(state.filter, awaiting)}</EmptyState>
+          </div>
         )}
         <Group title="New" items={fresh} now={now} viewer={viewer} onOpen={(item, event) => void open(item, event)} />
         <Group title="Earlier" items={earlier} now={now} viewer={viewer} onOpen={(item, event) => void open(item, event)} />

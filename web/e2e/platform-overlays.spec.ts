@@ -267,10 +267,13 @@ test.describe("the overlays harness", () => {
       await expect(page.locator('[data-attention-problem="unavailable"]')).toBeVisible();
 
       await open(page, harness({ page: "attention", scenario: "empty" }));
-      await expect(page.locator("[data-attention-empty]")).toHaveText("Nothing needs you right now.");
+      // One empty state, said once: its title, and where new things will appear.
+      await expect(page.locator("[data-attention-empty]").getByRole("heading")).toHaveText("You're all caught up.");
+      await expect(page.locator("[data-attention-empty]")).toContainText("Mentions, answers to your requests and updates show here as they arrive.");
+      await expect(page.locator("[data-attention-total]")).toHaveCount(0);
       await page.locator('[data-attention-filter="requests"]').click();
       // F-6 (QAO-01, QA4-06): it says what Requests holds, and where a person's own access request is instead.
-      await expect(page.locator("[data-attention-empty]")).toHaveText(
+      await expect(page.locator("[data-attention-empty]").getByRole("heading")).toHaveText(
         "Answers to requests you send to mentors show here. Your own requests for mentor or organisation access are in Account.",
       );
 
