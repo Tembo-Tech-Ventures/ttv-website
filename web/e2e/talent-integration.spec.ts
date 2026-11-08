@@ -279,7 +279,7 @@ test.describe.serial("talent platform integration journey", () => {
     await page
       .locator("tr", { hasText: "Delivery tracking dashboard" })
       .first()
-      .getByRole("link", { name: "View" })
+      .getByRole("link", { name: "Delivery tracking dashboard" })
       .click();
     const interested = page
       .locator("section, div")

@@ -1,126 +1,124 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Badge from "@/components/common/Badge.astro";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { ButtonLink, DataCell, DataRow, DataTable, EmptyState, PageHeader, Pager, PillNav, StatusChip, linkClass, statusTone } from "@/components/platform/ui";
+import { lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
+import { PROJECTS_PATH, PROJECT_QUEUE, interestLabel, parseProjectStatus, readProjectsPage } from "@/lib/admin/projects";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDate } from "@/lib/display-date";
 import { budgetLabel } from "@/lib/talent/budget";
-import { sortProjectsForQueue } from "@/lib/talent/admin-review";
 
+/*
+ * Client projects, waiting ones first, a page at a time, filtered by status
+ * through links so the filter has an address and works without JavaScript.
+ * The page, the counts and the Admin space are read together.
+ */
 const db = drizzle(env.DB, { schema });
+const statusFilter = parseProjectStatus(Astro.url.searchParams.get("status"));
+const page = parsePage(Astro.url.searchParams.get("page"));
 
-const statusFilter = Astro.url.searchParams.get("status");
-const statuses = ["PENDING", "APPROVED", "REJECTED", "MATCHED", "CLOSED"] as const;
+const [{ rows, total, byStatus }, spaces] = await Promise.all([
+  readProjectsPage(db, { status: statusFilter, page }),
+  resolveSpacePage(Astro.locals, "adminProjects"),
+]);
 
-const allProjects = await db.query.clientProject.findMany({
-  with: { projectInterests: { columns: { id: true } } },
-});
-
-const filtered = statusFilter
-  ? allProjects.filter((p) => p.status === statusFilter)
-  : allProjects;
-
-const projects = sortProjectsForQueue(filtered);
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminProjects");
-// Named as the Admin space's sidebar names it.
-const title = spaces ? "Client projects" : "Client Projects";
+const lastPage = lastPageOf(total);
+const label = (status: (typeof PROJECT_QUEUE)[number]) => statusTone("project", status).label;
+// Only projects in review wait on an administrator, so only they carry a count.
+const filters = [
+  { label: "All", href: PROJECTS_PATH, current: !statusFilter },
+  ...PROJECT_QUEUE.map((status) => ({
+    label: label(status),
+    href: `${PROJECTS_PATH}?status=${status}`,
+    current: statusFilter === status,
+    count: status === "PENDING" ? (byStatus.get(status) ?? 0) : undefined,
+  })),
+];
+const filterName = statusFilter ? label(statusFilter).toLowerCase() : null;
+const caption = filterName ? `Client projects, ${filterName}` : "Client projects";
+const title = page === 1 ? caption : `${caption}, page ${page}`;
 ---
 
 <AdminLayout title={title} spaces={spaces}>
-  <div class="space-y-6">
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Client projects">Work organisations want built, waiting ones first. Open one to read it and decide.</PageHeader>
 
-    <div class="flex flex-wrap gap-2">
-      <a
-        href="/admin/projects"
-        class:list={[
-          "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-          !statusFilter
-            ? "bg-primary text-dark"
-            : "bg-teal/20 text-ink-secondary hover:text-white",
-        ]}
-      >
-        All
-      </a>
-      {statuses.map((s) => (
-        <a
-          href={`/admin/projects?status=${s}`}
-          class:list={[
-            "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
-            statusFilter === s
-              ? "bg-primary text-dark"
-              : "bg-teal/20 text-ink-secondary hover:text-white",
-          ]}
-        >
-          {s.toLowerCase()}
-        </a>
-      ))}
-    </div>
+    <PillNav label="Project status" items={filters} countLabel="waiting" />
 
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Organization</th>
-            <th class="px-4 py-3 font-medium">Title</th>
-            <th class="px-4 py-3 font-medium">Budget</th>
-            <th class="px-4 py-3 font-medium">Timeline</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Interest</th>
-            <th class="px-4 py-3 font-medium">Created</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {projects.length === 0 ? (
-            <tr>
-              <td colspan="8" class="px-4 py-8 text-center text-ink-muted">
-                {statusFilter
-                  ? `No ${statusFilter.toLowerCase()} projects found.`
-                  : "No client projects yet. Projects appear here when clients submit them."}
-              </td>
-            </tr>
+    <DataTable
+      caption={page === 1 ? caption : `${caption}, page ${page} of ${lastPage}`}
+      columns={[
+        { label: "Project" },
+        { label: "Budget" },
+        { label: "Timeline" },
+        { label: "Status" },
+        { label: "Interested" },
+        { label: "Submitted", align: "end" },
+      ]}
+      isEmpty={rows.length === 0}
+    >
+      {
+        rows.map((project) => (
+          <DataRow>
+            <DataCell label="Project" primary>
+              <span class="flex min-w-0 flex-col">
+                <a href={`${PROJECTS_PATH}/${project.id}`} class={linkClass()}>
+                  {project.title}
+                </a>
+                <span class="text-sm font-normal text-ink-secondary">{project.organization}</span>
+              </span>
+            </DataCell>
+            <DataCell label="Budget">{budgetLabel(project.budgetBand)}</DataCell>
+            <DataCell label="Timeline">{project.timeline ?? "Not given"}</DataCell>
+            <DataCell label="Status">
+              <StatusChip domain="project" status={project.status} />
+            </DataCell>
+            <DataCell label="Interested">{interestLabel(project.interest)}</DataCell>
+            <DataCell label="Submitted" align="end">
+              {project.createdAt ? formatMomentDate(project.createdAt) : "Not recorded"}
+            </DataCell>
+          </DataRow>
+        ))
+      }
+      <Fragment slot="empty">
+        {
+          page > 1 && total > 0 ? (
+            <EmptyState title="No projects on this page" headingLevel={2}>
+              The list has {lastPage} {lastPage === 1 ? "page" : "pages"}.
+              <Fragment slot="action">
+                <ButtonLink href={pageHref(Astro.url, 1)}>Back to the first page</ButtonLink>
+              </Fragment>
+            </EmptyState>
+          ) : statusFilter === "PENDING" ? (
+            <EmptyState title="No projects in review" headingLevel={2}>
+              No one is waiting for a decision.
+              <Fragment slot="action">
+                <ButtonLink href={PROJECTS_PATH}>See every project</ButtonLink>
+              </Fragment>
+            </EmptyState>
+          ) : filterName ? (
+            <EmptyState title={`No ${filterName} projects`} headingLevel={2}>
+              Projects move here when an administrator decides them.
+              <Fragment slot="action">
+                <ButtonLink href={PROJECTS_PATH}>See every project</ButtonLink>
+              </Fragment>
+            </EmptyState>
           ) : (
-            projects.map((project) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3">{project.organization}</td>
-                <td class="px-4 py-3">{project.title}</td>
-                <td class="px-4 py-3">{budgetLabel(project.budgetBand)}</td>
-                <td class="px-4 py-3">{project.timeline ?? "—"}</td>
-                <td class="px-4 py-3">
-                  <Badge
-                    variant={
-                      project.status.toLowerCase() as
-                        | "pending"
-                        | "approved"
-                        | "rejected"
-                        | "matched"
-                        | "closed"
-                    }
-                  />
-                </td>
-                <td class="px-4 py-3">{project.projectInterests.length}</td>
-                <td class="px-4 py-3">
-                  {project.createdAt
-                    ? new Date(project.createdAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/projects/${project.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            <EmptyState title="No client projects yet" headingLevel={2}>
+              Projects appear here when organisations submit them.
+            </EmptyState>
+          )
+        }
+      </Fragment>
+    </DataTable>
+
+    <Pager
+      previousHref={page > 1 && rows.length > 0 ? pageHref(Astro.url, page - 1) : null}
+      nextHref={page < lastPage ? pageHref(Astro.url, page + 1) : null}
+      summary={pageSummary(page, rows.length, total)}
+      label="Project pages"
+    />
   </div>
 </AdminLayout>

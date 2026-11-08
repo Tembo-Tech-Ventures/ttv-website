@@ -137,7 +137,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback", retired: true },
   { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback", retired: true },
   { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback", retired: true },
-  { path: "/admin/projects", heading: "Client projects", current: "Client projects", legacy: "Client Projects" },
+  { path: "/admin/projects", heading: "Client projects", current: "Client projects", retired: true },
   { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects", retired: true },
   { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
   { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
@@ -300,6 +300,23 @@ test.describe("every admin page", () => {
     await filters.getByRole("link", { name: "Published", exact: true }).click();
     await page.getByRole("table", { name: "Profiles, published" }).getByRole("link", { name: "Achieng Otieno" }).click();
     await expect(page).toHaveURL(/\/admin\/profiles\/ttv-local-persona-profile-alumna$/);
+  });
+
+  test("client projects: the status filter is a link with an address, and each title opens its project", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/projects");
+    const table = page.getByRole("table", { name: "Client projects" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Project", "Budget", "Timeline", "Status", "Interested", "Submitted"]);
+    const filters = page.getByRole("navigation", { name: "Project status" });
+    await expect(filters.getByRole("link")).toHaveText([/^All/, /^In review/, /^Accepted/, /^Matched/, /^Declined/, /^Closed/]);
+    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    await table.getByRole("link", { name: "Member savings tracker" }).click();
+    await expect(page).toHaveURL(/\/admin\/projects\/ttv-local-persona-project$/);
+
+    await open(page, "/admin/projects?status=CLOSED");
+    await expect(filters.getByRole("link", { name: /^Closed/ })).toHaveAttribute("aria-current", "page");
+    for (const status of await page.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Closed");
   });
 
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
