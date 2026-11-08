@@ -7,11 +7,11 @@ import {
   ButtonLink,
   Card,
   ConfirmStep,
-  FOCUS_RING,
   Notice,
   PageHeader,
   TextAreaField,
   TextField,
+  linkClass,
   confirmHref,
   confirmingAction,
   withoutConfirm,
@@ -100,7 +100,7 @@ const isInUse = curriculum.programs.length > 0 || refusedInUse;
 const confirming = !isInUse && confirmingAction(Astro.url, ["delete"]) === "delete";
 // Every form posts to the page's own path, so a `?confirm=` in the address never reaches a POST.
 const SELF = Astro.url.pathname;
-const TEXT_LINK = `inline-flex min-h-11 items-center rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`;
+const PROGRAM_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
 ---
 
 <AdminLayout title={curriculum.title} titlePrefix={rejected || deleteError ? "Error: " : ""} spaces={spaces}>
@@ -133,14 +133,16 @@ const TEXT_LINK = `inline-flex min-h-11 items-center rounded-sm text-sm font-sem
     <Card>
       <div class="grid gap-2">
         <h2 class="text-lg text-ink-primary">Programs and cohorts using it</h2>
-        {isInUse ? (
+        {curriculum.programs.length > 0 ? (
           <ul>
             {curriculum.programs.map((program) => (
               <li>
-                <a href={`/admin/programs/${program.id}`} class={TEXT_LINK}>{program.name}</a>
+                <a href={`/admin/programs/${program.id}`} class={PROGRAM_LINK}>{program.name}</a>
               </li>
             ))}
           </ul>
+        ) : refusedInUse ? (
+          <p class="text-sm text-ink-secondary">A program or cohort started using it just now. Reload the page to see which.</p>
         ) : (
           <p class="text-sm text-ink-muted">No programs or cohorts use this curriculum yet.</p>
         )}

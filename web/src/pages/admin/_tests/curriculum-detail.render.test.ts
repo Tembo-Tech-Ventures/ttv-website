@@ -94,7 +94,9 @@ describe("a curriculum on the style guide", () => {
     expect(body).not.toContain("data-confirm-step");
     expect(body).not.toMatch(/data-variant="danger"/);
     expect(body).toContain("This curriculum cannot be deleted while a program or cohort references it.");
-    expect(body).toMatch(/<a href="\/admin\/programs\/cohort-07" class="[^"]*min-h-11[^"]*text-peach-ink[^"]*">Cohort 07<\/a>/);
+    // A link reads as one by its underline, in ink: peach is the page's one primary action.
+    expect(body).toMatch(/<a href="\/admin\/programs\/cohort-07" class="[^"]*text-ink-primary underline[^"]*min-h-11[^"]*">Cohort 07<\/a>/);
+    expect(body).not.toContain("text-peach-ink");
   });
 
   it("answers a save with a 303 to the page and a flash, never ?notice", async () => {
@@ -134,6 +136,9 @@ describe("a curriculum on the style guide", () => {
     expect(refused.body).toMatch(/<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\s\S]*?The curriculum wasn&#x27;t deleted[\s\S]*?cannot be deleted\./);
     expect(refused.body).toContain("This curriculum cannot be deleted while a program or cohort references it.");
     expect(refused.body).not.toMatch(/confirm=delete/);
+    // The cohort that took it came after this page's read: say so rather than list nothing.
+    expect(refused.body).toContain("A program or cohort started using it just now.");
+    expect(refused.body).not.toMatch(/<ul>\s*<\/ul>/);
     store.remove.mockRejectedValue(new Error("D1 down"));
     expect((await visit({ form: { action: "delete" } })).body).toContain("The database didn&#39;t answer. Try again in a moment.");
     store.remove.mockResolvedValue({ ok: true });
