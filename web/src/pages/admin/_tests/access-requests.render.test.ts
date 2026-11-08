@@ -144,4 +144,26 @@ describe("the access-request queue on the style guide", () => {
     expect(notice).toContain('role="alert"');
     expect(notice).toMatch(/autofocus/i);
   });
+
+  it("posts each row's decision back to its list, never to an address that announces an earlier decision", async () => {
+    reads.get.mockResolvedValue(request("request-otieno", "Otieno Ouma", {
+      status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
+    }));
+    const { body } = await html("?decided=request-otieno");
+    const actions = [...body.matchAll(/<form method="POST" action="([^"]*)"[^>]*data-access-request-form/g)].map((match) => match[1]);
+    expect(actions).toEqual(PENDING.items.map(() => "/admin/access-requests"));
+    const paged = await html("?status=PENDING&cursor=c2Vjb25kLXBhZ2U&decided=request-otieno");
+    expect(paged.body).toMatch(/<form method="POST" action="\/admin\/access-requests\?status=PENDING&amp;cursor=c2Vjb25kLXBhZ2U"/);
+  });
+
+  it("never shows an earlier decision's notice beside a refused message, even posted to that address", async () => {
+    reads.get.mockResolvedValue(request("request-otieno", "Otieno Ouma", {
+      status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
+    }));
+    const body = new URLSearchParams({ id: "request-peter", decision: "decline", message: "x".repeat(601) });
+    const result = await html("?decided=request-otieno", { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    expect(result.status).toBe(400);
+    expect(result.body).not.toContain('id="access-request-notice"');
+    expect(count(result.body, /autofocus/gi)).toBe(1);
+  });
 });
