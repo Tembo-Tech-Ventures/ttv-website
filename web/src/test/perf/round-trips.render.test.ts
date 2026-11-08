@@ -154,7 +154,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   ask: { d1: 14, depth: 3 },
   "admin home": { d1: 19, depth: 3 },
   account: { d1: 16, depth: 3 },
-  "admin users": { d1: 14, depth: 3 },
+  // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
+  // read beside the page of people, in the same round trip.
+  "admin users": { d1: 15, depth: 3 },
   "admin applications": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 3 },

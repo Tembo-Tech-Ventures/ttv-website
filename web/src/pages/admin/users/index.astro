@@ -1,61 +1,95 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { asc, count, desc } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { ButtonLink, Chip, DataCell, DataRow, DataTable, EmptyState, PageHeader, Pager, linkClass } from "@/components/platform/ui";
+import { ADMIN_PAGE_SIZE, lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
+import { roleLabel } from "@/lib/admin/users";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDate } from "@/lib/display-date";
 
+/*
+ * Everyone who has signed in, newest first, a page at a time. Each name opens
+ * that person's page, where an administrator changes their roles. The list,
+ * the count and the Admin space are independent reads, started together.
+ */
 const db = drizzle(env.DB, { schema });
+const page = parsePage(Astro.url.searchParams.get("page"));
 
-const users = await db.query.user.findMany({
-  with: { userRoles: { with: { role: true } } },
-  orderBy: (u, { desc }) => [desc(u.createdAt)],
-});
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminUsers");
+const [users, [{ total }], spaces] = await Promise.all([
+  db.query.user.findMany({
+    columns: { id: true, name: true, email: true, createdAt: true },
+    with: { userRoles: { columns: {}, with: { role: { columns: { name: true } } } } },
+    orderBy: (user) => [desc(user.createdAt), asc(user.id)],
+    limit: ADMIN_PAGE_SIZE,
+    offset: (page - 1) * ADMIN_PAGE_SIZE,
+  }),
+  db.select({ total: count() }).from(schema.user),
+  resolveSpacePage(Astro.locals, "adminUsers"),
+]);
+
+const lastPage = lastPageOf(total);
+const title = page === 1 ? "Users" : `Users, page ${page}`;
 ---
 
-<AdminLayout title="Users" spaces={spaces}>
-  <div class="space-y-6">
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Users</PageTitle>
+<AdminLayout title={title} spaces={spaces}>
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Users">Everyone who has signed in, newest first. Open a person to change their roles.</PageHeader>
 
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Name</th>
-            <th class="px-4 py-3 font-medium">Email</th>
-            <th class="px-4 py-3 font-medium">Roles</th>
-            <th class="px-4 py-3 font-medium">Created</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {users.map((u) => (
-            <tr class="text-white/80 hover:bg-teal/10">
-              <td class="px-4 py-3">{u.name}</td>
-              <td class="px-4 py-3">{u.email}</td>
-              <td class="px-4 py-3">
-                {u.userRoles.length > 0
-                  ? u.userRoles.map((ur) => ur.role.name).join(", ")
-                  : "—"}
-              </td>
-              <td class="px-4 py-3">
-                {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
-              </td>
-              <td class="px-4 py-3">
-                <a
-                  href={`/admin/users/${u.id}`}
-                  class="text-primary hover:underline"
-                >
-                  View
-                </a>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption={page === 1 ? "Users" : `Users, page ${page} of ${lastPage}`}
+      columns={[{ label: "Name" }, { label: "Email" }, { label: "Roles" }, { label: "Joined", align: "end" }]}
+      isEmpty={users.length === 0}
+    >
+      {
+        users.map((user) => (
+          <DataRow>
+            <DataCell label="Name" primary>
+              <a href={`/admin/users/${user.id}`} class={linkClass()}>{user.name}</a>
+            </DataCell>
+            <DataCell label="Email">{user.email}</DataCell>
+            <DataCell label="Roles">
+              {user.userRoles.length > 0 ? (
+                <span class="inline-flex flex-wrap gap-1.5">
+                  {user.userRoles.map((userRole) => (
+                    <Chip>{roleLabel(userRole.role.name)}</Chip>
+                  ))}
+                </span>
+              ) : (
+                <span class="text-ink-secondary">None</span>
+              )}
+            </DataCell>
+            <DataCell label="Joined" align="end">
+              {user.createdAt ? formatMomentDate(user.createdAt) : "Not recorded"}
+            </DataCell>
+          </DataRow>
+        ))
+      }
+      <Fragment slot="empty">
+        {
+          page > 1 ? (
+            <EmptyState title="No one on this page" headingLevel={2}>
+              The list has {lastPage} {lastPage === 1 ? "page" : "pages"}.
+              <Fragment slot="action">
+                <ButtonLink href={pageHref(Astro.url, 1)}>Back to the first page</ButtonLink>
+              </Fragment>
+            </EmptyState>
+          ) : (
+            <EmptyState title="No one has signed in yet" headingLevel={2}>
+              People appear here the first time they sign in with GitHub.
+            </EmptyState>
+          )
+        }
+      </Fragment>
+    </DataTable>
+
+    <Pager
+      previousHref={page > 1 && users.length > 0 ? pageHref(Astro.url, page - 1) : null}
+      nextHref={page < lastPage ? pageHref(Astro.url, page + 1) : null}
+      summary={pageSummary(page, users.length, total)}
+      label="Users pages"
+    />
   </div>
 </AdminLayout>

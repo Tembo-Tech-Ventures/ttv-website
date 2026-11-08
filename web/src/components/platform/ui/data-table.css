@@ -59,3 +59,16 @@
     padding: 0.125rem 0.75rem 0 0;
   }
 }
+
+/*
+ * On a touch screen the link that names a row is a 44px target. The padding
+ * grows its press area and the equal negative margin hands the room back, so
+ * neither the table's rows nor a stacked row move: an inline link keeps its
+ * line, and a link that is a flex item keeps its box.
+ */
+@media (pointer: coarse) {
+  .kit-table__cell[data-primary] a {
+    padding-block: 0.75rem;
+    margin-block: -0.75rem;
+  }
+}

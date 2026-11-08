@@ -127,7 +127,7 @@ interface AdminPage {
 /** Every admin page T14 moved, with a seeded record behind each detail page (platform-personas.local.sql). */
 const MOVED: readonly AdminPage[] = [
   { path: "/admin/access-requests", heading: "Access requests", current: "Access requests", retired: true },
-  { path: "/admin/users", heading: "Users", current: "Users" },
+  { path: "/admin/users", heading: "Users", current: "Users", retired: true },
   { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users" },
   { path: "/admin/applications", heading: "Applications", current: "Applications" },
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application", current: "Applications" },
@@ -223,6 +223,26 @@ test.describe("every admin page", () => {
         expect(covered).toEqual([]);
       });
     }
+  });
+
+  test("the users list: each name opens the person, roles read as words, and a page past the end says so", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/users");
+    const table = page.getByRole("table", { name: "Users" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Email", "Roles", "Joined"]);
+    const david = table.getByRole("row").filter({ hasText: "David Kamau" });
+    await expect(david.getByRole("cell").nth(2)).toHaveText("Mentor");
+    await expect(david.getByRole("cell").nth(3)).toHaveText(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/);
+    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    await david.getByRole("link", { name: "David Kamau" }).click();
+    await expect(page).toHaveURL(/\/admin\/users\/ttv-local-persona-mentor$/);
+
+    await open(page, "/admin/users?page=40");
+    await expect(page.getByRole("heading", { level: 2, name: "No one on this page" })).toBeVisible();
+    await page.getByRole("link", { name: "Back to the first page" }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.getByRole("navigation", { name: "Users pages" })).toHaveCount(0);
   });
 
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
