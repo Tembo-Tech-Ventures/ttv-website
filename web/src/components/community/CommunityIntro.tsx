@@ -1,5 +1,9 @@
 import React from "react";
 import { communityEntryHref } from "../../lib/community-entry";
+import { Card, linkClass } from "@/components/platform/ui";
+
+/** Links that stand on their own line: a 44px target on a touch screen. */
+const TOUCH = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center";
 
 const steps = [
   ["01", "Show the work", "Build a profile around your contributions. Add projects, source links, and the opportunities you want to explore."],
@@ -63,13 +67,14 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
   );
 }
 
+// A kit card in the sheet's own light; its links read as links by their line, never by peach (kept for the page's one primary).
 export function CommunityJourneyCard({ restrictedQa = false }: { restrictedQa?: boolean }) {
-  return <section aria-labelledby="dashboard-community-title" className="rounded-xl border border-primary/30 bg-dark p-6 sm:p-8">
-    <h2 id="dashboard-community-title" className="mt-3 text-2xl font-semibold text-ink-primary">Your work has a story.</h2>
+  return <Card as="section" aria-labelledby="dashboard-community-title">
+    <h2 id="dashboard-community-title" className="text-2xl text-ink-primary">Your work has a story.</h2>
     <p className="mt-3 leading-relaxed text-ink-secondary">Share your work and contributions. Open to every member, with or without a cohort.</p>
     <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
-      <a href="/dashboard/community" className="font-semibold text-primary underline underline-offset-4">Open my profile and journey</a>
-      <a href={restrictedQa ? "/community/members" : "/community"} className="text-ink-secondary underline underline-offset-4">About the community</a>
+      <a href="/dashboard/community" className={linkClass(TOUCH)}>Open my profile and journey</a>
+      <a href={restrictedQa ? "/community/members" : "/community"} className={linkClass(TOUCH)}>About the community</a>
     </div>
-  </section>;
+  </Card>;
 }

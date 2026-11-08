@@ -87,13 +87,17 @@ intent alone.
   is off for the person, for restricted staging identities, for personal access
   tokens and for agents' delegated sessions. A failed read is recorded and the
   page keeps the framing it had before onboarding.
-- `OnboardingNotices.astro` sits at the top of a landing page: the status cards
-  (`StatusCard.astro`, S3) and, in Community, the welcome for someone just
-  looking around and the "Your spaces" line. An approval is announced
-  everywhere but in the space it opened, since opening that space marks it seen.
+- `OnboardingNotices.astro` sits at the top of a landing page, after its title:
+  the status cards (`StatusCard.astro`, S3) and, in Community, the welcome for
+  someone just looking around and the "Your spaces" line. Each is a kit `Card`;
+  a status card says its state in a `StatusChip` ("In review", "Accepted",
+  "Declined"), never in the mentor colour, and its buttons are quiet, so the
+  page keeps its one peach action. Confirmations are success `Notice`s that take
+  focus. An approval is announced everywhere but in the space it opened, since
+  opening that space marks it seen.
 - `OnboardingPrompt.astro` places the one-time card (`ExistingAccountCard.astro`,
   S4) after the page's title and its own primary action, never above them:
-  after "Your next step" on Cohort, after "Review shared work" on Mentoring
+  after the next step on Cohort, after "Review shared work" on Mentoring
   (MentoringOverview's `after-primary` slot), and after the journey and scout
   islands on Community and Discover, which draw their own titles. Its buttons
   are quiet ("Not now" ghost), so the page keeps its one peach action, and with
