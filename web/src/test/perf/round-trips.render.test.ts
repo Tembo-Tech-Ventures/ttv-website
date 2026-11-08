@@ -180,7 +180,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin users": { d1: 15, depth: 2 },
   // Depth 5 before the style-guide rollout: the person, their pending requests and the space were read in turn.
   "admin user": { d1: 15, depth: 2 },
-  "admin applications": { d1: 14, depth: 2 },
+  // One more since the style-guide rollout: the list is paged, and the count for each status (which
+  // pages it and says how many wait) is read beside the page of applications, in the same round trip.
+  "admin applications": { d1: 15, depth: 2 },
   "admin application": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 2 },
