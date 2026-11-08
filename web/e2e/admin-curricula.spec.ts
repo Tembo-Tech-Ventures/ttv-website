@@ -77,11 +77,9 @@ test.describe("admin curriculum management", () => {
         .click();
 
       await expect(
-        page.getByRole("heading", { name: "Edit Curriculum" })
+        page.getByRole("heading", { level: 1, name: initialTitle })
       ).toBeVisible();
-      await expect(notice(page)).toContainText(
-        "Curriculum created."
-      );
+      await expect(notice(page)).toContainText("Curriculum created");
       editPath = new URL(page.url()).pathname;
       await expect(titleInput).toHaveValue(initialTitle);
       await expect(descriptionInput).toHaveValue(
@@ -90,11 +88,9 @@ test.describe("admin curriculum management", () => {
 
       await titleInput.fill(`  ${updatedTitle}  `);
       await descriptionInput.fill("  Updated curriculum description.  ");
-      await page.getByRole("button", { name: "Save Changes" }).click();
+      await page.getByRole("button", { name: "Save changes" }).click();
 
-      await expect(notice(page)).toContainText(
-        "Curriculum changes saved."
-      );
+      await expect(notice(page)).toContainText("Curriculum saved");
       await expect(titleInput).toHaveValue(updatedTitle);
       await expect(descriptionInput).toHaveValue(
         "Updated curriculum description."
@@ -103,7 +99,16 @@ test.describe("admin curriculum management", () => {
         page.getByText("No programs or cohorts use this curriculum yet.")
       ).toBeVisible();
 
-      await page.getByRole("link", { name: "Back to Curricula" }).click();
+      // The flash is said once: a rejected save next shows its error alone, not "saved" beside it.
+      await titleInput.fill("   ");
+      await page.getByRole("button", { name: "Save changes" }).click();
+      // The page's own alert: the spaces shell keeps empty live regions of its own.
+      await expect(page.getByRole("alert").filter({ hasText: "The curriculum wasn't saved" })).toBeFocused();
+      await expect(page.getByText("Enter a curriculum title.")).toBeVisible();
+      await expect(page.getByText("Curriculum saved")).toHaveCount(0);
+      await expect(page).toHaveTitle(/^Error: /);
+
+      await page.locator("[data-back-link]").click();
       const curriculumCard = page.locator("article").filter({
         hasText: updatedTitle,
       });
@@ -113,10 +118,11 @@ test.describe("admin curriculum management", () => {
         .getByRole("link", { name: `Edit ${updatedTitle}` })
         .click();
 
-      page.once("dialog", (dialog) => dialog.accept());
-      await page
-        .getByRole("button", { name: "Delete Curriculum" })
-        .click();
+      // The confirm step is the page itself, at ?confirm=delete: no browser dialog.
+      await page.getByRole("link", { name: "Delete curriculum" }).click();
+      await expect(page).toHaveURL(/\?confirm=delete$/);
+      await expect(page.getByRole("region", { name: `Delete ${updatedTitle}?` })).toBeFocused();
+      await page.getByRole("button", { name: "Delete curriculum" }).click();
 
       await expect(notice(page)).toContainText(
         "Curriculum deleted."
@@ -129,12 +135,11 @@ test.describe("admin curriculum management", () => {
       });
     } finally {
       if (editPath) {
-        await page.goto(editPath);
+        await page.goto(`${editPath}?confirm=delete`);
         const deleteButton = page.getByRole("button", {
-          name: "Delete Curriculum",
+          name: "Delete curriculum",
         });
         if (await deleteButton.isVisible().catch(() => false)) {
-          page.once("dialog", (dialog) => dialog.accept());
           await deleteButton.click();
         }
       }
@@ -169,7 +174,7 @@ test.describe("admin curriculum management", () => {
   }) => {
     await page.goto("/admin/curricula/ttv-fixture-curriculum");
     await expect(
-      page.getByRole("heading", { name: "Edit Curriculum" })
+      page.getByRole("heading", { level: 1, name: "Preview Curriculum" })
     ).toBeVisible();
     const cohortLink = page.getByRole("link", {
       name: "Cohort 04",
@@ -182,7 +187,12 @@ test.describe("admin curriculum management", () => {
       )
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Delete Curriculum" })
+      page.getByRole("link", { name: "Delete curriculum" })
+    ).toHaveCount(0);
+    // Asking to confirm a curriculum in use offers no delete button either.
+    await page.goto("/admin/curricula/ttv-fixture-curriculum?confirm=delete");
+    await expect(
+      page.getByRole("button", { name: "Delete curriculum" })
     ).toHaveCount(0);
 
     const deleteResponse = await page.evaluate(async () => {
@@ -191,9 +201,10 @@ test.describe("admin curriculum management", () => {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ action: "delete" }),
       });
-      return { ok: response.ok, body: await response.text() };
+      return { status: response.status, body: await response.text() };
     });
-    expect(deleteResponse.ok).toBe(true);
+    // A refused delete renders the page again with its reason, as a rejected form.
+    expect(deleteResponse.status).toBe(400);
     expect(deleteResponse.body).toContain(
       "This curriculum is used by one or more programs and cannot be deleted."
     );

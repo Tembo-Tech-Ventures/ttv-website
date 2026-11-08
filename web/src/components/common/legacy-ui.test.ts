@@ -20,7 +20,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "components/admin/CohortMentors.astro",
     "components/platform/application/ApplicationAnswers.astro",
     "pages/admin/agent-access.astro",
-    "pages/admin/curricula/[id].astro",
     "pages/admin/curricula/new.astro",
     "pages/admin/personal-access-tokens.astro",
     "pages/admin/programs/[id].astro",
@@ -44,7 +43,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     files: [
     "components/admin/CohortMentors.astro",
     "pages/admin/applications/[id].astro",
-    "pages/admin/curricula/[id].astro",
     "pages/admin/curricula/new.astro",
     "pages/admin/profiles/[id].astro",
     "pages/admin/programs/[id].astro",
@@ -91,7 +89,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "components/blog/editor/PlainPostForm.astro",
     "components/platform/application/ApplicationAnswers.astro",
     "pages/admin/agent-access.astro",
-    "pages/admin/curricula/[id].astro",
     "pages/admin/curricula/new.astro",
     "pages/admin/personal-access-tokens.astro",
     "pages/admin/programs/[id].astro",
