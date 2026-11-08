@@ -1,9 +1,9 @@
 ---
+import { PiArrowRight } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Card from "@/components/common/Card.astro";
-import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import { Card, Chip, EmptyState, FOCUS_RING, PillNav, type ChipTone } from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { countFeedbackByStatus, listFeedback } from "@/lib/feedback/store";
 import { feedbackAttachmentPath } from "@/lib/feedback/api";
@@ -14,139 +14,115 @@ import {
   FeedbackValidationError,
   feedbackPagePath,
   parseFeedbackStatusFilter,
+  type FeedbackStatus,
 } from "@/lib/feedback/model";
 
+const FEEDBACK_PATH = "/admin/feedback";
 const requested = Astro.url.searchParams.get("status") ?? "open";
 let statuses;
 try {
   statuses = parseFeedbackStatusFilter(requested);
 } catch (error) {
   if (!(error instanceof FeedbackValidationError)) throw error;
-  return Astro.redirect("/admin/feedback");
+  return Astro.redirect(FEEDBACK_PATH, 303);
 }
 
-const [items, counts] = await Promise.all([
+// The notes, their counts and the Admin space are independent reads: one round trip, not two.
+const [items, counts, spaces] = await Promise.all([
   listFeedback(env.DB, { statuses, limit: 100 }),
   countFeedbackByStatus(env.DB),
+  resolveSpacePage(Astro.locals, "adminFeedback"),
 ]);
 
 const tabs = [
   { value: "open", label: "Open", count: counts.NEW + counts.IN_PROGRESS },
-  ...FEEDBACK_STATUSES.map((status) => ({
-    value: status,
-    label: FEEDBACK_ADMIN_STATUS_LABELS[status],
-    count: counts[status],
-  })),
-  {
-    value: "all",
-    label: "All",
-    count: Object.values(counts).reduce((sum, count) => sum + count, 0),
-  },
+  ...FEEDBACK_STATUSES.map((status) => ({ value: status, label: FEEDBACK_ADMIN_STATUS_LABELS[status], count: counts[status] })),
+  { value: "all", label: "All", count: Object.values(counts).reduce((sum, count) => sum + count, 0) },
 ];
+const all = requested === "all";
 
+// TODO(K2): StatusChip and statusTone("feedback") replace this map once lane K's detail parts merge.
+// Peach is a note nobody has picked up yet; a resolved one is a success; the rest are facts.
+const NOTE_TONES: Record<FeedbackStatus, ChipTone> = {
+  NEW: "peach",
+  IN_PROGRESS: "neutral",
+  RESOLVED: "success",
+  DECLINED: "neutral",
+};
 const formatDate = (date: Date) =>
-  date.toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
-const excerpt = (text: string) =>
-  text.length > 220 ? `${text.slice(0, 219)}…` : text;
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
+  date.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+const excerpt = (text: string) => (text.length > 220 ? `${text.slice(0, 219)}…` : text);
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 ---
 
 <AdminLayout title="Feedback" spaces={spaces}>
   <div class="space-y-6">
-    <header>
-      <div class="flex flex-wrap items-baseline justify-between gap-3">
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Feedback</PageTitle>
-        <a href="/admin/feedback/themes" class="text-sm text-primary hover:underline">
-          Themes &rarr;
+    <header class="space-y-2">
+      <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <PageTitle spaces>Feedback</PageTitle>
+        <a href={`${FEEDBACK_PATH}/themes`} class:list={["inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline", FOCUS_RING]}>
+          Themes
+          <PiArrowRight className="size-4 shrink-0" aria-hidden="true" />
         </a>
       </div>
-      <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
-        Notes and screenshots from signed-in students. Agents read and update
-        the same queue through <code class="text-ink-primary">/api/admin/feedback</code>
-        with an admin personal access token.
+      <p class="max-w-2xl text-sm leading-relaxed text-ink-secondary">
+        Notes and screenshots from signed-in students. Agents read and update the same queue
+        through <code class="text-ink-primary">/api/admin/feedback</code> with an admin personal access token.
       </p>
     </header>
 
-    <nav aria-label="Filter by status" class="flex flex-wrap gap-2">
-      {
-        tabs.map((tab) => (
-          <a
-            href={`/admin/feedback?status=${tab.value}`}
-            aria-current={requested === tab.value ? "page" : undefined}
-            class:list={[
-              "rounded-full border px-3 py-1 text-sm transition-colors",
-              requested === tab.value
-                ? "border-primary bg-primary/15 text-ink-primary"
-                : "border-rule text-ink-secondary hover:text-ink-primary",
-            ]}
-          >
-            {tab.label} <span class="text-ink-muted">{tab.count}</span>
-          </a>
-        ))
-      }
-    </nav>
+    <PillNav
+      label="Filter by status"
+      countLabel="notes"
+      items={tabs.map((tab) => ({ label: tab.label, href: `${FEEDBACK_PATH}?status=${tab.value}`, current: requested === tab.value, count: tab.count }))}
+    />
 
     {
       items.length === 0 ? (
-        <Card>
-          <p class="text-sm text-ink-secondary">No feedback here.</p>
-        </Card>
+        <EmptyState title={all ? "No feedback yet" : "No feedback in this view"} headingLevel={2}>
+          {all
+            ? "Notes students send from the Feedback button on any page appear here."
+            : "Notes with this status appear here. All shows every note."}
+        </EmptyState>
       ) : (
         <ul class="space-y-3" data-testid="admin-feedback-list">
           {items.map((item) => (
-            <li>
-              <a
-                href={`/admin/feedback/${encodeURIComponent(item.id)}`}
-                class="flex gap-4 rounded-lg border border-teal/20 bg-dark/80 p-4 transition-colors hover:border-primary/60"
-              >
+            <Card as="li" className="relative transition-colors hover:border-ink-primary/30 motion-reduce:transition-none">
+              <div class="flex gap-4">
                 {item.attachments[0] && (
                   <img
                     src={feedbackAttachmentPath(item.attachments[0].id)}
                     alt=""
                     loading="lazy"
-                    class="hidden h-20 w-28 shrink-0 rounded border border-rule object-cover object-top sm:block"
+                    class="hidden h-20 w-28 shrink-0 rounded-lg border border-hairline object-cover object-top sm:block"
                   />
                 )}
                 <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <FeedbackStatusPill note={item.status} />
-                    <span class="text-sm font-medium text-ink-primary">
-                      {FEEDBACK_KIND_LABELS[item.kind]}
-                    </span>
-                    {item.theme && (
-                      <span class="truncate rounded-full border border-rule px-2 py-0.5 text-xs text-ink-secondary">
-                        {item.theme.title}
-                      </span>
-                    )}
-                    {item.sensitive && (
-                      <span class="rounded-full border border-rose-500/30 px-2 py-0.5 text-xs text-rose-200">
-                        Sensitive
-                      </span>
-                    )}
-                    <span class="text-sm text-ink-muted">
-                      {item.user.name} · {formatDate(item.createdAt)} UTC
-                    </span>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <Chip tone={NOTE_TONES[item.status]}>{FEEDBACK_ADMIN_STATUS_LABELS[item.status]}</Chip>
+                    <h2 class="min-w-0 font-body text-base font-bold text-ink-primary">
+                      {/* Who sent it is the row's link; it stretches over the card, so the whole card opens the note. */}
+                      <a
+                        href={`${FEEDBACK_PATH}/${encodeURIComponent(item.id)}`}
+                        class:list={["rounded-sm after:absolute after:inset-0 after:rounded-[1.125rem] hover:underline", FOCUS_RING]}
+                      >
+                        {item.user.name}
+                      </a>
+                    </h2>
+                    <span class="text-sm font-medium text-ink-secondary">{FEEDBACK_KIND_LABELS[item.kind]}</span>
+                    {item.theme && <Chip>{item.theme.title}</Chip>}
+                    {item.sensitive && <Chip tone="warning">Sensitive</Chip>}
+                    <span class="text-sm text-ink-muted">{formatDate(item.createdAt)} UTC</span>
                   </div>
                   <p class="mt-2 break-words text-sm text-ink-secondary">
-                    {item.message ? excerpt(item.message) : "(screenshot only)"}
+                    {item.message ? excerpt(item.message) : "Screenshot only"}
                   </p>
                   <p class="mt-1 truncate text-xs text-ink-muted">
-                    {feedbackPagePath(item.pageUrl)}
-                    {item.attachments.length > 0 &&
-                      ` · ${item.attachments.length} image${item.attachments.length === 1 ? "" : "s"}`}
-                    {item.context.errors.length > 0 &&
-                      ` · ${item.context.errors.length} client error${item.context.errors.length === 1 ? "" : "s"}`}
+                    {feedbackPagePath(item.pageUrl)}{item.attachments.length > 0 && ` · ${plural(item.attachments.length, "image")}`}{item.context.errors.length > 0 && ` · ${plural(item.context.errors.length, "client error")}`}
                   </p>
                 </div>
-              </a>
-            </li>
+              </div>
+            </Card>
           ))}
         </ul>
       )
