@@ -1,10 +1,55 @@
 ---
-import { createAuth } from "@/lib/auth";
+/**
+ * Sign out. Only a POST signs out: link prefetchers, chat-app link previews and browser preloading
+ * all fetch with GET, so a GET here only asks, with a form that posts back to this page. Astro's
+ * origin check refuses a cross-site POST. On success, a 303 sends the browser home with the
+ * cleared session cookies; if better-auth fails, the question comes back with a danger notice and
+ * the person stays signed in.
+ */
 import { env } from "cloudflare:workers";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { Button, ButtonLink, Notice, PageTitle, Sheet } from "@/components/platform/ui";
+import { createAuth } from "@/lib/auth";
 import { logoutResponse } from "@/lib/logout";
 
-// Sign out by calling better-auth's signOut endpoint server-side
-const auth = createAuth(env);
+const TITLE_ID = "sign-out-title";
 
-return logoutResponse(Astro.request.headers, (options) => auth.api.signOut(options));
+if (!Astro.locals.user) {
+  return Astro.request.method === "POST" ? Astro.redirect("/", 303) : Astro.redirect("/");
+}
+
+let failed = false;
+if (Astro.request.method === "POST") {
+  const auth = createAuth(env);
+  const signedOut = await logoutResponse(Astro.request.headers, (options) => auth.api.signOut(options));
+  if (signedOut) return signedOut;
+  failed = true;
+  Astro.response.status = 503;
+}
+Astro.response.headers.set("Cache-Control", "no-store");
 ---
+
+<BaseLayout title={`${failed ? "Error: " : ""}Sign out`} noIndex>
+  <main class="grid min-h-dvh place-items-center bg-ground px-4 py-12">
+    <Sheet
+      space="profile"
+      as="section"
+      aria-labelledby={TITLE_ID}
+      className="w-full max-w-lg p-6 [--sheet-foot:var(--sheet-radius,1.75rem)] sm:p-10"
+    >
+      {
+        failed && (
+          <Notice tone="danger" focusOnLoad title="We couldn't sign you out" className="mb-6">
+            You're still signed in. Try again in a moment.
+          </Notice>
+        )
+      }
+      <PageTitle id={TITLE_ID}>Sign out?</PageTitle>
+      <p class="mt-3 text-ink-secondary">You'll sign in with GitHub again next time.</p>
+      <form method="POST" class="mt-8 flex flex-wrap gap-3" data-sign-out-form>
+        <Button type="submit" variant="primary">Sign out</Button>
+        <ButtonLink href="/dashboard" variant="quiet">Stay signed in</ButtonLink>
+      </form>
+    </Sheet>
+  </main>
+</BaseLayout>

@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { InternalPath, SPACE_ORDER } from "@/lib/platform/contracts";
 import { canonicalSpacePath, SPACE_PATHS, SPACE_REDIRECTS, spaceForPath } from "@/lib/platform/server/space-routes";
-import { ACCOUNT_HREF, opensInShell, SIGN_OUT_HREF, SPACE_HOME, SPACE_LABEL } from "./space-routes";
+import { ACCOUNT_HREF, opensInShell, SIGN_OUT_PATH, SPACE_HOME, SPACE_LABEL } from "./space-routes";
 
 describe("space routes", () => {
   it("names and places every space", () => {
     expect(Object.keys(SPACE_HOME).toSorted()).toEqual([...SPACE_ORDER].toSorted());
     expect(Object.keys(SPACE_LABEL).toSorted()).toEqual([...SPACE_ORDER].toSorted());
-    for (const href of [...Object.values(SPACE_HOME), ACCOUNT_HREF, SIGN_OUT_HREF]) {
+    for (const href of [...Object.values(SPACE_HOME), ACCOUNT_HREF, SIGN_OUT_PATH]) {
       expect(InternalPath.safeParse(href).success).toBe(true);
     }
   });

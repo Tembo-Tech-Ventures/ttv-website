@@ -19,7 +19,8 @@ export const SPACE_LABEL: Readonly<Record<SpaceId, string>> = {
 };
 
 export const ACCOUNT_HREF = "/dashboard/account";
-export const SIGN_OUT_HREF = "/auth/logout";
+/** Signing out is a POST here; a GET only asks "Sign out?". */
+export const SIGN_OUT_PATH = "/auth/logout";
 
 /** Space pages outside any space's path prefix: the entry (it redirects into a space), attention and feedback. */
 const SHELL_PATHS: ReadonlySet<string> = new Set(["/dashboard", "/dashboard/attention", "/dashboard/feedback"]);

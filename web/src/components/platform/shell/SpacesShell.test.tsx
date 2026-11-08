@@ -12,7 +12,8 @@ import SpacesShell from "./SpacesShell";
 
 type Props = ComponentProps<typeof SpacesShell>;
 
-const LINK_OUT: Props["account"] = { signOut: { kind: "link", href: "/auth/logout", label: "Sign out" }, feedback: true };
+const SIGN_OUT: Props["account"] = { signOut: { kind: "form", action: "/auth/logout", label: "Sign out" }, feedback: true };
+const DEMO_LINK: Props["account"] = { signOut: { kind: "link", href: "/demo", label: "Demo controls" }, feedback: true };
 
 function props(overrides: Partial<Props> = {}): Props {
   return {
@@ -20,7 +21,7 @@ function props(overrides: Partial<Props> = {}): Props {
     space: "mentoring",
     lastSpace: null,
     heading: "Requests",
-    account: LINK_OUT,
+    account: SIGN_OUT,
     persistPreference: false,
     sidebar: (
       <nav aria-label="Mentoring pages">
@@ -264,7 +265,7 @@ describe("SpacesShell account menu", () => {
       item.textContent?.trim(),
     );
 
-  it("works before and without JavaScript: Account and Sign out are links in the page", () => {
+  it("works before and without JavaScript: Account is a link and Sign out posts, never a GET", () => {
     const html = renderToString(<SpacesShell {...props()} />);
     const host = document.createElement("div");
     host.innerHTML = html;
@@ -272,7 +273,10 @@ describe("SpacesShell account menu", () => {
     // Feedback needs the widget, which needs JavaScript, so it is not offered yet.
     expect(items(host)).toEqual(["Account", "Sign out"]);
     expect(host.querySelector('.spaces-account__panel a[href="/dashboard/account"]')).not.toBeNull();
-    expect(host.querySelector('.spaces-account__panel a[href="/auth/logout"]')).not.toBeNull();
+    expect(host.querySelector('.spaces-account__panel a[href="/auth/logout"]')).toBeNull();
+    const form = host.querySelector<HTMLFormElement>(".spaces-account__panel form[data-shell-sign-out]");
+    expect(form?.getAttribute("method")).toBe("post");
+    expect(form?.getAttribute("action")).toBe("/auth/logout");
   });
 
   it("offers Feedback once hydrated, which opens the form and closes the menu", async () => {
@@ -291,7 +295,7 @@ describe("SpacesShell account menu", () => {
   });
 
   it("leaves Feedback out where the widget is not mounted", async () => {
-    await mount({ account: { ...LINK_OUT, feedback: false } });
+    await mount({ account: { ...SIGN_OUT, feedback: false } });
     expect(items(container)).toEqual(["Account", "Sign out"]);
   });
 
@@ -310,7 +314,7 @@ describe("SpacesShell account menu", () => {
   });
 
   it("forgets this tab's unsent onboarding requests, channel drafts and mentor requests when signing out, by link or by form", async () => {
-    for (const account of [LINK_OUT, { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false }] as const) {
+    for (const account of [SIGN_OUT, DEMO_LINK, { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false }] as const) {
       sessionStorage.setItem("ttv-onboarding-drafts:someone", JSON.stringify({ MENTOR: { note: "Unsent", link: "" } }));
       sessionStorage.setItem("ttv-channel-drafts:someone:channel", JSON.stringify({ drafts: { root: { body: "Unsent", embeds: [] } }, sends: [] }));
       sessionStorage.setItem("ttv-mentor-request-draft:someone:mentor", JSON.stringify({ note: "Unsent", project: null, format: null }));
