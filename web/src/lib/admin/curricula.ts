@@ -255,5 +255,5 @@ export async function deleteCurriculum(
 }
 
 export function curriculumSaveErrorMessage(): string {
-  return "The curriculum could not be saved. Please try again.";
+  return "The database didn't answer. Try again in a moment; everything you wrote is kept.";
 }

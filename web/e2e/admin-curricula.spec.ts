@@ -64,7 +64,7 @@ test.describe("admin curriculum management", () => {
 
     try {
       await navigateToCurricula(page, viewportWidth);
-      await page.getByRole("link", { name: "New Curriculum" }).click();
+      await page.getByRole("link", { name: "New curriculum" }).click();
 
       const titleInput = page.locator('input[name="title"]');
       const descriptionInput = page.locator('textarea[name="description"]');
@@ -73,7 +73,7 @@ test.describe("admin curriculum management", () => {
         "  Curriculum created by the isolated admin journey.  "
       );
       await page
-        .getByRole("button", { name: "Create Curriculum" })
+        .getByRole("button", { name: "Create curriculum" })
         .click();
 
       await expect(
@@ -157,10 +157,14 @@ test.describe("admin curriculum management", () => {
     await titleInput.fill("   ");
     await descriptionInput.fill(submittedDescription);
     await page
-      .getByRole("button", { name: "Create Curriculum" })
+      .getByRole("button", { name: "Create curriculum" })
       .click();
 
+    await expect(page.getByRole("alert")).toContainText("The curriculum wasn't created");
+    await expect(page.getByRole("alert")).toBeFocused();
+    await expect(page).toHaveTitle(/^Error: /);
     await expect(page.getByText("Enter a curriculum title.")).toBeVisible();
+    await expect(titleInput).toHaveAttribute("aria-invalid", "true");
     await expect(titleInput).toHaveValue("   ");
     await expect(descriptionInput).toHaveValue(submittedDescription);
     await page.screenshot({

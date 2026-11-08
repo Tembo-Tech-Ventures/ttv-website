@@ -140,7 +140,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/projects", heading: "Client projects", current: "Client projects", legacy: "Client Projects" },
   { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects" },
   { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
-  { path: "/admin/curricula/new", heading: "Create Curriculum", current: "Curricula" },
+  { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts" },
   { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },

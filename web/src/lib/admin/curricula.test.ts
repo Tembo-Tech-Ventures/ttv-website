@@ -248,7 +248,7 @@ describe("validateCurriculumSelection", () => {
 describe("curriculumSaveErrorMessage", () => {
   it("returns a safe message for unexpected persistence failures", () => {
     expect(curriculumSaveErrorMessage()).toBe(
-      "The curriculum could not be saved. Please try again."
+      "The database didn't answer. Try again in a moment; everything you wrote is kept."
     );
   });
 });
