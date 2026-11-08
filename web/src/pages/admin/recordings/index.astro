@@ -1,88 +1,87 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
-import { formatDuration } from "@/lib/recordings/time-utils";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { ButtonLink, DataCell, DataRow, DataTable, EmptyState, PageHeader, Pager, StatusChip, linkClass } from "@/components/platform/ui";
+import { lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
+import { RECORDINGS_PATH, readRecordingsPage } from "@/lib/admin/recordings";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDate } from "@/lib/display-date";
+import { formatDuration } from "@/lib/recordings/time-utils";
 
+/*
+ * Every session recording, newest first, a page at a time. A recording's page
+ * holds its details, its transcript and its processing; this list leads there,
+ * and to adding one. The page of recordings and the Admin space are read together.
+ */
 const db = drizzle(env.DB, { schema });
-const recordings = await db.query.recording.findMany({
-  with: { program: true },
-  orderBy: (recording, { desc }) => [desc(recording.createdAt)],
-});
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
+const page = parsePage(Astro.url.searchParams.get("page"));
+const [{ rows, total }, spaces] = await Promise.all([
+  readRecordingsPage(db, { page }),
+  resolveSpacePage(Astro.locals, "adminRecordings"),
+]);
+
+const lastPage = lastPageOf(total);
+const title = page === 1 ? "Recordings" : `Recordings, page ${page}`;
 ---
 
-<AdminLayout title="Recordings" spaces={spaces}>
-  <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Recordings</PageTitle>
-        <p class="mt-1 text-sm text-ink-muted">
-          Upload sessions, monitor processing, and manage transcripts.
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <Button variant="secondary" href="/admin/recordings/import">
-          Import from Drive
-        </Button>
-        <Button href="/admin/recordings/upload">
-          Upload Recording
-        </Button>
-      </div>
-    </div>
+<AdminLayout title={title} spaces={spaces}>
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Recordings">
+      Cohort sessions, newest first. Open one to check its processing, edit its details or read its transcript.
+      <Fragment slot="action">
+        <ButtonLink variant="primary" href={`${RECORDINGS_PATH}/upload`}>Upload recording</ButtonLink>
+        <ButtonLink variant="quiet" href={`${RECORDINGS_PATH}/import`}>Import from Drive</ButtonLink>
+      </Fragment>
+    </PageHeader>
 
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Title</th>
-            <th class="px-4 py-3 font-medium">Program</th>
-            <th class="px-4 py-3 font-medium">Recorded</th>
-            <th class="px-4 py-3 font-medium">Duration</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {recordings.length === 0 ? (
-            <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
-                No recordings uploaded yet
-              </td>
-            </tr>
+    <DataTable
+      caption={page === 1 ? "Recordings" : `Recordings, page ${page} of ${lastPage}`}
+      columns={[{ label: "Recording" }, { label: "Cohort" }, { label: "Recorded" }, { label: "Length" }, { label: "Status", align: "end" }]}
+      isEmpty={rows.length === 0}
+    >
+      {
+        rows.map((recording) => (
+          <DataRow>
+            <DataCell label="Recording" primary>
+              <a href={`${RECORDINGS_PATH}/${recording.id}`} class={linkClass()}>
+                {recording.title}
+              </a>
+            </DataCell>
+            <DataCell label="Cohort">{recording.cohort ?? "No cohort"}</DataCell>
+            <DataCell label="Recorded">{recording.recordedAt ? formatMomentDate(recording.recordedAt) : "No date"}</DataCell>
+            <DataCell label="Length">{recording.durationSeconds ? formatDuration(recording.durationSeconds) : "Not known yet"}</DataCell>
+            <DataCell label="Status" align="end">
+              <StatusChip domain="recording" status={recording.processingStatus} />
+            </DataCell>
+          </DataRow>
+        ))
+      }
+      <Fragment slot="empty">
+        {
+          page > 1 && total > 0 ? (
+            <EmptyState title="No recordings on this page" headingLevel={2}>
+              The list has {lastPage} {lastPage === 1 ? "page" : "pages"}.
+              <Fragment slot="action">
+                <ButtonLink href={pageHref(Astro.url, 1)}>Back to the first page</ButtonLink>
+              </Fragment>
+            </EmptyState>
           ) : (
-            recordings.map((recording) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3 font-medium text-white">{recording.title}</td>
-                <td class="px-4 py-3">{recording.program?.name ?? "Unassigned"}</td>
-                <td class="px-4 py-3">
-                  {recording.recordedAt
-                    ? recording.recordedAt.toISOString().split("T")[0]
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">{formatDuration(recording.durationSeconds)}</td>
-                <td class="px-4 py-3">
-                  <ProcessingStatus status={recording.processingStatus} />
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/recordings/${recording.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            <EmptyState title="No recordings yet" headingLevel={2}>
+              A cohort's sessions appear here once they're uploaded or imported from Google Drive, and its members can then watch
+              them and ask Tembo about them.
+            </EmptyState>
+          )
+        }
+      </Fragment>
+    </DataTable>
+
+    <Pager
+      previousHref={page > 1 && rows.length > 0 ? pageHref(Astro.url, page - 1) : null}
+      nextHref={page < lastPage ? pageHref(Astro.url, page + 1) : null}
+      summary={pageSummary(page, rows.length, total)}
+      label="Recording pages"
+    />
   </div>
 </AdminLayout>
