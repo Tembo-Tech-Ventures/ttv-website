@@ -142,7 +142,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
   { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
-  { path: "/admin/programs", heading: "Cohorts", current: "Cohorts" },
+  { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
   { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings" },
@@ -265,6 +265,20 @@ test.describe("every admin page", () => {
 
     await inReview.locator("td[data-primary] a").first().click();
     await expect(page).toHaveURL(/\/admin\/applications\/[^/?]+$/);
+  });
+
+  test("cohorts: New cohort is the page's one primary, and each cohort's name opens it", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/programs");
+    const table = page.getByRole("table", { name: "Cohorts" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Cohort", "Curriculum", "Starts", "Ends", "Applications"]);
+    await expect(table.getByRole("row").filter({ hasText: "Cohort 06" }).getByRole("cell").nth(4)).toHaveText("Open");
+    const main = page.locator("#spaces-main");
+    await expect(main.getByRole("link", { name: "New cohort", exact: true })).toHaveAttribute("href", "/admin/programs/new");
+    expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await table.getByRole("link", { name: "Cohort 05", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/programs\/ttv-local-persona-cohort-05$/);
   });
 
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
