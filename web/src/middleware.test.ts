@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { sessionApi } from "@/test/auth-mock";
 
 const mocks = vi.hoisted(() => ({
   authenticatePersonalAccessToken: vi.fn(),
@@ -121,11 +122,7 @@ beforeEach(() => {
   mocks.enforcePersonalAccessTokenMutationScope.mockReturnValue(null);
   mocks.roleFirst.mockResolvedValue({ id: "admin-role" });
   mocks.getSession.mockResolvedValue(null);
-  mocks.createAuth.mockReturnValue({
-    api: {
-      getSession: mocks.getSession,
-    },
-  });
+  mocks.createAuth.mockReturnValue({ api: sessionApi(mocks.getSession) });
 });
 
 describe("dashboard authentication", () => {
@@ -140,6 +137,40 @@ describe("dashboard authentication", () => {
       "/auth/login?next=%2Fdashboard%2Fapply"
     );
     expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe("better-auth's session cookie cache", () => {
+  const REFRESHED = ["better-auth.session_data=fresh; Max-Age=300; Path=/; HttpOnly; SameSite=Lax"];
+  const browser = { session: { ...tokenAuth.session, id: "browser-session", userAgent: "Mozilla/5.0" }, user: tokenAuth.user };
+
+  it("passes on the cookies better-auth refreshed while reading, so the next navigation skips D1", async () => {
+    mocks.getSession.mockResolvedValue(browser);
+    mocks.createAuth.mockReturnValue({ api: sessionApi(mocks.getSession, () => REFRESHED) });
+    const { context, next } = createContext(new Request("https://example.com/talent"));
+    next.mockResolvedValue(new Response("page", { headers: { "Set-Cookie": "ttv-last-space=cohort; Path=/" } }));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.headers.getSetCookie()).toEqual(["ttv-last-space=cohort; Path=/", ...REFRESHED]);
+    // The cache stays on unless the demo operator cookie asks for a fresh read.
+    expect(mocks.getSession).toHaveBeenCalledWith(expect.objectContaining({ query: { disableCookieCache: false }, returnHeaders: true }));
+  });
+
+  it("passes them on with a refusal or a redirect too", async () => {
+    mocks.getSession.mockResolvedValue(null);
+    mocks.createAuth.mockReturnValue({ api: sessionApi(mocks.getSession, () => ["better-auth.session_data=; Max-Age=0; Path=/"]) });
+    const { context, next } = createContext(new Request("https://example.com/dashboard/apply"));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(302);
+    expect(response.headers.getSetCookie()).toEqual(["better-auth.session_data=; Max-Age=0; Path=/"]);
+  });
+
+  it("never puts them on a response a shared cache may keep", async () => {
+    mocks.getSession.mockResolvedValue(browser);
+    mocks.createAuth.mockReturnValue({ api: sessionApi(mocks.getSession, () => REFRESHED) });
+    const { context, next } = createContext(new Request("https://example.com/sitemap.xml"));
+    next.mockResolvedValue(new Response("<urlset/>", { headers: { "Cache-Control": "public, max-age=3600" } }));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.headers.getSetCookie()).toEqual([]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import type { Me, SpaceId } from "@/lib/platform/contracts";
+import type { Me, OnboardingState, SpaceId } from "@/lib/platform/contracts";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
 import { getOnboardingState } from "@/lib/onboarding/service";
 import { recordError } from "@/lib/observability/errors";
@@ -14,6 +14,7 @@ import { isValidCompletion } from "@/lib/talent/eligibility";
 import { restrictedQaNextStep } from "@/lib/dashboard-presentation";
 import { getStudentJourney, type StudentNextStep } from "@/lib/student/journey";
 import { requestScopeActive, requestScoped } from "@/lib/platform/server/request-scope";
+import { spaceForPath } from "@/lib/platform/server/space-routes";
 import { channelsServer } from "@/components/channels/server";
 import { drizzle } from "drizzle-orm/d1";
 import { startAdminNavCounts } from "@/components/admin/admin-nav-server";
@@ -91,6 +92,48 @@ export interface SpaceFrameFacts {
 }
 
 /**
+ * The flags and capabilities getMe reads first, as frame facts, from the same shared reads (getFlags
+ * and requestCapabilities cache them for the request), or null when there is no spaces frame for
+ * this caller: signed out, a personal access token, or the `spaces` flag off.
+ */
+async function spaceFrameFacts(locals: App.Locals): Promise<(SpaceFrameFacts & Pick<Me, "flags">) | null> {
+  const user = locals.user;
+  if (!user || locals.personalAccessToken) return null;
+  const [flags, capabilities] = await Promise.all([
+    getFlags({ db: env.DB, env, user, isAdmin: locals.isAdmin, locals }),
+    requestCapabilities(drizzle(env.DB, { schema }), locals),
+  ]);
+  return flags.spaces ? { user: { id: user.id }, flags, spaces: capabilities.spaces, capabilities } : null;
+}
+
+/** The page a path serves, for the frame's early reads; null where the path names no space page. */
+const PAGE_BY_PATH: ReadonlyMap<string, SpacePageKey> = new Map(
+  (Object.entries(SPACE_PAGE_PATHS) as [SpacePageKey, string][]).map(([page, path]) => [path, page]),
+);
+
+/**
+ * For a space page's GET, once the router has started its context: starts the frame's reads
+ * (startSpaceFrame) and the person's onboarding as soon as the flags and capabilities are read,
+ * beside the rest of getMe, instead of after the page's frontmatter has the whole context. They are
+ * the request's shared reads, so SpacePage and loadOnboarding get these same ones. The space is the
+ * path's; where the page later picks another (Ask Tembo without a cohort), the early reads are
+ * unused and the page reads its own. Failures are left to SpacePage, which reports them.
+ */
+export function startSpacePageFrame(locals: App.Locals, path: string): void {
+  const space = spaceForPath(path);
+  if (!space || !requestScopeActive()) return;
+  void (async () => {
+    const facts = await spaceFrameFacts(locals);
+    if (!facts?.spaces.includes(space)) return;
+    startSpaceFrame(facts, space);
+    const page = PAGE_BY_PATH.get(path);
+    if (onboardingFor(locals, facts) && (space === "community" || (page && ONBOARDING_PAGES.has(page)))) {
+      onboardingState(facts.user.id).catch(() => {});
+    }
+  })().catch(() => {});
+}
+
+/**
  * Starts the reads SpacePage's frame makes (the journey, the sidebar's channels, the cohort heading,
  * certificates) as soon as the space is known, beside onboarding and the page's own reads, instead of
  * after the page's frontmatter. Only in a read-only request: there each read is shared for the
@@ -117,19 +160,13 @@ function startSpaceFrame(me: SpaceFrameFacts, space: SpaceId): void {
  * a missing context as the existing admin shell.
  */
 export function startAdminSpacePage(locals: App.Locals): void {
-  const user = locals.user;
-  if (!requestScopeActive() || locals.personalAccessToken || !user) return;
+  if (!requestScopeActive() || locals.personalAccessToken || !locals.user) return;
   getSpaceContext({ locals }).catch(() => {});
+  // The frame needs only the flags and capabilities getMe reads first, not the counts it reads next.
+  // These are the same shared reads, so the Admin space opens exactly when canRenderSpace says so.
   void (async () => {
-    // The frame needs only the flags and capabilities getMe reads first, not the counts it reads next.
-    // These are the same shared reads, so the Admin space opens exactly when canRenderSpace says so.
-    const [flags, capabilities] = await Promise.all([
-      getFlags({ db: env.DB, env, user, isAdmin: locals.isAdmin, locals }),
-      requestCapabilities(drizzle(env.DB, { schema }), locals),
-    ]);
-    if (flags.spaces && capabilities.spaces.includes("admin")) {
-      startSpaceFrame({ user: { id: user.id }, flags, spaces: capabilities.spaces, capabilities }, "admin");
-    }
+    const facts = await spaceFrameFacts(locals);
+    if (facts?.spaces.includes("admin")) startSpaceFrame(facts, "admin");
   })().catch(() => {});
 }
 
@@ -138,7 +175,7 @@ export function startAdminSpacePage(locals: App.Locals): void {
  * for them, and they are not a restricted synthetic identity, a personal access
  * token or an agent's delegated session (none of which chooses for a person).
  */
-export function onboardingFor(locals: App.Locals, me: Me): boolean {
+export function onboardingFor(locals: App.Locals, me: Pick<Me, "flags">): boolean {
   const { qaPersona, demo, fixture } = restrictionsFor(locals);
   return onboardingOpen(me.flags)
     && !qaPersona && !demo && !fixture && !locals.personalAccessToken && !isAgentSession(locals.session?.userAgent);
@@ -162,12 +199,21 @@ const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey"
 export async function loadOnboarding(locals: App.Locals, me: Me, space: SpaceId, page: SpacePageKey): Promise<OnboardingView | null> {
   if (!onboardingFor(locals, me) || (!ONBOARDING_PAGES.has(page) && space !== "community")) return null;
   try {
-    return onboardingView(await getOnboardingState(env.DB, me.user.id), me);
+    return onboardingView(await onboardingState(me.user.id), me);
   } catch (error) {
     // recordError never throws; it reports its own ledger failures.
     await recordError(env.DB, { source: "request", route: SPACE_PAGE_PATHS[page], error, level: "warning" });
     return null;
   }
+}
+
+/**
+ * The person's onboarding state, read once in a read-only request (request-scope.ts), so the frame can
+ * start it early (startSpacePageFrame). A GET's only onboarding write, an approval's seen marker, runs
+ * after the response (space-routing.ts acknowledgeApproval), so nothing reads back its own write.
+ */
+function onboardingState(userId: string): Promise<OnboardingState> {
+  return requestScoped(`onboarding:${userId}`, () => getOnboardingState(env.DB, userId));
 }
 
 export interface Restrictions {

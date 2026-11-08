@@ -12,6 +12,7 @@ import {
 } from "./onboarding-routing";
 import { getRouteChannel, startRouteChannel } from "./channel-context";
 import { getSpaceContext } from "./space-context";
+import { startSpacePageFrame } from "@/components/platform/spaces/space-page";
 import {
   canonicalSpacePath, channelRoute, conversationRoute, isAvailableSpacePath, isChannelPagePath, isMentorPagePath, isNewSpacePath,
   legacySpacePath, normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
@@ -162,8 +163,10 @@ export async function routeSpaceRequest(context: APIContext, next: MiddlewareNex
     return next();
   }
 
-  // A channel page's channel is read beside the context, rather than after it (pageMissing).
+  // A channel page's channel is read beside the context, rather than after it (pageMissing), and the
+  // page's frame as soon as the flags and capabilities are known, beside the rest of the context.
   startRouteChannel(context);
+  if (!canonical) startSpacePageFrame(context.locals, path);
   let me;
   try {
     me = await getSpaceContext(context);

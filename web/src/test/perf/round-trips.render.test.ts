@@ -17,7 +17,10 @@ import { withRaw } from "@/lib/attention/test-support";
 
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
-vi.mock("@/lib/auth", () => ({ createAuth: () => ({ api: { getSession: mocks.getSession } }) }));
+vi.mock("@/lib/auth", async () => {
+  const { sessionApi } = await import("@/test/auth-mock");
+  return { createAuth: () => ({ api: sessionApi(mocks.getSession) }) };
+});
 
 const { onRequest } = await import("@/middleware");
 const { tracePerf } = await import("@/lib/observability/perf-trace");
@@ -92,6 +95,12 @@ const PAGES = {
   "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
   "admin moderation": { path: () => "/admin/moderation", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
   "admin request notes": { path: () => "/admin/moderation?tab=request-notes", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
+  // The frame alone: a page with no reads of its own (FramePage.astro) in each kind of space.
+  "frame only, community": { path: () => "/dashboard/community/conduct", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "conduct" } },
+  "frame only, cohort": { path: () => "/dashboard/cohort", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "cohort" } },
+  "frame only, mentoring": { path: () => "/dashboard/mentoring", page: () => import("./FramePage.astro"), user: MENTOR, props: { page: "mentoring" } },
+  "frame only, profile": { path: () => "/dashboard/me", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "profile" } },
+  "frame only, admin": { path: () => "/admin/curricula", page: () => import("./FramePage.astro"), user: ADMIN, props: { page: "adminCurricula", admin: true } },
 } as const;
 type PageName = keyof typeof PAGES;
 
@@ -118,7 +127,7 @@ async function visit(name: PageName) {
   };
   const { result, summary } = await tracePerf(db, async () => {
     const response = await onRequest(context as never, async () =>
-      container.renderToResponse(Page, { request: new Request(url), locals, params })) as Response;
+      container.renderToResponse(Page, { request: new Request(url), locals, params, props: "props" in entry ? entry.props : {} })) as Response;
     return { status: response.status, body: await response.text() };
   });
   await Promise.allSettled(deferred);
@@ -130,7 +139,16 @@ async function visit(name: PageName) {
  * measured, in this order: 23/10, 22/9, 22/9, 26/9, 23/8, 23/14, 19/6, 18/8 and 18/8.
  */
 const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
-  "cohort overview": { d1: 16, depth: 3 },
+  // The frame alone, which every page pays before its own reads: depth 3 before perf-frame-floor (the
+  // sidebar, journey, onboarding and admin counts waited for the whole space context; the Admin
+  // space's flags waited for the ADMIN guard). Now flags and capabilities are one round trip and
+  // everything the frame reads after them is the next.
+  "frame only, community": { d1: 16, depth: 2 },
+  "frame only, cohort": { d1: 16, depth: 2 },
+  "frame only, mentoring": { d1: 13, depth: 2 },
+  "frame only, profile": { d1: 16, depth: 2 },
+  "frame only, admin": { d1: 13, depth: 2 },
+  "cohort overview": { d1: 16, depth: 2 },
   // The conversation's reads chain off the route channel, which the router reads beside the space
   // context (page-channels: 6, 4 and 8 deep before). A first visit reads the view too, unrendered,
   // rather than wait for the habits' answer.
@@ -144,33 +162,33 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
   // Its channel list, requests and availability start beside onboarding (depth 5 before).
   "mentoring home": { d1: 16, depth: 3 },
-  "mentoring confirm": { d1: 11, depth: 3 },
+  "mentoring confirm": { d1: 11, depth: 2 },
   "mentoring availability": { d1: 12, depth: 3 },
   // One directory read, filtered in memory: two (the same statement twice) before the style-guide rollout.
   "mentors, filtered": { d1: 20, depth: 3 },
   // The same before the style-guide rollout: this page reads no onboarding, so starting its reads with the
   // context (resolveSpacePageWith) keeps the depth rather than cuts it. "Worth another look" reads its access first.
   "mentoring requests": { d1: 15, depth: 3 },
-  ask: { d1: 14, depth: 3 },
-  "admin home": { d1: 19, depth: 3 },
-  account: { d1: 16, depth: 3 },
+  ask: { d1: 14, depth: 2 },
+  "admin home": { d1: 19, depth: 2 },
+  account: { d1: 16, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
   // read beside the page of people, in the same round trip.
-  "admin users": { d1: 15, depth: 3 },
-  "admin applications": { d1: 14, depth: 3 },
+  "admin users": { d1: 15, depth: 2 },
+  "admin applications": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
-  "admin access requests": { d1: 14, depth: 3 },
-  "admin curricula": { d1: 14, depth: 3 },
+  "admin access requests": { d1: 14, depth: 2 },
+  "admin curricula": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
   "admin feedback detail": { d1: 16, depth: 3 },
-  "admin feedback theme": { d1: 15, depth: 3 },
-  "admin feedback themes": { d1: 14, depth: 3 },
+  "admin feedback theme": { d1: 15, depth: 2 },
+  "admin feedback themes": { d1: 14, depth: 2 },
   // With the seed's one note listed, its attachments are read too (one query, same depth).
   "admin feedback": { d1: 16, depth: 3 },
-  "admin feature flags": { d1: 14, depth: 3 },
+  "admin feature flags": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the queue's channels waited for the flag reads.
   "admin moderation": { d1: 15, depth: 3 },
-  "admin request notes": { d1: 14, depth: 3 },
+  "admin request notes": { d1: 14, depth: 2 },
 };
 
 describe("D1 round trips per page (PERF-2)", () => {

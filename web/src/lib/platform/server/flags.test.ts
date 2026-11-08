@@ -120,6 +120,29 @@ describe("request cache and API guard", () => {
     expect(queries).toHaveBeenCalledTimes(2);
   });
 
+  it("lets a read that found the ADMIN role itself serve callers that pass it, so an admin page reads flags once", async () => {
+    setup.database.exec("UPDATE feature_flag SET audience='STAFF'");
+    setup.database.exec("INSERT INTO Roles(id,name) VALUES ('ADMIN','ADMIN'); INSERT INTO UserRoles(id,userId,roleId) VALUES ('a','amina','ADMIN')");
+    const locals = {};
+    const queries = vi.spyOn(setup.db, "prepare");
+    // Started beside the ADMIN guard, before it sets locals.isAdmin.
+    const early = getFlags(context({ locals }));
+    expect(await getFlags(context({ locals, isAdmin: true }))).toEqual(uniform(true));
+    expect(await early).toEqual(uniform(true));
+    // The flags and the role, once each.
+    expect(queries).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads again when a trusted ADMIN result contradicts an earlier trusted one", async () => {
+    setup.database.exec("UPDATE feature_flag SET audience='STAFF'");
+    const locals = {};
+    const queries = vi.spyOn(setup.db, "prepare");
+    expect(await getFlags(context({ locals, isAdmin: true }))).toEqual(uniform(true));
+    expect(await getFlags(context({ locals }))).toEqual(uniform(true));
+    expect(await getFlags(context({ locals, isAdmin: false }))).toEqual(uniform(false));
+    expect(queries).toHaveBeenCalledTimes(2);
+  });
+
   it("shares concurrent results across helpers and contexts using the same locals", async () => {
     const locals = {};
     const ctx = context({ locals });

@@ -40,16 +40,27 @@ Each sequential D1 round trip costs a visitor far from the database 200–300 ms
 - `getStudentJourney`;
 - the channel list (`channelsServer().list()`);
 - the cohort heading and certificates;
-- the admin navigation's counts.
+- the admin navigation's counts;
+- the person's onboarding state.
 
 The scope ends with the request, so a revoked role or assignment applies on the next one. POST, PUT, PATCH and DELETE requests get no scope: a handler may change something and then read it back.
 
 Reads also start as soon as what they depend on is known:
 - `getMe` reads flags and capabilities together, then attention, the mentoring count and Tembo usage together. The `spaces` flag still decides first.
-- `resolveSpacePage` starts SpacePage's frame reads as soon as the space is known. `resolveSpacePageWith` also starts the page's own reads beside onboarding.
-- An admin page's GET starts its Admin space right after the ADMIN guard, beside the page's own reads.
+- The space router starts the frame's reads (the sidebar's channels, the journey, the cohort heading, certificates, the admin counts and onboarding) as soon as the flags and capabilities are read, beside the rest of `getMe`, not after the page's frontmatter has the whole context (`startSpacePageFrame`). `resolveSpacePageWith` starts the page's own reads beside onboarding.
+- An admin page's GET starts its Admin space beside the ADMIN guard, which reads the same capabilities. A flags read made before the guard serves the callers that pass its result (`getFlags`).
 
-`src/test/perf/round-trips.render.test.ts` renders representative pages through the real middleware and sets a budget of queries and depth for each. Before PERF-2 they took 8–10 sequential round trips (auth excluded). After it they take 3–4.
+So the frame alone costs two round trips: flags and capabilities, then everything that depends on them.
+
+`src/test/perf/round-trips.render.test.ts` renders representative pages through the real middleware and sets a budget of queries and depth for each, with a page that has no reads of its own (`FramePage.astro`) in each kind of space. Before PERF-2 they took 8–10 sequential round trips (auth excluded). After it they took 3–4, and since perf-frame-floor the frame alone takes 2.
+
+## Authentication: the session cookie cache
+
+better-auth answers most session reads from its signed five-minute `session_data` cookie (`auth.ts`, `cookieCache`), with no D1 query. When that cookie is missing or stale, it reads the session and user from D1 (two queries, one round trip) and sets a fresh one. The middleware reads the session with `returnHeaders` (`src/lib/auth-session.ts`) and passes those cookies on with its response. Before, they were dropped, so after the first five minutes from sign-in every navigation read D1 twice. Two rules keep this safe:
+- a cookie the response sets itself wins, so signing out is never undone by the read before it;
+- nothing goes on a response a shared cache may keep (`Cache-Control: public`).
+
+A revoked session can therefore stay usable on a browser that holds a cached copy for up to five minutes, which is what `cookieCache` was configured for. Signing out clears the cached copy on that browser.
 
 ## The navigation harness
 
