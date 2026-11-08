@@ -41,6 +41,7 @@ export { default as Pill } from "./Pill";
 export { default as PillNav, type PillNavItem } from "./PillNav";
 export { default as Pager } from "./Pager";
 export { default as RoleBadge } from "./RoleBadge";
+export { default as SecretValue } from "./SecretValue";
 export { default as Sheet, type SheetTone } from "./Sheet";
 export { default as SpaceFile, type SpaceTabItem } from "./SpaceFile";
 export { default as SpaceGlyph } from "./SpaceGlyph";

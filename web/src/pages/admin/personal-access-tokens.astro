@@ -1,254 +1,242 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import { PersonalAccessTokenExpiry } from "@/components/admin/PersonalAccessTokenExpiry";
 import { env } from "cloudflare:workers";
-import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
-import { isAgentSession } from "@/lib/agent-auth";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import {
+  Button,
+  Card,
+  ConfirmStep,
+  DataCell,
+  DataRow,
+  DataTable,
+  EmptyState,
+  Notice,
+  PageHeader,
+  RowAction,
+  SecretValue,
+  SelectField,
+  StatusChip,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  withoutConfirm,
+} from "@/components/platform/ui";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { TOKENS_PATH, TOKEN_ACCESS_OPTIONS, TOKEN_EXPIRY_OPTIONS, revokeAction, tokenAccessLabel, tokenStatus } from "@/lib/admin/tokens";
+import { isAgentSession } from "@/lib/agent-auth";
+import { formatMomentDateTime } from "@/lib/display-date";
+import {
+  PersonalAccessTokenInputError,
   createPersonalAccessToken,
   listPersonalAccessTokens,
   parsePersonalAccessTokenDuration,
   parsePersonalAccessTokenScopes,
-  personalAccessTokenFamily,
   revokePersonalAccessToken,
-  type PersonalAccessTokenScope,
 } from "@/lib/personal-access-tokens";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 
+/*
+ * The admin's own personal access tokens: make one, see each one's access and
+ * whether it still works, and revoke one after a confirm step. A new token is
+ * shown once, in the response to the form that made it, so that response is
+ * never cached and never a redirect.
+ */
 Astro.response.headers.set("Cache-Control", "no-store");
 
 const userId = Astro.locals.user?.id;
 if (!userId) return Astro.redirect("/auth/login");
-if (
-  Astro.locals.personalAccessToken ||
-  isAgentSession(Astro.locals.session?.userAgent)
-) {
-  return new Response(
-    "Forbidden: delegated credentials cannot manage personal access tokens.",
-    { status: 403 }
-  );
+if (Astro.locals.personalAccessToken || isAgentSession(Astro.locals.session?.userAgent)) {
+  return new Response("Forbidden: delegated credentials cannot manage personal access tokens.", { status: 403 });
 }
 
-let createdToken: string | undefined;
-let message: string | undefined;
-let error: string | undefined;
+type Field = "label" | "access" | "duration";
+const UNAVAILABLE = "The database didn't answer, so nothing changed. Try again in a moment.";
+let created: { label: string; token: string } | undefined;
+let actionError: string | undefined;
+const fieldErrors: Partial<Record<Field, string>> = {};
+// What a refused create keeps, so the person fixes one field rather than starting again.
+let kept = { label: "", access: "read", duration: TOKEN_EXPIRY_OPTIONS[0].value };
 
 if (Astro.request.method === "POST") {
-  try {
-    if (!hasMatchingRequestOrigin(Astro.request)) {
-      throw new Error("The request origin could not be verified.");
-    }
-
-    const formData = await Astro.request.formData();
-    const action = String(formData.get("action") ?? "");
-    if (action === "create") {
-      const created = await createPersonalAccessToken({
+  const formData = await Astro.request.formData();
+  const action = formData.get("action");
+  if (!hasMatchingRequestOrigin(Astro.request)) {
+    actionError = "This request didn't come from this page, so nothing changed. Reload the page and try again.";
+    Astro.response.status = 403;
+  } else if (action === "create") {
+    kept = {
+      label: String(formData.get("label") ?? ""),
+      access: String(formData.get("access") ?? ""),
+      duration: String(formData.get("duration") ?? ""),
+    };
+    try {
+      const made = await createPersonalAccessToken({
         db: env.DB,
         userId,
-        label: String(formData.get("label") ?? ""),
-        durationHours: parsePersonalAccessTokenDuration(
-          formData.get("duration")
-        ),
-        scopes: parsePersonalAccessTokenScopes(formData.get("access")),
+        label: kept.label,
+        durationHours: parsePersonalAccessTokenDuration(kept.duration),
+        scopes: parsePersonalAccessTokenScopes(kept.access),
       });
-      createdToken = created.token;
-      message = `Created ${created.label}. Copy the token now; it will not be shown again.`;
-    } else if (action === "revoke") {
-      const revoked = await revokePersonalAccessToken(
-        env.DB,
-        userId,
-        String(formData.get("tokenId") ?? "")
-      );
-      message = revoked ? "Personal access token revoked." : "That active token was not found.";
-    } else {
-      throw new Error("Unsupported personal access token action.");
+      created = { label: made.label, token: made.token };
+      kept = { label: "", access: "read", duration: TOKEN_EXPIRY_OPTIONS[0].value };
+    } catch (caught) {
+      if (caught instanceof PersonalAccessTokenInputError) {
+        if (caught.field) fieldErrors[caught.field] = caught.message;
+        actionError = caught.field ? "Check the field marked below." : caught.message;
+        Astro.response.status = 400;
+      } else {
+        actionError = UNAVAILABLE;
+        Astro.response.status = 503;
+      }
     }
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : "Token update failed.";
+  } else if (action === "revoke") {
+    const revoked = await revokePersonalAccessToken(env.DB, userId, String(formData.get("tokenId") ?? "")).catch(() => null);
+    if (revoked === true) return redirectWithFlash(Astro, TOKENS_PATH, { tone: "success", title: "Token revoked" });
+    if (revoked === false) {
+      return redirectWithFlash(Astro, TOKENS_PATH, { tone: "info", title: "That token had already stopped working", message: "It was revoked or had expired, so nothing changed." });
+    }
+    actionError = UNAVAILABLE;
+    Astro.response.status = 503;
+  } else {
+    actionError = "Choose one of the actions on this page.";
+    Astro.response.status = 400;
   }
 }
 
-const tokens = await listPersonalAccessTokens(env.DB, userId);
+const flash = takeFlash(Astro);
+const [tokens, spaces] = await Promise.all([listPersonalAccessTokens(env.DB, userId), resolveSpacePage(Astro.locals, "adminTokens")]);
 const now = new Date();
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
-const accessLabel = (scopes: PersonalAccessTokenScope[]) => {
-  const family = personalAccessTokenFamily(scopes);
-  if (family === "admin") return scopes.includes("admin:write") ? "Admin, read/write" : "Admin, read only";
-  if (family === "channels") return scopes.includes("channels:write") ? "Channels, read/write" : "Channels, read only";
-  return "Community";
-};
-const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
-  if (revokedAt) return "Revoked";
-  if (expiresAt <= now) return "Expired";
-  return "Active";
-};
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminTokens");
-// Named as the Admin space's sidebar names it.
-const title = spaces ? "Personal access tokens" : "Personal Access Tokens";
+const rows = tokens.map((token) => ({ ...token, status: tokenStatus(token, now) }));
+const active = rows.filter((token) => token.status === "ACTIVE");
+const confirming = confirmingAction(Astro.url, active.map((token) => revokeAction(token.id)));
+const toRevoke = confirming ? active.find((token) => revokeAction(token.id) === confirming) : undefined;
+const cancelHref = withoutConfirm(Astro.url);
 ---
 
-<AdminLayout title={title} spaces={spaces}>
-  <div class="max-w-5xl space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
-      <p class="mt-2 max-w-3xl text-sm text-ink-secondary">
-        Create an expiring credential for command-line or automated verification.
-        A token acts as your current account and cannot grant roles you do not have.
-      </p>
-    </div>
+<AdminLayout title="Personal access tokens" titlePrefix={actionError ? "Error: " : undefined} spaces={spaces}>
+  <div class="flex max-w-5xl flex-col gap-8">
+    <PageHeader title="Personal access tokens">
+      An expiring credential for the command line or an automated check. A token acts as you, and can never do more than your account can.
+    </PageHeader>
 
-    {message && (
-      <div class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-        {message}
-      </div>
-    )}
-    {error && (
-      <div class="rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100">
-        {error}
-      </div>
-    )}
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
 
-    {createdToken && (
-      <section class="rounded-lg border border-primary/40 bg-dark/80 p-5 shadow-lg">
-        <h3 class="font-semibold text-white">One-time token</h3>
-        <p class="mt-1 text-sm text-ink-secondary">
-          Store this like a password. Send it only through a secure secret channel,
-          never in chat, logs, screenshots, or a command argument.
-        </p>
-        <div class="mt-4 flex items-start gap-3">
-          <code
-            id="personal-access-token"
-            class="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-primary"
-          >{createdToken}</code>
-          <Button
-            id="copy-personal-access-token"
-            type="button"
-          >Copy</Button>
-        </div>
-        <p class="mt-3 text-xs text-ink-muted">
-          Use the HTTP header <code>Authorization: Bearer &lt;token&gt;</code>.
-        </p>
-      </section>
-    )}
+    {
+      created && (
+        <SecretValue id="personal-access-token" title={`Your new token: ${created.label}`} value={created.token} copyLabel="Copy token">
+          Copy it now: it won't be shown again. Keep it like a password, and send it only through a secret store, never in chat, logs,
+          screenshots or a command's arguments.
+          <Fragment slot="usage">
+            Send it as the HTTP header <code class="font-mono">Authorization: Bearer &lt;token&gt;</code>.
+          </Fragment>
+        </SecretValue>
+      )
+    }
 
-    <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
-      <h3 class="text-lg font-semibold text-white">Create a token</h3>
-      <form method="POST" class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-end">
+    <Card as="section" aria-labelledby="create-token" className="flex flex-col gap-4">
+      <h2 id="create-token" class="text-lg text-ink-primary">Create a token</h2>
+      <form method="POST" action={TOKENS_PATH} class="grid gap-4 sm:grid-cols-2">
         <input type="hidden" name="action" value="create" />
-        <label class="flex flex-col gap-1.5 text-sm text-white/80">
-          Label
-          <input
-            name="label"
-            required
-            maxlength="50"
-            autocomplete="off"
-            placeholder="SAM production verifier"
-            class="form-control placeholder:text-ink-muted"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5 text-sm text-white/80">
-          Access
-          <select
-            name="access"
-            class="form-control"
-          >
-            <optgroup label="Admin">
-              <option value="read" selected>Admin: read only</option>
-              <option value="write">Admin: read and write</option>
-            </optgroup>
-            <optgroup label="Channels">
-              <option value="channels-read">Channels: read only</option>
-              <option value="channels-write">Channels: read and write</option>
-            </optgroup>
-          </select>
-        </label>
-        <PersonalAccessTokenExpiry />
-        <Button type="submit">Create token</Button>
-      </form>
-      <p class="mt-3 text-xs text-ink-muted">
-        Month options use 30-day periods.
-        Admin read/write tokens can submit admin changes without a browser Origin header, and decide
-        moderation cases through MCP.
-        Channel tokens read channels as you, seeing exactly what you see (hidden messages included),
-        and, with read and write, post, edit, delete, react, report, ask for a review and mark messages
-        read as you. They can't reach admin pages or moderation decisions, and stop working if you stop
-        being an admin. Revoke any you no longer need here while you are still an admin.
-        Prefer read-only unless the automation must perform a specific mutation.
-      </p>
-    </section>
-
-    <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
-      <h3 class="text-lg font-semibold text-white">Issued tokens</h3>
-      {tokens.length === 0 ? (
-        <p class="mt-3 text-sm text-ink-muted">No personal access tokens have been issued.</p>
-      ) : (
-        <div class="mt-4 overflow-x-auto">
-          <table class="w-full min-w-[760px] text-left text-sm">
-            <thead class="border-b border-teal/20 text-ink-muted">
-              <tr>
-                <th class="pb-2 pr-4 font-medium">Label</th>
-                <th class="pb-2 pr-4 font-medium">Token</th>
-                <th class="pb-2 pr-4 font-medium">Access</th>
-                <th class="pb-2 pr-4 font-medium">Last used</th>
-                <th class="pb-2 pr-4 font-medium">Expires (UTC)</th>
-                <th class="pb-2 pr-4 font-medium">Status</th>
-                <th class="pb-2 text-right font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tokens.map((token) => {
-                const state = tokenState(token.expiresAt, token.revokedAt);
-                return (
-                  <tr class="border-b border-teal/10 text-white/75">
-                    <td class="py-3 pr-4 font-medium text-white">{token.label}</td>
-                    <td class="py-3 pr-4 font-mono text-xs">{token.tokenPrefix}</td>
-                    <td class="py-3 pr-4">
-                      {accessLabel(token.scopes)}
-                    </td>
-                    <td class="py-3 pr-4">
-                      {token.lastUsedAt ? formatDate(token.lastUsedAt) : "Never"}
-                    </td>
-                    <td class="py-3 pr-4">{formatDate(token.expiresAt)}</td>
-                    <td class="py-3 pr-4">{state}</td>
-                    <td class="py-3 text-right">
-                      {state === "Active" ? (
-                        <form method="POST">
-                          <input type="hidden" name="action" value="revoke" />
-                          <input type="hidden" name="tokenId" value={token.id} />
-                          <Button variant="danger" size="sm" type="submit">Revoke</Button>
-                        </form>
-                      ) : (
-                        <span class="text-ink-muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <TextField
+          label="Label"
+          name="label"
+          required
+          maxLength={50}
+          autoComplete="off"
+          defaultValue={kept.label}
+          error={fieldErrors.label}
+          hint="What uses it, so you know which one to revoke: letters, numbers, spaces, dots, underscores and hyphens, up to 50."
+          className="sm:col-span-2"
+        />
+        <SelectField
+          label="Access"
+          name="access"
+          options={TOKEN_ACCESS_OPTIONS}
+          defaultValue={kept.access}
+          error={fieldErrors.access}
+          hint="Choose read only unless the automation must change something. Admin read and write can make admin changes without a browser, and decide moderation cases through MCP. A channels token reads channels exactly as you see them, and with write posts, edits, reacts and reports as you; it never reaches admin pages or moderation decisions."
+        />
+        <SelectField
+          label="Expires after"
+          name="duration"
+          options={TOKEN_EXPIRY_OPTIONS}
+          defaultValue={kept.duration}
+          error={fieldErrors.duration}
+          hint="A month is 30 days. Every token stops working if you stop being an admin."
+        />
+        <div class="sm:col-span-2">
+          <Button type="submit" variant="primary">Create token</Button>
         </div>
-      )}
+      </form>
+    </Card>
+
+    <section aria-labelledby="your-tokens" class="flex flex-col gap-4">
+      <h2 id="your-tokens" class="text-lg text-ink-primary">Your tokens</h2>
+
+      {
+        toRevoke && (
+          <ConfirmStep
+            title={`Revoke “${toRevoke.label}”?`}
+            confirmLabel="Revoke token"
+            cancelHref={cancelHref}
+            action={TOKENS_PATH}
+            fields={{ action: "revoke", tokenId: toRevoke.id }}
+          >
+            Anything using it stops working at once, and it can't be turned back on. Make a new token if you need one again.
+          </ConfirmStep>
+        )
+      }
+
+      <DataTable
+        caption="Your tokens"
+        columns={[{ label: "Label" }, { label: "Token" }, { label: "Access" }, { label: "Last used" }, { label: "Expires" }, { label: "Status" }, { label: "Action", align: "end" }]}
+        isEmpty={rows.length === 0}
+      >
+        {
+          rows.map((token) => (
+            <DataRow current={token.id === toRevoke?.id}>
+              <DataCell label="Label" primary>
+                {token.label}
+              </DataCell>
+              <DataCell label="Token">
+                <code class="font-mono text-[0.8125rem]">{token.tokenPrefix}</code>
+              </DataCell>
+              <DataCell label="Access">{tokenAccessLabel(token.scopes)}</DataCell>
+              <DataCell label="Last used">{token.lastUsedAt ? formatMomentDateTime(token.lastUsedAt) : "Never"}</DataCell>
+              <DataCell label="Expires">{formatMomentDateTime(token.expiresAt)}</DataCell>
+              <DataCell label="Status">
+                <StatusChip domain="token" status={token.status} />
+              </DataCell>
+              <DataCell label="Action" align="end">
+                {token.status === "ACTIVE" ? (
+                  <RowAction href={confirmHref(Astro.url, revokeAction(token.id))} row={token.label}>Revoke</RowAction>
+                ) : (
+                  <span class="text-ink-secondary">None</span>
+                )}
+              </DataCell>
+            </DataRow>
+          ))
+        }
+        <Fragment slot="empty">
+          <EmptyState title="No tokens yet" headingLevel={3}>
+            Tokens you create appear here, with their access and when they stop working.
+          </EmptyState>
+        </Fragment>
+      </DataTable>
     </section>
   </div>
 
-  {createdToken && (
-    <script>
-      document
-        .getElementById("copy-personal-access-token")
-        ?.addEventListener("click", async () => {
-          const token = document
-            .getElementById("personal-access-token")
-            ?.textContent?.trim();
-          if (token) await navigator.clipboard.writeText(token);
-        });
-    </script>
-  )}
+  {
+    created && (
+      <script>
+        for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy-secret]")) {
+          button.addEventListener("click", async () => {
+            const secret = document.getElementById(button.dataset.copySecret ?? "")?.textContent?.trim();
+            if (secret) await navigator.clipboard.writeText(secret);
+          });
+        }
+      </script>
+    )
+  }
 </AdminLayout>

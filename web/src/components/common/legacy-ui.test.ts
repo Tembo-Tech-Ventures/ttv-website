@@ -19,7 +19,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     files: [
     "components/platform/application/ApplicationAnswers.astro",
     "pages/admin/agent-access.astro",
-    "pages/admin/personal-access-tokens.astro",
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/[id].astro",
     "pages/admin/recordings/import.astro",
@@ -61,11 +60,9 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "the form-control utility": {
     pattern: /\bform-control\b/,
     files: [
-    "components/admin/PersonalAccessTokenExpiry.tsx",
     "components/blog/editor/PlainPostForm.astro",
     "components/platform/application/ApplicationAnswers.astro",
     "pages/admin/agent-access.astro",
-    "pages/admin/personal-access-tokens.astro",
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/[id].astro",
     "pages/admin/recordings/import.astro",
