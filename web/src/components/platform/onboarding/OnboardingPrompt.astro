@@ -1,0 +1,28 @@
+---
+/**
+ * Where a space home puts the one-time card (ExistingAccountCard): after the
+ * page's title and its own primary action, never above them, so the page's
+ * task comes first and keeps the one peach button (style-guide rollout S2).
+ * Each home places this itself, right after that action. Renders nothing
+ * once the card has been saved or hidden, or while onboarding is off.
+ */
+import type { SpaceId } from "@/lib/platform/contracts";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import ExistingAccountCard from "./ExistingAccountCard.astro";
+import type { OnboardingView } from "./framing";
+
+interface Props {
+  view: OnboardingView | null | undefined;
+  /** The home this sits on: its forms return here. */
+  space: SpaceId;
+  class?: string;
+}
+
+const { view, space, class: spacing } = Astro.props;
+---
+
+{view?.prompt && (
+  <div class={spacing} data-onboarding-prompt-slot>
+    <ExistingAccountCard prompt={view.prompt} returnTo={SPACE_PATHS[space]} />
+  </div>
+)}

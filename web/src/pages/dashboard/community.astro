@@ -4,6 +4,7 @@ import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
+import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
 import { PARTNER } from "@/components/platform/onboarding/copy";
 import { offersCohort } from "@/components/platform/onboarding/framing";
 import { resolveSpacePageWith, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
@@ -39,8 +40,13 @@ const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), ste
     <SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} journey={journey} channels={channels}>
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class={invitation ? "mb-4" : "mb-10"} />}
       {invitation && <CohortInvitation step={invitation} />}
-      <ChannelShortcuts model={shortcuts} class="mb-6" />
       <CommunityApp client:load view="journey" embedded framing={framing} initial={initial} />
+      {/*
+        * The island draws the page's h1 and its primary action, so the channels card and the
+        * one-time card follow it: neither comes before the page's title (QAO-05, rollout S2).
+        */}
+      <ChannelShortcuts model={shortcuts} class="mt-10" />
+      <OnboardingPrompt view={spaces.onboarding} space={spaces.space} class="mt-10" />
     </SpacePage>
   ) : (
     <BaseLayout title="Your community journey | TTV" noIndex>

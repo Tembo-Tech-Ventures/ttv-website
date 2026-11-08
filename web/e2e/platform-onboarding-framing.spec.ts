@@ -247,24 +247,23 @@ test.describe("the one-time card for existing accounts (S4)", () => {
     test.skip(await card.count() === 0, "Onboarding is off here.");
     await expect(page.getByRole("region", { name: "How do you take part now?" })).toBeVisible();
     await expect(card).toContainText("We use this to choose where you start and what we suggest.");
-    if (desktop()) {
-      await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeChecked();
-      await expect(card.getByRole("checkbox", { name: /^Mentor/ })).not.toBeChecked();
-      await expect(card.getByRole("checkbox", { name: /^Find people for your organisation/ })).not.toBeChecked();
-      await expect(card.getByRole("button", { name: "Choose" })).toBeHidden();
-    } else {
-      // Compact on a phone, so the page's own task stays above the fold; Choose opens the toggles.
-      await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeHidden();
-      await expect(card.getByRole("button", { name: "Save" })).toBeHidden();
-      const choose = card.getByRole("button", { name: "Choose" });
-      await expect(choose).toHaveAttribute("aria-expanded", "false");
-      await expect(page.getByTestId("student-next-step")).toBeInViewport();
-      await page.screenshot({ path: evidence("existing-prompt-compact") });
-      await choose.click();
-      await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeFocused();
-      await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeChecked();
-      await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
-    }
+    // A side note after the page's own next step, which keeps the one peach action (style-guide rollout S2).
+    const nextStep = page.getByTestId("student-next-step");
+    expect(await nextStep.evaluate((step, after) => Boolean(step.compareDocumentPosition(after!) & Node.DOCUMENT_POSITION_FOLLOWING), await card.elementHandle())).toBe(true);
+    await expect(card.locator("button.bg-primary")).toHaveCount(0);
+    // Compact at every width, so the page's own task stays above the fold; Choose opens the toggles.
+    await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeHidden();
+    await expect(card.getByRole("button", { name: "Save" })).toBeHidden();
+    const choose = card.getByRole("button", { name: "Choose" });
+    await expect(choose).toHaveAttribute("aria-expanded", "false");
+    await expect(nextStep).toBeInViewport();
+    await page.screenshot({ path: evidence("existing-prompt-compact") });
+    await choose.click();
+    await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeFocused();
+    await expect(card.getByRole("checkbox", { name: /^Build and learn/ })).toBeChecked();
+    await expect(card.getByRole("checkbox", { name: /^Mentor/ })).not.toBeChecked();
+    await expect(card.getByRole("checkbox", { name: /^Find people for your organisation/ })).not.toBeChecked();
+    await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
     await noSideways(page);
     await page.screenshot({ path: evidence("existing-prompt") });
     await runAxe(page, test.info(), "cohort, existing account card");
@@ -302,6 +301,7 @@ test.describe("the one-time card for existing accounts (S4)", () => {
     await as(page, baseURL, "onb-grace");
     await open(page, "/dashboard/cohort");
     test.skip(await prompt(page).count() === 0, "Grace saved her choices in an earlier run: reseed to replay.");
+    await prompt(page).getByRole("button", { name: "Choose" }).click();
     await prompt(page).locator("label[data-intent='mentor']").click();
     await expect(prompt(page).getByRole("checkbox", { name: /^Mentor/ })).toBeChecked();
     await prompt(page).getByRole("button", { name: "Save" }).click();
@@ -538,6 +538,9 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     await open(page, "/dashboard");
     expect(new URL(page.url()).pathname).toBe("/dashboard/mentoring");
     test.skip(await prompt(page).count() === 0, "Wanjiku saved the card in an earlier run: reseed to replay it.");
+    // After Mentoring's own primary, never above it (style-guide rollout S2).
+    expect(await page.getByRole("link", { name: "Review shared work" }).evaluate((primary, card) => Boolean(primary.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING), await prompt(page).elementHandle())).toBe(true);
+    await prompt(page).getByRole("button", { name: "Choose" }).click();
     // A mentor from before onboarding: Mentor is already Active and ticked.
     await expect(prompt(page).getByRole("checkbox", { name: "Mentor, Active", exact: true })).toBeChecked();
     await noStraySpaces(page);
