@@ -74,6 +74,7 @@ beforeAll(async () => {
 
 const PAGES = {
   "cohort overview": { path: () => "/dashboard/cohort", page: () => import("@/pages/dashboard/index.astro"), user: STUDENT },
+  "cohort sessions": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: STUDENT },
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
   conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
@@ -159,6 +160,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "frame only, profile": { d1: 16, depth: 2 },
   "frame only, admin": { d1: 13, depth: 2 },
   "cohort overview": { d1: 16, depth: 2 },
+  // Its one read of its own is the recordings, once the router has the space context.
+  "cohort sessions": { d1: 15, depth: 3 },
   // The conversation's reads chain off the route channel, which the router reads beside the space
   // context (page-channels: 6, 4 and 8 deep before). A first visit reads the view too, unrendered,
   // rather than wait for the habits' answer.
