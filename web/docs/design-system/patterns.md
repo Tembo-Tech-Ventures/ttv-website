@@ -152,6 +152,13 @@ jumps or blanks.
 
 ## Lists and filters
 
+Many things compared across columns are a `DataTable`: the first cell names
+the row and links to it, actions are quiet `RowAction`s named by their row,
+headers are sentence case, and an empty list is an `EmptyState` in its place.
+Things read one at a time are a `DataList`. A list longer than a page ends in
+a `Pager`. An action on several rows at once takes `DataSelectCell`s and one
+button for the selection, with a confirm step if it removes anything.
+
 Views worth linking to are addresses: a `PillNav` of links, current view
 `aria-current="page"`, working without JavaScript. Filters that only narrow
 what is on screen are `Pill` toggles. More than five or six options: a

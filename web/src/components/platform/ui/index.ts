@@ -13,9 +13,23 @@ export { default as Chip } from "./Chip";
 export { default as ConfirmStep } from "./ConfirmStep";
 export { CONFIRM_PARAM, confirmHref, confirmingAction, withoutConfirm } from "./confirm";
 export { default as CountBadge } from "./CountBadge";
+export { default as DataList, DataListItem } from "./DataList";
+export { default as DataTable, DataCell, DataRow, DataSelectCell, RowAction, type DataColumn } from "./DataTable";
 export { default as DescriptionList, DescriptionItem } from "./DescriptionList";
 export { default as EmptyState } from "./EmptyState";
-export { Checkbox, ChoiceGroup, SelectField, TextAreaField, TextField, fieldAria, fieldId, type FieldOption } from "./Field";
+export {
+  Checkbox,
+  ChoiceCard,
+  ChoiceGroup,
+  FileField,
+  PrefixField,
+  SelectField,
+  TextAreaField,
+  TextField,
+  fieldAria,
+  fieldId,
+  type FieldOption,
+} from "./Field";
 export { default as IconButton } from "./IconButton";
 export { default as Menu, MenuItem, MenuSection, MenuSeparator } from "./Menu";
 export { default as Notice, type NoticeAnnounce, type NoticeTone } from "./Notice";
@@ -24,6 +38,7 @@ export { default as PageTitle } from "./PageTitle";
 export { default as PersonMarker, type PersonKind } from "./PersonMarker";
 export { default as Pill } from "./Pill";
 export { default as PillNav, type PillNavItem } from "./PillNav";
+export { default as Pager } from "./Pager";
 export { default as RoleBadge } from "./RoleBadge";
 export { default as Sheet, type SheetTone } from "./Sheet";
 export { default as SpaceFile, type SpaceTabItem } from "./SpaceFile";
@@ -37,9 +52,16 @@ export { default as TemboMark } from "./TemboMark";
 export { default as TextReaction, REACTIONS } from "./TextReaction";
 export { cx } from "./cx";
 export {
+  BUTTON_SIZES,
   BUTTON_VARIANTS,
+  CHOICE_BOX,
+  CONTROL,
+  CONTROL_HEIGHT,
+  FIELD_ERROR,
   FOCUS_RING,
+  HINT,
   INSET_FOCUS_RING,
+  LABEL,
   buttonClass,
   linkClass,
   pillClass,

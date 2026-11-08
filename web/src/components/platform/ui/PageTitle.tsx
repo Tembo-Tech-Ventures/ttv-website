@@ -13,7 +13,9 @@ type PageTitleProps = {
 };
 
 /**
- * The page's title: its one Mattone heading, 36–60px. Long words wrap rather
+ * The page's title: its one Mattone heading, 36–60px; on the narrowest phones
+ * it eases down to 28px (9vw), so a long word such as "Applications" fits the
+ * line instead of breaking in two. A word too long even then wraps rather
  * than push the page sideways, even inside a flex row, and the lines balance
  * so a two-line title does not leave one word alone. Sections below it are
  * Maven Pro h2s, which the base styles give every h2 without a class.
@@ -31,7 +33,7 @@ export default function PageTitle({ children, id, as: Tag = "h1", className }: P
       id={id}
       data-page-title
       className={cx(
-        "my-[0.2em] font-heading leading-[1.1] tracking-heading text-4xl text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl",
+        "my-[0.2em] font-heading leading-[1.1] tracking-heading text-[clamp(1.75rem,9vw,2.25rem)] text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl",
         className,
       )}
     >

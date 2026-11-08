@@ -154,3 +154,43 @@ test("is linked from every public page's footer", async ({ page }) => {
   const link = page.locator("footer").getByRole("link", { name: "Style guide", exact: true });
   await expect(link).toHaveAttribute("href", "/style-guide");
 });
+
+test("draws every checkbox and radio 20px, and makes each a 44px target on a touch screen without moving its row", async ({ page }, testInfo) => {
+  const touch = testInfo.project.name.includes("mobile");
+  await open(page, "/style-guide/components");
+  const boxes = await page.locator("main input.kit-choice").evaluateAll((inputs) =>
+    inputs.map((input) => {
+      const outer = input.getBoundingClientRect();
+      const border = Number.parseFloat(getComputedStyle(input).borderTopWidth);
+      return { width: Math.round(outer.width), height: Math.round(outer.height), drawn: Math.round(outer.width - 2 * border) };
+    }),
+  );
+  expect(boxes.length).toBeGreaterThan(4);
+  for (const box of boxes) {
+    expect(box.drawn).toBe(20);
+    expect(Math.min(box.width, box.height)).toBe(touch ? 44 : 20);
+  }
+  // The drawn box sits where an unenlarged one would: its label starts the same distance from it.
+  const gap = await page.locator("#fields [data-choice='checkbox']").first().evaluate((row) => {
+    const input = row.querySelector("input")!;
+    const border = Number.parseFloat(getComputedStyle(input).borderLeftWidth);
+    return Math.round(row.querySelector("label")!.getBoundingClientRect().left - (input.getBoundingClientRect().right - border));
+  });
+  expect(gap).toBe(12);
+});
+
+test("stacks a data table on a phone, each fact said with its column, and never scrolls sideways", async ({ page }, testInfo) => {
+  await open(page, "/style-guide/components");
+  const table = page.locator("#data-table table");
+  const display = await table.evaluate((element) => getComputedStyle(element).display);
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    expect(display).toBe("block");
+    const cohort = table.locator("td[data-label='Cohort']").first();
+    expect(await cohort.evaluate((cell) => getComputedStyle(cell, "::before").content)).toContain("Cohort");
+  } else {
+    expect(display, testInfo.project.name).toBe("table");
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(table.getByRole("checkbox", { name: "Select Wanjiku Mwangi" })).toBeVisible();
+  await expect(table.getByRole("link", { name: "Review Wanjiku Mwangi" })).toBeVisible();
+});

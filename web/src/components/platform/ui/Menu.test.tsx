@@ -73,7 +73,8 @@ describe("Menu", () => {
   it("is a kit button: an IconButton without words, a Button with them, 44px on touch", () => {
     const icon = renderToStaticMarkup(<Actions />);
     expect(icon).toContain('data-variant="ghost"');
-    expect(icon).toContain("pointer-coarse:size-11");
+    expect(icon).toContain("pointer-coarse:min-w-11");
+    expect(icon).toContain("pointer-coarse:min-h-11");
     const words = renderToStaticMarkup(
       <Menu label="Share project" icon={<Icon />}>
         <MenuItem>Chama ledger</MenuItem>

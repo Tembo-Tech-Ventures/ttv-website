@@ -1,0 +1,61 @@
+/*
+ * Below 40rem a DataTable stops being a grid: each row becomes a block, and
+ * each fact in it is said with its column's name, so the table never scrolls
+ * sideways. The names come from each cell's `data-label` and are hidden from
+ * screen readers (`/ ""`), which still hear the column headers.
+ */
+@media (width < 40rem) {
+  .kit-table,
+  .kit-table tbody,
+  .kit-table__row {
+    display: block;
+  }
+
+  .kit-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .kit-table__row {
+    padding-block: 0.75rem;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+
+  .kit-table__cell {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border-bottom: 0;
+    text-align: start;
+  }
+
+  .kit-table__cell::before {
+    content: attr(data-label) / "";
+    flex: 0 0 7rem;
+    color: var(--color-ink-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  /* The cell that names the row leads it, without a label of its own. */
+  .kit-table__cell[data-primary]::before,
+  .kit-table__cell[data-label=""]::before {
+    content: none;
+  }
+
+  .kit-table__cell[data-primary] {
+    padding-bottom: 0.375rem;
+  }
+
+  /* The selection box stands to the left of the row's name. */
+  .kit-table__cell[data-select] {
+    display: block;
+    float: left;
+    width: auto;
+    padding: 0.125rem 0.75rem 0 0;
+  }
+}

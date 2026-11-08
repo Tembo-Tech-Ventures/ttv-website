@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "./cx";
+import { filled } from "./slot";
 
 type EmptyStateProps = {
   /** What is missing, said plainly: "No requests yet". */
@@ -35,14 +36,14 @@ export default function EmptyState({ title, children, action, mark, headingLevel
         className,
       )}
     >
-      {mark && (
+      {filled(mark) && (
         <span aria-hidden="true" className="mb-1 inline-flex">
           {mark}
         </span>
       )}
       <Heading className="m-0 font-body text-base leading-snug font-bold text-ink-primary">{title}</Heading>
-      {children && <div className="max-w-prose text-sm leading-relaxed text-ink-secondary">{children}</div>}
-      {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
+      {filled(children) && <div className="max-w-prose text-sm leading-relaxed text-ink-secondary">{children}</div>}
+      {filled(action) && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
     </div>
   );
 }

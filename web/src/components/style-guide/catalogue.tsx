@@ -11,9 +11,16 @@ import {
   ChoiceGroup,
   ConfirmStep,
   CountBadge,
+  DataCell,
+  DataList,
+  DataListItem,
+  DataRow,
+  DataSelectCell,
+  DataTable,
   DescriptionItem,
   DescriptionList,
   EmptyState,
+  FileField,
   IconButton,
   Menu,
   MenuItem,
@@ -22,9 +29,12 @@ import {
   Notice,
   PageHeader,
   PageTitle,
+  Pager,
   PersonMarker,
   PillNav,
+  PrefixField,
   RoleBadge,
+  RowAction,
   SelectField,
   SpaceFile,
   StatusChip,
@@ -129,7 +139,7 @@ import { ButtonLink, PageHeader } from "@/components/platform/ui";
   {
     id: "button",
     name: "Button",
-    exports: ["Button", "Spinner", "buttonClass"],
+    exports: ["Button", "Spinner", "buttonClass", "BUTTON_SIZES"],
     live: "button",
     summary: "An action on this page: send, save, accept. One primary per view; everything else is quiet or ghost.",
     specimen: () => (
@@ -696,7 +706,7 @@ const asking = confirmingAction(Astro.url, ["remove-mentor"]);
   {
     id: "fields",
     name: "Fields",
-    exports: ["TextField", "TextAreaField", "SelectField", "Checkbox", "ChoiceGroup"],
+    exports: ["TextField", "TextAreaField", "SelectField", "Checkbox", "ChoiceGroup", "CONTROL", "CONTROL_HEIGHT", "CHOICE_BOX", "LABEL", "HINT", "FIELD_ERROR"],
     summary: "Labelled form controls: a label above, a hint under it, and after a rejected submit an error that says how to fix it.",
     specimen: () => (
       <div className="grid max-w-xl gap-5">
@@ -743,12 +753,162 @@ const asking = confirmingAction(Astro.url, ["remove-mentor"]);
       "Labels are linked by id, which comes from id or name and is never generated.",
       "Hints and errors are read with the control (aria-describedby); errors mark it aria-invalid.",
       "Edges are 3:1 against every sheet; one-line controls are a 44px target.",
+      "A checkbox or radio is drawn 20px but is a 44px target on a touch screen, and the system draws it in forced colours.",
     ],
     code: `<form method="POST">
   <TextField name="email" type="email" label="Email" hint="Mentors reply here." error={errors.email} required />
   <ChoiceGroup name="format" label="How would you like to meet?" options={FORMATS} defaultValue={values.format} />
   <Button variant="primary" type="submit">Send request</Button>
 </form>`,
+  },
+  {
+    id: "more-fields",
+    name: "FileField, PrefixField and ChoiceCard",
+    exports: ["FileField", "PrefixField", "ChoiceCard"],
+    summary: "Three fields for answers the plain ones don't fit: a file, a value that continues a fixed address, and choices that need a sentence each.",
+    specimen: () => (
+      <div className="grid max-w-xl gap-5">
+        <FileField id="guide-recording" name="guide-recording" label="Recording" hint="An MP4 or WebM, up to 2 GB." accept="video/mp4,video/webm" />
+        <PrefixField
+          id="guide-handle"
+          name="guide-handle"
+          label="Your public address"
+          hint="Letters, numbers and hyphens."
+          prefix="tembotechventures.com/talent/"
+          defaultValue="wanjiku-mwangi"
+        />
+        <ChoiceGroup
+          name="guide-part"
+          label="How will you take part?"
+          appearance="cards"
+          defaultValue="cohort"
+          options={[
+            { value: "cohort", label: "Learning in a cohort", hint: "Sessions, channels and Tembo for your cohort." },
+            { value: "mentor", label: "Mentoring", hint: "Give time to people building their first projects." },
+          ]}
+        />
+      </div>
+    ),
+    use: [
+      "FileField for an upload, with what it takes in the hint: the kinds of file and the size limit.",
+      "PrefixField where the value finishes something fixed: a profile's handle, a post's slug.",
+      "ChoiceGroup appearance=\"cards\" (or ChoiceCard alone) when each answer needs a sentence to be understood.",
+    ],
+    avoid: ["A ChoiceCard for a yes or no: that is a Checkbox.", "Hiding the prefix in a placeholder: it is part of what the person is choosing."],
+    access: [
+      "The file picker is the browser's own, so it works with every keyboard and screen reader.",
+      "The prefix is read with the field (aria-describedby) and wraps above it on a narrow screen.",
+      "A whole ChoiceCard is its label, one large target; the chosen card says so with its box as well as its colour.",
+    ],
+    code: `<FileField name="file" label="Recording" hint="An MP4 or WebM, up to 2 GB." accept="video/mp4,video/webm" required />
+<PrefixField name="handle" label="Your public address" prefix="tembotechventures.com/talent/" defaultValue={values.handle} />
+<ChoiceGroup name="intent" label="How will you take part?" appearance="cards" options={INTENTS} />`,
+  },
+  {
+    id: "data-table",
+    name: "DataTable",
+    exports: ["DataTable", "DataRow", "DataCell", "DataSelectCell", "RowAction"],
+    summary: "Many things side by side: people, applications, recordings. A real table on a wide screen; on a phone each row stacks and names each fact.",
+    specimen: () => (
+      <DataTable
+        caption="Applications"
+        columns={[{ label: "Select", hidden: true }, { label: "Name" }, { label: "Cohort" }, { label: "Status" }, { label: "Applied", align: "end" }, { label: "Actions", hidden: true }]}
+      >
+        {[
+          { person: wanjiku, cohort: "Cohort 05", status: "APPROVED" as const, applied: "3 Nov" },
+          { person: lucy, cohort: "Cohort 05", status: "PENDING" as const, applied: "5 Nov" },
+        ].map((row) => (
+          <DataRow key={row.person.id}>
+            <DataSelectCell name="guide-applications" value={row.person.id} row={row.person.name} />
+            <DataCell label="Name" primary>
+              <a href="#data-table" className={linkClass()}>
+                {row.person.name}
+              </a>
+            </DataCell>
+            <DataCell label="Cohort">{row.cohort}</DataCell>
+            <DataCell label="Status">
+              <StatusChip domain="application" status={row.status} />
+            </DataCell>
+            <DataCell label="Applied" align="end">
+              {row.applied}
+            </DataCell>
+            <DataCell label="">
+              <RowAction href="#data-table" row={row.person.name}>
+                Review
+              </RowAction>
+            </DataCell>
+          </DataRow>
+        ))}
+      </DataTable>
+    ),
+    use: [
+      "Lists people compare across columns: the admin's users, applications, recordings.",
+      "The first cell names the row and links to it; actions are quiet RowActions named by their row.",
+      "isEmpty with an EmptyState in empty, so an empty list says what fills it.",
+    ],
+    avoid: ["Uppercase or tracked headers: headers are sentence case.", "A primary button in every row. The page has one primary; rows are quiet.", "A table for one thing's facts: that is a DescriptionList."],
+    access: [
+      "Table roles are spelled out, so the table is still a table when it stacks on a phone.",
+      "Each stacked fact is shown with its column's name, which screen readers skip in favour of the real header.",
+      "A selection box is named by its row: “Select Wanjiku Mwangi”.",
+    ],
+    code: `<DataTable caption="Users" columns={[{ label: "Name" }, { label: "Joined", align: "end" }, { label: "Actions", hidden: true }]}
+  isEmpty={users.length === 0}>
+  {users.map((user) => (
+    <DataRow>
+      <DataCell label="Name" primary><a href={\`/admin/users/\${user.id}\`} class={linkClass()}>{user.name}</a></DataCell>
+      <DataCell label="Joined" align="end">{formatDay(user.createdAt)}</DataCell>
+      <DataCell label=""><RowAction href={\`/admin/users/\${user.id}\`} row={user.name}>Open</RowAction></DataCell>
+    </DataRow>
+  ))}
+  <Fragment slot="empty"><EmptyState title="No people yet">…</EmptyState></Fragment>
+</DataTable>`,
+  },
+  {
+    id: "data-list",
+    name: "DataList",
+    exports: ["DataList", "DataListItem"],
+    summary: "Things read one at a time rather than compared: notes, themes, requests. A title that links, a line of facts, a status and room for actions.",
+    specimen: () => (
+      <DataList label="Feedback notes" className="max-w-2xl">
+        <DataListItem
+          title="The sessions page loads slowly on my phone"
+          href="#data-list"
+          meta={`${wanjiku.name} · 3 Nov · Cohort 05`}
+          status={<StatusChip domain="feedback" status="NEW" />}
+          actions={
+            <RowAction href="#data-list" row="The sessions page loads slowly on my phone">
+              Reply
+            </RowAction>
+          }
+        >
+          It takes a while before the recording starts, even on wifi.
+        </DataListItem>
+        <DataListItem title="More time for questions after each session" href="#data-list" meta={`${lucy.name} · 1 Nov`} status={<StatusChip domain="feedback" status="RESOLVED" />} />
+      </DataList>
+    ),
+    use: ["A queue or a feed where each item is read on its own.", "headingLevel to fit the page: 2 straight under the title, 3 under a section."],
+    avoid: ["Cards around each item: hairlines separate them.", "More than two actions on an item: open it instead."],
+    access: ["Each item's title is a heading, so a screen reader can move from item to item.", "The list is named (label), so it can be found among the page's landmarks and lists."],
+    code: `<DataList label="Feedback notes" isEmpty={notes.length === 0}>
+  {notes.map((note) => (
+    <DataListItem title={note.summary} href={\`/admin/feedback/\${note.id}\`} meta={\`\${note.author} · \${formatDay(note.createdAt)}\`}>
+      <Fragment slot="status"><StatusChip domain="feedback" status={note.status} /></Fragment>
+    </DataListItem>
+  ))}
+  <Fragment slot="empty"><EmptyState title="No notes yet">…</EmptyState></Fragment>
+</DataList>`,
+  },
+  {
+    id: "pager",
+    name: "Pager",
+    exports: ["Pager"],
+    summary: "The way through a list longer than a page: links to the previous and next pages, and where the reader is.",
+    specimen: () => <Pager previousHref="#pager" nextHref="#pager" summary="21–40 of 133" label="Applications pages" />,
+    use: ["Any list that stops: the users, feedback, access requests.", "Cursor or offset pages alike: it only needs the two addresses."],
+    avoid: ["“Load more” buttons that need a script.", "A disabled link at an end of the list: leave it out."],
+    access: ["A named nav of plain links, rel=prev and rel=next, so each page has its own address and works without JavaScript."],
+    code: `<Pager previousHref={previous} nextHref={next} summary="21–40 of 133" />`,
   },
   {
     id: "tab-file",

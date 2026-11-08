@@ -204,7 +204,8 @@ describe("reading without JavaScript", () => {
     for (const button of buttons) {
       expect(button.dataset.variant).toBe("ghost");
       expect(button.getAttribute("aria-haspopup")).toBe("menu");
-      expect(button.className).toContain("pointer-coarse:size-11");
+      expect(button.className).toContain("pointer-coarse:min-w-11");
+      expect(button.className).toContain("pointer-coarse:min-h-11");
     }
   });
 

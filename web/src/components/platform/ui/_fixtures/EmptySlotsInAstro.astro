@@ -1,0 +1,33 @@
+---
+/** Named slots left empty by a condition, the way an `.astro` page writes them, for slots.render.test.ts. */
+import { ButtonLink, EmptyState, Notice, PageHeader } from "@/components/platform/ui";
+
+interface Props {
+  show: boolean;
+}
+const { show } = Astro.props;
+---
+
+<PageHeader title="Programs">
+  {show && "Every cohort."}
+  {show && (
+    <Fragment slot="action">
+      <ButtonLink href="/new" variant="primary">New cohort</ButtonLink>
+    </Fragment>
+  )}
+</PageHeader>
+<EmptyState title="No cohorts yet">
+  {show && "Create one."}
+  {show && (
+    <Fragment slot="action">
+      <ButtonLink href="/new">New cohort</ButtonLink>
+    </Fragment>
+  )}
+</EmptyState>
+<Notice tone="info" title="Applications are closed">
+  {show && (
+    <Fragment slot="actions">
+      <ButtonLink href="/open" size="sm">Open them</ButtonLink>
+    </Fragment>
+  )}
+</Notice>

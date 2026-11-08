@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import Button, { BUTTON_VARIANTS } from "./Button";
 import CountBadge from "./CountBadge";
 import IconButton from "./IconButton";
+import { buttonClass } from "./recipes";
 
 const Icon = () => <svg data-icon="true" />;
 
@@ -165,10 +166,24 @@ describe("IconButton", () => {
     );
   });
 
-  it("is a 44px target on touch screens", () => {
-    expect(renderToStaticMarkup(<IconButton label="Search" icon={<Icon />} size="sm" />)).toContain(
-      "pointer-coarse:size-11",
-    );
+  it("is a 44px square target on touch screens", () => {
+    const html = renderToStaticMarkup(<IconButton label="Search" icon={<Icon />} size="sm" />);
+    expect(html).toContain("pointer-coarse:min-h-11");
+    expect(html).toContain("pointer-coarse:min-w-11");
+  });
+
+  it("is built from the button recipe, so each variant looks as the same Button does", () => {
+    const html = renderToStaticMarkup(<IconButton label="Search" icon={<Icon />} variant="quiet" size="md" />);
+    const classes = /class="([^"]+)"/.exec(html)![1];
+    expect(classes).toBe(buttonClass({ variant: "quiet", size: "md", iconOnly: true, className: "relative" }));
+    expect(classes).toContain(BUTTON_VARIANTS.quiet);
+    expect(classes).toContain("size-10");
+  });
+
+  it("goes quiet when disabled, the same way a Button does", () => {
+    const html = renderToStaticMarkup(<IconButton label="Search" icon={<Icon />} variant="primary" disabled />);
+    expect(html).not.toContain("bg-primary");
+    expect(html).toContain("text-ink-muted");
   });
 });
 

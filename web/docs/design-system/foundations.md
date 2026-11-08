@@ -59,7 +59,7 @@ pre-spaces dashboard. Don't use them in new platform work.
 
 | Role | Face | Size | Notes |
 |---|---|---|---|
-| Page title (h1) | Mattone Black | 36–60px | One per screen, from `PageTitle` or `PageHeader`. `tracking-heading` |
+| Page title (h1) | Mattone Black | 36–60px (28px on a 320px phone) | One per screen, from `PageTitle` or `PageHeader`. `tracking-heading` |
 | Section (h2) | Maven Pro bold | 24–30px | The base styles set it: no class needed |
 | Heading in a card (h3–h6) | Maven Pro bold | 16–18px | |
 | Body | Maven Pro | 16px, `leading-relaxed` | Prose stops at about 70 characters a line |
