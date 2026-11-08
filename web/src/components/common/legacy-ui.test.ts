@@ -52,7 +52,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/admin/feedback/[id].astro",
     "pages/admin/feedback/index.astro",
     "pages/admin/feedback/themes/[id].astro",
-    "pages/admin/index.astro",
     "pages/admin/profiles/[id].astro",
     "pages/admin/programs/[id].astro",
     "pages/admin/programs/new.astro",

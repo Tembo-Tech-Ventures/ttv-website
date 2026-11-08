@@ -1,6 +1,7 @@
 ---
+import { PiArrowRight } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import Card from "@/components/common/Card.astro";
+import { Card, EmptyState, FOCUS_RING, PageTitle } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { count, eq } from "drizzle-orm";
@@ -10,13 +11,20 @@ import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { MODERATION_PATH } from "@/components/admin/moderation/case-model";
 import { requestNotesAttention, requestNotesPaths } from "@/components/admin/moderation/request-notes";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 
 const db = drizzle(env.DB, { schema });
 
-// Independent counts, read together (PERF-2).
-const [[usersResult], [programsResult], statusCounts, [flaggedProfiles], [pendingProjects], adminAttention] = await Promise.all([
+// Request notes waiting for a check (QA4-04): they live under /admin/moderation, which needs
+// `channels`, and the tab needs `mentor_requests`. Counted once here, for the sidebar badge too
+// (0 while either is off, which is what the layout would count).
+const { user, isAdmin } = Astro.locals;
+const flagContext = { db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals };
+
+// Independent counts, the flags and the Admin space, read together (PERF-2).
+const [
+  [usersResult], [programsResult], statusCounts, [flaggedProfiles], [pendingProjects], adminAttention, channelsOn, mentorRequestsOn, spaces,
+] = await Promise.all([
   db.select({ value: count() }).from(schema.user),
   db.select({ value: count() }).from(schema.program),
   db.select({ status: schema.programApplication.status, value: count() })
@@ -29,6 +37,10 @@ const [[usersResult], [programsResult], statusCounts, [flaggedProfiles], [pendin
     .from(schema.clientProject)
     .where(eq(schema.clientProject.status, "PENDING")),
   getAdminAttention(env.DB),
+  user ? isFlagEnabled(flagContext, "channels") : false,
+  user ? isFlagEnabled(flagContext, "mentor_requests") : false,
+  // In the Admin space while `spaces` is on for this admin (T02), named as its sidebar names it.
+  resolveSpacePage(Astro.locals, "adminHome"),
 ]);
 
 const totalApps = statusCounts.reduce((sum, r) => sum + r.value, 0);
@@ -36,37 +48,32 @@ const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value])
 
 const attentionGroups = adminAttention.filter((group) => group.items.length > 0);
 
-// Request notes waiting for a check (QA4-04): they live under /admin/moderation, which needs
-// `channels`, and the tab needs `mentor_requests`. Counted once here, for the sidebar badge too
-// (0 while either is off, which is what the layout would count).
-const { user, isAdmin } = Astro.locals;
-const flagContext = { db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals };
-const requestNotesOn = Boolean(user) &&
-  (await isFlagEnabled(flagContext, "channels")) &&
-  (await isFlagEnabled(flagContext, "mentor_requests"));
+const requestNotesOn = Boolean(user) && channelsOn && mentorRequestsOn;
 const openChecks = requestNotesOn && user ? await countOpenChecks(env.DB, user.id) : 0;
 const requestNotes = requestNotesAttention(openChecks, requestNotesOn, requestNotesPaths(MODERATION_PATH));
 
+// Dates as voice.md writes them: "3 Nov, 09:13".
 const formatAttentionDate = (value: string) =>
-  new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(new Date(value));
-// In the Admin space while `spaces` is on for this admin (T02), named as its sidebar names it.
-const spaces = await resolveSpacePage(Astro.locals, "adminHome");
-const title = spaces ? "Admin home" : "Dashboard";
+  new Date(value).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+// One word per status (voice.md): an approved application reads "Accepted" everywhere.
+// TODO(K2): statusTone("application") and its labels replace this list once lane K's detail parts merge.
+const APPLICATION_STATUSES = [
+  ["PENDING", "Pending"], ["APPROVED", "Accepted"], ["REJECTED", "Rejected"], ["AUDIT", "Audit"], ["COMPLETED", "Completed"],
+] as const;
+const title = "Admin home";
+const ROW_LINK = `group block rounded-lg ${FOCUS_RING}`;
+const MORE_LINK = `inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`;
+const STAT_LABEL = "text-sm text-ink-secondary";
+const STAT_VALUE = "mt-1 text-3xl font-bold tabular-nums text-ink-primary";
 ---
 
 <AdminLayout title={title} pendingRequestNotes={openChecks} spaces={spaces}>
-  <div class="space-y-6">
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
+  <div class="space-y-8">
+    <PageTitle>{title}</PageTitle>
 
     <section aria-labelledby="attention-heading" class="space-y-4">
       <div>
-        <h3 id="attention-heading" class="text-lg font-semibold text-white">
-          Attention
-        </h3>
+        <h2 id="attention-heading" class="text-xl text-ink-primary">Attention</h2>
         <p class="mt-1 text-sm text-ink-secondary">
           New requests and feedback, recent failures, and work that has waited beyond its review window.
         </p>
@@ -75,12 +82,9 @@ const title = spaces ? "Admin home" : "Dashboard";
       {requestNotes && (
         <Card>
           <div id="attention-request-notes" data-attention-request-notes>
-            <h4 class="font-semibold text-white">Request notes</h4>
-            <a
-              href={requestNotes.href}
-              class="group mt-3 block rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-            >
-              <span class="font-medium text-white group-hover:text-primary">{requestNotes.text}</span>
+            <h3 class="text-base text-ink-primary">Request notes</h3>
+            <a href={requestNotes.href} class:list={["mt-3", ROW_LINK]}>
+              <span class="font-medium text-ink-primary group-hover:underline">{requestNotes.text}</span>
               <span class="mt-1 block text-sm text-ink-secondary">
                 Requests for a mentor's time whose note Tembo's check held, or that a mentor reported.
               </span>
@@ -92,37 +96,27 @@ const title = spaces ? "Admin home" : "Dashboard";
       {
         attentionGroups.length === 0 ? (
           !requestNotes && (
-            <Card>
-              <p class="text-sm text-ink-secondary">Nothing needs attention.</p>
-            </Card>
+            <EmptyState title="Nothing needs you right now">
+              New access requests and feedback, failures, and work past its review window appear here.
+            </EmptyState>
           )
         ) : (
           <div class="space-y-4">
             {attentionGroups.map((group) => (
               <Card>
                 <div id={`attention-${group.id}`}>
-                  <h4 class="font-semibold text-white">{group.label}</h4>
-                  <ul class="mt-3 divide-y divide-white/10">
+                  <h3 class="text-base text-ink-primary">{group.label}</h3>
+                  <ul class="mt-3 divide-y divide-hairline">
                     {group.items.map((item) => (
                       <li class="py-3 first:pt-0 last:pb-0">
-                        <a
-                          href={item.href}
-                          class="group block rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-                        >
+                        <a href={item.href} class={ROW_LINK}>
                           <span class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                            <span class="font-medium text-white group-hover:text-primary">
-                              {item.title}
-                            </span>
-                            <time
-                              datetime={item.occurredAt}
-                              class="shrink-0 text-xs text-ink-secondary"
-                            >
+                            <span class="font-medium text-ink-primary group-hover:underline">{item.title}</span>
+                            <time datetime={item.occurredAt} class="shrink-0 text-xs text-ink-secondary">
                               {formatAttentionDate(item.occurredAt)} UTC
                             </time>
                           </span>
-                          <span class="mt-1 block text-sm text-ink-secondary">
-                            {item.detail}
-                          </span>
+                          <span class="mt-1 block text-sm text-ink-secondary">{item.detail}</span>
                         </a>
                       </li>
                     ))}
@@ -135,57 +129,56 @@ const title = spaces ? "Admin home" : "Dashboard";
       }
     </section>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <p class="text-sm text-ink-secondary">Total Users</p>
-        <p class="mt-1 text-3xl font-bold text-primary">{usersResult.value}</p>
-      </Card>
-      <Card>
-        <p class="text-sm text-ink-secondary">Total Applications</p>
-        <p class="mt-1 text-3xl font-bold text-primary">{totalApps}</p>
-      </Card>
-      <Card>
-        <p class="text-sm text-ink-secondary">Total Programs</p>
-        <p class="mt-1 text-3xl font-bold text-primary">{programsResult.value}</p>
-      </Card>
-    </div>
-
-    <h3 class="text-lg font-semibold text-white">Follow-up</h3>
-    <div class="grid gap-4 sm:grid-cols-2">
-      <Card>
-        <p class="text-sm text-ink-secondary">Profiles flagged by checks</p>
-        <p class="mt-1 text-3xl font-bold text-primary">
-          {flaggedProfiles.value}
-        </p>
-        <a
-          href="/admin/profiles#moderation"
-          class="mt-2 inline-block text-sm text-primary hover:underline"
-        >
-          View flagged profiles &rarr;
-        </a>
-      </Card>
-      <Card>
-        <p class="text-sm text-ink-secondary">Pending client projects</p>
-        <p class="mt-1 text-3xl font-bold text-primary">
-          {pendingProjects.value}
-        </p>
-        <a
-          href="/admin/projects?status=PENDING"
-          class="mt-2 inline-block text-sm text-primary hover:underline"
-        >
-          View queue &rarr;
-        </a>
-      </Card>
-    </div>
-
-    <h3 class="text-lg font-semibold text-white">Applications by Status</h3>
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      {["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"].map((status) => (
+    <section aria-labelledby="totals-heading" class="space-y-4">
+      <h2 id="totals-heading" class="text-xl text-ink-primary">Totals</h2>
+      <div class="grid gap-4 sm:grid-cols-3">
         <Card>
-          <p class="text-sm text-ink-secondary capitalize">{status.toLowerCase()}</p>
-          <p class="mt-1 text-2xl font-bold text-white">{byStatus[status] ?? 0}</p>
+          <p class={STAT_LABEL}>Users</p>
+          <p class={STAT_VALUE}>{usersResult.value}</p>
         </Card>
-      ))}
-    </div>
+        <Card>
+          <p class={STAT_LABEL}>Applications</p>
+          <p class={STAT_VALUE}>{totalApps}</p>
+        </Card>
+        <Card>
+          <p class={STAT_LABEL}>Cohorts</p>
+          <p class={STAT_VALUE}>{programsResult.value}</p>
+        </Card>
+      </div>
+    </section>
+
+    <section aria-labelledby="follow-up-heading" class="space-y-4">
+      <h2 id="follow-up-heading" class="text-xl text-ink-primary">Follow-up</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <p class={STAT_LABEL}>Profiles flagged by checks</p>
+          <p class={STAT_VALUE}>{flaggedProfiles.value}</p>
+          <a href="/admin/profiles#moderation" class:list={["mt-1", MORE_LINK]}>
+            View flagged profiles
+            <PiArrowRight className="size-4 shrink-0" aria-hidden="true" />
+          </a>
+        </Card>
+        <Card>
+          <p class={STAT_LABEL}>Pending client projects</p>
+          <p class={STAT_VALUE}>{pendingProjects.value}</p>
+          <a href="/admin/projects?status=PENDING" class:list={["mt-1", MORE_LINK]}>
+            View pending projects
+            <PiArrowRight className="size-4 shrink-0" aria-hidden="true" />
+          </a>
+        </Card>
+      </div>
+    </section>
+
+    <section aria-labelledby="applications-heading" class="space-y-4">
+      <h2 id="applications-heading" class="text-xl text-ink-primary">Applications by status</h2>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {APPLICATION_STATUSES.map(([status, label]) => (
+          <Card>
+            <p class={STAT_LABEL}>{label}</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums text-ink-primary">{byStatus[status] ?? 0}</p>
+          </Card>
+        ))}
+      </div>
+    </section>
   </div>
 </AdminLayout>
