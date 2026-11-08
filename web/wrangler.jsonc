@@ -65,7 +65,8 @@
       "class_name": "FfmpegContainer",
       "image": "./containers/ffmpeg/Dockerfile",
       "instance_type": "standard-2",
-      "max_instances": 1
+      // One running recording plus rollout headroom: see CONTAINER_MAX_INSTANCES in scripts/cloudflare/lib.mjs.
+      "max_instances": 2
     }
   ],
 

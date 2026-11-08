@@ -211,7 +211,7 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
     expect(config.containers[0].name).toBe("ttv-agent-ffmpegcontainer");
     expect(config.containers[0].instance_type).toBe("standard-2");
-    expect(config.containers[0].max_instances).toBe(1);
+    expect(config.containers[0].max_instances).toBe(2);
   });
 
   it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
@@ -368,7 +368,7 @@ describe("createGeneratedWranglerConfig", () => {
     );
     expect(config.containers[0].name).toBe(context.containerAppName);
     expect(config.containers[0].instance_type).toBe("standard-2");
-    expect(config.containers[0].max_instances).toBe(1);
+    expect(config.containers[0].max_instances).toBe(2);
   });
 
   it("deploys and destroys the same truncated name for overlong environments", () => {
@@ -983,5 +983,15 @@ describe("getSecretBindings", () => {
     expect(JSON.stringify(bindings)).not.toContain(
       "real-secret-must-not-be-used"
     );
+  });
+});
+
+describe("container capacity", () => {
+  it("keeps one slot of rollout headroom above the one running recording, and wrangler.jsonc agrees", async () => {
+    const { CONTAINER_MAX_INSTANCES } = await import("./lib.mjs");
+    expect(CONTAINER_MAX_INSTANCES).toBe(2);
+    const { readFileSync } = await import("node:fs");
+    const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
+    expect(wrangler).toMatch(new RegExp(`"max_instances": ${CONTAINER_MAX_INSTANCES}\\b`));
   });
 });

@@ -19,6 +19,15 @@ const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/openai/gpt-oss-20b";
 const CONTAINER_CLASS_NAME = "FfmpegContainer";
+/*
+ * The recording queue runs one recording at a time, so one running container is
+ * the steady state. The second slot is rollout headroom: when a deploy rolls a
+ * new image onto an existing container app, the previous version's instance
+ * still counts against the cap for a while, and with a cap of 1 the new version
+ * cannot get an instance at all ("There is no container instance that can be
+ * provided to this Durable Object"). Containers are billed only while running.
+ */
+export const CONTAINER_MAX_INSTANCES = 2;
 const SCHEDULED_TASK_CRON = "*/15 * * * *";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -701,7 +710,7 @@ export function createGeneratedWranglerConfig({
         class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
         instance_type: "standard-2",
-        max_instances: 1,
+        max_instances: CONTAINER_MAX_INSTANCES,
       },
     ],
     durable_objects: {
