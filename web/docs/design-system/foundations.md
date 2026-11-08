@@ -72,8 +72,8 @@ Mattone appears in the kit only as the page title and Tembo's mark. The one
 other place outside the h1 is the logo, the TEMBO wordmark at the start of the
 spaces shell; its tagline beside it, "Tech Ventures", is Maven Pro in sentence
 case. The public site's display h2s (the homepage's sections, `/hire`, the
-blog) take it with `font-display`; on the platform an h2 never does. Tracking comes from three
-tokens, `--tracking-display` (-0.02em), `--tracking-heading` (-0.015em) and
+blog) take it with `font-display`; on the platform an h2 never does.
+Tracking comes from three tokens, `--tracking-display` (-0.02em), `--tracking-heading` (-0.015em) and
 `--tracking-subhead` (-0.01em), never inline `letter-spacing`
 (`src/styles/typography.test.ts`).
 
