@@ -85,7 +85,7 @@ everyone) at `/admin/platform-flags`. See
 You need Node.js 22 and npm. Every npm command runs from `web/`.
 
 ```sh
-git clone https://github.com/tembo-tech-ventures/ttv-website.git
+git clone https://github.com/Tembo-Tech-Ventures/ttv-website.git
 cd ttv-website/web
 npm ci --legacy-peer-deps
 npm run db:migrate:local
