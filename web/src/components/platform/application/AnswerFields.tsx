@@ -15,9 +15,9 @@ import {
 export function QuestionText({ label }: { label: string }) {
   return (
     <>
-      {labelSegments(label).map((segment, index) =>
+      {labelSegments(label).map((segment) =>
         segment.href ? (
-          <a key={index} href={segment.href} target="_blank" rel="noopener noreferrer" className={linkClass()}>
+          <a key={`${segment.href} ${segment.text}`} href={segment.href} target="_blank" rel="noopener noreferrer" className={linkClass()}>
             {segment.text}
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
@@ -118,8 +118,8 @@ export default function AnswerFields({
 export function AnswerList({ items }: { items: readonly { label: string; plain?: boolean; value: string | null }[] }) {
   return (
     <DescriptionList>
-      {items.map((item, index) => (
-        <DescriptionItem key={index} term={item.plain ? item.label : <QuestionText label={item.label} />}>
+      {items.map((item) => (
+        <DescriptionItem key={item.label} term={item.plain ? item.label : <QuestionText label={item.label} />}>
           <span className={item.value === null ? "text-ink-muted" : "whitespace-pre-line"}>{item.value ?? "Not answered"}</span>
         </DescriptionItem>
       ))}
