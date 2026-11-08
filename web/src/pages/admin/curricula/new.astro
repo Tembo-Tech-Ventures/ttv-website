@@ -20,6 +20,8 @@ const db = drizzle(env.DB, { schema });
 const store = createDrizzleCurriculumStore(db);
 // The Admin space is read beside the save, not after it: a rejected form renders without a second wait.
 const spacesRead = resolveSpacePage(Astro.locals, "adminCurricula");
+// A created curriculum redirects without awaiting it; a failure then must not go unhandled.
+spacesRead.catch(() => undefined);
 let values: CurriculumValues = { title: "", description: "" };
 let errors: CurriculumFieldErrors = {};
 let formError: string | undefined;
@@ -40,8 +42,10 @@ if (Astro.request.method === "POST") {
     } else {
       formError = result.message;
     }
+    Astro.response.status = 400;
   } catch {
     formError = curriculumSaveErrorMessage();
+    Astro.response.status = 503;
   }
 }
 const spaces = await spacesRead;

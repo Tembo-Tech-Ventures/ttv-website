@@ -75,7 +75,7 @@ describe("a new curriculum on the style guide", () => {
       errors: { title: "Enter a curriculum title." },
     });
     const { status, body } = await visit({ title: "   ", description: "Kept." });
-    expect(status).toBe(200);
+    expect(status).toBe(400);
     expect(body).toMatch(/data-title-prefix="Error: "/);
     expect(body).toMatch(/<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\s\S]*?The curriculum wasn&#x27;t created[\s\S]*?Fix the fields marked below\. Everything you wrote is kept\./);
     expect(body).toMatch(/<input required="" aria-describedby="title-error" aria-invalid="true" id="title" name="title" type="text" class="[^"]*" value=" {3}"\/>/);
@@ -85,7 +85,8 @@ describe("a new curriculum on the style guide", () => {
 
   it("says a failed save in the same Notice and keeps what was typed", async () => {
     store.create.mockRejectedValue(new Error("D1 down"));
-    const { body } = await visit({ title: "Web foundations", description: "HTML and CSS." });
+    const { status, body } = await visit({ title: "Web foundations", description: "HTML and CSS." });
+    expect(status).toBe(503);
     expect(count(body, /data-notice="danger"/g)).toBe(1);
     expect(body).toContain("The database didn&#39;t answer. Try again in a moment; everything you wrote is kept.");
     expect(body).toMatch(/value="Web foundations"/);
