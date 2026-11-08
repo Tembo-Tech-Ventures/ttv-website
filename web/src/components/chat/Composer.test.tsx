@@ -41,3 +41,19 @@ describe("Composer and a question handed over from search", () => {
     expect(location.hash).toBe("#elsewhere");
   });
 });
+
+describe("Composer on the kit", () => {
+  it("sends with the page's one primary control, and the box carries a visible focus ring", async () => {
+    await act(async () => root.render(<Composer onSend={vi.fn()} disabled={false} />));
+    const send = container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(send.getAttribute("aria-label")).toBe("Send message");
+    expect(send.dataset.variant).toBe("primary");
+    expect(send.className).toContain("pointer-coarse:min-h-11");
+    // Nothing to send yet: the kit's quiet disabled look, never faded peach.
+    expect(send.disabled).toBe(true);
+    expect(send.className).not.toContain("bg-primary");
+    const form = container.querySelector("form")!;
+    expect(form.className).toContain("focus-within:outline-peach-ink");
+    expect(container.querySelector("textarea")!.className).not.toContain("focus:outline-none");
+  });
+});

@@ -219,6 +219,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "mentoring requests": { d1: 15, depth: 3 },
   // The application is read beside the space context (16 queries 6 deep in the style-guide audit).
   application: { d1: 15, depth: 3 },
+  // The same before the style-guide rollout: the journey and the request's capabilities (shared with the
+  // space context) start beside it through resolveSpacePageWith, instead of after it.
   ask: { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list waited for the whole space context, and the cohort name for the list.
   attention: { d1: 10, depth: 2 },

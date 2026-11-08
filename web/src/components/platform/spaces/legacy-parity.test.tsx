@@ -32,6 +32,12 @@ import type { ChatSession } from "@/components/chat/types";
  *   session's title is the page's h1 above the player (the island names the
  *   video by its id), each transcript line is a link to `?t=`, the retry is the
  *   kit's quiet Button, and the colours are tokens.
+ * - chat-empty and chat-conversation (style guide M9): the chat is built from
+ *   the UI kit in both frames. The page's h1 is a visually hidden "Ask Tembo"
+ *   and the conversation's title an h2; Send is the one peach control (New
+ *   chat is quiet, your own question a lifted bubble); an empty list is an
+ *   EmptyState; sources are cards with chips; Tembo has its mark and AI badge;
+ *   the site links and focus rings are the kit's, in the platform's tokens.
  */
 const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };

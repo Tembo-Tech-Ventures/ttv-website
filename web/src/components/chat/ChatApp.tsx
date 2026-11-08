@@ -10,10 +10,9 @@ import Transcript from "@/components/chat/Transcript";
 import AboutAskTembo from "@/components/chat/AboutAskTembo";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
-import {
-  DASHBOARD_LINKS,
-  getDashboardLinks,
-} from "@/components/shells/DashboardShell";
+// The plain list, not DashboardShell: that module brings its Sidebar and Headless UI into this island.
+import { DASHBOARD_LINKS, getDashboardLinks } from "@/components/shells/dashboard-links";
+import { BackLink, Button, IconButton, Notice, PageTitle, buttonClass, linkClass } from "@/components/platform/ui";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import type { PrivateAskScope } from "@/lib/tembo/private-ask";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
@@ -424,18 +423,19 @@ export default function ChatApp({
   );
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="relative flex min-h-0 flex-1">
+      {/*
+        The page's one Mattone heading, first in the outline. Visually hidden: the chat fills the
+        screen, and on a phone a display title would push the composer off it; the conversation's
+        own title (an h2) and the shell say where you are.
+      */}
+      <PageTitle className="sr-only">Ask Tembo</PageTitle>
+
       {/* Desktop rail. The way back into the product stays visible at both ends. */}
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-rule bg-dark/40 lg:flex">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-hairline lg:flex">
         {!inSpace && (
-          <div className="shrink-0 border-b border-rule px-3 py-3">
-            <a
-              href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-            >
-              <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
-              Back to dashboard
-            </a>
+          <div className="shrink-0 border-b border-hairline px-4 py-3">
+            <BackLink href="/dashboard">Back to dashboard</BackLink>
           </div>
         )}
         <div className="shrink-0 px-3 py-3">
@@ -445,45 +445,35 @@ export default function ChatApp({
           aria-label="Conversations"
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4"
         >
-          <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-subhead text-ink-muted">
-            Recent
-          </p>
+          <h2 className="px-3 pb-2 text-xs text-ink-muted">Recent</h2>
           {conversationList}
         </nav>
         {!inSpace && (
-          <nav aria-label="Site" className="shrink-0 border-t border-rule px-2 py-2">
+          <nav aria-label="Site" className="flex shrink-0 flex-col items-start gap-1 border-t border-hairline px-4 py-3">
             {appNav.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="block rounded-lg px-3 py-1.5 text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-              >
+              <a key={item.href} href={item.href} className={linkClass("inline-flex items-center text-sm pointer-coarse:min-h-11")}>
                 {item.label}
                 {item.badge !== undefined && item.badge > 0
                   ? ` (${item.badge} unread)`
                   : ""}
               </a>
             ))}
-            <button
-              type="button"
-              onClick={openFeedbackWidget}
-              className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-            >
+            <Button variant="ghost" size="sm" onClick={openFeedbackWidget} className="-ml-3">
               Send feedback
-            </button>
+            </Button>
           </nav>
         )}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-rule px-2 sm:px-4 lg:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-hairline px-2 sm:px-4 lg:px-6">
           {!inSpace && (
             <a
               href="/dashboard"
               aria-label="Back to dashboard"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary lg:hidden"
+              className={buttonClass({ variant: "ghost", iconOnly: true, className: "lg:hidden" })}
             >
-              <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
+              <PiArrowLeftBold className="size-4" aria-hidden="true" />
             </a>
           )}
 
@@ -495,35 +485,31 @@ export default function ChatApp({
             events — a keyboard user could still activate it on desktop and open
             a `display: none` modal that swallows every click on the page.
           */}
-          <h1 className="flex min-w-0 flex-1 justify-center lg:justify-start">
-            <span className="hidden truncate font-body text-base font-semibold text-ink-primary lg:inline">
-              {activeTitle}
-            </span>
-            <button
-              type="button"
+          {/* The conversation's title, in body type under the page's h1. */}
+          <h2 className="flex min-w-0 flex-1 justify-center text-base lg:justify-start" data-chat-title>
+            <span className="hidden truncate text-ink-primary lg:inline">{activeTitle}</span>
+            <Button
+              variant="ghost"
               aria-haspopup="dialog"
               aria-expanded={sheetOpen}
               onClick={openSheet}
-              className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 transition hover:bg-ink-primary/[0.06] lg:hidden"
+              className="max-w-full lg:hidden"
             >
-              <span className="truncate font-body text-sm font-semibold text-ink-primary">
-                {activeTitle}
-              </span>
-              <PiCaretUpDownBold className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
-            </button>
-          </h1>
+              <span className="truncate text-ink-primary">{activeTitle}</span>
+              <PiCaretUpDownBold className="size-3 shrink-0 text-ink-muted" aria-hidden="true" />
+            </Button>
+          </h2>
 
-          <button
-            type="button"
+          <IconButton
+            variant="ghost"
             // Not "New chat": on an empty conversation the switcher above is
             // also titled "New chat", and two identically named buttons doing
             // different things is ambiguous to anyone not seeing the icons.
-            aria-label="Start a new chat"
+            label="Start a new chat"
+            icon={<PiPlusBold className="size-5" />}
             onClick={startNewChat}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary lg:hidden"
-          >
-            <PiPlusBold className="h-5 w-5" aria-hidden="true" />
-          </button>
+            className="lg:hidden"
+          />
         </header>
 
         <Transcript
@@ -543,28 +529,23 @@ export default function ChatApp({
           exactly when it matters.
         */}
         {error && (
-          <div className="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-2 sm:px-6">
-            <p role="alert" className="text-sm text-red-200">
-              {error}
-            </p>
-            {failedQuestion && (
-              <span className="-ml-3 flex gap-1" data-chat-recovery>
-                <button
-                  type="button"
-                  onClick={retryQuestion}
-                  className="min-h-11 rounded-lg px-3 text-sm font-semibold text-primary transition hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary"
-                >
-                  Try again
-                </button>
-                <button
-                  type="button"
-                  onClick={editQuestion}
-                  className="min-h-11 rounded-lg px-3 text-sm font-semibold text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-primary"
-                >
-                  Edit question
-                </button>
-              </span>
-            )}
+          <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-2 sm:px-6">
+            <Notice
+              tone="danger"
+              title={error}
+              actions={
+                failedQuestion && (
+                  <>
+                    <Button size="sm" onClick={retryQuestion}>
+                      Try again
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={editQuestion}>
+                      Edit question
+                    </Button>
+                  </>
+                )
+              }
+            />
           </div>
         )}
 
@@ -583,8 +564,8 @@ export default function ChatApp({
         label="Conversations"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-          <h2 className="font-body text-base font-semibold text-ink-primary">Conversations</h2>
-          <NewChatButton onClick={startNewChat} label="New" />
+          <h2 className="text-base text-ink-primary">Conversations</h2>
+          <NewChatButton onClick={startNewChat} label="New" size="sm" />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
           {conversationList}
@@ -592,30 +573,26 @@ export default function ChatApp({
         {!inSpace && (
           <nav
             aria-label="Site"
-            className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-rule px-4 py-3"
+            className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-hairline px-4 py-3"
           >
             {appNav.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="text-sm text-ink-muted transition hover:text-ink-primary"
-              >
+              <a key={item.href} href={item.href} className={linkClass("inline-flex items-center text-sm pointer-coarse:min-h-11")}>
                 {item.label}
                 {item.badge !== undefined && item.badge > 0
                   ? ` (${item.badge} unread)`
                   : ""}
               </a>
             ))}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setSheetOpen(false);
                 openFeedbackWidget();
               }}
-              className="text-sm text-ink-muted transition hover:text-ink-primary"
             >
               Send feedback
-            </button>
+            </Button>
           </nav>
         )}
       </ConversationSheet>

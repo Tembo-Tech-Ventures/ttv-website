@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PiArrowDownBold } from "react-icons/pi";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
+import { Button, Chip, FOCUS_RING, INSET_FOCUS_RING, RAISED, RoleBadge, TemboMark, cx } from "@/components/platform/ui";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 import type { ChatMessage, Citation } from "@/components/chat/types";
 
@@ -12,6 +13,9 @@ import type { ChatMessage, Citation } from "@/components/chat/types";
 const NEAR_BOTTOM_PX = 100;
 
 const NO_SUGGESTIONS: string[] = [];
+
+/** Tembo's badge, as in channels: its own mark and "AI", never a person's avatar. */
+const AI_BADGE = { kind: "AI", label: "AI" } as const;
 
 const FALLBACK_PROMPTS = [
   "What were the main action items from mentor hours?",
@@ -59,20 +63,19 @@ function Citations({ citations }: { citations: Citation[] }) {
   return (
     <div className="mt-3 grid gap-2">
       {citations.map((citation, index) => (
+        // A card that is a link: the kit's card recipe (RAISED on a hairline) on the link itself, with the ring.
         <a
           key={`${citation.recordingId}-${citation.startTime}-${index}`}
           href={citationHref(citation)}
-          className="group rounded-xl border border-rule bg-dark/40 p-3 transition hover:border-primary/50 hover:bg-dark/70"
+          className={cx(
+            "group block rounded-[1.125rem] border border-hairline p-3 transition-colors duration-150 hover:border-ink-primary/30 motion-reduce:transition-none",
+            RAISED,
+            FOCUS_RING,
+          )}
         >
           <span className="mb-1.5 flex flex-wrap items-center gap-2">
-            {citation.sourceNumber !== undefined && (
-              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-subhead text-primary">
-                Source {citation.sourceNumber}
-              </span>
-            )}
-            <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
-              {formatTimestamp(citation.startTime)}
-            </span>
+            {citation.sourceNumber !== undefined && <Chip>Source {citation.sourceNumber}</Chip>}
+            <Chip>{formatTimestamp(citation.startTime)}</Chip>
             <span className="text-xs font-semibold text-ink-secondary group-hover:text-ink-primary">
               {citation.title}
             </span>
@@ -94,7 +97,8 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
       <article
         className={
           isUser
-            ? "max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-dark"
+            ? // Lifted, not peach: peach is the Send button's alone.
+              "max-w-[85%] rounded-2xl rounded-br-md border border-hairline bg-ink-primary/8 px-4 py-2.5 text-sm leading-relaxed text-ink-primary"
             : // Long-form answers read badly in a chat bubble, so only the
               // user's own turn gets one.
               "max-w-full text-sm leading-relaxed text-ink-primary"
@@ -105,9 +109,10 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
         ) : (
           <>
             {/* Every answer says who wrote it: an AI (QA3-03). */}
-            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-secondary" data-chat-author>
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-primary" data-chat-author>
+              <TemboMark size="sm" decorative />
               Tembo
-              <span className="rounded px-1.5 py-px text-[0.6875rem] font-bold tracking-subhead text-peach-ink ring-1 ring-peach-ink/40">AI</span>
+              <RoleBadge badge={AI_BADGE} />
             </p>
             <MarkdownMessage content={message.content} />
             {message.citations && message.citations.length > 0 && (
@@ -120,25 +125,22 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
   );
 }
 
-function EmptyState({ onPick, suggestions, name }: { onPick: (prompt: string) => void; suggestions: string[]; name: string }) {
+function Welcome({ onPick, suggestions, name }: { onPick: (prompt: string) => void; suggestions: string[]; name: string }) {
   const prompts = suggestions.length > 0 ? suggestions : FALLBACK_PROMPTS;
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
-      <h2 className="text-2xl tracking-display text-ink-primary">{name}</h2>
+      {/* Body type: the page's one Mattone heading is its h1 (ChatApp). */}
+      <h2 className="text-2xl text-ink-primary">{name}</h2>
       <p className="mt-2 text-sm text-ink-secondary">
         Ask about your sessions, your program, or anything you need help with. Just you and Tembo: nothing here is
         posted in a channel.
       </p>
       <div className="mt-6 grid w-full gap-2">
         {prompts.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            onClick={() => onPick(prompt)}
-            className="rounded-xl border border-rule bg-ink-primary/[0.04] px-4 py-3 text-left text-sm text-ink-secondary transition hover:border-primary/40 hover:bg-primary/10 hover:text-ink-primary"
-          >
-            {prompt}
-          </button>
+          <Button key={prompt} variant="quiet" onClick={() => onPick(prompt)} className="h-auto w-full justify-start py-3">
+            {/* The words wrap, left aligned, inside the kit's single-line button. */}
+            <span className="min-w-0 text-left whitespace-normal">{prompt}</span>
+          </Button>
         ))}
       </div>
     </div>
@@ -302,7 +304,7 @@ export default function Transcript({
         data-chat-scroller="true"
         tabIndex={0}
         aria-label="Conversation"
-        className="h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+        className={cx("h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable]", INSET_FOCUS_RING)}
       >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-5 sm:px-6">
           {loadingConversation ? (
@@ -310,7 +312,7 @@ export default function Transcript({
             // fetch lands, and the transcript on screen is still the old one.
             <p className="py-10 text-center text-sm text-ink-muted">Loading conversation…</p>
           ) : messages.length === 0 ? (
-            <EmptyState onPick={onPickPrompt} suggestions={suggestions} name={assistantName} />
+            <Welcome onPick={onPickPrompt} suggestions={suggestions} name={assistantName} />
           ) : (
             messages.map((message, index) => (
               <MessageRow key={message.id ?? index} message={message} index={index} />
@@ -331,14 +333,12 @@ export default function Transcript({
       </p>
 
       {!nearBottom && (
-        <button
-          type="button"
-          onClick={() => scrollToBottom()}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-rule bg-bg-raised/95 px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-lg backdrop-blur transition hover:text-ink-primary"
-        >
-          <PiArrowDownBold className="mr-1.5 inline h-3 w-3" aria-hidden="true" />
-          Jump to latest
-        </button>
+        // The kit's quiet button over the sheet's own colour, so words scrolling under it never show through.
+        <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg bg-[var(--sheet,var(--color-dark))]">
+          <Button variant="quiet" size="sm" onClick={() => scrollToBottom()} icon={<PiArrowDownBold className="size-3" />}>
+            Jump to latest
+          </Button>
+        </span>
       )}
     </div>
   );

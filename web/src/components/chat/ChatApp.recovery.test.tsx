@@ -41,7 +41,8 @@ afterEach(async () => {
 
 const composer = () => container.querySelector<HTMLTextAreaElement>("#chat-composer")!;
 const button = (name: string) => Array.from(container.querySelectorAll("button")).find((element) => element.textContent === name);
-const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? null;
+// The danger Notice's title: the alert also holds its spoken "Problem: " and its two actions.
+const alertText = () => container.querySelector('[role="alert"] p')?.textContent ?? null;
 
 async function ask(question: string) {
   const textarea = composer();
@@ -64,6 +65,17 @@ describe("a question that fails", () => {
     expect(alertText()).toBe("That question didn't get an answer.");
     expect(button("Try again")).toBeDefined();
     expect(button("Edit question")).toBeDefined();
+  });
+
+  it("says so in the kit's danger Notice, with its two ways forward inside it", () => {
+    const notice = container.querySelector('[data-notice="danger"]')!;
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toContain("Problem: ");
+    // Asking again is the way forward; neither is peach, which is Send's alone.
+    expect(notice.contains(button("Try again")!)).toBe(true);
+    expect(button("Try again")!.dataset.variant).toBe("quiet");
+    expect(button("Edit question")!.dataset.variant).toBe("ghost");
+    expect(notice.contains(button("Edit question")!)).toBe(true);
   });
 
   it("asks the same question again, in the same conversation, and answers it", async () => {

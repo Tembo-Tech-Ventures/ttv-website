@@ -1,7 +1,8 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import DashboardShell, { getDashboardLinks } from "./DashboardShell";
+import DashboardShell from "./DashboardShell";
+import { getDashboardLinks } from "./dashboard-links";
 
 const BASE_LINKS = ["home", "apply", "ask", "account", "logout"] as const;
 

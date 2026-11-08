@@ -118,7 +118,7 @@ test("sends a message and keeps the layout intact afterwards", async ({ page }, 
 
 /** Desktop lists conversations in the rail; mobile needs the sheet opened. */
 async function openConversationList(page: Page) {
-  const sheetTrigger = page.locator("h1 button");
+  const sheetTrigger = page.locator("[data-chat-title] button");
   if (await sheetTrigger.isVisible()) {
     await sheetTrigger.click();
     await expect(page.getByRole("dialog")).toBeVisible();

@@ -1,4 +1,5 @@
 import React from "react";
+import { linkClass } from "@/components/platform/ui";
 
 interface InlineToken {
   type: "text" | "code" | "strong" | "em" | "link";
@@ -119,7 +120,7 @@ function InlineContent({ text }: { text: string }) {
         const key = `${token.type}:${token.text}:${token.href ?? ""}`;
         if (token.type === "code") {
           return (
-            <code key={key} className="rounded bg-dark/50 px-1 py-0.5 text-primary">
+            <code key={key} className="rounded bg-ink-primary/8 px-1 py-0.5 text-ink-primary">
               {token.text}
             </code>
           );
@@ -132,7 +133,7 @@ function InlineContent({ text }: { text: string }) {
             <a
               key={key}
               href={isSafeHref ? token.href : "#"}
-              className="font-semibold text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+              className={linkClass()}
             >
               {token.text}
             </a>
@@ -156,7 +157,7 @@ export default function MarkdownMessage({ content }: { content: string }) {
           return (
             <pre
               key={key}
-              className="overflow-x-auto rounded-lg border border-white/10 bg-dark/70 p-3 text-xs text-white/85"
+              className="overflow-x-auto rounded-lg border border-hairline bg-ground/40 p-3 text-xs text-ink-primary"
             >
               <code>{block.text}</code>
             </pre>
@@ -165,8 +166,8 @@ export default function MarkdownMessage({ content }: { content: string }) {
         if (block.type === "heading") {
           const className =
             block.level === 2
-              ? "text-base font-semibold text-white"
-              : "text-sm font-semibold text-white/90";
+              ? "text-base font-semibold text-ink-primary"
+              : "text-sm font-semibold text-ink-primary";
           return (
             <p key={key} className={className}>
               <InlineContent text={block.text ?? ""} />
