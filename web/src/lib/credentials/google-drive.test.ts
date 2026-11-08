@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Database } from "@/lib/db/schema";
 import type { CredentialCipher } from "./crypto";
 import {
+  ServiceAccountInputError,
   saveGoogleDriveCredential,
   getGoogleDriveCredentials,
 } from "./google-drive";
@@ -211,6 +212,21 @@ describe("saveGoogleDriveCredential", () => {
         actorUserId: "user-1",
       })
     ).rejects.toThrow("private key is not valid PKCS#8 PEM");
+  });
+
+  it("refuses every bad paste as an input error, so the page answers 400, a key that isn't base64 included", async () => {
+    const store: MockStore = { credential: null, auditLog: [] };
+    const db = createMockDb(store);
+    const cipher = createMockCipher();
+    for (const serviceAccountJson of [
+      "not json",
+      "[]",
+      createServiceAccountJson({ type: "user" }),
+      createServiceAccountJson({ private_key: "-----BEGIN PRIVATE KEY-----\n%%% not base64 %%%\n-----END PRIVATE KEY-----\n" }),
+    ]) {
+      await expect(saveGoogleDriveCredential(db, cipher, { serviceAccountJson, actorUserId: "user-1" })).rejects.toBeInstanceOf(ServiceAccountInputError);
+    }
+    expect(store.credential).toBeNull();
   });
 
   it("normalizes escaped newlines in the private key", async () => {

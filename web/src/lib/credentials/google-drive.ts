@@ -3,7 +3,6 @@ import type { CredentialCipher } from "./crypto";
 import {
   setIntegrationCredential,
   getIntegrationCredentialSecret,
-  getIntegrationCredentialStatus,
 } from "./store";
 
 const PROVIDER = "google-drive";
@@ -30,18 +29,26 @@ function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/** A pasted service account the rules refuse, as opposed to a failure: its message is written for the person. */
+export class ServiceAccountInputError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ServiceAccountInputError";
+  }
+}
+
 async function validatePrivateKey(pem: string): Promise<void> {
-  const der = pemToDer(pem);
   try {
+    // Inside the try: a key that isn't base64 at all fails in atob, and is refused the same way.
     await crypto.subtle.importKey(
       "pkcs8",
-      der,
+      pemToDer(pem),
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["sign"],
     );
   } catch (error) {
-    throw new Error("Invalid service account: private key is not valid PKCS#8 PEM.", {
+    throw new ServiceAccountInputError("Invalid service account: private key is not valid PKCS#8 PEM.", {
       cause: error,
     });
   }
@@ -60,27 +67,27 @@ function parseAndValidateServiceAccount(raw: string): ServiceAccountJson {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("Invalid JSON: the pasted value is not valid JSON.");
+    throw new ServiceAccountInputError("Invalid JSON: the pasted value is not valid JSON.");
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("Invalid service account: expected a JSON object.");
+    throw new ServiceAccountInputError("Invalid service account: expected a JSON object.");
   }
 
   const obj = parsed as Record<string, unknown>;
 
   if (obj.type !== "service_account") {
-    throw new Error(
+    throw new ServiceAccountInputError(
       'Invalid service account: "type" must be "service_account".',
     );
   }
   if (typeof obj.client_email !== "string" || !obj.client_email) {
-    throw new Error(
+    throw new ServiceAccountInputError(
       'Invalid service account: "client_email" must be a non-empty string.',
     );
   }
   if (typeof obj.private_key !== "string" || !obj.private_key) {
-    throw new Error(
+    throw new ServiceAccountInputError(
       'Invalid service account: "private_key" must be a non-empty string.',
     );
   }
@@ -165,10 +172,6 @@ export async function getGoogleDriveCredentials(
     privateKeyId: parsed.privateKeyId,
     impersonatedUser: config.impersonatedUser || undefined,
   };
-}
-
-export async function getGoogleDriveCredentialStatus(db: Database) {
-  return getIntegrationCredentialStatus(db, PROVIDER);
 }
 
 export const GOOGLE_DRIVE_PROVIDER = PROVIDER;

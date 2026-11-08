@@ -149,7 +149,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", legacy: null },
   { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
-  { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations" },
+  { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
   { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },

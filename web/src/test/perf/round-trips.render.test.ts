@@ -101,6 +101,8 @@ const PAGES = {
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
   "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
+  // With credential storage set up, as in production.
+  "admin integrations": { path: () => "/admin/settings/integrations", page: () => import("@/pages/admin/settings/integrations.astro"), user: ADMIN, env: { CREDENTIALS_ENCRYPTION_KEY: "synthetic-key" } },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
@@ -131,7 +133,7 @@ type PageName = keyof typeof PAGES;
 async function visit(name: PageName) {
   const { db, cohortChannel } = seeded();
   const entry = PAGES[name];
-  Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production", AGENT_AUTH_ENABLED: undefined, ...("env" in entry ? entry.env : {}) });
+  Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production", AGENT_AUTH_ENABLED: undefined, CREDENTIALS_ENCRYPTION_KEY: undefined, ...("env" in entry ? entry.env : {}) });
   const { path, page, user: userId } = entry;
   const user = { id: userId, name: "Synthetic", email: `${userId}@example.test`, image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" } });
@@ -219,6 +221,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin tokens": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the sessions, then the space.
   "admin agent access": { d1: 14, depth: 2 },
+  // Depth 4 + N before the style-guide rollout: the credential, the activity, its updater, each actor in turn, then the space.
+  "admin integrations": { d1: 15, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count for each status (which
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },

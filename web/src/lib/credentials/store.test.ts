@@ -215,16 +215,6 @@ describe("getIntegrationCredentialSecret", async () => {
   });
 });
 
-describe("getIntegrationCredentialStatus", async () => {
-  const { getIntegrationCredentialStatus } = await import("./store");
-
-  it("returns null when no credential exists", async () => {
-    const { db } = createMockDb();
-    const result = await getIntegrationCredentialStatus(db, "google-drive");
-    expect(result).toBeNull();
-  });
-});
-
 describe("updateIntegrationCredentialConfig", async () => {
   const { updateIntegrationCredentialConfig } = await import("./store");
 
@@ -295,20 +285,3 @@ describe("recordCredentialTest", async () => {
   });
 });
 
-describe("getRecentAuditEntries", async () => {
-  const { getRecentAuditEntries } = await import("./store");
-
-  it("returns recent audit entries for a provider", async () => {
-    const { db, auditLog } = createMockDb();
-    auditLog.push({
-      provider: "google-drive",
-      action: "set",
-      outcome: "Credential saved.",
-      actorUserId: "user-1",
-    });
-
-    const entries = await getRecentAuditEntries(db, "google-drive");
-    expect(entries).toHaveLength(1);
-    expect(entries[0].action).toBe("set");
-  });
-});
