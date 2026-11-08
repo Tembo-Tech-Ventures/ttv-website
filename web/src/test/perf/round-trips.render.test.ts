@@ -50,6 +50,8 @@ function seeded() {
       ('${MENTOR}','Backend engineer','Reviews APIs.','["Code review"]','["WRITTEN_REVIEW"]',3,0);
     INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
     INSERT INTO feedback_theme(id,title,summary,kind,status,createdAt,updatedAt) VALUES ('theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',0,0);
+    INSERT INTO user(id,name,email) VALUES ('synthetic-achieng','Achieng Otieno','achieng@example.test');
+    INSERT INTO studentProfile(id,userId,handle,status,headline) VALUES ('profile','synthetic-achieng','achieng-otieno','PUBLISHED','Fictional builder');
     UPDATE feature_flag SET audience='ALL';`);
   // One request waiting for the mentor, for the Mentoring space's Requests page.
   sqlite.exec(`INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
@@ -88,6 +90,7 @@ const PAGES = {
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
+  "admin profile": { path: () => "/admin/profiles/profile", page: () => import("@/pages/admin/profiles/[id].astro"), user: ADMIN, id: "profile" },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
   "admin curriculum": { path: () => "/admin/curricula/curriculum", page: () => import("@/pages/admin/curricula/[id].astro"), user: ADMIN, id: "curriculum" },
@@ -185,6 +188,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },
   "admin application": { d1: 14, depth: 2 },
+  "admin profile": { d1: 16, depth: 3 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 2 },
   "admin curricula": { d1: 14, depth: 2 },

@@ -132,7 +132,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/applications", heading: "Applications", current: "Applications", retired: true },
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application from Wanjiku Mwangi", current: "Applications", retired: true },
   { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
-  { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Profile", current: "Profiles" },
+  { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Achieng Otieno", current: "Profiles", retired: true },
   { path: "/admin/feedback", heading: "Feedback", current: "Feedback", retired: true },
   { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback", retired: true },
   { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback", retired: true },

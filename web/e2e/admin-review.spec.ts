@@ -88,7 +88,7 @@ test.describe("admin review surfaces", () => {
       await kwameRow.getByRole("link", { name: "View" }).click();
     }
 
-    await expect(page.getByRole("heading", { name: /profile/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Kwame Fixture" })).toBeVisible();
 
     await page.screenshot({
       path: evidence("admin-profile-kwame-detail"),
