@@ -70,6 +70,7 @@ const PAGES = {
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
+  "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
   "admin feedback themes": { path: () => "/admin/feedback/themes", page: () => import("@/pages/admin/feedback/themes/index.astro"), user: ADMIN },
   "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
   "admin moderation": { path: () => "/admin/moderation", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
@@ -124,6 +125,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin applications": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 3 },
+  "admin curricula": { d1: 14, depth: 3 },
   "admin feedback themes": { d1: 14, depth: 3 },
   "admin feature flags": { d1: 14, depth: 3 },
   // Depth 4 before the style-guide rollout: the queue's channels waited for the flag reads.

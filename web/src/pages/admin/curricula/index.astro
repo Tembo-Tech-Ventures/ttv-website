@@ -1,9 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
+import { ButtonLink, Card, EmptyState, FOCUS_RING, Notice, PageHeader } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
@@ -13,99 +11,83 @@ import {
 } from "@/lib/admin/curricula";
 
 const db = drizzle(env.DB, { schema });
-const curricula = await listCurricula(createDrizzleCurriculumStore(db));
+// The curricula and the Admin space are independent reads: one round trip, not two.
+const [curricula, spaces] = await Promise.all([
+  listCurricula(createDrizzleCurriculumStore(db)),
+  resolveSpacePage(Astro.locals, "adminCurricula"),
+]);
 
-const noticeByOutcome: Record<string, string> = {
-  deleted: "Curriculum deleted.",
-  missing: "That curriculum no longer exists.",
+const noticeByOutcome: Record<string, { tone: "success" | "warning"; text: string }> = {
+  deleted: { tone: "success", text: "Curriculum deleted." },
+  missing: { tone: "warning", text: "That curriculum no longer exists." },
 };
 const outcome = Astro.url.searchParams.get("notice");
 const notice = outcome ? noticeByOutcome[outcome] : undefined;
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminCurricula");
+const NEW_PATH = "/admin/curricula/new";
+const INTRO = "Manage the reusable learning plans required by programs and cohorts.";
+const TEXT_LINK = `inline-flex min-h-11 items-center rounded-sm text-sm font-semibold text-peach-ink hover:underline ${FOCUS_RING}`;
 ---
 
 <AdminLayout title="Curricula" spaces={spaces}>
   <div class="space-y-6">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Curricula</PageTitle>
-        <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
-          Manage the reusable learning plans required by programs and cohorts.
-        </p>
-      </div>
-      <Button href="/admin/curricula/new" class="w-fit">
-        New Curriculum
-      </Button>
-    </div>
+    {/* With no curricula yet, the empty state below carries the one way to start. A named slot inside a
+        condition still reaches the header as a (blank) action, so the header itself is chosen here. */}
+    {curricula.length > 0 ? (
+      <PageHeader title="Curricula">
+        {INTRO}
+        <Fragment slot="action">
+          <ButtonLink href={NEW_PATH} variant="primary" size="lg">New curriculum</ButtonLink>
+        </Fragment>
+      </PageHeader>
+    ) : (
+      <PageHeader title="Curricula">{INTRO}</PageHeader>
+    )}
 
     {notice && (
-      <p
-        role="status"
-        class="rounded-md border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100"
-      >
-        {notice}
-      </p>
+      // A deletion is announced like any saved change; a missing one is a quiet caution read in turn.
+      <Notice tone={notice.tone} announce="polite">{notice.text}</Notice>
     )}
 
     {curricula.length === 0 ? (
-      <Card>
-        <div class="py-6 text-center">
-          <h3 class="text-lg font-semibold text-white">No curricula yet</h3>
-          <p class="mx-auto mt-2 max-w-xl text-sm text-ink-secondary">
-            Create a curriculum before setting up a program or cohort.
-          </p>
-          <Button href="/admin/curricula/new" class="mt-5">
-            Create your first curriculum
-          </Button>
-        </div>
-      </Card>
+      <EmptyState title="No curricula yet" headingLevel={2}>
+        Create a curriculum before setting up a program or cohort.
+        <Fragment slot="action">
+          <ButtonLink href={NEW_PATH} variant="primary" size="lg">Create your first curriculum</ButtonLink>
+        </Fragment>
+      </EmptyState>
     ) : (
-      <div class="grid gap-4">
+      <ul class="grid gap-4">
         {curricula.map((curriculum) => (
-          <Card>
-            <article class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div class="min-w-0 flex-1">
-                <h3 class="text-lg font-semibold text-white">
-                  {curriculum.title}
-                </h3>
-                <p class="mt-2 whitespace-pre-wrap text-sm text-white/70">
-                  {curriculum.description}
-                </p>
-              </div>
+          <li>
+            <Card as="article">
+              <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 flex-1">
+                  <h2 class="text-lg text-ink-primary">{curriculum.title}</h2>
+                  <p class="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{curriculum.description}</p>
+                </div>
 
-              <div class="w-full shrink-0 lg:w-80">
-                <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                  Program / cohort usage
-                </p>
-                {curriculum.programs.length === 0 ? (
-                  <p class="mt-2 text-sm text-ink-muted">Not used yet</p>
-                ) : (
-                  <ul class="mt-2 space-y-1.5">
-                    {curriculum.programs.map((program) => (
-                      <li>
-                        <a
-                          href={`/admin/programs/${program.id}`}
-                          class="text-sm text-primary hover:underline"
-                        >
-                          {program.name}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <a
-                  href={`/admin/curricula/${curriculum.id}`}
-                  aria-label={`Edit ${curriculum.title}`}
-                  class="mt-4 inline-flex text-sm font-medium text-primary hover:underline"
-                >
-                  Edit curriculum
-                </a>
+                <div class="w-full shrink-0 lg:w-80">
+                  <h3 class="text-sm text-ink-secondary">Programs and cohorts using it</h3>
+                  {curriculum.programs.length === 0 ? (
+                    <p class="mt-2 text-sm text-ink-muted">Not used yet</p>
+                  ) : (
+                    <ul class="mt-1">
+                      {curriculum.programs.map((program) => (
+                        <li>
+                          <a href={`/admin/programs/${program.id}`} class={TEXT_LINK}>{program.name}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <a href={`/admin/curricula/${curriculum.id}`} class:list={["mt-2", TEXT_LINK]}>
+                    Edit<span class="sr-only"> {curriculum.title}</span>
+                  </a>
+                </div>
               </div>
-            </article>
-          </Card>
+            </Card>
+          </li>
         ))}
-      </div>
+      </ul>
     )}
   </div>
 </AdminLayout>
