@@ -38,14 +38,32 @@ export function isAgentSession(userAgent: string | null | undefined): boolean {
   return userAgent?.startsWith(AGENT_SESSION_PREFIX) ?? false;
 }
 
+/**
+ * An agent session request the rules refuse, as opposed to a failure: its
+ * message is written for the person, and `field` names the form field it is about.
+ */
+export class AgentSessionInputError extends Error {
+  constructor(
+    message: string,
+    readonly field: "label" | "duration"
+  ) {
+    super(message);
+    this.name = "AgentSessionInputError";
+  }
+}
+
+/** The most sessions the admin page lists: the newest. */
+export const AGENT_SESSION_LIST_LIMIT = 50;
+
 export function normalizeAgentSessionLabel(value: string): string {
   const label = value.trim().replace(/\s+/g, " ");
   if (!label || label.length > 50) {
-    throw new Error("Agent label must be between 1 and 50 characters.");
+    throw new AgentSessionInputError("Agent label must be between 1 and 50 characters.", "label");
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9 ._-]*$/.test(label)) {
-    throw new Error(
-      "Agent label may contain letters, numbers, spaces, dots, underscores, and hyphens."
+    throw new AgentSessionInputError(
+      "Agent label may contain letters, numbers, spaces, dots, underscores, and hyphens.",
+      "label"
     );
   }
   return label;
@@ -56,7 +74,7 @@ export function parseAgentSessionDuration(
 ): AgentSessionDuration {
   const hours = Number(value);
   if (!AGENT_SESSION_DURATIONS.includes(hours as AgentSessionDuration)) {
-    throw new Error("Choose a supported agent session duration.");
+    throw new AgentSessionInputError("Choose a supported agent session duration.", "duration");
   }
   return hours as AgentSessionDuration;
 }
@@ -99,7 +117,7 @@ export async function createAgentSession({
   if (!userId) throw new Error("An authenticated user is required.");
   const label = normalizeAgentSessionLabel(untrustedLabel);
   if (!AGENT_SESSION_DURATIONS.includes(durationHours)) {
-    throw new Error("Choose a supported agent session duration.");
+    throw new AgentSessionInputError("Choose a supported agent session duration.", "duration");
   }
 
   const token = createToken(cryptoImpl);
@@ -136,9 +154,10 @@ export async function listAgentSessions(
       `SELECT "id", "expiresAt", "userAgent", "createdAt"
        FROM "session"
        WHERE "userId" = ? AND "userAgent" LIKE ?
-       ORDER BY "createdAt" DESC`
+       ORDER BY "createdAt" DESC
+       LIMIT ?`
     )
-    .bind(userId, `${AGENT_SESSION_PREFIX}%`)
+    .bind(userId, `${AGENT_SESSION_PREFIX}%`, AGENT_SESSION_LIST_LIMIT)
     .all<AgentSessionRow>();
 
   return result.results.map(toSummary);
