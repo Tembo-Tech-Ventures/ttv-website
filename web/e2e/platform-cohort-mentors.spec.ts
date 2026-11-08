@@ -47,11 +47,13 @@ const notice = (page: Page) => page.locator("div[role=status]");
 
 /** Leaves Cohort 05 without David as a mentor, whatever an earlier, interrupted run did. */
 async function removeDavidIfListed(page: Page) {
-  const remove = mentors(page).getByRole("button", { name: "Remove David Kamau as a mentor" });
+  const remove = mentors(page).getByRole("link", { name: "Remove David Kamau as a mentor" });
   if ((await remove.count()) === 0) return;
-  page.once("dialog", (dialog) => dialog.accept());
+  // Removing asks first, on the page itself.
   await remove.click();
-  await expect(notice(page)).toHaveText("Mentor removed. Their mentor access to this cohort has ended.");
+  await expect(page.getByRole("region", { name: "Remove David Kamau as a mentor of this cohort?" })).toBeFocused();
+  await mentors(page).getByRole("button", { name: "Remove as a mentor" }).click();
+  await expect(notice(page)).toHaveText("Done: Mentor removed. Their mentor access to this cohort has ended.");
 }
 // The desktop tabs: this journey runs at 1440 only.
 const cohortTab = (page: Page) => page.locator(".space-file__nav .space-tab__label").filter({ hasText: /^Cohort$/ });
@@ -68,18 +70,18 @@ test("an administrator adds and removes a cohort mentor, and the mentor's access
 
   await as(page, baseURL, "staff");
   await open(page, COHORT);
-  await expect(mentors(page).getByRole("heading", { level: 3, name: "Mentors" })).toBeVisible();
+  await expect(mentors(page).getByRole("heading", { level: 2, name: "Mentors" })).toBeVisible();
   await expect(mentors(page).locator(`[data-cohort-mentor="${DAVID}"]`)).toHaveCount(0);
   // Community mentors are offered first.
   await expect(mentors(page).locator('optgroup[label="Community mentors"] option', { hasText: "David Kamau" })).toHaveCount(1);
   await mentors(page).getByRole("combobox", { name: "Person" }).selectOption(DAVID);
   await mentors(page).getByRole("button", { name: "Add mentor" }).click();
-  await expect(notice(page)).toHaveText("Mentor added. They can open this cohort's recordings and channels now.");
+  await expect(notice(page)).toHaveText("Done: Mentor added. They can open this cohort's recordings and channels now.");
   const david = mentors(page).locator(`[data-cohort-mentor="${DAVID}"]`);
   await expect(david).toContainText("David Kamau");
   await expect(david).toContainText("Community mentor");
   // Mentors have their own list: the staff table stays instructors and TAs.
-  await expect(page.locator("table").getByText("MENTOR")).toHaveCount(0);
+  await expect(page.getByRole("table", { name: "Staff", exact: true }).getByRole("cell", { name: "Mentor", exact: true })).toHaveCount(0);
   await runAxe(page, testInfo, "cohort-mentors", { include: ["[data-cohort-mentors]"] });
   await mentors(page).screenshot({ path: `${EVIDENCE_DIR}/${testInfo.project.name}-added.png` });
 

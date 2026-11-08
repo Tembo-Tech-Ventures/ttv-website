@@ -63,7 +63,7 @@ describe("the admin cohort pages", () => {
   const page = (name: string) => readFileSync(new URL(`../../pages/admin/programs/${name}`, import.meta.url), "utf8");
 
   it("leave the cohort's roster out of the mentor picker's other groups (QA2-12)", () => {
-    expect(page("[id].astro")).toContain("cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds, enrolledUserIds)");
+    expect(page("[id].astro")).toContain("cohortMentorModel(prog.programRoles, people, new Set(mentorRows.map((row) => row.userId)), enrolledIds)");
   });
 
   it("write dates one way, day first with the month as a word, never the browser's locale (QA2-13)", () => {

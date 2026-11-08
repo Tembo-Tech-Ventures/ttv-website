@@ -311,6 +311,28 @@ test.describe("every admin page", () => {
     await expect(notice()).toHaveCount(0);
   });
 
+  test("a cohort asks before enrolling anyone as completed, without JavaScript, and Cancel changes nothing", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One width is enough for a server-side step.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/programs/ttv-local-persona-cohort-05");
+    const roster = page.locator("#roster");
+    const before = await roster.getByRole("row").count();
+    await roster.getByRole("combobox", { name: "Person" }).selectOption({ label: "Lucy Chebet (lucy@invalid.ttv)" });
+    await roster.getByRole("combobox", { name: "Status" }).selectOption("COMPLETED");
+    await roster.getByRole("button", { name: "Enroll", exact: true }).click();
+    const ask = page.getByRole("region", { name: "Enroll Lucy Chebet as a past learner?" });
+    await expect(ask).toBeVisible();
+    // The question takes focus, so a keyboard or screen-reader user lands on it after the POST.
+    await expect(ask).toBeFocused();
+    await expect(roster.getByRole("button", { name: "Enroll as completed" })).toBeVisible();
+    await roster.getByRole("link", { name: "Cancel" }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(roster.getByRole("row")).toHaveCount(before);
+    await context.close();
+  });
+
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");

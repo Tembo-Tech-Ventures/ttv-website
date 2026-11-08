@@ -11,4 +11,13 @@ describe("admin user detail page wiring", () => {
     expect(pageSource).toContain("Astro.response.status = 403;");
     expect(pageSource).not.toMatch(/throw error;/);
   });
+
+  it("posts every form to the page itself, never to a #fragment, so a focused notice takes focus", () => {
+    // A browser skips autofocus when the address targets an element; the confirm step and a rejected
+    // form's notice would render unfocused.
+    expect(pageSource).not.toMatch(/method="POST"[^>]*action=\{`[^`]*#/);
+    expect(pageSource).not.toMatch(/action=\{`\$\{page\}#/);
+    // Nor the link that opens a confirm step: its question takes focus the same way.
+    expect(pageSource).not.toMatch(/confirmHref\([^)]*\)\}#/);
+  });
 });

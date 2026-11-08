@@ -197,9 +197,13 @@ export function TextAreaField({ label, hint, error, optional, id, name, rows = 4
 
 export type FieldOption = { value: string; label: string; disabled?: boolean };
 
+/** Options under a heading inside a select: "Community mentors", "Everyone else". */
+export type FieldOptionGroup = { group: string; options: readonly FieldOption[] };
+
 type SelectFieldProps = FieldText &
   Omit<SelectHTMLAttributes<HTMLSelectElement>, "className" | "children" | "multiple"> & {
-    options: readonly FieldOption[];
+    /** Options, or groups of them under a heading; an empty group is left out. */
+    options: readonly (FieldOption | FieldOptionGroup)[];
     /** A first, empty choice such as "Choose a month", for a field with no default. */
     placeholder?: string;
     className?: string;
@@ -223,11 +227,23 @@ export function SelectField({ label, hint, error, optional, id, name, options, p
           className={cx(CONTROL, CONTROL_HEIGHT, "cursor-pointer appearance-none pr-10")}
         >
           {placeholder !== undefined && <option value="">{placeholder}</option>}
-          {options.map((option) => (
-            <option key={option.value} value={option.value} disabled={option.disabled}>
-              {option.label}
-            </option>
-          ))}
+          {options.map((entry) =>
+            "group" in entry ? (
+              entry.options.length > 0 && (
+                <optgroup key={`group-${entry.group}`} label={entry.group}>
+                  {entry.options.map((option) => (
+                    <option key={option.value} value={option.value} disabled={option.disabled}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )
+            ) : (
+              <option key={entry.value} value={entry.value} disabled={entry.disabled}>
+                {entry.label}
+              </option>
+            ),
+          )}
         </select>
         <PiCaretDown aria-hidden className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-ink-secondary" />
       </span>

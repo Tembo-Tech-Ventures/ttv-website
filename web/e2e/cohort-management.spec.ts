@@ -72,10 +72,8 @@ test.describe("admin cohort management", () => {
         `${label} must fit the ${configuredWidth}px viewport without scrolling sideways`
       ).toBeLessThanOrEqual(configuredWidth + 1);
     };
-    const clickWithConfirmation = async (
-      button: Locator,
-      expectedMessage: RegExp
-    ) => {
+    /** Presses a button where a finger would, after proving nothing covers it. */
+    const press = async (button: Locator) => {
       await button.evaluate((el) =>
         el.scrollIntoView({ block: "center", inline: "nearest" })
       );
@@ -107,15 +105,12 @@ test.describe("admin cohort management", () => {
         })
       );
 
-      const dialogPromise = page.waitForEvent("dialog");
-      const inputPromise =
-        viewport === "mobile"
-          ? button.tap()
-          : page.mouse.click(x, y);
-      const dialog = await dialogPromise;
-      expect(dialog.message()).toMatch(expectedMessage);
-      await dialog.accept();
-      await inputPromise;
+      await (viewport === "mobile" ? button.tap() : page.mouse.click(x, y));
+    };
+    /** Completing asks first, on the page: the question, then its own danger button. */
+    const confirmOnPage = async (question: RegExp, confirmLabel: RegExp) => {
+      await expect(page.getByRole("region", { name: question })).toBeFocused();
+      await press(page.getByRole("button", { name: confirmLabel }));
     };
     const enrollIfAvailable = async (
       learner: typeof current,
@@ -134,17 +129,17 @@ test.describe("admin cohort management", () => {
         if (status === "COMPLETED") {
           await page.locator("#enrollmentCompletionDate").fill("2025-04-12");
         }
-        await clickWithConfirmation(
-          page.getByRole("button", { name: "Enroll user" }),
-          /certificates and builder portfolios unlock immediately/i
-        );
+        await press(page.getByRole("button", { name: "Enroll", exact: true }));
+        if (status === "COMPLETED") {
+          await confirmOnPage(/as a past learner\?$/, /^Enroll as completed$/);
+        }
       }
 
       await expect(rosterRow(learner.name)).toContainText(learner.email);
-      await expect(rosterRow(learner.name)).toContainText("Admin enrollment");
+      await expect(rosterRow(learner.name)).toContainText("Enrolled by an admin");
       await expectRosterStatus(learner.name, status);
       const certificateLink = rosterRow(learner.name).getByRole("link", {
-        name: "View certificate",
+        name: /^Certificate /,
       });
       if (status === "COMPLETED") {
         await expect(certificateLink).toBeVisible();
@@ -155,9 +150,9 @@ test.describe("admin cohort management", () => {
 
     await page.goto(PROGRAM_PATH);
     await expect(
-      page.getByRole("heading", { name: "Cohort roster" })
+      page.getByRole("heading", { name: "Roster", exact: true })
     ).toBeVisible();
-    await expect(page.getByText(/select at most 90 applications/i)).toBeVisible();
+    await expect(page.getByText(/up to 90 at a time/i)).toBeVisible();
     await expectNoHorizontalOverflow("the cohort detail page");
 
     await enrollIfAvailable(current, "APPROVED");
@@ -198,10 +193,8 @@ test.describe("admin cohort management", () => {
     }
 
     if (eligibleForApproval.length > 0) {
-      await clickWithConfirmation(
-        page.getByRole("button", { name: "Approve selected" }),
-        /eligible PENDING or AUDIT applications/i
-      );
+      // Approving changes nothing that cannot be changed back, so it does not ask.
+      await press(page.getByRole("button", { name: "Accept selected" }));
     }
     await expectRosterStatus(pending.name, "APPROVED");
     await expectRosterStatus(audit.name, "APPROVED");
@@ -219,10 +212,8 @@ test.describe("admin cohort management", () => {
       await page
         .locator('[data-bulk-form] input[name="completionDate"]')
         .fill("2025-04-12");
-      await clickWithConfirmation(
-        page.getByRole("button", { name: "Complete selected" }),
-        /certificates and builder portfolios/i
-      );
+      await press(page.getByRole("button", { name: "Complete selected" }));
+      await confirmOnPage(/^Complete \d+ applications?\?$/, /^Complete \d+ applications?$/);
     }
 
     await expectRosterStatus(pending.name, "COMPLETED");
@@ -231,10 +222,10 @@ test.describe("admin cohort management", () => {
     await expectRosterStatus(current.name, "APPROVED");
     await expectRosterStatus(alumni.name, "COMPLETED");
     await expect(
-      rosterRow(current.name).getByRole("link", { name: "View certificate" })
+      rosterRow(current.name).getByRole("link", { name: /^Certificate / })
     ).toHaveCount(0);
     await expect(
-      rosterRow(alumni.name).getByRole("link", { name: "View certificate" })
+      rosterRow(alumni.name).getByRole("link", { name: /^Certificate / })
     ).toBeVisible();
 
     await rosterRow(alumni.name)
@@ -346,36 +337,36 @@ test.describe("admin cohort management", () => {
     expect(staleCurriculumBody).toContain(
       "That curriculum no longer exists"
     );
-    expect(staleCurriculumBody).toContain('id="curriculum-error"');
+    expect(staleCurriculumBody).toContain('id="curriculumId-error"');
 
     await page.goto(programPath);
     const detailsForm = page.locator("[data-cohort-details-form]");
     await expect(detailsForm).toBeVisible();
-    await detailsForm.getByLabel("Name *").fill(`  ${programName}  `);
+    await detailsForm.getByLabel("Name", { exact: true }).fill(`  ${programName}  `);
     await detailsForm
-      .getByLabel("Description *")
+      .getByLabel("Description", { exact: true })
       .fill("  Cohort applications managed in preview.  ");
     await detailsForm
-      .getByLabel("Curriculum *")
+      .getByLabel("Curriculum", { exact: true })
       .selectOption("ttv-fixture-curriculum");
-    await detailsForm.getByLabel("Start date").fill("2026-09-01");
-    await detailsForm.getByLabel("End date").fill("2026-12-01");
+    await detailsForm.getByLabel(/^Start date/).fill("2026-09-01");
+    await detailsForm.getByLabel(/^End date/).fill("2026-12-01");
     await detailsForm.getByLabel("Applications open").uncheck();
-    await detailsForm.getByRole("button", { name: "Save Changes" }).click();
-    await expect(page.getByText("Cohort details updated.")).toBeVisible();
-    await expect(page.getByLabel("Name *")).toHaveValue(programName);
+    await detailsForm.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Cohort details saved.")).toBeVisible();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue(programName);
     await expect(page.getByLabel("Applications open")).not.toBeChecked();
 
     await page.getByLabel("Applications open").check();
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByLabel("Applications open")).toBeChecked();
 
     await page.locator("#staffUserId").selectOption(staffUserId);
     await page.locator("#roleName").selectOption("TA");
-    await page.getByRole("button", { name: "Add Staff" }).click();
-    await expect(page.getByText("Cohort staff role added.")).toBeVisible();
+    await page.getByRole("button", { name: "Add to staff" }).click();
+    await expect(page.getByText("Added to the cohort's staff.")).toBeVisible();
     const staffRow = page.locator("tbody tr", { hasText: staffName });
-    await expect(staffRow).toContainText("TA");
+    await expect(staffRow).toContainText("Teaching assistant");
 
     const duplicateStaffResponse = await postForm(programPath, [
       ["action", "add-role"],
@@ -406,13 +397,11 @@ test.describe("admin cohort management", () => {
       "does not belong to this cohort"
     );
 
-    const dialogPromise = page.waitForEvent("dialog");
-    const removePromise = staffRow.getByRole("button", { name: "Remove" }).click();
-    const dialog = await dialogPromise;
-    expect(dialog.message()).toMatch(/remove this staff member from the cohort/i);
-    await dialog.accept();
-    await removePromise;
-    await expect(page.getByText("Cohort staff role removed.")).toBeVisible();
+    // Removing asks first, on the page itself.
+    await staffRow.getByRole("link", { name: /^Remove .* from the staff$/ }).click();
+    await expect(page.getByRole("region", { name: /from the staff\?$/ })).toBeFocused();
+    await page.getByRole("button", { name: "Remove from the staff" }).click();
+    await expect(page.getByText("Removed from the cohort's staff.")).toBeVisible();
     await expect(page.locator("tbody tr", { hasText: staffName })).toHaveCount(0);
 
     await page.screenshot({

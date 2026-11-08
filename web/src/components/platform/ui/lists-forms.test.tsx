@@ -50,6 +50,15 @@ describe("DataTable", () => {
     expect(html).toContain('data-label="Joined"');
   });
 
+  it("passes a row's own attributes through, such as a data attribute a test or script finds it by", () => {
+    const html = renderToStaticMarkup(
+      <DataRow data-application-status="PENDING">
+        <DataCell label="Name">Wanjiku</DataCell>
+      </DataRow>,
+    );
+    expect(html).toMatch(/^<tr data-application-status="PENDING" role="row"/);
+  });
+
   it("names a row's action by its row, quietly", () => {
     const html = renderToStaticMarkup(
       <RowAction href="/x" row="Wanjiku Mwangi">
@@ -175,5 +184,35 @@ describe("filled", () => {
     for (const something of ["Save", 0, createElement("a", { href: "/x" }), createElement(Slot, { value: new String("<a>Go</a>") })]) {
       expect.soft(filled(something)).toBe(true);
     }
+  });
+});
+
+describe("SelectField with groups", () => {
+  it("sets options under their heading, and leaves out an empty group", async () => {
+    const { SelectField } = await import("./Field");
+    const html = renderToStaticMarkup(
+      <SelectField
+        name="person"
+        label="Person"
+        placeholder="Choose a person"
+        options={[
+          { group: "Community mentors", options: [{ value: "u1", label: "David Kamau" }] },
+          { group: "Everyone else", options: [] },
+          { value: "u2", label: "Lucy Chebet" },
+        ]}
+      />,
+    );
+    expect(html).toContain('<option value="">Choose a person</option><optgroup label="Community mentors"><option value="u1">David Kamau</option></optgroup><option value="u2">Lucy Chebet</option>');
+    expect(html).not.toContain("Everyone else");
+  });
+});
+
+describe("ConfirmStep with a selection", () => {
+  it("repeats a field's name for each value, so a confirmed selection posts every row", async () => {
+    const { default: ConfirmStep } = await import("./ConfirmStep");
+    const html = renderToStaticMarkup(
+      <ConfirmStep title="Complete 2 applications?" confirmLabel="Complete 2 applications" cancelHref="/x" fields={{ action: "bulk-complete", applicationIds: ["a1", "a2"] }} focusOnLoad={false} />,
+    );
+    expect(html).toContain('<input type="hidden" name="action" value="bulk-complete"/><input type="hidden" name="applicationIds" value="a1"/><input type="hidden" name="applicationIds" value="a2"/>');
   });
 });

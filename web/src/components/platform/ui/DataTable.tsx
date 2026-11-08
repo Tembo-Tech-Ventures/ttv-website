@@ -4,7 +4,7 @@
  * table. Restating the roles keeps the headers announced with each cell.
  */
 /* oxlint-disable jsx-a11y/no-redundant-roles, jsx-a11y/no-interactive-element-to-noninteractive-role */
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cx } from "./cx";
 import { CHOICE_BOX, buttonClass } from "./recipes";
 // oxlint-disable-next-line import/no-unassigned-import -- how a table stacks on a phone.
@@ -73,7 +73,7 @@ export default function DataTable({ caption, captionVisible = false, columns, ch
   );
 }
 
-type DataRowProps = {
+type DataRowProps = Omit<HTMLAttributes<HTMLTableRowElement>, "className" | "children"> & {
   children: ReactNode;
   /** A row that is picked, open or new: lifted a little, never coloured alone. */
   current?: boolean;
@@ -81,9 +81,9 @@ type DataRowProps = {
 };
 
 /** One thing in the table. Its first cell names it. */
-export function DataRow({ children, current, className }: DataRowProps) {
+export function DataRow({ children, current, className, ...rest }: DataRowProps) {
   return (
-    <tr role="row" data-current={current || undefined} className={cx("kit-table__row transition-colors duration-150 motion-reduce:transition-none hover:bg-ink-primary/4 data-current:bg-ink-primary/4", className)}>
+    <tr {...rest} role="row" data-current={current || undefined} className={cx("kit-table__row transition-colors duration-150 motion-reduce:transition-none hover:bg-ink-primary/4 data-current:bg-ink-primary/4", className)}>
       {children}
     </tr>
   );

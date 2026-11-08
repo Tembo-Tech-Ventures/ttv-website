@@ -29,6 +29,7 @@ export {
   fieldAria,
   fieldId,
   type FieldOption,
+  type FieldOptionGroup,
 } from "./Field";
 export { default as IconButton } from "./IconButton";
 export { default as Menu, MenuItem, MenuSection, MenuSeparator } from "./Menu";

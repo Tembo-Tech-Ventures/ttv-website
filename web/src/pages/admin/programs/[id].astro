@@ -1,20 +1,37 @@
 ---
+import { env } from "cloudflare:workers";
+import { createId } from "@paralleldrive/cuid2";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
 import CohortMentors from "@/components/admin/CohortMentors.astro";
 import { cohortMentorModel, cohortRoleRefusal, teachingRoles } from "@/components/admin/cohort-mentors";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
-import { env } from "cloudflare:workers";
-import { applyApplicationMutationWithAttention } from "@/lib/attention/mutations";
-import { createId } from "@paralleldrive/cuid2";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import {
-  APPLICATION_COMPLETION_CONFIRMATION,
+  BackLink,
+  Button,
+  ButtonLink,
+  Checkbox,
+  ConfirmStep,
+  DataCell,
+  DataRow,
+  DataSelectCell,
+  DataTable,
+  EmptyState,
+  Notice,
+  PageHeader,
+  RowAction,
+  SelectField,
+  StatusChip,
+  TextAreaField,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  linkClass,
+  withoutConfirm,
+} from "@/components/platform/ui";
+import { applyApplicationMutationWithAttention } from "@/lib/attention/mutations";
+import {
   MAX_BULK_SELECTION_SIZE,
   ProgramApplicationError,
   buildAdminEnrollmentStatement,
@@ -26,377 +43,270 @@ import {
   parseSelectedApplicationIds,
   planBulkProgramApplicationMutation,
   throwAdminEnrollmentFailure,
-  toProgramApplicationBadgeVariant,
 } from "@/lib/admin/program-application";
 import {
+  COHORTS_PATH,
+  ENROLMENT_STATUS_OPTIONS,
+  STAFF_ROLE_OPTIONS,
+  STORE_UNAVAILABLE,
+  cohortChangeNotice,
+  cohortRoleLabel,
+  needsCompletionConfirmation,
+  type CohortForm,
+} from "@/lib/admin/program-detail";
+import {
   ProgramManagementError,
-  type CohortUpdateField,
-  type CohortUpdateValues,
-  cohortUpdateErrorField,
-  cohortUpdateValuesFromFormData,
   assertProgramRoleRemoved,
   buildAddProgramRoleStatement,
   buildCohortUpdateStatement,
   buildRemoveProgramRoleStatement,
+  cohortUpdateErrorField,
+  cohortUpdateValuesFromFormData,
   parseCohortUpdate,
   parseProgramStaffRole,
   parseProgramStaffUserId,
   throwAddProgramRoleFailure,
   throwCohortUpdateFailure,
+  type CohortUpdateField,
+  type CohortUpdateValues,
 } from "@/lib/admin/program-management";
-import { isFlagEnabled } from "@/lib/platform/server/flags";
+import * as schema from "@/lib/db/schema";
 import { formatMomentDate } from "@/lib/display-date";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
 
+/*
+ * One cohort, for an administrator: its details, its staff and mentors, and
+ * its roster. Middleware has required ADMIN and same-origin POSTs. Every form
+ * posts to the page; a change answers with a 303 and says what changed once,
+ * and a rejected one keeps what was typed and says what went wrong at the top
+ * of its own section. Removing someone, and completing anyone (which opens
+ * their certificate at once), asks first on the page itself, without script.
+ */
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
-const defaultCompletionDate = formatDateInputValue();
-
-if (!id) return Astro.redirect("/admin/programs");
-
+if (!id) return Astro.redirect(COHORTS_PATH);
+const page = `${COHORTS_PATH}/${encodeURIComponent(id)}`;
+const today = formatDateInputValue();
 // Cohort mentors exist for the channels (owner decision 4), so they appear with them.
-const mentorsEnabled = await isFlagEnabled(
-  { db: env.DB, env, user: Astro.locals.user, isAdmin: Astro.locals.isAdmin, locals: Astro.locals },
-  "channels"
-);
+const channelsOn = () => isFlagEnabled({ db: env.DB, env, user: Astro.locals.user, isAdmin: Astro.locals.isAdmin, locals: Astro.locals }, "channels");
 
-let actionError = "";
+let failedForm: CohortForm | null = null;
+let failure = "";
 let submittedCohortValues: CohortUpdateValues | null = null;
 const cohortFieldErrors: Partial<Record<CohortUpdateField, string>> = {};
-const curricula = await db.query.curriculum.findMany({
-  columns: { id: true, title: true },
-  orderBy: (curriculum, { asc }) => [asc(curriculum.title)],
-});
+/** What a rejected form held, so it renders again as it was sent. */
+const kept: Partial<Record<"staffUserId" | "staffRole" | "mentorUserId" | "enrolUserId" | "enrolStatus" | "enrolDate" | "rosterDate", string>> & { rosterIds?: string[] } = {};
+/**
+ * A change that asks first, with everything it will post. Its Cancel goes to the plain page: after
+ * the POST the address is already the page's, so a link to `#roster` alone would not reload it.
+ */
+let confirming: { form: "enrol" | "roster"; title: string; body: string; confirmLabel: string; fields: Record<string, string | string[]> } | null = null;
 
-// Handle POST actions
+const text = (value: ReturnType<FormData["get"]>) => (typeof value === "string" ? value.trim() : "");
+const reject = (form: CohortForm, message: string) => {
+  failedForm = form;
+  failure = message;
+  Astro.response.status = 400;
+};
+/** The database failed, not the request: the form stays as it was sent, and the page says to try again. */
+const unavailable = (form: CohortForm) => {
+  failedForm = form;
+  failure = STORE_UNAVAILABLE;
+  Astro.response.status = 503;
+};
+
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const actionValue = formData.get("action");
-  const action = typeof actionValue === "string" ? actionValue : "";
+  const action = text(formData.get("action"));
 
   if (action === "update-program") {
     submittedCohortValues = cohortUpdateValuesFromFormData(formData);
-
     try {
-      const update = parseCohortUpdate({
-        ...submittedCohortValues,
-        applicationsOpen: formData.get("applicationsOpen"),
-      });
-      const statement = buildCohortUpdateStatement({
-        programId: id,
-        update,
-      });
-      const result = await env.DB.prepare(statement.sql)
-        .bind(...statement.params)
-        .run();
-
+      const update = parseCohortUpdate({ ...submittedCohortValues, applicationsOpen: formData.get("applicationsOpen") });
+      const statement = buildCohortUpdateStatement({ programId: id, update });
+      const result = await env.DB.prepare(statement.sql).bind(...statement.params).run();
       if (result.meta.changes !== statement.expectedChanges) {
-        if (result.meta.changes !== 0) {
-          throw new Error(
-            `Atomic cohort update changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`
-          );
-        }
-
+        if (result.meta.changes !== 0) throw new Error(`Atomic cohort update changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`);
         const [program, curriculum] = await Promise.all([
-          db.query.program.findFirst({
-            where: eq(schema.program.id, id),
-            columns: { id: true },
-          }),
-          db.query.curriculum.findFirst({
-            where: eq(schema.curriculum.id, update.curriculumId),
-            columns: { id: true },
-          }),
+          db.query.program.findFirst({ where: eq(schema.program.id, id), columns: { id: true } }),
+          db.query.curriculum.findFirst({ where: eq(schema.curriculum.id, update.curriculumId), columns: { id: true } }),
         ]);
-        throwCohortUpdateFailure({
-          programExists: Boolean(program),
-          curriculumExists: Boolean(curriculum),
-        });
+        throwCohortUpdateFailure({ programExists: Boolean(program), curriculumExists: Boolean(curriculum) });
       }
-
-      return Astro.redirect(`/admin/programs/${id}?notice=cohort-updated`);
+      return redirectWithFlash(Astro, `${page}#details`, { tone: "success", title: cohortChangeNotice({ kind: "details" }) });
     } catch (error) {
-      if (error instanceof ProgramManagementError) {
-        actionError = error.message;
-        Astro.response.status = 400;
+      if (!(error instanceof ProgramManagementError)) {
+        unavailable("details");
+      } else {
+        reject("details", error.message);
         const field = cohortUpdateErrorField(error);
         if (field) cohortFieldErrors[field] = error.message;
-      } else {
-        throw error;
       }
     }
-  }
-
-  if (action === "add-role") {
+  } else if (action === "add-role") {
+    const asMentor = text(formData.get("roleName")) === "MENTOR";
+    const form: CohortForm = asMentor ? "mentors" : "staff";
+    if (asMentor) kept.mentorUserId = text(formData.get("userId"));
+    else Object.assign(kept, { staffUserId: text(formData.get("userId")), staffRole: text(formData.get("roleName")) });
     try {
       const userId = parseProgramStaffUserId(formData.get("userId"));
       const role = parseProgramStaffRole(formData.get("roleName"));
-      const refused = cohortRoleRefusal(role, mentorsEnabled);
+      const refused = cohortRoleRefusal(role, await channelsOn());
       if (refused) throw new ProgramManagementError("INVALID_STAFF_ROLE", refused);
-      const statement = buildAddProgramRoleStatement({
-        id: createId(),
-        programId: id,
-        userId,
-        role,
-      });
-      const result = await env.DB.prepare(statement.sql)
-        .bind(...statement.params)
-        .run();
-
+      const statement = buildAddProgramRoleStatement({ id: createId(), programId: id, userId, role });
+      const result = await env.DB.prepare(statement.sql).bind(...statement.params).run();
       if (result.meta.changes !== statement.expectedChanges) {
-        if (result.meta.changes !== 0) {
-          throw new Error(
-            "Atomic cohort role insert changed " +
-              result.meta.changes +
-              " rows; expected " +
-              statement.expectedChanges +
-              "."
-          );
-        }
-
+        if (result.meta.changes !== 0) throw new Error(`Atomic cohort role insert changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`);
         const [program, user, duplicate] = await Promise.all([
-          db.query.program.findFirst({
-            where: eq(schema.program.id, id),
-            columns: { id: true },
-          }),
-          db.query.user.findFirst({
-            where: eq(schema.user.id, userId),
-            columns: { id: true },
-          }),
+          db.query.program.findFirst({ where: eq(schema.program.id, id), columns: { id: true } }),
+          db.query.user.findFirst({ where: eq(schema.user.id, userId), columns: { id: true } }),
           db.query.programRole.findFirst({
-            where: and(
-              eq(schema.programRole.programId, id),
-              eq(schema.programRole.userId, userId),
-              eq(schema.programRole.name, role)
-            ),
+            where: and(eq(schema.programRole.programId, id), eq(schema.programRole.userId, userId), eq(schema.programRole.name, role)),
             columns: { id: true },
           }),
         ]);
-        throwAddProgramRoleFailure({
-          programExists: Boolean(program),
-          userExists: Boolean(user),
-          duplicateRole: Boolean(duplicate),
-        });
+        throwAddProgramRoleFailure({ programExists: Boolean(program), userExists: Boolean(user), duplicateRole: Boolean(duplicate) });
       }
-
-      return Astro.redirect(
-        `/admin/programs/${id}?notice=${role === "MENTOR" ? "mentor-added" : "staff-added"}`
-      );
+      return role === "MENTOR"
+        ? redirectWithFlash(Astro, `${page}#cohort-mentors`, { tone: "success", title: cohortChangeNotice({ kind: "mentor-added" }) })
+        : redirectWithFlash(Astro, `${page}#staff`, { tone: "success", title: cohortChangeNotice({ kind: "staff-added" }) });
     } catch (error) {
-      if (error instanceof ProgramManagementError) {
-        actionError = error.message;
-        Astro.response.status = 400;
-      } else {
-        throw error;
-      }
+      if (error instanceof ProgramManagementError) reject(form, error.message);
+      else unavailable(form);
     }
-  }
-
-  if (action === "remove-role") {
+  } else if (action === "remove-role") {
+    const asMentor = formData.get("roleKind") === "MENTOR";
     try {
-      const roleIdValue = formData.get("roleId");
-      const roleId =
-        typeof roleIdValue === "string" ? roleIdValue.trim() : "";
-      const statement = buildRemoveProgramRoleStatement({
-        programId: id,
-        roleId,
-      });
-      const result = await env.DB.prepare(statement.sql)
-        .bind(...statement.params)
-        .run();
+      const statement = buildRemoveProgramRoleStatement({ programId: id, roleId: text(formData.get("roleId")) });
+      const result = await env.DB.prepare(statement.sql).bind(...statement.params).run();
       assertProgramRoleRemoved(result.meta.changes);
-      // Only the notice depends on which list the row was in.
-      const notice = formData.get("roleKind") === "MENTOR" ? "mentor-removed" : "staff-removed";
-      return Astro.redirect(`/admin/programs/${id}?notice=${notice}`);
+      return asMentor
+        ? redirectWithFlash(Astro, `${page}#cohort-mentors`, { tone: "success", title: cohortChangeNotice({ kind: "mentor-removed" }) })
+        : redirectWithFlash(Astro, `${page}#staff`, { tone: "success", title: cohortChangeNotice({ kind: "staff-removed" }) });
     } catch (error) {
-      if (error instanceof ProgramManagementError) {
-        actionError = error.message;
-        Astro.response.status = 400;
-      } else {
-        throw error;
-      }
+      if (error instanceof ProgramManagementError) reject(asMentor ? "mentors" : "staff", error.message);
+      else unavailable(asMentor ? "mentors" : "staff");
     }
-  }
-
-  if (action === "direct-enroll") {
+  } else if (action === "direct-enroll") {
+    Object.assign(kept, { enrolUserId: text(formData.get("userId")), enrolStatus: text(formData.get("status")), enrolDate: text(formData.get("completionDate")) });
     try {
-      const userIdValue = formData.get("userId");
-      const userId = typeof userIdValue === "string" ? userIdValue.trim() : "";
       const enrollment = createAdminEnrollment({
         id: createId(),
         programId: id,
-        userId,
+        userId: kept.enrolUserId ?? "",
         status: formData.get("status"),
         completionDate: formData.get("completionDate"),
       });
-      const statement = buildAdminEnrollmentStatement(enrollment);
-      const result = await env.DB.prepare(statement.sql)
-        .bind(...statement.params)
-        .run();
-
-      if (result.meta.changes !== statement.expectedChanges) {
-        if (result.meta.changes !== 0) {
-          throw new Error(
-            `Atomic admin enrollment changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`
-          );
-        }
-
-        const [program, user, existing] = await Promise.all([
-          db.query.program.findFirst({
-            where: eq(schema.program.id, id),
-            columns: { id: true },
-          }),
-          db.query.user.findFirst({
-            where: eq(schema.user.id, userId),
-            columns: { id: true },
-          }),
-          db.query.programApplication.findFirst({
-            where: and(
-              eq(schema.programApplication.programId, id),
-              eq(schema.programApplication.userId, userId)
-            ),
-            columns: { id: true },
-          }),
-        ]);
-
-        throwAdminEnrollmentFailure({
-          programExists: Boolean(program),
-          userExists: Boolean(user),
-          alreadyEnrolled: Boolean(existing),
-        });
-      }
-
-      const notice =
-        enrollment.status === "COMPLETED"
-          ? "historical-enrollment"
-          : "current-enrollment";
-      return Astro.redirect(`/admin/programs/${id}?notice=${notice}`);
-    } catch (error) {
-      if (error instanceof ProgramApplicationError) {
-        actionError = error.message;
-        Astro.response.status = 400;
+      if (needsCompletionConfirmation(formData, enrollment.status)) {
+        const person = await db.query.user.findFirst({ where: eq(schema.user.id, enrollment.userId), columns: { name: true } });
+        confirming = {
+          form: "enrol",
+          title: `Enroll ${person?.name ?? "this person"} as a past learner?`,
+          body: "Completed opens their certificate and builder portfolio at once. Use it only for someone who finished this cohort.",
+          confirmLabel: "Enroll as completed",
+          fields: { action: "direct-enroll", userId: enrollment.userId, status: "COMPLETED", completionDate: kept.enrolDate ?? today, confirmed: "yes" },
+        };
       } else {
-        throw error;
+        const statement = buildAdminEnrollmentStatement(enrollment);
+        const result = await env.DB.prepare(statement.sql).bind(...statement.params).run();
+        if (result.meta.changes !== statement.expectedChanges) {
+          if (result.meta.changes !== 0) throw new Error(`Atomic admin enrollment changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`);
+          const [program, user, existing] = await Promise.all([
+            db.query.program.findFirst({ where: eq(schema.program.id, id), columns: { id: true } }),
+            db.query.user.findFirst({ where: eq(schema.user.id, enrollment.userId), columns: { id: true } }),
+            db.query.programApplication.findFirst({
+              where: and(eq(schema.programApplication.programId, id), eq(schema.programApplication.userId, enrollment.userId)),
+              columns: { id: true },
+            }),
+          ]);
+          throwAdminEnrollmentFailure({ programExists: Boolean(program), userExists: Boolean(user), alreadyEnrolled: Boolean(existing) });
+        }
+        return redirectWithFlash(Astro, `${page}#roster`, { tone: "success", title: cohortChangeNotice({ kind: "enrolled", status: enrollment.status }) });
       }
+    } catch (error) {
+      if (error instanceof ProgramApplicationError) reject("enrol", error.message);
+      else unavailable("enrol");
     }
   } else if (action === "bulk-approve" || action === "bulk-complete") {
+    kept.rosterIds = formData.getAll("applicationIds").filter((value): value is string => typeof value === "string");
+    kept.rosterDate = text(formData.get("completionDate"));
     try {
       const bulkAction = parseBulkApplicationAction(action);
-      const applicationIds = parseSelectedApplicationIds(
-        formData.getAll("applicationIds")
-      );
+      const applicationIds = parseSelectedApplicationIds(formData.getAll("applicationIds"));
       const applications = await db.query.programApplication.findMany({
         where: inArray(schema.programApplication.id, [...applicationIds]),
         columns: { id: true, programId: true, status: true },
       });
-      const plan = planBulkProgramApplicationMutation({
-        action: bulkAction,
-        programId: id,
-        applicationIds,
-        applications,
-        completionDate: formData.get("completionDate"),
-      });
-      const statement = buildBulkMutationStatement(plan);
-      await applyApplicationMutationWithAttention({ db: env.DB, env }, {
-        statement,
-        applicationIds: plan.applicationIds,
-        actorId: Astro.locals.user!.id,
-        status: plan.status,
-        staleCode: "STALE_BULK_SELECTION",
-        staleMessage:
-          "The roster changed while this bulk action was running. No applications were updated; refresh the roster and select the rows again.",
-      });
-
-      const notice =
-        bulkAction === "bulk-approve" ? "bulk-approved" : "bulk-completed";
-      return Astro.redirect(
-        `/admin/programs/${id}?notice=${notice}&count=${plan.applicationIds.length}`
-      );
-    } catch (error) {
-      if (error instanceof ProgramApplicationError) {
-        actionError = error.message;
-        Astro.response.status = 400;
+      const plan = planBulkProgramApplicationMutation({ action: bulkAction, programId: id, applicationIds, applications, completionDate: formData.get("completionDate") });
+      if (needsCompletionConfirmation(formData, plan.status)) {
+        const count = plan.applicationIds.length;
+        confirming = {
+          form: "roster",
+          title: `Complete ${count} ${count === 1 ? "application" : "applications"}?`,
+          body: "Completing opens each person's certificate and builder portfolio at once.",
+          confirmLabel: `Complete ${count} ${count === 1 ? "application" : "applications"}`,
+          fields: { action, applicationIds: [...plan.applicationIds], completionDate: kept.rosterDate || today, confirmed: "yes" },
+        };
       } else {
-        throw error;
+        await applyApplicationMutationWithAttention({ db: env.DB, env }, {
+          statement: buildBulkMutationStatement(plan),
+          applicationIds: plan.applicationIds,
+          actorId: Astro.locals.user!.id,
+          status: plan.status,
+          staleCode: "STALE_BULK_SELECTION",
+          staleMessage: "The roster changed while this ran, so nothing was updated. Check the roster and choose the rows again.",
+        });
+        return redirectWithFlash(Astro, `${page}#roster`, {
+          tone: "success",
+          title: cohortChangeNotice({ kind: "bulk", action: bulkAction, count: plan.applicationIds.length }),
+        });
       }
+    } catch (error) {
+      if (error instanceof ProgramApplicationError) reject("roster", error.message);
+      else unavailable("roster");
     }
-  } else if (!actionError) {
-    actionError = "Choose a supported program action and try again.";
-    Astro.response.status = 400;
+  } else {
+    reject("details", "That isn't something this page can do. Reload it and try again.");
   }
 }
 
-const prog = await db.query.program.findFirst({
-  where: eq(schema.program.id, id),
-  with: {
-    curriculum: true,
-    programRoles: { with: { user: true } },
-    programApplications: { with: { user: true } },
-  },
-});
+// Independent reads, started together: the flag, the curricula, the cohort, the people who could join it,
+// community mentors (found in SQL, not by reading every role) and the Admin space.
+const [mentorsEnabled, curricula, prog, people, mentorRows, spaces] = await Promise.all([
+  channelsOn(),
+  db.query.curriculum.findMany({ columns: { id: true, title: true }, orderBy: (curriculum) => [asc(curriculum.title)] }),
+  db.query.program.findFirst({
+    where: eq(schema.program.id, id),
+    with: {
+      programRoles: { columns: { id: true, userId: true, name: true }, with: { user: { columns: { name: true, email: true } } } },
+      programApplications: {
+        columns: { id: true, userId: true, status: true, application: true, createdAt: true, completedAt: true },
+        with: { user: { columns: { name: true, email: true } } },
+        orderBy: (application) => [asc(application.createdAt)],
+      },
+    },
+  }),
+  db.query.user.findMany({ columns: { id: true, name: true, email: true }, orderBy: (user) => [asc(user.name), asc(user.email)] }),
+  db
+    .select({ userId: schema.userRole.userId })
+    .from(schema.userRole)
+    .innerJoin(schema.role, eq(schema.role.id, schema.userRole.roleId))
+    .where(eq(schema.role.name, "MENTOR")),
+  resolveSpacePage(Astro.locals, "adminCohorts"),
+]);
+if (!prog) return Astro.redirect(`${COHORTS_PATH}${failure ? "?notice=missing" : ""}`);
 
-if (!prog) {
-  return Astro.redirect(`/admin/programs${actionError ? "?notice=missing" : ""}`);
-}
-
-const rosterApplications = prog.programApplications.toSorted(
-  (first, second) => first.createdAt.getTime() - second.createdAt.getTime()
-);
-const enrolledUserIds = new Set(
-  rosterApplications.map((application) => application.userId)
-);
-
-// Existing signed-in users who are not already enrolled in this cohort.
-const allUsers = await db.query.user.findMany({
-  orderBy: (user, { asc }) => [asc(user.name), asc(user.email)],
-});
-const availableEnrollmentUsers = allUsers.filter(
-  (user) => !enrolledUserIds.has(user.id)
-);
-
-const approvedMentorIds = new Set(
-  mentorsEnabled
-    ? (
-        await db.query.userRole.findMany({
-          columns: { userId: true },
-          with: { role: { columns: { name: true } } },
-        })
-      )
-        .filter(({ role }) => role.name === "MENTOR")
-        .map(({ userId }) => userId)
-    : []
-);
-const mentorModel = cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds, enrolledUserIds);
+const flash = takeFlash(Astro);
+const roster = prog.programApplications;
+const enrolledIds = new Set(roster.map((application) => application.userId));
+const available = people.filter((person) => !enrolledIds.has(person.id));
+const mentorModel = cohortMentorModel(prog.programRoles, people, new Set(mentorRows.map((row) => row.userId)), enrolledIds);
 // While channels are off, mentor rows stay in the staff list as they always have.
 const staffRoles = mentorsEnabled ? teachingRoles(prog.programRoles) : prog.programRoles;
-
-const roster = rosterApplications.map((application) => ({
-  ...application,
-  badgeVariant: toProgramApplicationBadgeVariant(application.status),
-  enrollmentSource: getEnrollmentSource(application.application),
-}));
-
-const notice = Astro.url.searchParams.get("notice");
-const noticeCount = Number.parseInt(
-  Astro.url.searchParams.get("count") ?? "0",
-  10
-);
-const SUCCESS_NOTICES = new Map([
-  ["cohort-updated", "Cohort details updated."],
-  ["staff-added", "Cohort staff role added."],
-  ["staff-removed", "Cohort staff role removed."],
-  ["mentor-added", "Mentor added. They can open this cohort's recordings and channels now."],
-  ["mentor-removed", "Mentor removed. Their mentor access to this cohort has ended."],
-  ["current-enrollment", "Current learner enrolled as APPROVED."],
-  ["historical-enrollment", "Historical learner enrolled as COMPLETED; certificate and builder portfolio access is now unlocked."],
-]);
-const actionSuccess =
-  notice === "bulk-approved" && noticeCount > 0
-    ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} approved.`
-    : notice === "bulk-completed" && noticeCount > 0
-      ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} completed; certificate and builder portfolio access is now unlocked.`
-      : SUCCESS_NOTICES.get(notice ?? "") ?? "";
-
-const formatDate = (date: Date | null) =>
-  date ? new Date(date).toISOString().split("T")[0] : "";
+const asking = confirmingAction(Astro.url, prog.programRoles.map((role) => `remove-${role.id}`));
+const askingStaff = staffRoles.find((role) => asking === `remove-${role.id}`);
+const formatDate = (date: Date | null) => (date ? formatDateInputValue(date) : "");
 const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
   name: prog.name,
   description: prog.description,
@@ -405,484 +315,255 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
   endDate: formatDate(prog.endDate),
   applicationsOpen: prog.applicationsOpen,
 };
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminCohorts");
+const personOption = (person: { id: string; name: string; email: string }) => ({ value: person.id, label: `${person.name} (${person.email})` });
+const rosterIds = new Set(kept.rosterIds ?? []);
 ---
 
-<AdminLayout title={prog.name} spaces={spaces}>
-  <div class="space-y-6">
-    <a href="/admin/programs" class="text-sm text-primary hover:underline">
-      &larr; Back to Cohorts
-    </a>
-    <PageTitle spaces={Boolean(spaces)} legacyTag={null}>{prog.name}</PageTitle>
+<AdminLayout title={prog.name} titlePrefix={failure ? "Error: " : ""} spaces={spaces}>
+  <div class="flex flex-col gap-12">
+    <div class="flex flex-col gap-4">
+      <BackLink href={COHORTS_PATH}>Cohorts</BackLink>
+      <PageHeader title={prog.name}>
+        {prog.description}
+      </PageHeader>
+    </div>
 
-    {actionSuccess && (
-      <div
-        role="status"
-        class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200"
-      >
-        {actionSuccess}
-      </div>
-    )}
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
 
-    {actionError && (
-      <div
-        role="alert"
-        class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
-      >
-        {actionError}
-      </div>
-    )}
-
-    <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Cohort details</h3>
-      <form method="POST" class="space-y-4" data-cohort-details-form>
+    <section id="details" aria-labelledby="details-title" class="flex max-w-3xl flex-col gap-5">
+      <h2 id="details-title" class="m-0 text-2xl">Details</h2>
+      {failedForm === "details" && <Notice tone="danger" focusOnLoad title="The details weren't saved">{failure}</Notice>}
+      <form method="POST" action={page} class="flex flex-col gap-5" data-cohort-details-form>
         <input type="hidden" name="action" value="update-program" />
-        <div class="flex flex-col gap-1.5">
-          <label for="name" class="text-sm font-medium text-white/90">Name *</label>
-          <input
-            id="name"
-            name="name"
-            value={cohortEditValues.name}
-            required
-            aria-invalid={Boolean(cohortFieldErrors.name)}
-            aria-describedby={cohortFieldErrors.name ? "name-error" : undefined}
-            class="form-control placeholder:text-ink-muted"
-          />
-          {cohortFieldErrors.name && (
-            <p id="name-error" class="text-sm text-red-300">{cohortFieldErrors.name}</p>
-          )}
+        <TextField id="name" name="name" label="Name" defaultValue={cohortEditValues.name} error={cohortFieldErrors.name} required />
+        <TextAreaField id="description" name="description" label="Description" rows={3} defaultValue={cohortEditValues.description} error={cohortFieldErrors.description} required />
+        <div class="grid gap-5 sm:grid-cols-2">
+          <TextField id="startDate" name="startDate" type="date" label="Start date" optional defaultValue={cohortEditValues.startDate} error={cohortFieldErrors.startDate} />
+          <TextField id="endDate" name="endDate" type="date" label="End date" optional defaultValue={cohortEditValues.endDate} error={cohortFieldErrors.endDate} />
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
-          <textarea
-            id="description"
-            name="description"
-            required
-            rows="3"
-            aria-invalid={Boolean(cohortFieldErrors.description)}
-            aria-describedby={cohortFieldErrors.description ? "description-error" : undefined}
-            class="form-control placeholder:text-ink-muted"
-          >{cohortEditValues.description}</textarea>
-          {cohortFieldErrors.description && (
-            <p id="description-error" class="text-sm text-red-300">{cohortFieldErrors.description}</p>
-          )}
+        <SelectField
+          id="curriculumId"
+          name="curriculumId"
+          label="Curriculum"
+          placeholder="Choose a curriculum"
+          options={curricula.map((curriculum) => ({ value: curriculum.id, label: curriculum.title }))}
+          defaultValue={cohortEditValues.curriculumId}
+          error={cohortFieldErrors.curriculumId}
+          required
+        />
+        <Checkbox
+          id="applicationsOpen"
+          name="applicationsOpen"
+          label="Applications open"
+          hint="Shows this cohort on the application page, and accepts new applications."
+          defaultChecked={cohortEditValues.applicationsOpen}
+          error={cohortFieldErrors.applicationsOpen}
+        />
+        <div>
+          <Button variant="primary" type="submit">Save changes</Button>
         </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="flex flex-col gap-1.5">
-            <label for="startDate" class="text-sm font-medium text-white/90">Start date</label>
-            <input
-              type="date"
-              id="startDate"
-              name="startDate"
-              value={cohortEditValues.startDate}
-              aria-invalid={Boolean(cohortFieldErrors.startDate)}
-              aria-describedby={cohortFieldErrors.startDate ? "start-date-error" : undefined}
-              class="form-control"
-            />
-            {cohortFieldErrors.startDate && (
-              <p id="start-date-error" class="text-sm text-red-300">{cohortFieldErrors.startDate}</p>
-            )}
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label for="endDate" class="text-sm font-medium text-white/90">End date</label>
-            <input
-              type="date"
-              id="endDate"
-              name="endDate"
-              value={cohortEditValues.endDate}
-              aria-invalid={Boolean(cohortFieldErrors.endDate)}
-              aria-describedby={cohortFieldErrors.endDate ? "end-date-error" : undefined}
-              class="form-control"
-            />
-            {cohortFieldErrors.endDate && (
-              <p id="end-date-error" class="text-sm text-red-300">{cohortFieldErrors.endDate}</p>
-            )}
-          </div>
-        </div>
-        <div class="flex w-full min-w-0 flex-col gap-1.5">
-          <label for="curriculumId" class="text-sm font-medium text-white/90">
-            Curriculum *
-          </label>
-          <select
-            id="curriculumId"
-            name="curriculumId"
-            required
-            aria-invalid={Boolean(cohortFieldErrors.curriculumId)}
-            aria-describedby={cohortFieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="form-control w-full min-w-0"
-          >
-            <option value="">Select a curriculum…</option>
-            {curricula.map((curriculum) => (
-              <option
-                value={curriculum.id}
-                selected={curriculum.id === cohortEditValues.curriculumId}
-              >
-                {curriculum.title}
-              </option>
-            ))}
-          </select>
-          {cohortFieldErrors.curriculumId && (
-            <p id="curriculum-error" class="text-sm text-red-300">
-              {cohortFieldErrors.curriculumId}
-            </p>
-          )}
-        </div>
-        <div class="rounded-md border border-teal/30 bg-teal/10 p-4">
-          <label class="flex items-start gap-3 text-sm text-white/90">
-            <input
-              id="applicationsOpen"
-              type="checkbox"
-              name="applicationsOpen"
-              checked={cohortEditValues.applicationsOpen}
-              aria-invalid={Boolean(cohortFieldErrors.applicationsOpen)}
-              aria-describedby={cohortFieldErrors.applicationsOpen ? "applications-open-error" : undefined}
-              class="mt-0.5 h-4 w-4 rounded border-teal bg-dark text-primary focus:ring-primary"
-            />
-            <span>
-              <span class="block font-medium">Applications open</span>
-              <span class="mt-1 block text-ink-muted">
-                Show this cohort on the learner application page and accept new applications.
-              </span>
-            </span>
-          </label>
-          {cohortFieldErrors.applicationsOpen && (
-            <p id="applications-open-error" class="mt-2 text-sm text-red-300">
-              {cohortFieldErrors.applicationsOpen}
-            </p>
-          )}
-        </div>
-        <Button type="submit">
-          Save Changes
-        </Button>
       </form>
-    </Card>
+    </section>
 
-    <Card>
-      <h3 class="mb-4 text-lg font-semibold text-white">Staff</h3>
-      {staffRoles.length > 0 ? (
-        <div class="mb-4 overflow-x-auto rounded-lg border border-teal/20">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-teal/30 text-xs uppercase text-white/80">
-              <tr>
-                <th class="px-4 py-3 font-medium">Name</th>
-                <th class="px-4 py-3 font-medium">Role</th>
-                <th class="px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-teal/10">
-              {staffRoles.map((programRole) => (
-                <tr class="text-white/80">
-                  <td class="px-4 py-3">{programRole.user?.name ?? "Unknown"}</td>
-                  <td class="px-4 py-3">{programRole.name}</td>
-                  <td class="px-4 py-3">
-                    <form method="POST" class="inline">
-                      <input type="hidden" name="action" value="remove-role" />
-                      <input type="hidden" name="roleId" value={programRole.id} />
-                      <button
-                        type="submit"
-                        class="text-red-400 hover:text-red-300"
-                        onclick="return confirm('Remove this staff member from the cohort?')"
-                      >
-                        Remove
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p class="mb-4 text-ink-muted">No staff assigned</p>
-      )}
-
-      <form method="POST" class="flex flex-wrap items-end gap-3">
+    <section id="staff" aria-labelledby="staff-title" class="flex max-w-3xl flex-col gap-5">
+      <h2 id="staff-title" class="m-0 text-2xl">Staff</h2>
+      {failedForm === "staff" && <Notice tone="danger" focusOnLoad title="The staff didn't change">{failure}</Notice>}
+      <DataTable caption="Staff" columns={[{ label: "Name" }, { label: "Role" }, { label: "Actions", hidden: true }]} isEmpty={staffRoles.length === 0}>
+        {
+          staffRoles.map((role) => (
+            <DataRow current={askingStaff?.id === role.id}>
+              <DataCell label="Name" primary>
+                <a href={`/admin/users/${encodeURIComponent(role.userId)}`} class={linkClass()}>{role.user?.name ?? "Account removed"}</a>
+              </DataCell>
+              <DataCell label="Role">{cohortRoleLabel(role.name)}</DataCell>
+              <DataCell label="" align="end">
+                <ButtonLink variant="danger" size="sm" href={confirmHref(Astro.url, `remove-${role.id}`)}>
+                  Remove<span class="sr-only"> {role.user?.name ?? "this person"} from the staff</span>
+                </ButtonLink>
+              </DataCell>
+            </DataRow>
+          ))
+        }
+        <Fragment slot="empty">
+          <EmptyState title="No staff yet" headingLevel={3}>Instructors and teaching assistants you add here can run this cohort's sessions.</EmptyState>
+        </Fragment>
+      </DataTable>
+      {
+        askingStaff && (
+          <ConfirmStep
+            title={`Remove ${askingStaff.user?.name ?? "this person"} from the staff?`}
+            confirmLabel="Remove from the staff"
+            cancelHref={`${withoutConfirm(Astro.url)}#staff`}
+            action={page}
+            fields={{ action: "remove-role", roleId: askingStaff.id, roleKind: askingStaff.name }}
+          >
+            They stop running this cohort at once. You can add them again here.
+          </ConfirmStep>
+        )
+      }
+      <form method="POST" action={page} class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="action" value="add-role" />
-        <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto">
-          <label for="staffUserId" class="text-sm font-medium text-white/90">User</label>
-          <select
-            id="staffUserId"
-            name="userId"
-            required
-            class="form-control w-full min-w-0"
-          >
-            <option value="">Select user…</option>
-            {allUsers.map((user) => (
-              <option value={user.id}>{user.name} ({user.email})</option>
-            ))}
-          </select>
+        <SelectField id="staffUserId" name="userId" label="Person" placeholder="Choose a person" options={people.map(personOption)} defaultValue={kept.staffUserId} required />
+        <SelectField id="roleName" name="roleName" label="Role" options={STAFF_ROLE_OPTIONS} defaultValue={kept.staffRole ?? "INSTRUCTOR"} required />
+        <div>
+          <Button type="submit" size="lg">Add to staff</Button>
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label for="roleName" class="text-sm font-medium text-white/90">Role</label>
-          <select
-            id="roleName"
-            name="roleName"
-            required
-            class="form-control"
-          >
-            <option value="INSTRUCTOR">Instructor</option>
-            <option value="TA">TA</option>
-          </select>
-        </div>
-        <Button type="submit">
-          Add Staff
-        </Button>
       </form>
-    </Card>
+    </section>
 
-    {mentorsEnabled && <CohortMentors model={mentorModel} />}
+    {
+      mentorsEnabled && (
+        <CohortMentors
+          model={mentorModel}
+          page={page}
+          url={Astro.url}
+          asking={asking}
+          error={failedForm === "mentors" ? failure : undefined}
+          keptUserId={kept.mentorUserId}
+        />
+      )
+    }
 
-    <Card>
-      <div class="mb-5">
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-          Student administration
-        </p>
-        <h3 class="mt-1 text-xl font-semibold text-white">Cohort roster</h3>
-        <p class="mt-1 max-w-3xl text-sm text-ink-secondary">
-          Enroll existing signed-in users, review how each learner joined, and update eligible applications in one atomic cohort action.
-        </p>
+    <section id="roster" aria-labelledby="roster-title" class="flex flex-col gap-6">
+      <div class="flex max-w-3xl flex-col gap-2">
+        <h2 id="roster-title" class="m-0 text-2xl">Roster</h2>
+        <p class="m-0 text-ink-secondary">Everyone who applied to this cohort or was enrolled in it, oldest first.</p>
       </div>
 
-      <section class="rounded-lg border border-teal/20 bg-dark/30 p-4 sm:p-5">
-        <h4 class="font-semibold text-white">Direct enrollment</h4>
-        <p class="mt-1 text-sm text-ink-secondary">
-          Use APPROVED for a current learner. Use COMPLETED only to backfill historical alumni; completion immediately unlocks certificates and builder portfolios.
+      <section aria-labelledby="enrol-title" class="flex max-w-3xl flex-col gap-4">
+        <h3 id="enrol-title" class="m-0 text-lg">Enroll someone directly</h3>
+        <p class="m-0 text-sm text-ink-secondary">
+          Accepted is for someone joining now. Completed is only for someone who already finished this cohort: it opens their
+          certificate and builder portfolio at once, so it asks first.
         </p>
-
-        {availableEnrollmentUsers.length > 0 ? (
-          <form
-            method="POST"
-            class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(12rem,1fr)_minmax(11rem,0.8fr)_auto] lg:items-end"
-            onsubmit={`return confirm(${JSON.stringify(
-              "Enroll this user in the cohort? If COMPLETED is selected, certificates and builder portfolios unlock immediately."
-            )})`}
-          >
-            <input type="hidden" name="action" value="direct-enroll" />
-            <div class="flex w-full min-w-0 flex-col gap-1.5">
-              <label for="enrollmentUserId" class="text-sm font-medium text-white/90">
-                Signed-in user
-              </label>
-              <select
-                id="enrollmentUserId"
-                name="userId"
-                required
-                class="w-full min-w-0 rounded-md border border-teal bg-dark/70 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="">Select a user…</option>
-                {availableEnrollmentUsers.map((user) => (
-                  <option value={user.id}>{user.name} ({user.email})</option>
-                ))}
-              </select>
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="enrollmentStatus" class="text-sm font-medium text-white/90">
-                Enrollment status
-              </label>
-              <select
-                id="enrollmentStatus"
-                name="status"
-                required
-                class="rounded-md border border-teal bg-dark/70 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="APPROVED">Approved · current learner</option>
-                <option value="COMPLETED">Completed · historical alumni</option>
-              </select>
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="enrollmentCompletionDate" class="text-sm font-medium text-white/90">
-                Completion date
-              </label>
-              <input
-                type="date"
+        {failedForm === "enrol" && <Notice tone="danger" focusOnLoad title="No one was enrolled">{failure}</Notice>}
+        {
+          confirming?.form === "enrol" ? (
+            <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={page} fields={confirming.fields}>
+              {confirming.body}
+            </ConfirmStep>
+          ) : available.length > 0 ? (
+            <form method="POST" action={page} class="grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="action" value="direct-enroll" />
+              <SelectField id="enrollmentUserId" name="userId" label="Person" placeholder="Choose a person" options={available.map(personOption)} defaultValue={kept.enrolUserId} required className="sm:col-span-2" />
+              <SelectField id="enrollmentStatus" name="status" label="Status" options={ENROLMENT_STATUS_OPTIONS} defaultValue={kept.enrolStatus ?? "APPROVED"} required />
+              <TextField
                 id="enrollmentCompletionDate"
                 name="completionDate"
-                value={defaultCompletionDate}
-                max={defaultCompletionDate}
+                type="date"
+                label="Completion date"
+                hint="Only used for Completed."
+                defaultValue={kept.enrolDate || today}
+                max={today}
                 required
-                class="rounded-md border border-teal bg-dark/70 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
-              <span class="text-xs text-ink-muted">Used only for COMPLETED.</span>
-            </div>
-            <Button type="submit" class="w-full font-semibold lg:w-auto">
-              Enroll user
-            </Button>
-          </form>
-        ) : (
-          <p class="mt-4 rounded-md bg-teal/10 p-3 text-sm text-ink-secondary">
-            Every signed-in user is already enrolled in this cohort.
-          </p>
-        )}
+              <div class="sm:col-span-2">
+                <Button type="submit" size="lg">Enroll</Button>
+              </div>
+            </form>
+          ) : (
+            <p class="m-0 text-sm text-ink-secondary">Everyone who has signed in is already on this roster.</p>
+          )
+        }
       </section>
 
-      {roster.length > 0 ? (
-        <form
-          method="POST"
-          class="mt-6"
-          data-bulk-form
-          data-selection-limit={MAX_BULK_SELECTION_SIZE}
+      {failedForm === "roster" && <Notice tone="danger" focusOnLoad title="Nothing on the roster changed">{failure}</Notice>}
+      {
+        confirming?.form === "roster" && (
+          <ConfirmStep title={confirming.title} confirmLabel={confirming.confirmLabel} cancelHref={page} action={page} fields={confirming.fields}>
+            {confirming.body}
+          </ConfirmStep>
+        )
+      }
+      <form method="POST" action={page} class="flex flex-col gap-5" data-bulk-form data-selection-limit={MAX_BULK_SELECTION_SIZE}>
+        <DataTable
+          caption={`${prog.name} roster`}
+          columns={[{ label: "Select", hidden: true }, { label: "Learner" }, { label: "Status" }, { label: "Joined" }, { label: "Links", hidden: true }]}
+          isEmpty={roster.length === 0}
         >
-          <div class="hidden border-b border-teal/20 px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted md:grid md:grid-cols-[2rem_minmax(0,2fr)_minmax(8rem,1fr)_minmax(10rem,1.2fr)_minmax(8rem,0.8fr)] md:gap-4">
-            <span class="sr-only">Select</span>
-            <span>Learner</span>
-            <span>Status</span>
-            <span>Enrollment</span>
-            <span>Links</span>
-          </div>
+          {
+            roster.map((application) => (
+              <DataRow data-roster-application={application.id} data-application-status={application.status}>
+                <DataSelectCell name="applicationIds" value={application.id} row={application.user?.name ?? "this learner"} defaultChecked={rosterIds.has(application.id)} />
+                <DataCell label="Learner" primary>
+                  <span class="flex min-w-0 flex-col">
+                    <a href={`/admin/users/${encodeURIComponent(application.userId)}`} class={linkClass()}>{application.user?.name ?? "Account removed"}</a>
+                    <span class="text-[0.8125rem] font-normal break-all text-ink-secondary">{application.user?.email ?? "No email"}</span>
+                  </span>
+                </DataCell>
+                <DataCell label="Status">
+                  <StatusChip domain="application" status={application.status} />
+                </DataCell>
+                <DataCell label="Joined">
+                  {getEnrollmentSource(application.application) === "ADMIN" ? "Enrolled by an admin" : "Applied"}, {formatMomentDate(application.createdAt)}
+                </DataCell>
+                <DataCell label="" align="end">
+                  <span class="inline-flex flex-wrap gap-2">
+                    <RowAction href={`/admin/applications/${application.id}`} row={application.user?.name ?? "this learner"}>
+                      Application
+                    </RowAction>
+                    {application.status === "COMPLETED" && application.completedAt && (
+                      <RowAction href={`/certificate/${application.id}`} row={application.user?.name ?? "this learner"}>
+                        Certificate
+                      </RowAction>
+                    )}
+                  </span>
+                </DataCell>
+              </DataRow>
+            ))
+          }
+          <Fragment slot="empty">
+            <EmptyState title="No one on the roster yet" headingLevel={3}>
+              People appear here when they apply to this cohort, or when you enroll them above.
+            </EmptyState>
+          </Fragment>
+        </DataTable>
 
-          <div class="divide-y divide-teal/10 rounded-lg border border-teal/20 md:rounded-t-none md:border-t-0">
-            {roster.map((application) => (
-              <div
-                data-roster-application={application.id}
-                data-application-status={application.status}
-                class="grid gap-3 p-3 text-sm text-white/80 transition-colors hover:bg-teal/10 md:grid-cols-[2rem_minmax(0,2fr)_minmax(8rem,1fr)_minmax(10rem,1.2fr)_minmax(8rem,0.8fr)] md:items-center md:gap-4"
-              >
-                <div class="flex items-center gap-2 md:block">
-                  <input
-                    type="checkbox"
-                    name="applicationIds"
-                    value={application.id}
-                    aria-label={`Select ${application.user?.name ?? "unknown learner"}`}
-                    class="h-4 w-4 rounded border-teal bg-dark text-primary focus:ring-primary"
-                  />
-                  <span class="text-xs font-medium text-ink-muted md:hidden">Select learner</span>
-                </div>
-
-                <div class="min-w-0">
-                  <a
-                    href={`/admin/users/${application.userId}`}
-                    class="font-medium text-white hover:text-primary hover:underline"
-                  >
-                    {application.user?.name ?? "Unknown user"}
-                  </a>
-                  <p class="truncate text-xs text-ink-muted">
-                    {application.user?.email ?? "No email available"}
-                  </p>
-                </div>
-
-                <div>
-                  <span class="mb-1 block text-xs text-ink-muted md:hidden">Status</span>
-                  <Badge variant={application.badgeVariant} />
-                </div>
-
-                <div>
-                  <span class="mb-1 block text-xs text-ink-muted md:hidden">Enrollment</span>
-                  <p class="text-white/80">
-                    {application.enrollmentSource === "ADMIN"
-                      ? "Admin enrollment"
-                      : "Student application"}
-                  </p>
-                  <p class="text-xs text-ink-muted">
-                    {formatMomentDate(application.createdAt)}
-                  </p>
-                </div>
-
-                <div class="flex flex-wrap gap-x-3 gap-y-1">
-                  <a
-                    href={`/admin/users/${application.userId}`}
-                    class="text-primary hover:underline"
-                  >
-                    User
-                  </a>
-                  <a
-                    href={`/admin/applications/${application.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    Application
-                  </a>
-                  {application.status === "COMPLETED" && application.completedAt && (
-                    <a
-                      href={`/certificate/${application.id}`}
-                      class="text-primary hover:underline"
-                    >
-                      View certificate
-                    </a>
-                  )}
+        {
+          roster.length > 0 && (
+            <div class="flex flex-col gap-4 border-t border-hairline pt-5">
+              <p class="m-0 max-w-prose text-sm text-ink-secondary">
+                Choose rows, then accept those waiting for review or auditing, or complete those accepted. If anything you chose
+                has changed meanwhile, nothing is updated. Up to {MAX_BULK_SELECTION_SIZE} at a time
+                (<output data-selection-count aria-live="polite">{rosterIds.size} chosen</output>).
+              </p>
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
+                <TextField
+                  id="rosterCompletionDate"
+                  name="completionDate"
+                  type="date"
+                  label="Completion date"
+                  hint="Only used when completing."
+                  defaultValue={kept.rosterDate || today}
+                  max={today}
+                  required
+                  className="sm:w-56"
+                />
+                <div class="flex flex-wrap gap-2">
+                  <Button type="submit" size="lg" name="action" value="bulk-approve">Accept selected</Button>
+                  <Button type="submit" size="lg" name="action" value="bulk-complete">Complete selected</Button>
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div class="mt-4 flex flex-col gap-4 rounded-lg border border-teal/20 bg-teal/10 p-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="space-y-2 text-xs leading-relaxed text-ink-muted lg:max-w-xl">
-              <p>
-                Approve accepts only PENDING or AUDIT rows. Complete accepts only APPROVED rows. A stale or cross-cohort selection is rejected in full without partial updates.
-              </p>
-              <p>
-                Select at most {MAX_BULK_SELECTION_SIZE} applications per action
-                (<output data-selection-count aria-live="polite">0 selected</output>).
-              </p>
             </div>
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <label class="flex flex-col gap-1 text-xs font-medium text-white/70">
-                Completion date
-                <input
-                  type="date"
-                  name="completionDate"
-                  value={defaultCompletionDate}
-                  max={defaultCompletionDate}
-                  required
-                  class="rounded-md border border-teal bg-dark/70 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </label>
-              <button
-                type="submit"
-                name="action"
-                value="bulk-approve"
-                class="inline-flex w-full items-center justify-center rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-800 sm:w-auto"
-                onclick="return confirm('Approve the selected eligible PENDING or AUDIT applications?')"
-              >
-                Approve selected
-              </button>
-              <button
-                type="submit"
-                name="action"
-                value="bulk-complete"
-                class="inline-flex w-full items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700 sm:w-auto"
-                onclick={`return confirm(${JSON.stringify(
-                  APPLICATION_COMPLETION_CONFIRMATION
-                )})`}
-              >
-                Complete selected
-              </button>
-            </div>
-          </div>
-        </form>
-      ) : (
-        <p class="mt-6 rounded-lg border border-dashed border-teal/30 p-6 text-center text-sm text-ink-muted">
-          No applications for this cohort yet. Enroll an existing signed-in user above to start the roster.
-        </p>
-      )}
-    </Card>
+          )
+        }
+      </form>
+    </section>
   </div>
 </AdminLayout>
 
 <script>
-  document.querySelectorAll<HTMLFormElement>("[data-bulk-form]").forEach((form) => {
+  // Counts the selection as it changes and stops it at the limit. The server checks both again.
+  for (const form of document.querySelectorAll<HTMLFormElement>("[data-bulk-form]")) {
     const limit = Number.parseInt(form.dataset.selectionLimit ?? "", 10);
-    const checkboxes = Array.from(
-      form.querySelectorAll<HTMLInputElement>('input[name="applicationIds"]')
-    );
-    const countOutput = form.querySelector<HTMLOutputElement>(
-      "[data-selection-count]"
-    );
-
-    const updateSelectionState = () => {
-      const selectedCount = checkboxes.filter(({ checked }) => checked).length;
-      if (countOutput) {
-        countOutput.value = `${selectedCount} selected`;
-      }
-      for (const checkbox of checkboxes) {
-        checkbox.disabled =
-          Number.isFinite(limit) &&
-          selectedCount >= limit &&
-          !checkbox.checked;
-      }
+    const boxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="applicationIds"]'));
+    const count = form.querySelector<HTMLOutputElement>("[data-selection-count]");
+    const update = () => {
+      const chosen = boxes.filter((box) => box.checked).length;
+      if (count) count.value = `${chosen} chosen`;
+      for (const box of boxes) box.disabled = Number.isFinite(limit) && chosen >= limit && !box.checked;
     };
-
-    for (const checkbox of checkboxes) {
-      checkbox.addEventListener("change", updateSelectionState);
-    }
-    updateSelectionState();
-  });
+    for (const box of boxes) box.addEventListener("change", update);
+    update();
+  }
 </script>
