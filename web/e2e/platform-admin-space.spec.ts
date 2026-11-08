@@ -143,7 +143,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
-  { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
+  { path: "/admin/programs/new", heading: "New cohort", current: "Cohorts", retired: true },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
@@ -416,6 +416,30 @@ test.describe("every admin page", () => {
     await expect(main.getByText("notes.txt isn't a video. Choose a video file, such as an MP4.")).toBeVisible();
     await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue("Week 5: e2e upload");
     await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue("ttv-local-persona-cohort-05");
+    await context.close();
+  });
+
+  test("a new cohort: a refused form keeps what was written and says what to fix, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/programs/new");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Create cohort"]);
+    await main.getByRole("textbox", { name: "Name" }).fill("Cohort e2e");
+    await main.getByRole("textbox", { name: "Description" }).fill("Kept description.");
+    await main.getByRole("combobox", { name: "Curriculum" }).selectOption({ index: 1 });
+    await main.getByLabel(/^Starts on/).fill("2027-04-02");
+    await main.getByLabel(/^Ends on/).fill("2027-01-11");
+    await main.getByRole("checkbox", { name: "Applications open" }).check();
+    const create = main.getByRole("button", { name: "Create cohort" });
+    await create.focus();
+    await create.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The cohort wasn't created" })).toBeVisible();
+    await expect(main.getByText("End date must be on or after start date.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Description" })).toHaveValue("Kept description.");
+    await expect(main.getByRole("checkbox", { name: "Applications open" })).toBeChecked();
     await context.close();
   });
 

@@ -1,12 +1,23 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  Card,
+  Checkbox,
+  EmptyState,
+  Notice,
+  PageHeader,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { redirectWithFlash } from "@/lib/platform/server/flash";
 import {
   createCohortValuesFromFormData,
   validateCreateCohort,
@@ -14,207 +25,96 @@ import {
   type CreateCohortValues,
 } from "@/lib/admin/cohorts";
 
+const LIST_PATH = "/admin/programs";
 const db = drizzle(env.DB, { schema });
 
-const curricula = await db.query.curriculum.findMany({
-  orderBy: (c, { asc }) => [asc(c.title)],
-});
+// The curricula and the Admin space are independent reads: one round trip.
+const [curricula, spaces] = await Promise.all([
+  db.query.curriculum.findMany({ columns: { id: true, title: true }, orderBy: (c, { asc }) => [asc(c.title)] }),
+  resolveSpacePage(Astro.locals, "adminCohorts"),
+]);
 
-let values: CreateCohortValues = {
-  name: "",
-  description: "",
-  curriculumId: "",
-  startDate: "",
-  endDate: "",
-  applicationsOpen: false,
-};
-let fieldErrors: CreateCohortFieldErrors = {};
+let values: CreateCohortValues = { name: "", description: "", curriculumId: "", startDate: "", endDate: "", applicationsOpen: false };
+let errors: CreateCohortFieldErrors = {};
 let formError: string | undefined;
 
 if (Astro.request.method === "POST") {
   values = createCohortValuesFromFormData(await Astro.request.formData());
-  const validation = validateCreateCohort(
-    values,
-    curricula.map((curriculum) => curriculum.id)
-  );
-
+  const validation = validateCreateCohort(values, curricula.map((curriculum) => curriculum.id));
   if (!validation.valid) {
-    fieldErrors = validation.errors;
+    errors = validation.errors;
+    Astro.response.status = 400;
   } else {
     try {
-      const [created] = await db
-        .insert(schema.program)
-        .values(validation.data)
-        .returning();
-      if (!created) throw new Error("Cohort insert did not return a row.");
-      return Astro.redirect(`/admin/programs/${created.id}`);
+      const [created] = await db.insert(schema.program).values(validation.data).returning({ id: schema.program.id });
+      if (!created) throw new Error("The cohort insert returned no row.");
+      return redirectWithFlash(Astro, `${LIST_PATH}/${encodeURIComponent(created.id)}`, {
+        tone: "success",
+        title: "Cohort created",
+        message: validation.data.applicationsOpen ? "Applications are open." : "Applications are closed until you open them.",
+      });
     } catch {
-      formError = "The cohort could not be created. Please try again.";
+      formError = "The database didn't answer, so the cohort wasn't created. Try again in a moment.";
+      Astro.response.status = 503;
     }
   }
 }
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminCohorts");
+
+const rejected = Boolean(formError || Object.keys(errors).length > 0);
+const curriculumOptions = curricula.map((curriculum) => ({ value: curriculum.id, label: curriculum.title }));
 ---
 
-<AdminLayout title="New Cohort" spaces={spaces}>
-  <div class="space-y-6">
-    <a href="/admin/programs" class="text-sm text-primary hover:underline">
-      &larr; Back to Cohorts
-    </a>
+<AdminLayout title="New cohort" titlePrefix={rejected ? "Error: " : ""} spaces={spaces}>
+  <div class="mx-auto max-w-3xl space-y-6">
+    <BackLink href={LIST_PATH}>Cohorts</BackLink>
 
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Create Cohort</PageTitle>
+    <PageHeader title="New cohort">
+      A group of learners following one curriculum, with its own channels, sessions and applications.
+    </PageHeader>
+
+    {rejected && (
+      <Notice tone="danger" focusOnLoad id="cohort-failure" title="The cohort wasn't created">
+        {formError ?? (curricula.length === 0 ? errors.curriculumId : undefined) ?? "Fix the fields marked below. Everything you wrote is kept."}
+      </Notice>
+    )}
 
     {curricula.length === 0 ? (
-      <Card>
-        <div class="py-6 text-center">
-          <h3 class="text-lg font-semibold text-white">
-            Create a curriculum first
-          </h3>
-          <p class="mx-auto mt-2 max-w-xl text-sm text-ink-secondary">
-            Every cohort needs a curriculum. Add one, then return here to
-            create the cohort.
-          </p>
-          {fieldErrors.curriculumId && (
-            <p role="alert" class="mt-3 text-sm text-red-200">
-              {fieldErrors.curriculumId}
-            </p>
-          )}
-          <Button href="/admin/curricula/new" class="mt-5">
-            Create Curriculum
-          </Button>
-        </div>
-      </Card>
+      <EmptyState title="Create a curriculum first" headingLevel={2}>
+        Every cohort follows a curriculum. Add one, then come back to create the cohort.
+        <Fragment slot="action">
+          <ButtonLink variant="primary" href="/admin/curricula/new">New curriculum</ButtonLink>
+        </Fragment>
+      </EmptyState>
     ) : (
-    <Card>
-      {formError && (
-        <p
-          role="alert"
-          class="mb-5 rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-        >
-          {formError}
-        </p>
-      )}
-      <form method="POST" class="space-y-4">
-        <div class="flex flex-col gap-1.5">
-          <label for="name" class="text-sm font-medium text-white/90">Name *</label>
-          <input
-            id="name"
-            name="name"
-            required
-            aria-invalid={Boolean(fieldErrors.name)}
-            aria-describedby={fieldErrors.name ? "name-error" : undefined}
-            value={values.name}
-            placeholder="Cohort name"
-            class="form-control placeholder:text-ink-muted"
-          />
-          {fieldErrors.name && (
-            <p id="name-error" class="text-sm text-red-200">
-              {fieldErrors.name}
-            </p>
-          )}
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
-          <textarea
-            id="description"
-            name="description"
-            required
-            aria-invalid={Boolean(fieldErrors.description)}
-            aria-describedby={fieldErrors.description ? "description-error" : undefined}
-            rows="3"
-            placeholder="Cohort description"
-            class="form-control placeholder:text-ink-muted"
-          >{values.description}</textarea>
-          {fieldErrors.description && (
-            <p id="description-error" class="text-sm text-red-200">
-              {fieldErrors.description}
-            </p>
-          )}
-        </div>
-
-        <div class="flex w-full min-w-0 flex-col gap-1.5">
-          <label for="curriculumId" class="text-sm font-medium text-white/90">Curriculum *</label>
-          <select
-            id="curriculumId"
+      <Card>
+        <form method="POST" action={Astro.url.pathname} class="grid gap-5" data-cohort-form>
+          <TextField label="Name" name="name" required placeholder="Cohort 06" defaultValue={values.name} error={errors.name} />
+          <TextAreaField label="Description" name="description" required rows={3} defaultValue={values.description} error={errors.description} />
+          <SelectField
+            label="Curriculum"
             name="curriculumId"
             required
-            aria-invalid={Boolean(fieldErrors.curriculumId)}
-            aria-describedby={fieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="form-control w-full min-w-0"
-          >
-            <option value="">Select curriculum…</option>
-            {curricula.map((c) => (
-              <option value={c.id} selected={values.curriculumId === c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.curriculumId && (
-            <p id="curriculum-error" class="text-sm text-red-200">
-              {fieldErrors.curriculumId}
-            </p>
-          )}
-        </div>
-
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="flex flex-col gap-1.5">
-            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
-            <input
-              type="date"
-              id="startDate"
-              name="startDate"
-              aria-invalid={Boolean(fieldErrors.startDate)}
-              aria-describedby={fieldErrors.startDate ? "start-date-error" : undefined}
-              value={values.startDate}
-              class="form-control"
-            />
-            {fieldErrors.startDate && (
-              <p id="start-date-error" class="text-sm text-red-200">
-                {fieldErrors.startDate}
-              </p>
-            )}
+            placeholder="Choose a curriculum"
+            options={curriculumOptions}
+            defaultValue={values.curriculumId}
+            error={errors.curriculumId}
+          />
+          <div class="grid gap-5 sm:grid-cols-2">
+            <TextField label="Starts on" name="startDate" type="date" optional defaultValue={values.startDate} error={errors.startDate} />
+            <TextField label="Ends on" name="endDate" type="date" optional defaultValue={values.endDate} error={errors.endDate} />
           </div>
-          <div class="flex flex-col gap-1.5">
-            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
-            <input
-              type="date"
-              id="endDate"
-              name="endDate"
-              aria-invalid={Boolean(fieldErrors.endDate)}
-              aria-describedby={fieldErrors.endDate ? "end-date-error" : undefined}
-              value={values.endDate}
-              class="form-control"
-            />
-            {fieldErrors.endDate && (
-              <p id="end-date-error" class="text-sm text-red-200">
-                {fieldErrors.endDate}
-              </p>
-            )}
+          <Checkbox
+            label="Applications open"
+            name="applicationsOpen"
+            value="true"
+            defaultChecked={values.applicationsOpen}
+            hint="Leave it unticked to create a closed cohort; you can open applications later."
+          />
+          <div>
+            <Button type="submit" variant="primary">Create cohort</Button>
           </div>
-        </div>
-
-        <div class="space-y-1.5">
-          <label for="applicationsOpen" class="flex items-center gap-2 text-sm font-medium text-white/90">
-            <input
-              type="checkbox"
-              id="applicationsOpen"
-              name="applicationsOpen"
-              value="true"
-              checked={values.applicationsOpen}
-              class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
-            />
-            Applications open
-          </label>
-          <p class="text-sm text-ink-muted">Leave unchecked to create a closed cohort.</p>
-        </div>
-
-        <Button type="submit">
-          Create Cohort
-        </Button>
-      </form>
-    </Card>
+        </form>
+      </Card>
     )}
   </div>
 </AdminLayout>
