@@ -1,138 +1,123 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Badge from "@/components/common/Badge.astro";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { asc, count, desc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { ButtonLink, DataCell, DataRow, DataTable, EmptyState, Notice, PageHeader, Pager, PillNav, StatusChip, linkClass, statusTone } from "@/components/platform/ui";
+import { emptyFilterCopy } from "@/lib/admin/applications";
+import { ADMIN_PAGE_SIZE, lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
+import * as schema from "@/lib/db/schema";
+import { formatMomentDate } from "@/lib/display-date";
 
+/*
+ * Every application, newest first, a page at a time, filtered by status
+ * through links, so the filter has an address and works without JavaScript.
+ * The page of applications, the count for each status and the Admin space are
+ * independent reads, started together.
+ */
 const db = drizzle(env.DB, { schema });
+const PATH = "/admin/applications";
+const STATUSES = schema.programApplication.status.enumValues;
+type ApplicationStatus = (typeof STATUSES)[number];
 
-type ApplicationStatus = typeof schema.programApplication.$inferSelect.status;
-const statuses = [
-  "PENDING",
-  "APPROVED",
-  "REJECTED",
-  "AUDIT",
-  "COMPLETED",
-] as const satisfies readonly ApplicationStatus[];
-const statusVariants = {
-  PENDING: "pending",
-  APPROVED: "approved",
-  REJECTED: "rejected",
-  AUDIT: "audit",
-  COMPLETED: "completed",
-} as const;
-const requestedStatus = Astro.url.searchParams.get("status");
-const statusFilter = statuses.find((status) => status === requestedStatus);
+const requested = Astro.url.searchParams.get("status");
+const statusFilter = STATUSES.find((status) => status === requested);
+const page = parsePage(Astro.url.searchParams.get("page"));
 
-let applications;
-if (statusFilter) {
-  applications = await db.query.programApplication.findMany({
-    where: eq(schema.programApplication.status, statusFilter),
-    with: { user: true, program: true },
-    orderBy: (a, { desc }) => [desc(a.createdAt)],
-  });
-} else {
-  applications = await db.query.programApplication.findMany({
-    with: { user: true, program: true },
-    orderBy: (a, { desc }) => [desc(a.createdAt)],
-  });
-}
+const [applications, counts, spaces] = await Promise.all([
+  db.query.programApplication.findMany({
+    where: statusFilter ? eq(schema.programApplication.status, statusFilter) : undefined,
+    columns: { id: true, status: true, createdAt: true },
+    with: { user: { columns: { name: true } }, program: { columns: { name: true } } },
+    orderBy: (application) => [desc(application.createdAt), asc(application.id)],
+    limit: ADMIN_PAGE_SIZE,
+    offset: (page - 1) * ADMIN_PAGE_SIZE,
+  }),
+  db
+    .select({ status: schema.programApplication.status, total: count() })
+    .from(schema.programApplication)
+    .groupBy(schema.programApplication.status),
+  resolveSpacePage(Astro.locals, "adminApplications"),
+]);
 
-const notice = Astro.url.searchParams.get("notice");
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminApplications");
+const byStatus = new Map<ApplicationStatus, number>(counts.map((row) => [row.status, row.total]));
+const allTotal = counts.reduce((sum, row) => sum + row.total, 0);
+const total = statusFilter ? (byStatus.get(statusFilter) ?? 0) : allTotal;
+const lastPage = lastPageOf(total);
+const filterHref = (status?: ApplicationStatus) => (status ? `${PATH}?status=${status}` : PATH);
+// Only applications in review wait on an administrator, so only they carry a count.
+const filters = [
+  { label: "All", href: filterHref(), current: !statusFilter },
+  ...STATUSES.map((status) => ({
+    label: statusTone("application", status).label,
+    href: filterHref(status),
+    current: statusFilter === status,
+    count: status === "PENDING" ? (byStatus.get(status) ?? 0) : undefined,
+  })),
+];
+const filterName = statusFilter ? statusTone("application", statusFilter).label.toLowerCase() : null;
+// The application page sends a reader here when the one they opened is gone.
+const missing = Astro.url.searchParams.get("notice") === "missing";
 ---
 
-<AdminLayout title="Applications" spaces={spaces}>
-  <div class="space-y-6">
-    {notice === "missing" && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
-        That application no longer exists.
-      </p>
-    )}
+<AdminLayout title={filterName ? `Applications, ${filterName}` : "Applications"} spaces={spaces}>
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Applications">Every application to a cohort, newest first. Open one to read it and decide.</PageHeader>
 
-    <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Applications</PageTitle>
+    {missing && <Notice tone="warning" title="That application no longer exists">It may have been removed. The list below is up to date.</Notice>}
 
-    <div class="flex flex-wrap gap-2">
-      <a
-        href="/admin/applications"
-        class:list={[
-          "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-          !statusFilter
-            ? "bg-primary text-dark"
-            : "bg-teal/20 text-ink-secondary hover:text-white",
-        ]}
-      >
-        All
-      </a>
-      {statuses.map((s) => (
-        <a
-          href={`/admin/applications?status=${s}`}
-          class:list={[
-            "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
-            statusFilter === s
-              ? "bg-primary text-dark"
-              : "bg-teal/20 text-ink-secondary hover:text-white",
-          ]}
-        >
-          {s.toLowerCase()}
-        </a>
-      ))}
-    </div>
+    <PillNav label="Application status" items={filters} countLabel="waiting" />
 
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Applicant</th>
-            <th class="px-4 py-3 font-medium">Program</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Date</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {applications.length === 0 ? (
-            <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-ink-muted">
-                {statusFilter
-                  ? `No ${statusFilter.toLowerCase()} applications found.`
-                  : "No applications yet. Applications appear here when students submit them."}
-              </td>
-            </tr>
+    <DataTable
+      caption={filterName ? `Applications, ${filterName}` : "Applications"}
+      columns={[{ label: "Applicant" }, { label: "Cohort" }, { label: "Status" }, { label: "Applied", align: "end" }]}
+      isEmpty={applications.length === 0}
+    >
+      {
+        applications.map((application) => (
+          <DataRow>
+            <DataCell label="Applicant" primary>
+              <a href={`${PATH}/${application.id}`} class={linkClass()}>{application.user?.name ?? "Account removed"}</a>
+            </DataCell>
+            <DataCell label="Cohort">{application.program?.name ?? "Cohort removed"}</DataCell>
+            <DataCell label="Status">
+              <StatusChip domain="application" status={application.status} />
+            </DataCell>
+            <DataCell label="Applied" align="end">{formatMomentDate(application.createdAt)}</DataCell>
+          </DataRow>
+        ))
+      }
+      <Fragment slot="empty">
+        {
+          page > 1 && total > 0 ? (
+            <EmptyState title="No applications on this page" headingLevel={2}>
+              The list has {lastPage} {lastPage === 1 ? "page" : "pages"}.
+              <Fragment slot="action">
+                <ButtonLink href={pageHref(Astro.url, 1)}>Back to the first page</ButtonLink>
+              </Fragment>
+            </EmptyState>
+          ) : statusFilter ? (
+            <EmptyState title={emptyFilterCopy(statusFilter).title} headingLevel={2}>
+              {emptyFilterCopy(statusFilter).body}
+              <Fragment slot="action">
+                <ButtonLink href={PATH}>See every application</ButtonLink>
+              </Fragment>
+            </EmptyState>
           ) : (
-            applications.map((app) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
-                <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
-                <td class="px-4 py-3">
-                  <Badge variant={statusVariants[app.status]} />
-                </td>
-                <td class="px-4 py-3">
-                  {app.createdAt
-                    ? new Date(app.createdAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/applications/${app.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            <EmptyState title="No applications yet" headingLevel={2}>
+              Applications appear here when people apply to a cohort.
+            </EmptyState>
+          )
+        }
+      </Fragment>
+    </DataTable>
+
+    <Pager
+      previousHref={page > 1 && applications.length > 0 ? pageHref(Astro.url, page - 1) : null}
+      nextHref={page < lastPage ? pageHref(Astro.url, page + 1) : null}
+      summary={pageSummary(page, applications.length, total)}
+      label="Applications pages"
+    />
   </div>
 </AdminLayout>

@@ -129,7 +129,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/access-requests", heading: "Access requests", current: "Access requests", retired: true },
   { path: "/admin/users", heading: "Users", current: "Users", retired: true },
   { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users", retired: true },
-  { path: "/admin/applications", heading: "Applications", current: "Applications" },
+  { path: "/admin/applications", heading: "Applications", current: "Applications", retired: true },
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application from Wanjiku Mwangi", current: "Applications", retired: true },
   { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
   { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Profile", current: "Profiles" },
@@ -243,6 +243,28 @@ test.describe("every admin page", () => {
     await page.getByRole("link", { name: "Back to the first page" }).click();
     await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole("navigation", { name: "Users pages" })).toHaveCount(0);
+  });
+
+  test("applications: the status filter is a link with an address, and each applicant opens their application", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    await open(page, "/admin/applications");
+    const table = page.getByRole("table", { name: "Applications" });
+    await expect(table.getByRole("columnheader")).toHaveText(["Applicant", "Cohort", "Status", "Applied"]);
+
+    const filters = page.getByRole("navigation", { name: "Application status" });
+    await expect(filters.getByRole("link", { name: "All", exact: true })).toHaveAttribute("aria-current", "page");
+    await filters.getByRole("link", { name: /^In review/ }).click();
+    await expect(page).toHaveURL(/\/admin\/applications\?status=PENDING$/);
+    await expect(filters.getByRole("link", { name: /^In review/ })).toHaveAttribute("aria-current", "page");
+    const inReview = page.getByRole("table", { name: "Applications, in review" });
+    const statuses = inReview.locator("td[data-label='Status']");
+    expect(await statuses.count()).toBeGreaterThan(0);
+    for (const status of await statuses.allTextContents()) expect(status.trim()).toBe("In review");
+    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+
+    await inReview.locator("td[data-primary] a").first().click();
+    await expect(page).toHaveURL(/\/admin\/applications\/[^/?]+$/);
   });
 
   test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
