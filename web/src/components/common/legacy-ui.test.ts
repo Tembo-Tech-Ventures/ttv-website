@@ -25,7 +25,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/dashboard/apply.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
-    "pages/dashboard/writing/index.astro",
     ],
   },
   "common/Card.astro": {
@@ -39,7 +38,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/dashboard/apply.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
-    "pages/dashboard/writing/index.astro",
     ],
   },
   "common/Badge.astro": {
@@ -48,7 +46,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/dashboard/application/[id].astro",
     "pages/dashboard/opportunities.astro",
     "pages/dashboard/portfolio.astro",
-    "pages/dashboard/writing/index.astro",
     ],
   },
   "the form-control utility": {
