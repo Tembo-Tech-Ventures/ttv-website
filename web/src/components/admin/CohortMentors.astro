@@ -61,7 +61,7 @@ const option = (person: CohortPerson) => ({ value: person.id, label: `${person.n
           </DataCell>
           <DataCell label="Access">{mentor.approvedMentor ? "Community mentor" : "This cohort only"}</DataCell>
           <DataCell label="" align="end">
-            <ButtonLink variant="danger" size="sm" href={`${confirmHref(url, `remove-${mentor.roleId}`)}#cohort-mentors`}>
+            <ButtonLink variant="danger" size="sm" href={confirmHref(url, `remove-${mentor.roleId}`)}>
               Remove<span class="sr-only"> {mentor.name} as a mentor</span>
             </ButtonLink>
           </DataCell>

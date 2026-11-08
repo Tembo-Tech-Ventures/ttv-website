@@ -117,9 +117,10 @@ that says what it does and a ghost Cancel back to `withoutConfirm(Astro.url)`.
 The buttons sit under the warning, never on its tint. Never `confirm()`. The
 POST handler authorises as it always does; the step only asks.
 
-Post forms to the page itself, never to a `#fragment`. A browser skips
-`autofocus` when the address targets an element, so a confirm step or a
-rejected form's notice drawn in answer to that POST would not take focus.
+Post forms to the page itself, and link to a confirm step with
+`confirmHref` alone, never with a `#fragment`. A browser skips `autofocus`
+when the address targets an element, so the confirm step, or a rejected
+form's notice drawn in answer to a POST, would not take focus.
 Focus scrolls the notice into view anyway, and a successful change's 303 can
 still carry the fragment.
 

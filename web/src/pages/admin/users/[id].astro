@@ -199,7 +199,7 @@ const failed = Boolean(roleError || communityError);
             </ConfirmStep>
           ) : (
             <div>
-              <ButtonLink variant="danger" href={`${confirmHref(Astro.url, "remove-admin")}#admin-access`}>Remove admin access</ButtonLink>
+              <ButtonLink variant="danger" href={confirmHref(Astro.url, "remove-admin")}>Remove admin access</ButtonLink>
             </div>
           )
         ) : (
@@ -238,7 +238,7 @@ const failed = Boolean(roleError || communityError);
                 </div>
                 {!delegated && asking !== `revoke-${access.role}` && (
                   access.held ? (
-                    <ButtonLink variant="danger" href={`${confirmHref(Astro.url, `revoke-${access.role}`)}#community-access`} className="self-start sm:self-auto">
+                    <ButtonLink variant="danger" href={confirmHref(Astro.url, `revoke-${access.role}`)} className="self-start sm:self-auto">
                       Remove {access.label.toLowerCase()} access
                     </ButtonLink>
                   ) : (

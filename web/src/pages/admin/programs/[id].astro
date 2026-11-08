@@ -377,7 +377,7 @@ const rosterIds = new Set(kept.rosterIds ?? []);
               </DataCell>
               <DataCell label="Role">{cohortRoleLabel(role.name)}</DataCell>
               <DataCell label="" align="end">
-                <ButtonLink variant="danger" size="sm" href={`${confirmHref(Astro.url, `remove-${role.id}`)}#staff`}>
+                <ButtonLink variant="danger" size="sm" href={confirmHref(Astro.url, `remove-${role.id}`)}>
                   Remove<span class="sr-only"> {role.user?.name ?? "this person"} from the staff</span>
                 </ButtonLink>
               </DataCell>

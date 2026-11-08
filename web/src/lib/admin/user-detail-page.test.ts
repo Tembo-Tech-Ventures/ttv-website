@@ -17,5 +17,7 @@ describe("admin user detail page wiring", () => {
     // form's notice would render unfocused.
     expect(pageSource).not.toMatch(/method="POST"[^>]*action=\{`[^`]*#/);
     expect(pageSource).not.toMatch(/action=\{`\$\{page\}#/);
+    // Nor the link that opens a confirm step: its question takes focus the same way.
+    expect(pageSource).not.toMatch(/confirmHref\([^)]*\)\}#/);
   });
 });
