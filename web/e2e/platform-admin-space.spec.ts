@@ -153,7 +153,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
   { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
-  { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", legacy: "Agent Access" },
+  { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", retired: true },
 ];
 
 /** Whether `spaces` is on for the signed-in person: /api/platform/me exists only while it is. */
@@ -361,6 +361,33 @@ test.describe("every admin page", () => {
     await expect(page.getByRole("status").filter({ hasText: "Token revoked" })).toBeVisible();
     await expect(tokens.getByRole("row").filter({ hasText: label })).toContainText("Revoked");
     await expect(page.getByRole("region", { name: `Your new token: ${label}` })).toHaveCount(0);
+    await context.close();
+  });
+
+  test("agent access: a session's token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Making a session writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/agent-access");
+    const off = await page.getByText("Agent access is off here", { exact: true }).count();
+    test.skip(off > 0, "Agent sessions are off on this server; set AGENT_AUTH_ENABLED=true (web/.env.local) to run this.");
+    const label = `e2e check ${Date.now().toString(36)}`;
+    const form = page.getByRole("region", { name: "Create a session" });
+    await form.getByRole("textbox", { name: "Label" }).fill(label);
+    await form.getByRole("combobox", { name: "Lasts for" }).selectOption("1");
+    await form.getByRole("button", { name: "Create session" }).click();
+
+    await expect(page.getByRole("region", { name: `Your new session: ${label}` }).locator("code#agent-token")).toHaveText(/^[0-9a-f]{64}$/);
+    const sessions = page.getByRole("table", { name: "Your sessions" });
+    const row = sessions.getByRole("row").filter({ hasText: label });
+    await expect(row).toContainText("Active");
+    await row.getByRole("link", { name: `Revoke ${label}` }).click();
+    await expect(page.getByRole("region", { name: `Revoke “${label}”?` })).toBeVisible();
+    await page.getByRole("button", { name: "Revoke session" }).click();
+    await expect(page).toHaveURL(/\/admin\/agent-access$/);
+    await expect(page.getByRole("status").filter({ hasText: "Session revoked" })).toBeVisible();
+    await expect(sessions.getByRole("row").filter({ hasText: label })).toHaveCount(0);
     await context.close();
   });
 

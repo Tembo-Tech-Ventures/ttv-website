@@ -291,8 +291,8 @@ never a redirect): a Card region named by its h2 (`title`), what to do with it
 now (children), the `value` in mono wrapping anywhere under `id`, a quiet copy
 button saying what it copies (`copyLabel`) and how to use it (`usage`). The
 page's script binds `[data-copy-secret]`, which holds the value's id; without
-script the value is text to select. The admin's personal access tokens page
-uses it.
+script the value is text to select. The admin's personal access tokens and
+agent access pages use it.
 
 ## Forms
 

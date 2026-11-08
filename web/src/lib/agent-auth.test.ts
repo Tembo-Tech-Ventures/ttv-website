@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AGENT_SESSION_LIST_LIMIT,
   AGENT_SESSION_PREFIX,
+  AgentSessionInputError,
   createAgentSession,
   isAgentAuthEnabled,
   isAgentSession,
@@ -45,6 +47,20 @@ describe("agent auth policy", () => {
     expect(() => normalizeAgentSessionLabel("bad/label")).toThrow("may contain");
     expect(parseAgentSessionDuration("8")).toBe(8);
     expect(() => parseAgentSessionDuration("12")).toThrow("supported");
+  });
+
+  it("refuses a bad label or duration as an input error naming its field, so the page answers 400 under it", () => {
+    const refusal = (run: () => unknown) => {
+      try {
+        run();
+      } catch (caught) {
+        return caught;
+      }
+      return null;
+    };
+    expect(refusal(() => normalizeAgentSessionLabel(" "))).toBeInstanceOf(AgentSessionInputError);
+    expect(refusal(() => normalizeAgentSessionLabel("bad/label"))).toMatchObject({ field: "label" });
+    expect(refusal(() => parseAgentSessionDuration("12"))).toMatchObject({ name: "AgentSessionInputError", field: "duration" });
   });
 
   it("requires a matching browser origin for mutations", () => {
@@ -126,6 +142,8 @@ describe("agent sessions", () => {
       },
     ]);
     expect(database.prepare.mock.calls[0][0]).not.toContain('"token"');
+    expect(database.prepare.mock.calls[0][0]).toContain("LIMIT ?");
+    expect(database.bind).toHaveBeenCalledWith("admin-id", `${AGENT_SESSION_PREFIX}%`, AGENT_SESSION_LIST_LIMIT);
   });
 
   it("revokes only the current user's marked agent session", async () => {

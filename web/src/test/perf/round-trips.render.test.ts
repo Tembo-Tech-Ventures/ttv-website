@@ -99,6 +99,8 @@ const PAGES = {
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
+  // With agent sessions on, as on the previews where the page is used; production never turns them on.
+  "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
   "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
@@ -128,8 +130,8 @@ type PageName = keyof typeof PAGES;
 /** One signed-in GET through the middleware and the page, traced to the end of its body. */
 async function visit(name: PageName) {
   const { db, cohortChannel } = seeded();
-  Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production" });
   const entry = PAGES[name];
+  Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production", AGENT_AUTH_ENABLED: undefined, ...("env" in entry ? entry.env : {}) });
   const { path, page, user: userId } = entry;
   const user = { id: userId, name: "Synthetic", email: `${userId}@example.test`, image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" } });
@@ -215,6 +217,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin recordings": { d1: 15, depth: 2 },
   // Depth 4 before the style-guide rollout: the tokens, then the space.
   "admin tokens": { d1: 14, depth: 2 },
+  // Depth 4 before the style-guide rollout: the sessions, then the space.
+  "admin agent access": { d1: 14, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count for each status (which
   // pages it and says how many wait) is read beside the page of applications, in the same round trip.
   "admin applications": { d1: 15, depth: 2 },
