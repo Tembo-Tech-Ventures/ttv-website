@@ -35,6 +35,7 @@ import {
   parseCommunityRoleAction,
 } from "@/lib/admin/access-requests";
 import {
+  AdminRoleOperationError,
   adminRoleErrorMessage,
   assertPersistentAdminRoleMutationAllowed,
   assignAdminRole,
@@ -116,7 +117,8 @@ if (Astro.request.method === "POST") {
       Astro.response.status = 400;
       roleError = "Choose a valid role action.";
     } catch (error) {
-      Astro.response.status = 400;
+      // A refused change (the last admin, yourself, an agent session) is the request's fault; anything else is the database's.
+      Astro.response.status = error instanceof AdminRoleOperationError ? 400 : 503;
       roleError = adminRoleErrorMessage(error);
     }
   }
