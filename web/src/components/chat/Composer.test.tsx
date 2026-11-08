@@ -48,6 +48,8 @@ describe("Composer on the kit", () => {
     const send = container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     expect(send.getAttribute("aria-label")).toBe("Send message");
     expect(send.dataset.variant).toBe("primary");
+    // The box is a 44px target at any width, one line tall on a 320px phone included.
+    expect(container.querySelector("#chat-composer")?.className).toContain("min-h-11");
     expect(send.className).toContain("pointer-coarse:min-h-11");
     // Nothing to send yet: the kit's quiet disabled look, never faded peach.
     expect(send.disabled).toBe(true);

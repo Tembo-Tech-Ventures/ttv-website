@@ -372,3 +372,11 @@ test("two quick conversation taps land on the second one", async ({ page }) => {
   await expect(transcript(page).getByText("Charge for the outcome")).toBeVisible();
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
 });
+
+test("the composer is a 44px target at 320 wide, one line tall", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await gotoChat(page);
+  const box = await page.locator("#chat-composer").boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+});

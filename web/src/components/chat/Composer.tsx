@@ -103,7 +103,8 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
           // text-base on mobile: iOS Safari zooms the viewport when a focused
           // input is smaller than 16px, which breaks the fixed-height layout.
           // The ring is the box's (focus-within above), so the textarea draws none of its own.
-          className="max-h-42 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-primary placeholder:text-ink-muted focus-visible:outline-none sm:text-sm"
+          // min-h-11: a 44px target at any width, even one line tall on a 320px phone.
+          className="max-h-42 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-primary placeholder:text-ink-muted focus-visible:outline-none sm:text-sm"
         />
         {/* The page's one primary action. */}
         <IconButton

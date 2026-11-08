@@ -12,7 +12,8 @@ import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 // The plain list, not DashboardShell: that module brings its Sidebar and Headless UI into this island.
 import { DASHBOARD_LINKS, getDashboardLinks } from "@/components/shells/dashboard-links";
-import { BackLink, Button, IconButton, Notice, PageTitle, buttonClass, linkClass } from "@/components/platform/ui";
+import { BackLink, Button, ButtonLink, IconButton, Notice, PageTitle, buttonClass, linkClass } from "@/components/platform/ui";
+import { signInHref } from "@/components/platform/overlays/sign-in";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import type { PrivateAskScope } from "@/lib/tembo/private-ask";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
@@ -112,6 +113,8 @@ export default function ChatApp({
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
+  // The session ended (any chat call answered 401): the way back is signing in, not trying again.
+  const [signedOut, setSignedOut] = useState(false);
   /** The question that just failed, and the conversation it was asked in, so it can be asked again. */
   const [failedQuestion, setFailedQuestion] = useState<{ message: string; history: ChatMessage[] } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -172,6 +175,10 @@ export default function ChatApp({
           fetch("/api/chat/sessions"),
           fetch("/api/chat/suggestions"),
         ]);
+        if (sessionsRes.status === 401) {
+          if (!cancelled) setSignedOut(true);
+          return;
+        }
         const sessionsPayload = (await sessionsRes.json()) as {
           sessions?: ChatSession[];
           error?: string;
@@ -263,6 +270,10 @@ export default function ChatApp({
         return;
       }
       const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+      if (response.status === 401) {
+        if (!isStale()) setSignedOut(true);
+        return;
+      }
       const payload = (await response.json()) as {
         messages?: ChatMessage[];
         error?: string;
@@ -369,6 +380,14 @@ export default function ChatApp({
           conversationHistory: nextMessages.slice(-HISTORY_TURNS),
         }),
       });
+      if (response.status === 401) {
+        if (isStale()) return;
+        // Signed out: the question goes back in the box rather than into a retry that can't work.
+        setSignedOut(true);
+        setMessages(history);
+        composerRef.current?.fill(message);
+        return;
+      }
       const payload = (await response.json()) as {
         error?: string;
         sessionId?: string;
@@ -528,26 +547,12 @@ export default function ChatApp({
           parked wherever the reader left it, so an inline banner is invisible
           exactly when it matters.
         */}
-        {error && (
-          <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-2 sm:px-6">
-            <Notice
-              tone="danger"
-              title={error}
-              actions={
-                failedQuestion && (
-                  <>
-                    <Button size="sm" onClick={retryQuestion}>
-                      Try again
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={editQuestion}>
-                      Edit question
-                    </Button>
-                  </>
-                )
-              }
-            />
-          </div>
-        )}
+        <ChatProblem
+          signedOut={signedOut}
+          error={error}
+          onRetry={failedQuestion ? retryQuestion : undefined}
+          onEdit={failedQuestion ? editQuestion : undefined}
+        />
 
         <AboutAskTembo scope={scope} />
 
@@ -596,6 +601,45 @@ export default function ChatApp({
           </nav>
         )}
       </ConversationSheet>
+    </div>
+  );
+}
+
+/**
+ * What went wrong, above the composer: a signed-out session, whose way back is signing in rather than
+ * trying again, or a failure, with "Try again" and "Edit question" when a question went unanswered.
+ */
+function ChatProblem({ signedOut, error, onRetry, onEdit }: {
+  signedOut: boolean;
+  error: string;
+  onRetry?: () => void;
+  onEdit?: () => void;
+}) {
+  if (!signedOut && !error) return null;
+  return (
+    <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-2 sm:px-6" data-chat-signed-out={signedOut || undefined}>
+      {signedOut ? (
+        <Notice
+          tone="warning"
+          title="You've been signed out"
+          actions={<ButtonLink href={signInHref()} size="sm">Sign in again</ButtonLink>}
+        >
+          Sign in again to keep asking Tembo. Anything you were asking is still in the box.
+        </Notice>
+      ) : (
+        <Notice
+          tone="danger"
+          title={error}
+          actions={
+            onRetry && onEdit && (
+              <>
+                <Button size="sm" onClick={onRetry}>Try again</Button>
+                <Button variant="ghost" size="sm" onClick={onEdit}>Edit question</Button>
+              </>
+            )
+          }
+        />
+      )}
     </div>
   );
 }
