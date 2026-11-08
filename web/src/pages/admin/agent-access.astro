@@ -47,6 +47,10 @@ const enabled = isAgentAuthEnabled(env.AGENT_AUTH_ENABLED);
 const userId = Astro.locals.user?.id;
 if (!userId) return Astro.redirect("/auth/login");
 if (isAgentSession(Astro.locals.session?.userAgent)) return Astro.redirect("/admin");
+// A personal access token is delegated too: it never mints a session, as it never mints another token.
+if (Astro.locals.personalAccessToken) {
+  return new Response("Forbidden: delegated credentials cannot manage agent sessions.", { status: 403 });
+}
 
 type Field = "label" | "duration";
 const UNAVAILABLE = "The database didn't answer, so nothing changed. Try again in a moment.";

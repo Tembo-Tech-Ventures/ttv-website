@@ -156,6 +156,16 @@ describe("agent access on the style guide", () => {
     expect(location).toBe("/admin");
   });
 
+  it("refuses a personal access token 403, reading and writing nothing: it can't mint a session", async () => {
+    const read = await visit({ locals: { personalAccessToken: { id: "token-1" } } });
+    expect(read.status).toBe(403);
+    expect(read.body).toContain("delegated credentials cannot manage agent sessions");
+    const write = await visit({ form: CREATE, locals: { personalAccessToken: { id: "token-1" } } });
+    expect(write.status).toBe(403);
+    expect(store.create).not.toHaveBeenCalled();
+    expect(store.list).not.toHaveBeenCalled();
+  });
+
   it("says when the admin has no sessions yet", async () => {
     store.list.mockResolvedValue([]);
     expect((await visit()).body).toContain("No sessions yet");
