@@ -59,6 +59,7 @@ const PAGES = {
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
+  "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
 } as const;
 type PageName = keyof typeof PAGES;
 
@@ -101,6 +102,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   account: { d1: 16, depth: 3 },
   "admin users": { d1: 14, depth: 3 },
   "admin applications": { d1: 14, depth: 3 },
+  // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
+  "admin access requests": { d1: 14, depth: 3 },
 };
 
 describe("D1 round trips per page (PERF-2)", () => {

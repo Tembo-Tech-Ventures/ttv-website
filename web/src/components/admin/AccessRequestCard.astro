@@ -1,13 +1,6 @@
 ---
-import {
-  PiClockCounterClockwiseDuotone,
-  PiGithubLogoDuotone,
-  PiGlobeSimpleDuotone,
-  PiLinkSimpleDuotone,
-} from "react-icons/pi";
-import Avatar from "@/components/platform/ui/Avatar";
-import Button from "@/components/platform/ui/Button";
-import RoleBadge from "@/components/platform/ui/RoleBadge";
+import { PiClockCounterClockwise, PiGithubLogo, PiGlobeSimple, PiLinkSimple } from "react-icons/pi";
+import { Avatar, Button, FOCUS_RING, RoleBadge, TextAreaField } from "@/components/platform/ui";
 import { formatMomentDate } from "@/lib/display-date";
 import {
   ACCESS_ROLE_LABELS, addressName, displayLink, githubProfileUrl,
@@ -33,11 +26,7 @@ const { requester } = request;
 const first = addressName(requester.name);
 const github = githubProfileUrl(request.githubLogin);
 const pending = request.status === "PENDING";
-const ids = {
-  message: `access-request-${request.id}-message`,
-  hint: `access-request-${request.id}-hint`,
-  error: `access-request-${request.id}-error`,
-};
+const messageId = `access-request-${request.id}-message`;
 const roleLabel = ACCESS_ROLE_LABELS[request.role];
 // Every card has the same two buttons, so each name says whose request it decides (QAO-06).
 // A deleted or unnamed account reads as Admin Home's attention list says it (lib/admin/attention.ts).
@@ -48,6 +37,8 @@ const earlier = request.earlierRequests.slice(0, HISTORY_SHOWN);
 const earlierHidden = request.earlierRequests.length - earlier.length;
 const earlierStatus = { APPROVED: "approved", DECLINED: "declined", WITHDRAWN: "withdrawn" } as const;
 const meta = "inline-flex min-w-0 items-center gap-1.5";
+// A flex item, so `truncate` holds; on a touch screen its padding makes the 44px target.
+const metaLink = ["truncate rounded-sm hover:text-ink-primary hover:underline pointer-coarse:py-3", FOCUS_RING];
 const icon = "size-4 shrink-0 text-ink-muted";
 ---
 
@@ -60,11 +51,11 @@ const icon = "size-4 shrink-0 text-ink-muted";
 
   <div class="min-w-0 space-y-3">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <h3 class="text-base font-bold text-ink-primary">
-        <a href={`/admin/users/${encodeURIComponent(requester.id)}`} class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink">
+      <h2 class="font-body text-base font-bold text-ink-primary">
+        <a href={`/admin/users/${encodeURIComponent(requester.id)}`} class:list={["rounded-sm hover:underline", FOCUS_RING]}>
           {requester.name}
         </a>
-      </h3>
+      </h2>
       <RoleBadge badge={{ kind: request.role, label: roleLabel }} />
       <span class="w-full text-sm text-ink-muted sm:w-auto">Requested {date(request.createdAt)}</span>
     </div>
@@ -82,10 +73,10 @@ const icon = "size-4 shrink-0 text-ink-muted";
     <ul class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-secondary" aria-label={`About ${first}'s request`}>
       {request.githubLogin && (
         <li class={meta}>
-          <PiGithubLogoDuotone className={icon} aria-hidden="true" />
+          <PiGithubLogo className={icon} aria-hidden="true" />
           <span class="sr-only">GitHub:</span>
           {github ? (
-            <a href={github} rel="noopener noreferrer nofollow" target="_blank" class="truncate hover:text-ink-primary hover:underline">
+            <a href={github} rel="noopener noreferrer nofollow" target="_blank" class:list={metaLink}>
               {request.githubLogin}<span class="sr-only"> (opens in a new tab)</span>
             </a>
           ) : (
@@ -96,24 +87,24 @@ const icon = "size-4 shrink-0 text-ink-muted";
       {request.link ? (
         <li class={meta}>
           {request.role === "INSTITUTION"
-            ? <PiGlobeSimpleDuotone className={icon} aria-hidden="true" />
-            : <PiLinkSimpleDuotone className={icon} aria-hidden="true" />}
+            ? <PiGlobeSimple className={icon} aria-hidden="true" />
+            : <PiLinkSimple className={icon} aria-hidden="true" />}
           <span class="sr-only">{request.role === "INSTITUTION" ? "Organisation website:" : "Their work:"}</span>
-          <a href={request.link} rel="noopener noreferrer nofollow" target="_blank" class="truncate hover:text-ink-primary hover:underline">
+          <a href={request.link} rel="noopener noreferrer nofollow" target="_blank" class:list={metaLink}>
             {displayLink(request.link)}<span class="sr-only"> (opens in a new tab)</span>
           </a>
         </li>
       ) : (
         <li class={meta}>
           {request.role === "INSTITUTION"
-            ? <PiGlobeSimpleDuotone className={icon} aria-hidden="true" />
-            : <PiLinkSimpleDuotone className={icon} aria-hidden="true" />}
+            ? <PiGlobeSimple className={icon} aria-hidden="true" />
+            : <PiLinkSimple className={icon} aria-hidden="true" />}
           {request.role === "INSTITUTION" ? "No website given" : "No link given"}
         </li>
       )}
       {earlier.map((item) => (
         <li class={meta}>
-          <PiClockCounterClockwiseDuotone className={icon} aria-hidden="true" />
+          <PiClockCounterClockwise className={icon} aria-hidden="true" />
           Earlier {item.role === request.role ? "" : `${ACCESS_ROLE_LABELS[item.role].toLowerCase()} `}request {earlierStatus[item.status]} {date(item.decidedAt ?? item.createdAt)}
         </li>
       ))}
@@ -124,28 +115,24 @@ const icon = "size-4 shrink-0 text-ink-muted";
   {pending ? (
     <form method="POST" class="col-span-2 space-y-3 lg:col-span-1" data-access-request-form>
       <input type="hidden" name="id" value={request.id} />
-      <div class="space-y-1.5">
-        <label for={ids.message} class="block text-sm font-semibold text-ink-primary">
-          Message to {first} <span class="font-normal text-ink-muted">(optional)</span>
-        </label>
-        <textarea
-          id={ids.message}
-          name="message"
-          rows="2"
-          maxlength="600"
-          aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
-          aria-invalid={error ? "true" : undefined}
-          autofocus={Boolean(error)}
-          class="block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink"
-        >{draftMessage}</textarea>
-        <p id={ids.hint} class="text-xs text-ink-muted">Sent only if you decline.</p>
-        {error && <p id={ids.error} role="alert" class="text-sm text-danger-ink">{error}</p>}
-      </div>
+      <TextAreaField
+        id={messageId}
+        name="message"
+        label={`Message to ${first}`}
+        optional
+        hint="Sent only if you decline."
+        error={error}
+        rows={2}
+        maxLength={600}
+        defaultValue={draftMessage}
+        autoFocus={Boolean(error)}
+      />
       <div class="grid grid-cols-2 gap-3">
-        <Button type="submit" name="decision" value="approve" variant="primary" aria-label={decides("Approve")} className="h-11 w-full">
+        {/* Every card has its own decision, so each is quiet: no wall of peach down the queue. */}
+        <Button type="submit" name="decision" value="approve" size="lg" aria-label={decides("Approve")} className="w-full">
           Approve
         </Button>
-        <Button type="submit" name="decision" value="decline" variant="quiet" aria-label={decides("Decline")} className="h-11 w-full">
+        <Button type="submit" name="decision" value="decline" size="lg" aria-label={decides("Decline")} className="w-full">
           Decline
         </Button>
       </div>

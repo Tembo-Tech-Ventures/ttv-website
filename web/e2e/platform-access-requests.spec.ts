@@ -100,9 +100,8 @@ test("lays the pending queue out as screens/06 does, clean under axe", async ({ 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
 
-  // The page title is the h1 in the Admin space (T14), the h2 it always had in the existing admin shell.
-  const level = (await page.locator(".spaces-shell").count()) > 0 ? 1 : 2;
-  await expect(page.getByRole("heading", { level, name: "Access requests" })).toBeVisible();
+  // The page title is the screen's one h1, and the lists are a PillNav (style guide).
+  await expect(page.getByRole("heading", { level: 1, name: "Access requests" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Pending\s+\d+ waiting$/ })).toHaveAttribute("aria-current", "page");
   // The sidebar entry counts what is waiting, and says what it counts. Phones open it as a drawer.
   if (test.info().project.name === "chromium") {
@@ -186,9 +185,9 @@ test("declines with a message the person reads without the administrator's name,
   const id = await request.getAttribute("data-access-request");
   await request.getByRole("textbox", { name: "Message to Wairimu (optional)" }).fill(DECLINE_MESSAGE);
   await request.getByRole("button", { name: "Decline mentor access for Wairimu Kamau", exact: true }).click();
-  await expect(page.locator("[data-access-request-notice]")).toHaveText("Declined. Wairimu will see your message, not your name.");
+  await expect(page.locator("#access-request-notice")).toHaveText("Done: Declined. Wairimu will see your message, not your name.");
   // QAO-06: the card left the list, so focus is on what happened, not lost on the page.
-  await expect(page.locator("[data-access-request-notice]")).toBeFocused();
+  await expect(page.locator("#access-request-notice")).toBeFocused();
   await expect(row(page, id!)).toHaveCount(0);
 
   await page.getByRole("link", { name: "Decided" }).click();
@@ -202,8 +201,8 @@ test("declines with a message the person reads without the administrator's name,
   const conflict = stale.waitForResponse((response) => response.request().method() === "POST");
   await row(stale, id!).getByRole("button", { name: "Approve mentor access for Wairimu Kamau", exact: true }).click();
   expect((await conflict).status()).toBe(409);
-  await expect(stale.locator("[data-access-request-failure]")).toHaveText(/^Someone already decided this request, or the person withdrew it, so nothing changed\./);
-  await expect(stale.locator("[data-access-request-failure]")).toBeFocused();
+  await expect(stale.locator("#access-request-failure")).toHaveText(/^Problem: Someone already decided this request, or the person withdrew it, so nothing changed\./);
+  await expect(stale.locator("#access-request-failure")).toBeFocused();
   if (!process.env.PLAYWRIGHT_BASE_URL) await stale.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
   await runAxe(stale, testInfo, "access-requests-conflict");
   await stale.screenshot({ path: evidence("conflict"), fullPage: true });
@@ -248,8 +247,8 @@ test("approving gives the person their new space, and the user page can take it 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
   await row(page, OTIENO_REQUEST).getByRole("button", { name: "Approve mentor access for Otieno Ouma", exact: true }).click();
-  await expect(page.locator("[data-access-request-notice]")).toHaveText("Approved. Otieno Ouma was given mentor access.");
-  await expect(page.locator("[data-access-request-notice]")).toBeFocused();
+  await expect(page.locator("#access-request-notice")).toHaveText("Done: Approved. Otieno Ouma was given mentor access.");
+  await expect(page.locator("#access-request-notice")).toBeFocused();
   await expect(row(page, OTIENO_REQUEST)).toHaveCount(0);
   expect(await tabLabels(his)).toContain("Mentoring");
 

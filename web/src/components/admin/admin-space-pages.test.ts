@@ -11,6 +11,7 @@ import { ADMIN_PAGE_HREFS, type AdminPageNavKey } from "./admin-nav";
  * AdminShell for null. This holds each page to that wiring: it resolves the key of the section it
  * sits under, so that sidebar entry is current, hands the context to AdminLayout, and draws its
  * title as the screen's h1 in the spaces shell and as the h2 it always had (or nothing) otherwise.
+ * A page on the style guide has retired that flag-off title (decision D1): its h1 is the same in both.
  */
 const PAGES = resolve(import.meta.dirname, "../../pages/admin");
 
@@ -52,10 +53,11 @@ describe("admin pages in the spaces shell", () => {
         expect(source).toMatch(/<AdminLayout\b[^>]*\sspaces=\{spaces\}/);
       });
 
-      it("draws its title as the h1 in the spaces shell, and as before in the existing admin shell", () => {
+      it("draws its title as the h1 in the spaces shell, and as before (or as the same h1) in the existing admin shell", () => {
         const pageTitle = /<PageTitle spaces=\{Boolean\(spaces\)\}/.test(source);
         const switched = /const (Title|titleTag) = spaces \? "h1" : "h2";/.test(source);
-        expect(pageTitle || switched).toBe(true);
+        const retired = /<PageTitle spaces>/.test(source);
+        expect(pageTitle || switched || retired).toBe(true);
       });
     });
   }
