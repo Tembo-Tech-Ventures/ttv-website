@@ -19,6 +19,8 @@ type SpaceFileProps = {
   tabs: readonly SpaceTabItem[];
   /** The space on screen: its tab is raised and the sheet takes its tone. */
   active: Space;
+  /** False for a page on this space's sheet that is not the space's own (TabFile `activeIsPage`). */
+  activeIsPage?: boolean;
   /** Who is signed in. The Profile tab wears their avatar. */
   person: Person;
   /**
@@ -45,7 +47,7 @@ const ORDER = new Map(SPACES.map((space, index) => [space, index]));
  * role the tabs are places to go; with several they double as a role switch.
  * Spaces always stand in the same order, Profile last, each with its glyph.
  */
-export default function SpaceFile({ tabs, active, person, start, end, label = "Spaces", children, sheetAs, className }: SpaceFileProps) {
+export default function SpaceFile({ tabs, active, activeIsPage, person, start, end, label = "Spaces", children, sheetAs, className }: SpaceFileProps) {
   const ordered = tabs.toSorted((a, b) => (ORDER.get(a.space) ?? 0) - (ORDER.get(b.space) ?? 0));
 
   return (
@@ -60,6 +62,7 @@ export default function SpaceFile({ tabs, active, person, start, end, label = "S
         unread: tab.unread,
       }))}
       active={active}
+      activeIsPage={activeIsPage}
       tone={active}
       start={start}
       end={end}

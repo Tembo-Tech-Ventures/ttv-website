@@ -25,6 +25,11 @@ type TabFileProps = {
   /** The tab on screen: it is raised, and the sheet takes its tone. */
   active: string;
   /**
+   * Whether the page is the active tab's own (`aria-current="page"`). A page that sits on a sheet but
+   * belongs to no tab (the attention page, which opens in the space you were last in) says false.
+   */
+  activeIsPage?: boolean;
+  /**
    * The sheet's tone, when it is not simply the active tab's: a file with no
    * tabs to show (the spaces shell before its flag is on) still has a sheet.
    */
@@ -40,12 +45,12 @@ type TabFileProps = {
   className?: string;
 };
 
-function Tab({ tab, active }: { tab: FileTab; active: boolean }) {
+function Tab({ tab, active, current }: { tab: FileTab; active: boolean; current: boolean }) {
   const count = tab.count === undefined ? 0 : Math.floor(tab.count);
 
   return (
     <li className="space-tab" data-tab={tab.id} data-space-tone={tab.tone} data-active={active || undefined}>
-      <a className="space-tab__link" href={tab.href} aria-current={active ? "page" : undefined}>
+      <a className="space-tab__link" href={tab.href} aria-current={current ? "page" : undefined}>
         {tab.marker && (
           <span aria-hidden="true" className="inline-grid shrink-0 place-items-center">
             {tab.marker}
@@ -72,7 +77,7 @@ function Tab({ tab, active }: { tab: FileTab; active: boolean }) {
  * of its own, such as the public style guide, can be another. Geometry, and
  * how the row folds at narrow widths, lives in platform-ui.css.
  */
-export default function TabFile({ tabs, active, tone, start, end, label, children, sheetAs, className }: TabFileProps) {
+export default function TabFile({ tabs, active, activeIsPage = true, tone, start, end, label, children, sheetAs, className }: TabFileProps) {
   const sheetTone = tone ?? tabs.find((tab) => tab.id === active)?.tone;
   if (!sheetTone) throw new Error(`TabFile: no tab "${active}" among ${tabs.map((tab) => tab.id).join(", ")}, and no tone.`);
   if (new Set(tabs.map((tab) => tab.id)).size !== tabs.length) throw new Error("TabFile: tab ids must be unique.");
@@ -87,7 +92,7 @@ export default function TabFile({ tabs, active, tone, start, end, label, childre
         <nav aria-label={label} className="space-file__nav">
           <ul className="space-file__tabs">
             {tabs.map((tab) => (
-              <Tab key={tab.id} tab={tab} active={tab.id === active} />
+              <Tab key={tab.id} tab={tab} active={tab.id === active} current={activeIsPage && tab.id === active} />
             ))}
           </ul>
         </nav>

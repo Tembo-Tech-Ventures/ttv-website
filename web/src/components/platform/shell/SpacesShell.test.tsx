@@ -70,6 +70,12 @@ function q<T extends Element = HTMLElement>(selector: string): T {
 }
 
 describe("SpacesShell on the server", () => {
+  it("marks no space current on a page outside them, such as attention: neither its tab nor the bottom bar", () => {
+    const html = renderToString(<SpacesShell {...props({ outsideSpaces: true })} />);
+    expect(html).not.toContain('aria-current="page"');
+    expect(html).toContain('data-space-file="mentoring"');
+  });
+
   it("shows the person's spaces in order, Profile last, with the page's own as current", () => {
     const html = renderToString(<SpacesShell {...props()} />);
     const tabs = [...html.matchAll(/class="space-tab" data-tab="([a-z]+)"/g)].map((match) => match[1]);

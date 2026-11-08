@@ -89,6 +89,7 @@ const PAGES = {
   "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
   ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
+  attention: { path: () => "/dashboard/attention", page: () => import("@/pages/dashboard/attention.astro"), user: STUDENT },
   "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
@@ -190,6 +191,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // context (resolveSpacePageWith) keeps the depth rather than cuts it. "Worth another look" reads its access first.
   "mentoring requests": { d1: 15, depth: 3 },
   ask: { d1: 14, depth: 2 },
+  // Depth 4 before the style-guide rollout: the list waited for the whole space context, and the cohort name for the list.
+  attention: { d1: 10, depth: 2 },
   "admin home": { d1: 19, depth: 2 },
   account: { d1: 16, depth: 2 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is

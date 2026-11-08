@@ -62,6 +62,17 @@ describe("SpaceFile", () => {
     expect(html).toContain('data-sheet="admin"');
   });
 
+  it("claims no current page for a page on the sheet that belongs to no space, and keeps its sheet", () => {
+    const html = renderToStaticMarkup(
+      <SpaceFile tabs={STAFF} active="admin" activeIsPage={false} person={PERSON}>
+        <p>content</p>
+      </SpaceFile>,
+    );
+    expect(html).not.toContain("aria-current");
+    expect(html).toContain('data-tab="admin" data-space-tone="admin" data-active="true"');
+    expect(html).toContain('data-sheet="admin"');
+  });
+
   it("tints every tab with its own space's tone", () => {
     for (const { space } of STAFF) expect(render()).toContain(`data-tab="${space}" data-space-tone="${space}"`);
   });

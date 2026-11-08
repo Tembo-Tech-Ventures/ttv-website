@@ -8,7 +8,8 @@ import type { HarnessScenario } from "@/components/platform/overlays/harness-cli
 import { useHarnessClients } from "@/components/platform/overlays/harness-loader";
 import { loadAndAnnounce, useAttentionOwner } from "./attention-client";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
-import { attentionSummary, unreadTotal } from "./attention-display";
+import { attentionSummary, unreadTotal, visibleAttention } from "./attention-display";
+import { PageTitle } from "@/components/platform/ui";
 import AttentionInbox, { MarkAll, useNow } from "./AttentionInbox";
 import "./attention.css";
 
@@ -39,6 +40,12 @@ export function AttentionPageView({ me, initialList, api }: { me: Me; initialLis
   const heading = useRef<HTMLHeadingElement>(null);
   const now = useNow(initialList?.snapshotAt ?? null);
   const total = useAttention(store, (state) => unreadTotal(state.counts.unreadCounts, me.spaces));
+  // An empty "All" list says it in one empty state; the summary and Mark all read would only repeat it.
+  // A filtered list that is empty keeps the summary: it still counts what the other filters hold.
+  const empty = useAttention(
+    store,
+    (state) => state.filter === "all" && state.loaded && !state.listError && visibleAttention(state.items, me.spaces).length === 0,
+  );
 
   useEffect(() => {
     if (!initialList) void loadAndAnnounce(owner, () => store.refresh());
@@ -56,15 +63,17 @@ export function AttentionPageView({ me, initialList, api }: { me: Me; initialLis
   return (
     <div className="attention-page">
       <header className="attention-page__header">
-        <h1 id={headingId} ref={heading} tabIndex={-1} className="attention-page__title tracking-heading">
+        <PageTitle id={headingId} ref={heading} tabIndex={-1} className="attention-page__title">
           Needs your attention
-        </h1>
-        <div className="attention-page__summary">
-          <p className="attention-page__count" data-attention-total={total}>
-            {attentionSummary(total, awaitingConfirmation(me))}
-          </p>
-          <MarkAll owner={owner} me={me} />
-        </div>
+        </PageTitle>
+        {!empty && (
+          <div className="attention-page__summary">
+            <p className="attention-page__count" data-attention-total={total}>
+              {attentionSummary(total, awaitingConfirmation(me))}
+            </p>
+            <MarkAll owner={owner} me={me} />
+          </div>
+        )}
       </header>
       <AttentionInbox owner={owner} me={me} headingId={headingId} now={now} />
       <LiveRegions announcer={owner.announcer} name="attention" />

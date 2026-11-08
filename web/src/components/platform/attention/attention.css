@@ -94,13 +94,13 @@
   margin-bottom: 1.25rem;
 }
 
+/* The count and Mark all read share one line, on the title's and the list's left edge. */
 .attention-page__summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  padding-inline: 0.5rem;
 }
 
 /* On phones the top bar already names the page (as the prototype does); the heading stays for screen readers. */
@@ -115,10 +115,8 @@
   }
 }
 
+/* The kit's PageTitle; the bell scrolls to it and focuses it. */
 .attention-page__title {
-  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem);
-  line-height: 1.1;
-  color: var(--color-ink-primary);
   scroll-margin-top: 1rem;
 }
 
@@ -149,6 +147,15 @@
 
 .attention-panel .attention-filters {
   padding-inline: 0.75rem;
+}
+
+/* On the page, the filters and group names stand on the title's left edge, as the rows' boxes do. */
+.attention-page .attention-filters {
+  padding-inline: 0;
+}
+
+.attention-page .attention-inbox__group {
+  margin-inline: 0;
 }
 
 .attention-inbox__group {
