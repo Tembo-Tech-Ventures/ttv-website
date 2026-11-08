@@ -35,6 +35,7 @@ import {
   PrefixField,
   RoleBadge,
   RowAction,
+  SecretValue,
   SelectField,
   SpaceFile,
   StatusChip,
@@ -702,6 +703,45 @@ const asking = confirmingAction(Astro.url, ["remove-mentor"]);
 ) : (
   <ButtonLink variant="danger" href={confirmHref(Astro.url, "remove-mentor")}>Remove from cohort</ButtonLink>
 )}`,
+  },
+  {
+    id: "secret-value",
+    name: "SecretValue",
+    exports: ["SecretValue"],
+    summary: "A secret shown once, just after it was made: a token or a key, with what to do with it now and a quiet button that copies it.",
+    specimen: () => (
+      <SecretValue
+        id="catalogue-secret"
+        title="Your new token: Nightly check"
+        value="ttv_pat_7f3a9c1e5b2d4086a1c3e5f7092b4d6f"
+        copyLabel="Copy token"
+        usage="Send it as the HTTP header Authorization: Bearer <token>."
+        className="max-w-xl"
+      >
+        Copy it now: it won't be shown again. Keep it like a password.
+      </SecretValue>
+    ),
+    use: [
+      "The response to the form that made a token or key, and only there: never cached (no-store), never a redirect, never stored to show again.",
+      "Say where to keep it and where never to put it, then how to use it under the value.",
+    ],
+    avoid: ["A primary copy button: the page's one primary stays the form that made the secret.", "Showing a stored secret again: show its prefix in the list instead."],
+    access: [
+      "A region named by its h2, so the reader finds it right after the form posts.",
+      "The value wraps anywhere, so a long token never scrolls sideways at 320px.",
+      "Without script the copy button does nothing, and the value is plain text to select.",
+    ],
+    code: `{created && (
+  <SecretValue id="personal-access-token" title={\`Your new token: \${created.label}\`} value={created.token} copyLabel="Copy token">
+    Copy it now: it won't be shown again.
+  </SecretValue>
+)}
+<script>
+  for (const button of document.querySelectorAll("[data-copy-secret]")) {
+    button.addEventListener("click", () =>
+      navigator.clipboard.writeText(document.getElementById(button.dataset.copySecret)?.textContent?.trim() ?? ""));
+  }
+</script>`,
   },
   {
     id: "fields",

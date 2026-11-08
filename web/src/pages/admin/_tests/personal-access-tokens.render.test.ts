@@ -98,7 +98,8 @@ describe("personal access tokens on the style guide", () => {
     expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "synthetic-admin", label: "Nightly check", durationHours: 168, scopes: ["channels:read"] }));
     expect(body).toContain("Your new token: Nightly check");
     expect(body).toMatch(/<code id="personal-access-token"[^>]*>\s*ttv_pat_secret-value\s*<\/code>/);
-    expect(body).toMatch(/<button [^>]*data-variant="quiet"[^>]*>Copy token<\/button>/);
+    expect(body).toMatch(/<button [^>]*data-copy-secret="personal-access-token"[^>]*data-variant="quiet"[^>]*>Copy token<\/button>|<button [^>]*data-variant="quiet"[^>]*data-copy-secret="personal-access-token"[^>]*>Copy token<\/button>/);
+    expect(body).toContain("Authorization: Bearer &lt;token&gt;");
     expect(count(body, /data-variant="primary"/g)).toBe(1);
     // The form is ready for the next token, not holding the last one.
     expect(body).toMatch(/<input [^>]*name="label"[^>]*value=""/);

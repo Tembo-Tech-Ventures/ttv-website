@@ -13,6 +13,7 @@ import {
   Notice,
   PageHeader,
   RowAction,
+  SecretValue,
   SelectField,
   StatusChip,
   TextField,
@@ -123,26 +124,13 @@ const cancelHref = withoutConfirm(Astro.url);
 
     {
       created && (
-        <Card as="section" aria-labelledby="new-token" className="flex flex-col gap-4">
-          <div class="flex flex-col gap-1">
-            <h2 id="new-token" class="text-lg text-ink-primary">
-              Your new token: {created.label}
-            </h2>
-            <p class="max-w-prose text-sm text-ink-secondary">
-              Copy it now: it won't be shown again. Keep it like a password, and send it only through a secret store, never in chat, logs,
-              screenshots or a command's arguments.
-            </p>
-          </div>
-          <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
-            <code id="personal-access-token" class="min-w-0 flex-1 rounded-xl bg-ink-primary/6 p-3 font-mono text-sm break-all text-ink-primary">
-              {created.token}
-            </code>
-            <Button id="copy-personal-access-token" type="button" variant="quiet">Copy token</Button>
-          </div>
-          <p class="text-sm text-ink-secondary">
+        <SecretValue id="personal-access-token" title={`Your new token: ${created.label}`} value={created.token} copyLabel="Copy token">
+          Copy it now: it won't be shown again. Keep it like a password, and send it only through a secret store, never in chat, logs,
+          screenshots or a command's arguments.
+          <Fragment slot="usage">
             Send it as the HTTP header <code class="font-mono">Authorization: Bearer &lt;token&gt;</code>.
-          </p>
-        </Card>
+          </Fragment>
+        </SecretValue>
       )
     }
 
@@ -242,10 +230,12 @@ const cancelHref = withoutConfirm(Astro.url);
   {
     created && (
       <script>
-        document.getElementById("copy-personal-access-token")?.addEventListener("click", async () => {
-          const token = document.getElementById("personal-access-token")?.textContent?.trim();
-          if (token) await navigator.clipboard.writeText(token);
-        });
+        for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy-secret]")) {
+          button.addEventListener("click", async () => {
+            const secret = document.getElementById(button.dataset.copySecret ?? "")?.textContent?.trim();
+            if (secret) await navigator.clipboard.writeText(secret);
+          });
+        }
       </script>
     )
   }
