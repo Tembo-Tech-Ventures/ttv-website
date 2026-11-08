@@ -1,0 +1,23 @@
+---
+/**
+ * The feedback form on a page: an optional server-rendered launcher, and the
+ * loader that brings in the form when someone asks for it (feedback-loader.ts).
+ * No island hydrates for it on page load.
+ */
+import FeedbackLauncher from "./FeedbackLauncher";
+
+interface Props {
+  /** The floating button. Off in the spaces shell and immersive pages, which open the form from their own menus. */
+  launcher?: boolean;
+}
+
+const { launcher = true } = Astro.props;
+---
+
+{launcher && <FeedbackLauncher />}
+
+<script>
+  import { installFeedbackLoader } from "./feedback-loader";
+
+  installFeedbackLoader();
+</script>

@@ -443,7 +443,7 @@ test.describe("the spaces shell harness", () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await page.route(/\/FeedbackWidget\.tsx/, async (route) => {
+    await page.route(/\/mount-feedback\.tsx/, async (route) => {
       await held;
       await route.continue();
     });
@@ -545,7 +545,7 @@ test.describe("the spaces shell harness", () => {
         const held = new Promise<void>((resolve) => {
           release = resolve;
         });
-        await page.route(/\/FeedbackWidget\.tsx/, async (route) => {
+        await page.route(/\/mount-feedback\.tsx/, async (route) => {
           await held;
           await route.continue();
         });

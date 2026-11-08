@@ -28,7 +28,7 @@ import FontPreload from "@/components/common/FontPreload.astro";
 import type { Me, SpaceId } from "@/lib/platform/contracts";
 import { readLastSpaceCookie } from "@/lib/platform/client/spaces-selection";
 import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
-import FeedbackWidget from "@/components/feedback/FeedbackWidget";
+import Feedback from "@/components/feedback/Feedback.astro";
 import SpacesShell from "@/components/platform/shell/SpacesShell";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
@@ -108,8 +108,8 @@ const shell = {
     }
     <slot name="overlays" />
     {
-      /* No floating button: it would sit on the bottom bar. The account menu opens the form. */
-      account.feedback && <FeedbackWidget client:idle showLauncher={false} />
+      /* No floating button: it would sit on the bottom bar. The account menu opens the form, which loads on that press. */
+      account.feedback && <Feedback launcher={false} />
     }
   </body>
 </html>
