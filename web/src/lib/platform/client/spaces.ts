@@ -1,4 +1,5 @@
-import { Me, SpaceId } from "../contracts";
+import type { Me } from "../contracts";
+import { inSpaceOrder, isSpaceId, type SpaceId } from "../space-order";
 import { createStore } from "./store";
 import { CLOSED_DRAWER, spacesDrawerReducer, type SpacesDrawerAction, type SpacesDrawerState } from "./spaces-drawer";
 import { readLastSpaceCookie, selectDefaultSpace, serializeLastSpaceCookie } from "./spaces-selection";
@@ -39,10 +40,25 @@ export type SpacesOptions = {
   browser?: SpacesBrowser | null;
 };
 
+/**
+ * Whether `value` can drive the shell: a person, flags, and spaces that are known, unique and in
+ * SPACE_ORDER (with a mentoring summary only beside the Mentoring space). The server validated the
+ * whole `Me` against the contract before rendering the island; this guard is what the shell itself
+ * relies on, without loading zod and the contract module on every page.
+ */
+function shellContext(value: unknown): Me | null {
+  if (!value || typeof value !== "object") return null;
+  const { user, flags, spaces, mentoring } = value as Partial<Record<keyof Me, unknown>>;
+  const valid = typeof (user as { id?: unknown } | null)?.id === "string"
+    && typeof (flags as { spaces?: unknown } | null)?.spaces === "boolean"
+    && Array.isArray(spaces) && inSpaceOrder(spaces)
+    && (mentoring === undefined || spaces.includes("mentoring"));
+  return valid ? value as Me : null;
+}
+
 /** One controller per island/request. No network calls, navigation, global listeners or server writes. */
 export function createSpacesController(options: SpacesOptions) {
-  const initial = Me.safeParse(options.me);
-  let me = initial.success ? initial.data : null;
+  let me = shellContext(options.me);
   let explicitSpace = options.explicitSpace;
   let lastSpace: unknown = options.lastSpace;
   const ports = options.browser === undefined ? browser() : options.browser;
@@ -75,23 +91,20 @@ export function createSpacesController(options: SpacesOptions) {
       catch { lastSpace = null; preferenceStatus = "unavailable"; }
       store.setState(previous => ({ ...previous, ...context(), preferenceStatus }));
       // A server fallback is not a user choice. Save only an authorized explicit visit.
-      const explicit = SpaceId.safeParse(explicitSpace);
-      if (explicit.success && store.getState().spaces.includes(explicit.data)) persist();
+      if (isSpaceId(explicitSpace) && store.getState().spaces.includes(explicitSpace)) persist();
     },
     /** Apply a newly validated /me payload. Null/invalid data revokes shell access immediately. */
     setContext(value: Me | null, urlSpace: unknown = explicitSpace): boolean {
-      const result = Me.safeParse(value);
-      me = result.success ? result.data : null;
+      me = shellContext(value);
       explicitSpace = urlSpace;
       store.setState(previous => ({ ...previous, ...context(), drawer: CLOSED_DRAWER, preferenceStatus: "idle" }));
-      return value === null || result.success;
+      return value === null || me !== null;
     },
     /** UI navigates after a true result. A preference never grants access to a space. */
     switchSpace(value: unknown): boolean {
       const state = store.getState();
-      const parsed = SpaceId.safeParse(value);
-      if (!state.enabled || !parsed.success || !state.spaces.includes(parsed.data)) return false;
-      const selected = parsed.data;
+      if (!state.enabled || !isSpaceId(value) || !state.spaces.includes(value)) return false;
+      const selected = value;
       explicitSpace = selected;
       lastSpace = selected;
       store.setState(previous => ({ ...previous, selectedSpace: selected, drawer: CLOSED_DRAWER }));

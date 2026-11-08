@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inSpaceOrder, SPACE_ORDER } from "./space-order";
 
 /** Wire contracts only. No handlers, database dependencies, or access decisions. */
 export interface RouteDef<P = unknown, Q = unknown, B = unknown, R = unknown> {
@@ -48,7 +49,8 @@ export const ErrorEnvelope = z.object({
 });
 export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>;
 
-export const SPACE_ORDER = ["cohort", "community", "mentoring", "discover", "admin", "profile"] as const;
+// Zod-free, so client islands can use the list and its guards without this module (space-order.ts).
+export { SPACE_ORDER } from "./space-order";
 export const SpaceId = z.enum(SPACE_ORDER);
 export type SpaceId = z.infer<typeof SpaceId>;
 /** onboarding is effective only while spaces is (onboarding SPEC §6). */
@@ -109,7 +111,7 @@ export const Me = z.object({
   user: PersonSummary, capabilities: Capabilities, spaces: z.array(SpaceId),
   unreadCounts: SpaceUnreadCounts, flags: EffectiveFlags, temboUsage: TemboUsage,
   mentoring: MentoringSummary.optional(),
-}).refine((m) => m.spaces.every((space, i) => i === 0 || SPACE_ORDER.indexOf(m.spaces[i - 1]) < SPACE_ORDER.indexOf(space)),
+}).refine((m) => inSpaceOrder(m.spaces),
   "Spaces must be unique and in SPACE_ORDER")
   .refine((m) => !m.mentoring || m.spaces.includes("mentoring"), "Mentoring summary needs the Mentoring space");
 export type Me = z.infer<typeof Me>;

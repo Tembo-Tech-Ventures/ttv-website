@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { ClientNonce, EmbedRef, Id, MarkdownBody, Timestamp, type Id as IdType } from "../contracts";
-import { sessionDraftStorage, type DraftStorage } from "./onboarding-drafts";
+import { CHANNEL_DRAFT_PREFIX, clearDrafts, sessionDraftStorage, type DraftStorage } from "./draft-keys";
+
+export { CHANNEL_DRAFT_PREFIX } from "./draft-keys";
 
 export type { DraftStorage };
 
@@ -10,7 +12,6 @@ export type { DraftStorage };
  * confirmed yet (with their nonces, so retrying after a reload cannot post twice). Cleared on sign-out
  * (`clearChannelDrafts`) and, per draft, after a successful send.
  */
-export const CHANNEL_DRAFT_PREFIX = "ttv-channel-drafts:";
 /** Thread drafts kept per channel; the least recently edited go first. */
 export const MAX_DRAFT_SCOPES = 20;
 /** Unconfirmed sends kept per channel. */
@@ -119,9 +120,7 @@ function keysWhere(storage: DraftStorage, keep: (key: string) => boolean): strin
 
 /** Call from the sign-out flow: removes every user's channel drafts from this tab. */
 export function clearChannelDrafts(storage: DraftStorage | undefined = sessionDraftStorage()): void {
-  if (!storage) return;
-  try { for (const key of keysWhere(storage, () => false)) storage.removeItem(key); }
-  catch { /* Storage is optional. */ }
+  clearDrafts([CHANNEL_DRAFT_PREFIX], storage);
 }
 
 /**

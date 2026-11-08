@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { CreateAccessRequest, type AccessRole } from "../contracts";
+import { clearDrafts, ONBOARDING_DRAFT_PREFIX, sessionDraftStorage, type DraftStorage } from "./draft-keys";
+
+export { ONBOARDING_DRAFT_PREFIX, sessionDraftStorage, type DraftStorage } from "./draft-keys";
 
 /**
  * Unsent access-request text (SPEC S2). It lives in sessionStorage only, never localStorage, so it ends
  * with the tab. It is cleared after a successful send and on sign-out.
  */
-export const ONBOARDING_DRAFT_PREFIX = "ttv-onboarding-drafts:";
 const MAX_FIELD = 4_096;
 const MAX_STORED = 32_768;
 
@@ -17,8 +19,6 @@ export interface AccessRequestDrafts { MENTOR?: MentorDraft; INSTITUTION?: Insti
 export type DraftFor<R extends AccessRole> = NonNullable<AccessRequestDrafts[R]>;
 export type DraftField = keyof MentorDraft | keyof InstitutionDraft;
 export type DraftFieldErrors = Partial<Record<DraftField, string>>;
-/** The parts of Web Storage drafts use. Inject one in tests; the default is `window.sessionStorage`. */
-export type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
 // In-progress text may be invalid, but stored data is still bounded and stripped of unknown keys.
 const Field = z.string().max(MAX_FIELD);
@@ -34,11 +34,6 @@ export const EMPTY_DRAFTS: { readonly [R in AccessRole]: DraftFor<R> } = {
   INSTITUTION: { note: "", organisation: "", organisationRole: "", link: "", scopeAcknowledged: false },
 };
 
-/** SSR-safe and failure-tolerant: blocked storage (private modes, sandboxed frames) means no drafts. */
-export function sessionDraftStorage(): DraftStorage | undefined {
-  try { return typeof window === "undefined" ? undefined : window.sessionStorage; }
-  catch { return undefined; }
-}
 
 /** One key per signed-in user, so a second account in the same tab never sees the first one's text. */
 export function onboardingDraftKey(userId: string): string {
@@ -80,15 +75,7 @@ export function writeDrafts(storage: DraftStorage | undefined, key: string, draf
 
 /** Call from the sign-out flow: removes every user's onboarding drafts from this tab. */
 export function clearOnboardingDrafts(storage: DraftStorage | undefined = sessionDraftStorage()): void {
-  if (!storage) return;
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < storage.length; i++) {
-      const key = storage.key(i);
-      if (key?.startsWith(ONBOARDING_DRAFT_PREFIX)) keys.push(key);
-    }
-    for (const key of keys) storage.removeItem(key);
-  } catch { /* Storage is optional. */ }
+  clearDrafts([ONBOARDING_DRAFT_PREFIX], storage);
 }
 
 /** Bounded patch: unknown keys and over-long text never reach state or storage. */

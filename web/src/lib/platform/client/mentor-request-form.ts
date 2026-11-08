@@ -4,7 +4,7 @@ import {
   type Id as IdType, type MentorDirectoryItem, type MentorRequest, type ProjectEmbed,
 } from "../contracts";
 import { ApiError, createApiClient, type ApiClient } from "./apiClient";
-import { sessionDraftStorage, type DraftStorage } from "./onboarding-drafts";
+import { clearDrafts, MENTOR_REQUEST_DRAFT_PREFIX, sessionDraftStorage, type DraftStorage } from "./draft-keys";
 import { createStore, type Store } from "./store";
 
 /**
@@ -25,7 +25,7 @@ import { createStore, type Store } from "./store";
  *   changed since the page was read); agreeing from there sends too.
  * - A send is never retried automatically: creating a request is not idempotent.
  */
-export const MENTOR_REQUEST_DRAFT_PREFIX = "ttv-mentor-request-draft:";
+export { MENTOR_REQUEST_DRAFT_PREFIX } from "./draft-keys";
 export const MAX_NOTE = 2000;
 const MAX_STORED = 16_384;
 
@@ -112,15 +112,7 @@ export function writeRequestDraft(storage: DraftStorage | undefined, key: string
 
 /** Forgets every mentor request draft in this tab. Called on sign-out. */
 export function clearMentorRequestDrafts(storage: DraftStorage | undefined = sessionDraftStorage()): void {
-  if (!storage) return;
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < storage.length; i++) {
-      const key = storage.key(i);
-      if (key?.startsWith(MENTOR_REQUEST_DRAFT_PREFIX)) keys.push(key);
-    }
-    for (const key of keys) storage.removeItem(key);
-  } catch { /* Storage is optional. */ }
+  clearDrafts([MENTOR_REQUEST_DRAFT_PREFIX], storage);
 }
 
 const sameRef = (a: Pick<ProjectEmbed, "journeyId" | "version">, b: Pick<ProjectEmbed, "journeyId" | "version">) =>
