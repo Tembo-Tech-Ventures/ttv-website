@@ -10,7 +10,7 @@ import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
-import { Button, ButtonLink, Card, Chip, EmptyState, Notice, PageHeader } from "@/components/platform/ui";
+import { Button, ButtonLink, Card, Chip, EmptyState, HINT, Notice, PageHeader } from "@/components/platform/ui";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -150,7 +150,7 @@ const Name = showOtherCohortsHeading ? "h3" : "h2";
               {program.description && <p class="text-sm leading-relaxed text-ink-secondary">{program.description}</p>}
               {program.curriculum && <div><Chip>{program.curriculum.title}</Chip></div>}
               {program.startDate && (
-                <p class="text-[0.8125rem] text-ink-muted">
+                <p class={HINT}>
                   Starts {formatCalendarDate(program.startDate)}
                   {program.endDate && ` — Ends ${formatCalendarDate(program.endDate)}`}
                 </p>
@@ -165,10 +165,10 @@ const Name = showOtherCohortsHeading ? "h3" : "h2";
       </ul>
     ) : emptyMessage && (
       <div data-apply-empty>
-        <EmptyState title={emptyMessage}>
+        <EmptyState title={emptyMessage} headingLevel={2}>
           {appliedProgramIds.length > 0 ? "Your applications and their status are on your Cohort page." : "New cohorts appear here when they open for applications."}
           {appliedProgramIds.length > 0 && (
-            <Fragment slot="action"><ButtonLink href={applicationsHref}>View your applications</ButtonLink></Fragment>
+            <Fragment slot="action"><ButtonLink href={applicationsHref} variant="primary">View your applications</ButtonLink></Fragment>
           )}
         </EmptyState>
       </div>

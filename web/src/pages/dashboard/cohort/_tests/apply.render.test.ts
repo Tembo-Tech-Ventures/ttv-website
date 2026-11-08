@@ -124,7 +124,19 @@ describe("Apply to a cohort", () => {
     seeded(`INSERT INTO programApplication(id,userId,programId,status,application) VALUES ('a','${MEMBER}','open-a','PENDING','{}'), ('b','${MEMBER}','open-b','PENDING','{}');`);
     const empty = main((await visit()).body).querySelector("[data-apply-empty] [data-empty-state]")!;
     expect(empty.textContent).toContain("You've applied to every cohort that's open right now.");
-    expect(empty.querySelector("a")?.getAttribute("href")).toBe("/dashboard/cohort");
+    expect(empty.querySelector("h2")?.textContent).toBe("You've applied to every cohort that's open right now.");
+    const way = empty.querySelector("a")!;
+    expect(way.getAttribute("href")).toBe("/dashboard/cohort");
+    expect(way.getAttribute("data-variant")).toBe("primary");
+  });
+
+  it("says when no cohort is open, with no action to take", async () => {
+    seeded("UPDATE program SET applicationsOpen = 0;");
+    const page = main((await visit()).body);
+    const empty = page.querySelector("[data-apply-empty] [data-empty-state]")!;
+    expect(empty.querySelector("h2")?.textContent).toBe("No cohorts are accepting applications right now.");
+    expect(empty.querySelector("a")).toBeNull();
+    expect(page.querySelector("[data-cohort-id]")).toBeNull();
   });
 
   it("refuses a closed cohort with a 400 and a danger notice that takes focus", async () => {
