@@ -128,7 +128,7 @@ interface AdminPage {
 const MOVED: readonly AdminPage[] = [
   { path: "/admin/access-requests", heading: "Access requests", current: "Access requests", retired: true },
   { path: "/admin/users", heading: "Users", current: "Users", retired: true },
-  { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users" },
+  { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users", retired: true },
   { path: "/admin/applications", heading: "Applications", current: "Applications" },
   { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application", current: "Applications" },
   { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
@@ -243,6 +243,36 @@ test.describe("every admin page", () => {
     await page.getByRole("link", { name: "Back to the first page" }).click();
     await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole("navigation", { name: "Users pages" })).toHaveCount(0);
+  });
+
+  test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Changing a role changes the seed; one project writes, and puts it back.");
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    const person = "/admin/users/ttv-local-persona-newcomer";
+    const notice = () => page.getByRole("status").filter({ hasText: /\S/ });
+    await open(page, person);
+    const access = page.getByRole("region", { name: "Admin access" });
+    await expect(access).toContainText("No admin access.");
+
+    await access.getByRole("button", { name: "Give admin access" }).click();
+    await expect(notice()).toHaveText("Done: Admin access was given.");
+    await expect(access).toContainText("Has admin access");
+
+    await access.getByRole("link", { name: "Remove admin access" }).click();
+    const ask = page.getByRole("region", { name: "Remove admin access from Brian Kiprono?" });
+    await expect(ask).toBeFocused();
+    await runAxe(page, testInfo, "admin-user-confirm");
+    await access.getByRole("link", { name: "Cancel" }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(access).toContainText("Has admin access");
+
+    await access.getByRole("link", { name: "Remove admin access" }).click();
+    await access.getByRole("button", { name: "Remove admin access" }).click();
+    await expect(notice()).toHaveText("Done: Admin access was removed.");
+    await expect(access).toContainText("No admin access.");
+    await page.reload();
+    await expect(notice()).toHaveCount(0);
   });
 
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
