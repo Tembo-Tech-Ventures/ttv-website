@@ -212,7 +212,7 @@ test("declines with a message the person reads without the administrator's name,
     form: { id: id!, decision: "decline", message: DECLINE_MESSAGE }, headers: { Origin: new URL(baseURL!).origin }, maxRedirects: 0,
   });
   expect(repeat.status()).toBe(303);
-  expect(repeat.headers().location).toBe(`${QUEUE}?decided=${id}`);
+  expect(repeat.headers().location).toBe(QUEUE);
 
   // Wairimu reads the decision and its message; who decided never reaches her.
   const requester = await browser.newContext();

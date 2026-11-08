@@ -61,6 +61,16 @@ async function html(query = "", init?: RequestInit) {
   return { status: response.status, body: await response.text() };
 }
 const count = (body: string, pattern: RegExp) => body.match(pattern)?.length ?? 0;
+const FORM = { "Content-Type": "application/x-www-form-urlencoded" };
+const FLASH = `ttv-flash=${encodeURIComponent(JSON.stringify({ tone: "success", message: "Approved. Otieno Ouma was given mentor access.", path: "/admin/access-requests" }))}`;
+const approvedOtieno = () => request("request-otieno", "Otieno Ouma", {
+  status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
+});
+/** The Set-Cookie lines of a response, read the way the adapter writes them. */
+const setCookies = (response: Response): string[] => {
+  const cookies = Reflect.get(response, Symbol.for("astro.cookies")) as { consume(): Iterable<string> } | undefined;
+  return [...response.headers.getSetCookie(), ...(cookies ? cookies.consume() : [])];
+};
 
 describe("the access-request queue on the style guide", () => {
   it("has one display title and the lists as a PillNav, the current one marked and counted", async () => {
@@ -91,12 +101,20 @@ describe("the access-request queue on the style guide", () => {
     expect(field).not.toContain("autofocus");
   });
 
+  it("answers a decision with a 303 to the list it was made from, carrying what happened in a read-once flash", async () => {
+    reads.decide.mockResolvedValue(approvedOtieno());
+    const form = new URLSearchParams({ id: "request-otieno", decision: "approve", message: "" });
+    const response = await visit("?status=PENDING&cursor=c2Vjb25kLXBhZ2U&decided=request-old", { method: "POST", body: form, headers: FORM });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/admin/access-requests?status=PENDING&cursor=c2Vjb25kLXBhZ2U");
+    const flash = decodeURIComponent(setCookies(response).find((line) => line.startsWith("ttv-flash=")) ?? "");
+    expect(flash).toContain('"message":"Approved. Otieno Ouma was given mentor access."');
+    expect(flash).toContain("Path=/admin/access-requests");
+  });
+
   it("confirms a decision in a success Notice that takes focus, since the card has left the list (QAO-06)", async () => {
-    reads.get.mockResolvedValue(request("request-otieno", "Otieno Ouma", {
-      status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
-    }));
-    const { body } = await html("?decided=request-otieno");
-    expect(reads.get).toHaveBeenCalledWith("synthetic-d1", "request-otieno");
+    const { body } = await html("", { headers: { Cookie: FLASH } });
+    expect(reads.get).not.toHaveBeenCalled();
     const notice = /<div id="access-request-notice"[^>]*>/.exec(body)?.[0] ?? "";
     expect(notice).toContain('data-notice="success"');
     expect(notice).toContain('role="status"');
@@ -145,10 +163,7 @@ describe("the access-request queue on the style guide", () => {
     expect(notice).toMatch(/autofocus/i);
   });
 
-  it("posts each row's decision back to its list, never to an address that announces an earlier decision", async () => {
-    reads.get.mockResolvedValue(request("request-otieno", "Otieno Ouma", {
-      status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
-    }));
+  it("posts each row's decision back to its list, without the old ?decided= address", async () => {
     const { body } = await html("?decided=request-otieno");
     const actions = [...body.matchAll(/<form method="POST" action="([^"]*)"[^>]*data-access-request-form/g)].map((match) => match[1]);
     expect(actions).toEqual(PENDING.items.map(() => "/admin/access-requests"));
@@ -156,14 +171,27 @@ describe("the access-request queue on the style guide", () => {
     expect(paged.body).toMatch(/<form method="POST" action="\/admin\/access-requests\?status=PENDING&amp;cursor=c2Vjb25kLXBhZ2U"/);
   });
 
-  it("never shows an earlier decision's notice beside a refused message, even posted to that address", async () => {
-    reads.get.mockResolvedValue(request("request-otieno", "Otieno Ouma", {
-      status: "APPROVED", decidedAt: NOW, decidedBy: person("synthetic-admin", "Amina Hassan"),
-    }));
+  it("never shows an earlier decision's notice beside a refused message: a POST never takes the flash", async () => {
     const body = new URLSearchParams({ id: "request-peter", decision: "decline", message: "x".repeat(601) });
-    const result = await html("?decided=request-otieno", { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    const result = await html("?decided=request-otieno", { method: "POST", body, headers: { ...FORM, Cookie: FLASH } });
     expect(result.status).toBe(400);
     expect(result.body).not.toContain('id="access-request-notice"');
     expect(count(result.body, /autofocus/gi)).toBe(1);
+  });
+
+  it("reads a repeated decision of the administrator's own as done, and a database failure as a worded 503", async () => {
+    const { OnboardingError } = await import("@/lib/onboarding/service");
+    reads.decide.mockRejectedValue(new OnboardingError("conflict", "Already decided."));
+    reads.get.mockResolvedValue(approvedOtieno());
+    const form = new URLSearchParams({ id: "request-otieno", decision: "approve", message: "" });
+    const repeat = await visit("", { method: "POST", body: form, headers: FORM });
+    expect(repeat.status).toBe(303);
+    expect(repeat.headers.get("location")).toBe("/admin/access-requests");
+    expect(decodeURIComponent(setCookies(repeat).join("\n"))).toContain("Approved. Otieno Ouma was given mentor access.");
+
+    reads.decide.mockRejectedValue(new Error("D1 down"));
+    const down = await html("", { method: "POST", body: form, headers: FORM });
+    expect(down.status).toBe(503);
+    expect(down.body).toMatch(/<div id="access-request-failure"[^>]*data-notice="danger"[\s\S]*?The database didn(?:&#39;|&#x27;|')t answer\./);
   });
 });
