@@ -9,6 +9,34 @@ link an `<a>`), the same focus ring (`FOCUS_RING`, peach ink, 2px, offset
 2px), colour transitions only, `motion-reduce:transition-none`, and a 44px
 target on touch screens.
 
+## The top of a page
+
+### PageHeader and PageTitle `#page-header`
+
+`PageTitle` is the page's one Mattone heading, its h1: 36–60px
+(`text-4xl sm:text-5xl lg:text-6xl`), `tracking-heading`, balanced lines,
+and a word too long for the line breaks rather than push the page sideways,
+even in a flex row (`wrap-anywhere`). Line height 1.1 and 0.2em of room above
+and below: Mattone's line box is 1.43em, so tighter type overhangs the h1,
+and a browser hit-tests the overhang (it once took a back link's click). `id` names a
+region by it; `as="p"` is only for showing a title as an example, as the
+style guide does.
+
+`PageHeader` is the title, the sentence under it and the page's one action:
+
+| Prop | Use |
+|---|---|
+| `title` | the page's title, drawn by `PageTitle` |
+| children | one sentence on what the page is for, when the title does not say it |
+| `action` | the action the page exists for, as its one `primary`: a `ButtonLink`, or a `Button` in its form. From `.astro`, `<Fragment slot="action">` |
+| `titleId`, `titleAs` | passed to the title |
+
+The action sits beside the title from 40rem and under the sentence below
+that, after the title in reading order at every width. Section headings below
+are plain h2s: the base styles set every heading but the h1 in Maven Pro
+bold, so they need no class. The public site's display h2s opt back in with
+`font-display`.
+
 ## Actions
 
 ### Button `#button`

@@ -127,6 +127,8 @@
 
   --font-heading: "Mattone", sans-serif;
   --font-body: "Maven Pro", sans-serif;
+  /* The display face as a role, for a public page's display heading below its h1 (`font-display`). */
+  --font-display: var(--font-heading);
 
   /*
    * Display tracking, by size band. These used to be hand-tuned inline on every
@@ -142,9 +144,10 @@
 }
 
 /*
- * Typography role split (PROPOSAL §A): the display face stays on hero/anchor
- * headings only. Maven Pro takes every heading small enough that a chunky
- * display face becomes hard to read (roughly h3 and below).
+ * Typography role split: the display face is the page's title, the h1, and
+ * nothing else by default. Every other heading is Maven Pro bold, so a section
+ * heading needs no class to follow the style guide. The public site's display
+ * h2s opt back in to Mattone with `font-display`.
  */
 @layer base {
   body {
@@ -153,11 +156,11 @@
     background-color: var(--color-dark);
   }
 
-  h1, h2 {
+  h1 {
     font-family: var(--font-heading);
   }
 
-  h3, h4, h5, h6 {
+  h2, h3, h4, h5, h6 {
     font-family: var(--font-body);
     font-weight: 700;
   }

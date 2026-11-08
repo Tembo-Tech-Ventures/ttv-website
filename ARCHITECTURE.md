@@ -276,7 +276,7 @@ GitHub OAuth via **better-auth**:
 
 - **Tailwind CSS 4**: Custom theme defined in `src/styles/global.css` using `@theme` directive
 - **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`; for the platform, the ground and sheet tones, `peach-ink`, `ring`, and the status inks `danger-ink`, `success-ink`, `warning-ink` (every one in `web/docs/design-system/foundations.md`)
-- **Typography**: Mattone Black (Collletttivo, OFL 1.1, self-hosted) for h1/h2, Maven Pro (OFL 1.1, self-hosted, latin file preloaded by `FontPreload`) for body and h3-h6
+- **Typography**: Mattone Black (Collletttivo, OFL 1.1, self-hosted) for h1, and for the public site's display h2s through `font-display`; Maven Pro (OFL 1.1, self-hosted, latin file preloaded by `FontPreload`) for body and h2-h6
 - **Display tracking**: three named theme tokens (`--tracking-display`, `--tracking-heading`, `--tracking-subhead`) instead of per-element `letter-spacing`, so the display face can be swapped without retuning every heading
 - **Animations**: GSAP ScrollTrigger on the homepage's stacked sheets and skills map (see `web/docs/homepage.md`), reveal utility class
 - **Grain overlay**: SVG noise texture via `Grain.astro` component

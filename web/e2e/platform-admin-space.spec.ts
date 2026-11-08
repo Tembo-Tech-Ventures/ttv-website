@@ -197,6 +197,34 @@ test.describe("every admin page", () => {
     }
   });
 
+  test("the page title never covers a link, tab or field beside it", async ({ page, baseURL }) => {
+    // Mattone's text overhangs a tight line box, and a browser hit-tests the overhang: a 60px title
+    // once took the click meant for the "Back to Curricula" link just above it.
+    test.setTimeout(120_000);
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    for (const path of ["/admin/curricula/ttv-local-persona-curriculum", "/admin/curricula/new", "/admin/programs/new", "/admin/applications", "/admin/projects", "/admin/feedback/themes", "/admin/recordings/upload"]) {
+      await test.step(path, async () => {
+        await open(page, path);
+        const covered = await page.evaluate(() => {
+          const title = document.querySelector("#spaces-main h1")!;
+          title.scrollIntoView({ block: "center" });
+          return Array.from(document.querySelectorAll("#spaces-main :is(a, button, input, select, textarea, summary)"))
+            .filter((control) => !title.contains(control))
+            .filter((control) => {
+              const box = control.getBoundingClientRect();
+              if (box.width === 0 || box.height === 0) return false;
+              // Its centre and the corners nearest a title above or below it.
+              return [[box.x + box.width / 2, box.y + box.height / 2], [box.x + 2, box.top + 1], [box.x + 2, box.bottom - 1]]
+                .some(([x, y]) => title.contains(document.elementFromPoint(x, y)));
+            })
+            .map((control) => control.textContent?.trim().slice(0, 40) ?? control.tagName);
+        });
+        expect(covered).toEqual([]);
+      });
+    }
+  });
+
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");

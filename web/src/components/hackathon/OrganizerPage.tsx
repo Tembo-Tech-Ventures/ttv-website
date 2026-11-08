@@ -92,7 +92,7 @@ export default function OrganizerPage() {
         <main id="hack-content" className="hack-story">
           <section id="why">
             <p className="hack-eyebrow">01 / Why</p>
-            <h2>Beyond a certificate.</h2>
+            <h2 className="font-display">Beyond a certificate.</h2>
             <p>
               “I have worked with students and alumni in Kenya and Nigeria. I
               want them to find local mentors and show abilities that a
@@ -111,7 +111,7 @@ export default function OrganizerPage() {
           </section>
           <section id="journeys">
             <p className="hack-eyebrow">02 / Who</p>
-            <h2>Three connected journeys.</h2>
+            <h2 className="font-display">Three connected journeys.</h2>
             <div className="hack-journeys">
               <article>
                 <span className="hack-number">01</span>
@@ -220,7 +220,7 @@ export default function OrganizerPage() {
           </section>
           <section id="weekend">
             <p className="hack-eyebrow">03 / Scope</p>
-            <h2>Built on TTV.</h2>
+            <h2 className="font-display">Built on TTV.</h2>
             <div className="hack-columns">
               <article className="hack-card">
                 <p className="hack-tag">Already existed</p>
@@ -243,7 +243,7 @@ export default function OrganizerPage() {
           </section>
           <section id="architecture">
             <p className="hack-eyebrow">04 / Architecture</p>
-            <h2>Evidence stays attached.</h2>
+            <h2 className="font-display">Evidence stays attached.</h2>
             <Diagram
               name="architecture"
               title="Web and MCP use shared authorized services, D1 and optional model routes"
@@ -269,7 +269,7 @@ export default function OrganizerPage() {
           </section>
           <section id="team">
             <p className="hack-eyebrow">05 / Process</p>
-            <h2>
+            <h2 className="font-display">
               Human direction.
               <br />
               Bounded agent work.
@@ -291,7 +291,7 @@ export default function OrganizerPage() {
           </section>
           <section id="evidence">
             <p className="hack-eyebrow">06 / Evidence & limits</p>
-            <h2>Tested, with gaps.</h2>
+            <h2 className="font-display">Tested, with gaps.</h2>
             <p>
               18 live directory checks covered expected results, ordering and
               access boundaries. Fictional persona journeys were reviewed on

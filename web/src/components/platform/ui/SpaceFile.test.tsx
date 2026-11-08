@@ -119,9 +119,9 @@ describe("SpaceFile", () => {
 });
 
 describe("display face", () => {
-  it("appears in the primitives only as Tembo's T", () => {
+  it("appears in the primitives only as the page's title and Tembo's T", () => {
     const sources = readdirSync(__dirname).filter((file) => file.endsWith(".tsx") && !file.endsWith(".test.tsx"));
-    const users = sources.filter((file) => readFileSync(join(__dirname, file), "utf8").includes("font-heading"));
-    expect(users).toEqual(["TemboMark.tsx"]);
+    const users = sources.filter((file) => /font-(heading|display)\b/.test(readFileSync(join(__dirname, file), "utf8")));
+    expect(users).toEqual(["PageTitle.tsx", "TemboMark.tsx"]);
   });
 });

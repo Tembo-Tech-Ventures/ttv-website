@@ -47,8 +47,8 @@ later, this is the place to start.
 - **No eyebrows**: no small uppercase labels above big titles, no `§ 01`
   numbering, no decorative kickers.
 - The brand: dark teal `#013D39`, peach `#F28D68`, lighter teal `#2C6964`, warm
-  ink `#FFF8F2`, the grain; Mattone Black for h1/h2, Maven Pro for everything
-  else. Balanced type scale.
+  ink `#FFF8F2`, the grain; Mattone Black for h1/h2 (the h2s through `font-display`),
+  Maven Pro for everything else. Balanced type scale.
 - Authored motion and layering that is visible but never blocks reading; calm,
   aligned grids; community voice, never rescue voice.
 

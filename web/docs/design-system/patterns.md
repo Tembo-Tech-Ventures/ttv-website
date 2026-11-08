@@ -16,10 +16,13 @@ reach the island, overlays, the sheet transition) are in
 
 ## A page
 
-- Exactly one Mattone heading, the h1 (`PageTitle` in pages that also render
-  outside the spaces shell). Sections are Maven Pro h2s (`font-body`).
-- A sentence under the title when the title does not say what the page is for.
-- The primary action before the long content it relates to.
+- Exactly one Mattone heading, the h1, from the kit's `PageHeader` (or
+  `PageTitle` when the title says it all). Sections are plain h2s, which the
+  base styles set in Maven Pro bold.
+- A sentence under the title when the title does not say what the page is for
+  (`PageHeader`'s children).
+- The primary action before the long content it relates to (`PageHeader`'s
+  `action`).
 - Prose stops at about 70 characters a line (`max-w-prose`, `max-w-3xl`).
 - Space first, a hairline second, a card third.
 - Nothing only on hover: every action and fact is reachable by keyboard and

@@ -1,18 +1,24 @@
 ---
 /**
- * An existing dashboard page's title. In the spaces shell it is the screen's
- * one Mattone heading, an h1; in the existing dashboard it keeps the h2 and
- * classes the page always had, so flag-off pages render exactly as before.
- * A page that had no title there (`legacyTag={null}`) gains one in the spaces
- * shell alone.
+ * An existing dashboard page's title, while its flag-off path still renders.
+ * In the spaces shell it is the kit's `PageTitle`, the screen's one Mattone
+ * heading; in the existing dashboard it keeps the heading and classes the
+ * page always had. A page that had no title there (`legacyTag={null}`) gains
+ * one in the spaces shell alone. A page that has moved to the kit imports
+ * `PageTitle` or `PageHeader` from `@/components/platform/ui` instead.
  */
+import { PageTitle } from "@/components/platform/ui";
+
 interface Props {
   spaces: boolean;
   /** The classes the existing dashboard gives this heading. */
   legacyClass?: string;
   /** The existing dashboard's heading level. Most pages used an h2; null where it drew none. */
   legacyTag?: "h1" | "h2" | null;
-  /** A title that sits inside a card rather than heading the page. */
+  /**
+   * A title that sits inside a card rather than heading the page. Kept, at its
+   * old size, only until those pages move to the kit, which has no card size.
+   */
   size?: "page" | "card";
 }
 
@@ -21,14 +27,15 @@ const { spaces, legacyClass, legacyTag: Legacy = "h2", size = "page" } = Astro.p
 
 {
   spaces ? (
-    <h1
-      class:list={[
-        "tracking-heading break-words text-ink-primary",
-        size === "page" ? "text-3xl sm:text-4xl lg:text-5xl" : "text-2xl sm:text-3xl",
-      ]}
-    >
-      <slot />
-    </h1>
+    size === "page" ? (
+      <PageTitle>
+        <slot />
+      </PageTitle>
+    ) : (
+      <h1 class="tracking-heading break-words text-2xl text-ink-primary sm:text-3xl">
+        <slot />
+      </h1>
+    )
   ) : (
     Legacy && (
       <Legacy class={legacyClass}>

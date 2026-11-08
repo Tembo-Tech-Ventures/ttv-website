@@ -57,8 +57,8 @@ describe("PageTitle outside the spaces shell", () => {
     expect(html.trim()).toBe("");
   });
 
-  it("is the screen's one h1 in the spaces shell", async () => {
+  it("is the screen's one h1 in the spaces shell, the kit's PageTitle", async () => {
     const html = await container.renderToString(PageTitle, { props: { spaces: true, legacyTag: null }, slots: { default: "Cohort 05" } });
-    expect(html).toMatch(/^<h1 class="[^"]*tracking-heading[^"]*">Cohort 05<\/h1>$/);
+    expect(html).toMatch(/^<h1 data-page-title="true" class="[^"]*tracking-heading[^"]*">Cohort 05<\/h1>$/);
   });
 });
