@@ -29,23 +29,19 @@ const bare = (status: number, body: string, headers: Record<string, string> = {}
 if (method !== "GET" && method !== "HEAD" && method !== "POST") return bare(405, "Not allowed.", { Allow: "GET, HEAD, POST" });
 
 const fetcher = communityFetch(Astro.request, Astro.locals, env);
-// Who may scout is the API's decision, read beside the space context and onboarding (PERF-2).
-const [spaces, allowed] = await Promise.all([
+const posted = method === "POST" ? await readDiscoverPost(Astro.request) : null;
+if (posted && !posted.ok) return bare(posted.status, posted.status === 413 ? "That form was too large." : posted.status === 403 ? "That request was refused." : "That form could not be read.");
+// What was asked runs beside the space context (PERF-2): every read passes the API's own institution
+// check, so nothing waits for the frame first. The Discover space is itself the page's access check (the
+// middleware refuses it to anyone without institutional access); without a space context (a token, or the
+// frame failing) the API says who may scout, and nothing it found is shown to anyone else.
+const [spaces, ran] = await Promise.all([
   resolveSpacePageWith(Astro.locals, "discover", async () => null).then((resolved) => resolved?.[0] ?? null),
-  discoverAccess(fetcher),
+  runDiscover(posted?.ok ? posted.request : readDiscoverGet(Astro.url), fetcher),
 ]);
-
-let outcome: DiscoverOutcome | null = null;
-if (allowed) {
-  const posted = method === "POST" ? await readDiscoverPost(Astro.request) : null;
-  if (posted && !posted.ok) return bare(posted.status, posted.status === 413 ? "That form was too large." : posted.status === 403 ? "That request was refused." : "That form could not be read.");
-  outcome = await runDiscover(posted?.ok ? posted.request : readDiscoverGet(Astro.url), fetcher);
-  Astro.response.status = outcome.status;
-} else if (allowed === false) {
-  Astro.response.status = 403;
-} else {
-  Astro.response.status = 503;
-}
+const allowed = spaces ? true : await discoverAccess(fetcher);
+const outcome: DiscoverOutcome | null = allowed ? ran : null;
+Astro.response.status = outcome?.status ?? (allowed === false ? 403 : 503);
 Astro.response.headers.set("Cache-Control", "no-store");
 
 const view = outcome?.view ?? null;
