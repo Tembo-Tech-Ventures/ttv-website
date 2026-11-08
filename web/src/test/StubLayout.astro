@@ -3,7 +3,7 @@
  * A page's layout in a render test that is about the page alone: its props as data, its slot in
  * `<main data-page>`, and none of the frame's own markup to match by mistake.
  */
-const { title } = Astro.props;
+const { title, titlePrefix } = Astro.props;
 ---
 
-<main data-page data-title={title}><slot /></main>
+<main data-page data-title={title} data-title-prefix={titlePrefix || undefined}><slot /></main>

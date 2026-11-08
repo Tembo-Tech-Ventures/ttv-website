@@ -88,6 +88,7 @@ const PAGES = {
   "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
   "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
   "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
+  "admin curriculum": { path: () => "/admin/curricula/curriculum", page: () => import("@/pages/admin/curricula/[id].astro"), user: ADMIN, id: "curriculum" },
   "admin feedback detail": { path: () => "/admin/feedback/feedback", page: () => import("@/pages/admin/feedback/[id].astro"), user: ADMIN, id: "feedback" },
   "admin feedback theme": { path: () => "/admin/feedback/themes/theme", page: () => import("@/pages/admin/feedback/themes/[id].astro"), user: ADMIN, id: "theme" },
   "admin feedback themes": { path: () => "/admin/feedback/themes", page: () => import("@/pages/admin/feedback/themes/index.astro"), user: ADMIN },
@@ -179,6 +180,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 4 before the style-guide rollout: the list, the decision just made and the space were read in turn.
   "admin access requests": { d1: 14, depth: 2 },
   "admin curricula": { d1: 14, depth: 2 },
+  "admin curriculum": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the note, then the themes, then the space.
   "admin feedback detail": { d1: 16, depth: 3 },
   "admin feedback theme": { d1: 15, depth: 2 },
