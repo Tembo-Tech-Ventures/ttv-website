@@ -103,7 +103,7 @@ describe("the mentor's requests page", () => {
     expect(code).toBe(200);
     expect(headers.get("Cache-Control")).toBe("no-store");
     expect(islands(body)).toEqual([
-      "@/components/feedback/FeedbackWidget", "@/components/platform/mentors/MentorRequestsQueue",
+      "@/components/platform/mentors/MentorRequestsQueue",
       "@/components/platform/overlays/PlatformOverlays", "@/components/platform/shell/SpacesShell",
     ]);
     // The rail comes after the island, outside it, with the spots the island takes over.
