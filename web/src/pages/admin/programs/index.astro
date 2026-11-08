@@ -1,100 +1,70 @@
 ---
-import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { desc } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { ButtonLink, Chip, DataCell, DataRow, DataTable, EmptyState, Notice, PageHeader, linkClass } from "@/components/platform/ui";
+import * as schema from "@/lib/db/schema";
 import { formatCalendarDate } from "@/lib/display-date";
 
+/*
+ * Every cohort, newest first. A cohort's page holds its dates, its people and
+ * its applications; this list leads there, and to a new cohort. The cohorts and
+ * the Admin space are independent reads, started together.
+ */
 const db = drizzle(env.DB, { schema });
 
-const programs = await db.query.program.findMany({
-  with: { curriculum: true },
-  orderBy: (p, { desc }) => [desc(p.createdAt)],
-});
+const [programs, spaces] = await Promise.all([
+  db.query.program.findMany({
+    columns: { id: true, name: true, startDate: true, endDate: true, applicationsOpen: true },
+    with: { curriculum: { columns: { title: true } } },
+    orderBy: (program) => [desc(program.createdAt)],
+  }),
+  resolveSpacePage(Astro.locals, "adminCohorts"),
+]);
 
-const notice = Astro.url.searchParams.get("notice");
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminCohorts");
+// A cohort's page sends a reader here when the one they opened is gone.
+const missing = Astro.url.searchParams.get("notice") === "missing";
+const day = (date: Date | null) => (date ? formatCalendarDate(date) : "Not set");
 ---
 
 <AdminLayout title="Cohorts" spaces={spaces}>
-  <div class="space-y-6">
-    {notice === "missing" && (
-      <p
-        role="alert"
-        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
-      >
-        That cohort no longer exists.
-      </p>
-    )}
+  <div class="flex flex-col gap-8">
+    <PageHeader title="Cohorts">
+      Every cohort, newest first. Open one to change its dates, its people and who it accepts.
+      <Fragment slot="action">
+        <ButtonLink variant="primary" href="/admin/programs/new">New cohort</ButtonLink>
+      </Fragment>
+    </PageHeader>
 
-    <div class="flex items-center justify-between">
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Cohorts</PageTitle>
-      <Button href="/admin/programs/new">
-        New Cohort
-      </Button>
-    </div>
+    {missing && <Notice tone="warning" title="That cohort no longer exists">It may have been removed. The list below is up to date.</Notice>}
 
-    <div class="overflow-x-auto rounded-lg border border-teal/20">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-teal/30 text-xs uppercase text-white/80">
-          <tr>
-            <th class="px-4 py-3 font-medium">Name</th>
-            <th class="px-4 py-3 font-medium">Curriculum</th>
-            <th class="px-4 py-3 font-medium">Start Date</th>
-            <th class="px-4 py-3 font-medium">End Date</th>
-            <th class="px-4 py-3 font-medium">Applications</th>
-            <th class="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-teal/10">
-          {programs.length === 0 ? (
-            <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
-                No cohorts yet
-              </td>
-            </tr>
-          ) : (
-            programs.map((p) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3 font-medium text-white">{p.name}</td>
-                <td class="px-4 py-3">{p.curriculum?.title ?? "—"}</td>
-                <td class="px-4 py-3">
-                  {p.startDate
-                    ? formatCalendarDate(new Date(p.startDate))
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  {p.endDate
-                    ? formatCalendarDate(new Date(p.endDate))
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    class:list={[
-                      "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
-                      p.applicationsOpen
-                        ? "bg-emerald-500/20 text-emerald-100"
-                        : "bg-white/10 text-ink-secondary",
-                    ]}
-                  >{p.applicationsOpen ? "Open" : "Closed"}</span>
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/programs/${p.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption="Cohorts"
+      columns={[{ label: "Cohort" }, { label: "Curriculum" }, { label: "Starts" }, { label: "Ends" }, { label: "Applications" }]}
+      isEmpty={programs.length === 0}
+    >
+      {
+        programs.map((program) => (
+          <DataRow>
+            <DataCell label="Cohort" primary>
+              <a href={`/admin/programs/${program.id}`} class={linkClass()}>{program.name}</a>
+            </DataCell>
+            <DataCell label="Curriculum">{program.curriculum?.title ?? "None"}</DataCell>
+            <DataCell label="Starts">{day(program.startDate)}</DataCell>
+            <DataCell label="Ends">{day(program.endDate)}</DataCell>
+            <DataCell label="Applications">
+              <Chip tone={program.applicationsOpen ? "success" : "neutral"}>{program.applicationsOpen ? "Open" : "Closed"}</Chip>
+            </DataCell>
+          </DataRow>
+        ))
+      }
+      <Fragment slot="empty">
+        <EmptyState title="No cohorts yet" headingLevel={2}>
+          A cohort brings a curriculum, its dates and its people together. Create the first one with “New cohort”.
+        </EmptyState>
+      </Fragment>
+    </DataTable>
   </div>
 </AdminLayout>

@@ -22,7 +22,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "pages/admin/agent-access.astro",
     "pages/admin/personal-access-tokens.astro",
     "pages/admin/programs/[id].astro",
-    "pages/admin/programs/index.astro",
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/[id].astro",
     "pages/admin/recordings/import.astro",

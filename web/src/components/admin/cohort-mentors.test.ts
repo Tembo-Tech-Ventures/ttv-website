@@ -68,7 +68,7 @@ describe("the admin cohort pages", () => {
 
   it("write dates one way, day first with the month as a word, never the browser's locale (QA2-13)", () => {
     for (const name of ["index.astro", "[id].astro"]) expect(page(name)).not.toMatch(/toLocale(Date)?String\(/);
-    expect(page("index.astro")).toContain("formatCalendarDate(new Date(p.startDate))");
+    expect(page("index.astro")).toContain("formatCalendarDate(date)");
     expect(page("[id].astro")).toContain("formatMomentDate(application.createdAt)");
   });
 });
