@@ -110,8 +110,10 @@ function smallTargets({ controls }: { controls: string }) {
   const w = window as unknown as { __styleVisible: (el: Element) => boolean; __styleName: (el: Element) => string };
   return [...document.querySelectorAll(`${controls},input:not([type=hidden]),select,textarea,[role=tab],[role=link]`)]
     .filter((el) => w.__styleVisible(el))
-    // A link inside a sentence is exempt (WCAG 2.5.8, inline).
-    .filter((el) => !(el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p,li,dd,td,blockquote,figcaption,label,legend")))
+    // A link inside a sentence is exempt (WCAG 2.5.8, inline): an inline link in running text, or with words around it.
+    .filter((el) => !(el.tagName === "A" && getComputedStyle(el).display === "inline"
+      && (el.closest("p,li,dd,td,blockquote,figcaption,label,legend")
+        || (el.parentElement?.textContent ?? "").trim().length > (el.textContent ?? "").trim().length)))
     .map((el) => ({ el, rect: el.getBoundingClientRect() }))
     .filter(({ rect }) => Math.min(rect.width, rect.height) < 43.5)
     .map(({ el, rect }) => `${w.__styleName(el)} ${Math.round(rect.width)}x${Math.round(rect.height)}`);

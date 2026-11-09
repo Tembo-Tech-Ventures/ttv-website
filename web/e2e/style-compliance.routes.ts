@@ -125,7 +125,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/projects/[id]", persona: "staff", detail: { from: "/admin/projects", link: ID("/admin/projects") } },
   { path: "/admin/recordings", persona: "staff" },
   { path: "/admin/recordings/[id]", persona: "staff", detail: { from: "/admin/recordings", link: ID("/admin/recordings") } },
-  { path: "/admin/recordings/import", persona: "staff", pending: { checks: ["kit-controls", "targets"], preview: ["peach"], todo: LANE_M("Admin recording imports, #397") } },
+  { path: "/admin/recordings/import", persona: "staff", pending: { preview: ["peach"], todo: LANE_X("a second peach action on the preview's import sources, before #397") } },
   { path: "/admin/recordings/upload", persona: "staff" },
   { path: "/admin/settings/integrations", persona: "staff", pending: { preview: ["kit-controls", "targets"], todo: LANE_X("the hand-rolled \"Where to get this credential\" summary") } },
   { path: "/admin/users", persona: "staff", pending: { checks: ["overflow"], todo: LANE_X("the users table is 2px too wide at 320") } },
