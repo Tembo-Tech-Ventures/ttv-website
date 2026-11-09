@@ -84,8 +84,9 @@ test.describe("authenticated talent foundation", () => {
 
   test("dashboard/opportunities stub renders", async ({ page }) => {
     await page.goto("/dashboard/opportunities");
+    // The page's empty state has its own heading; the title is the one h1.
     await expect(
-      page.getByRole("heading", { name: /opportunities/i }),
+      page.getByRole("heading", { level: 1, name: "Opportunities" }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-opportunities"),

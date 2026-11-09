@@ -68,6 +68,8 @@ export interface StudentJourney {
   visibleLinkIds: StudentDashboardLinkId[];
   unreadLeadCount: number;
   nextStep: StudentNextStep;
+  /** The builder profile as the journey read it, for a page that gates on it without reading it again. */
+  profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null;
 }
 
 const APPLICATION_STATE_PRIORITY: ApplicationStatus[] = [
@@ -373,5 +375,6 @@ async function readStudentJourney(
       openProgram: openProgram ?? null,
       unreadLeadCount,
     }),
+    profile: profile ?? null,
   };
 }

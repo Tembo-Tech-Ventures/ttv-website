@@ -1,297 +1,212 @@
 ---
+/**
+ * Opportunities: approved client projects, open to a builder whose public profile is published.
+ * Raising a hand (with an optional note for the introduction) and withdrawing it post back here,
+ * which answers with a 303 to a notice (a reload never posts again), a 400 when the form can't be
+ * taken, keeping what was typed, and a 503 when the write fails. No title or organisation is read
+ * for anyone the page's gate keeps out: the project query applies the gate itself.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Badge from "@/components/common/Badge.astro";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { Button, ButtonLink, Card, Chip, EmptyState, Notice, TextAreaField } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, exists, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { budgetBandLabel } from "@/components/hire/budget-bands";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { interestNoteSchema, resolveGateState } from "@/components/hire/validation";
-import type { ProfileStatus } from "@/components/hire/validation";
 import { formatMomentDate } from "@/lib/display-date";
 import { opportunityAnchor } from "@/components/platform/profile/overview";
+import { getStudentJourney } from "@/lib/student/journey";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
-
-const profile = await db.query.studentProfile.findFirst({
-  where: (sp, { eq: e }) => e(sp.userId, user.id),
+/** The person's published profile, as a subquery: what hangs off it is read beside it. */
+const publishedProfile = () => db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
+  .where(and(eq(schema.studentProfile.userId, user.id), eq(schema.studentProfile.status, "PUBLISHED")));
+const readProfile = () => db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
   columns: { id: true, status: true },
-}) as { id: string; status: ProfileStatus } | undefined;
+});
 
-const { state: gateState, message: gateMessage } = resolveGateState(profile);
+const DONE = { raised: "You raised your hand for this project.", withdrawn: "You withdrew your interest." } as const;
+let failure = "";
+/** The project whose note was refused, and the note, so the person doesn't type it again. */
+let refused: { projectId: string; note: string } | null = null;
 
-let projects: Array<
-  typeof schema.clientProject.$inferSelect & {
-    interest: typeof schema.projectInterest.$inferSelect | null;
-  }
-> = [];
-
-let interestError = "";
-let interestSuccess = "";
-
-if (gateState === "published" && profile) {
-  if (Astro.request.method === "POST") {
-    const formData = await Astro.request.formData();
-    const action = formData.get("_action") as string;
-    const projectId = formData.get("projectId") as string;
-
-    if (action === "interest" && projectId) {
-      const noteResult = interestNoteSchema.safeParse(
-        (formData.get("note") as string) ?? ""
-      );
-
-      if (!noteResult.success) {
-        interestError = noteResult.error.issues[0]?.message ?? "Invalid note.";
-      } else {
-        const project = await db.query.clientProject.findFirst({
-          where: (cp, { eq: e }) => e(cp.id, projectId),
-          columns: { id: true, status: true },
-        });
-
-        if (!project || project.status !== "APPROVED") {
-          interestError = "This project is not currently accepting interest.";
-        } else {
-          const existing = await db.query.projectInterest.findFirst({
-            where: (pi, { and: a, eq: e }) =>
-              a(e(pi.projectId, projectId), e(pi.profileId, profile.id)),
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("_action");
+  const projectId = formData.get("projectId");
+  const note = formData.get("note");
+  const profile = await readProfile();
+  const done = (outcome: keyof typeof DONE) => Astro.redirect(`${Astro.url.pathname}?done=${outcome}`, 303);
+  if (!profile || resolveGateState(profile).state !== "published") {
+    Astro.response.status = 400;
+    failure = "Publish your profile to raise your hand for a project.";
+  } else if (typeof projectId !== "string" || !projectId || (action !== "interest" && action !== "withdraw")) {
+    Astro.response.status = 400;
+    failure = "That didn't go through. Try again from the project.";
+  } else if (action === "interest") {
+    const parsed = interestNoteSchema.safeParse(typeof note === "string" ? note : "");
+    const project = parsed.success
+      ? await db.query.clientProject.findFirst({ where: eq(schema.clientProject.id, projectId), columns: { status: true } })
+      : null;
+    if (!parsed.success || project?.status !== "APPROVED") {
+      Astro.response.status = 400;
+      failure = !parsed.success
+        ? parsed.error.issues[0]?.message ?? "Check your note and try again."
+        : "This project isn't taking interest any more.";
+      refused = { projectId, note: typeof note === "string" ? note : "" };
+    } else {
+      try {
+        await db.insert(schema.projectInterest)
+          .values({ projectId, profileId: profile.id, note: parsed.data || null, status: "INTERESTED" })
+          .onConflictDoUpdate({
+            target: [schema.projectInterest.projectId, schema.projectInterest.profileId],
+            set: { status: "INTERESTED", note: parsed.data || null },
           });
-
-          if (existing) {
-            await db
-              .update(schema.projectInterest)
-              .set({
-                status: "INTERESTED",
-                note: noteResult.data || null,
-              })
-              .where(eq(schema.projectInterest.id, existing.id));
-          } else {
-            await db.insert(schema.projectInterest).values({
-              projectId,
-              profileId: profile.id,
-              note: noteResult.data || null,
-              status: "INTERESTED",
-            });
-          }
-
-          interestSuccess = "You raised your hand for this project.";
-        }
-      }
-    } else if (action === "withdraw" && projectId) {
-      const existing = await db.query.projectInterest.findFirst({
-        where: (pi, { and: a, eq: e }) =>
-          a(e(pi.projectId, projectId), e(pi.profileId, profile.id)),
-      });
-
-      if (existing && existing.status === "INTERESTED") {
-        await db
-          .update(schema.projectInterest)
-          .set({ status: "WITHDRAWN" })
-          .where(eq(schema.projectInterest.id, existing.id));
-        interestSuccess = "You withdrew your interest.";
+        return done("raised");
+      } catch (error) {
+        console.error("Interest in a project could not be saved.", error);
+        Astro.response.status = 503;
+        failure = "Your hand couldn't be raised just now. Try again in a moment.";
+        refused = { projectId, note: parsed.data };
       }
     }
+  } else {
+    try {
+      const withdrawn = await db.update(schema.projectInterest).set({ status: "WITHDRAWN" })
+        .where(and(
+          eq(schema.projectInterest.projectId, projectId),
+          eq(schema.projectInterest.profileId, profile.id),
+          eq(schema.projectInterest.status, "INTERESTED"),
+        ))
+        .returning({ id: schema.projectInterest.id });
+      if (withdrawn.length > 0) return done("withdrawn");
+      Astro.response.status = 400;
+      failure = "Your hand wasn't raised for that project.";
+    } catch (error) {
+      console.error("Interest in a project could not be withdrawn.", error);
+      Astro.response.status = 503;
+      failure = "That couldn't be saved just now. Try again in a moment.";
+    }
   }
+}
 
-  const approvedProjects = await db.query.clientProject.findMany({
-    where: (cp, { eq: e }) => e(cp.status, "APPROVED"),
+// The profile (the journey's, which the frame shares), the projects and the person's raised hands
+// (both through the published profile), and the space context: one round trip.
+const [{ profile }, approved, interests, spaces] = await Promise.all([
+  getStudentJourney(db, user.id),
+  db.query.clientProject.findMany({
+    where: and(eq(schema.clientProject.status, "APPROVED"), exists(publishedProfile())),
     orderBy: [desc(schema.clientProject.createdAt)],
-  });
+  }),
+  db.query.projectInterest.findMany({ where: inArray(schema.projectInterest.profileId, publishedProfile()) }),
+  resolveSpacePage(Astro.locals, "opportunities"),
+]);
+const { state: gateState, message: gateMessage } = resolveGateState(profile);
+const raised = new Map(interests.map((interest) => [interest.projectId, interest]));
+const projects = gateState === "published" ? approved.map((project) => ({ ...project, interest: raised.get(project.id) ?? null })) : [];
 
-  const interests = profile
-    ? await db.query.projectInterest.findMany({
-        where: (pi, { eq: e }) => e(pi.profileId, profile.id),
-      })
-    : [];
-
-  const interestMap = new Map(interests.map((i) => [i.projectId, i]));
-
-  projects = approvedProjects.map((p) => ({
-    ...p,
-    interest: interestMap.get(p.id) ?? null,
-  }));
-}
-
-function formatDate(date: Date | null): string {
-  return date ? formatMomentDate(date) : "";
-}
-const spaces = await resolveSpacePage(Astro.locals, "opportunities");
+const doneKey = Astro.request.method === "GET" ? Astro.url.searchParams.get("done") : null;
+const notice = doneKey === "raised" || doneKey === "withdrawn" ? DONE[doneKey] : "";
+const profilePath = spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio";
 ---
 
-<SpacePage context={spaces} title="Opportunities">
-  <div class={spaces ? "max-w-4xl" : "mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8"}>
-    <PageTitle spaces={Boolean(spaces)} legacyTag="h1" legacyClass="text-2xl font-semibold text-white">Opportunities</PageTitle>
+<SpacePage context={spaces} title={failure ? "Error: Opportunities" : "Opportunities"}>
+  <div class={spaces ? "max-w-4xl space-y-6" : "mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8"}>
+    <header>
+      <PageTitle spaces={Boolean(spaces)} legacyTag="h1" legacyClass="text-2xl font-semibold text-white">Opportunities</PageTitle>
+      <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary">
+        Approved client projects looking for builders. If there's a fit, the TTV team makes the introduction.
+      </p>
+    </header>
 
-    {
-      gateState === "no_profile" && (
-        <div class="mt-8 rounded-xl border border-[color:var(--color-rule)] bg-dark/40 p-8 text-center">
-          <p class="font-body text-lg text-ink-secondary">{gateMessage}</p>
-          <a
-            href="/dashboard/portfolio"
-            class="mt-4 inline-flex items-center rounded-full bg-primary px-6 py-2.5 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
-          >
-            Create your profile
-          </a>
-        </div>
-      )
-    }
+    {notice && <Notice tone="success" focusOnLoad>{notice}</Notice>}
+    {failure && <Notice tone="danger" focusOnLoad>{failure}</Notice>}
 
-    {
-      gateState === "not_published" && (
-        <div class="mt-8 rounded-xl border border-[color:var(--color-rule)] bg-dark/40 p-8 text-center">
-          <p class="font-body text-lg text-ink-secondary">{gateMessage}</p>
-          <a
-            href="/dashboard/portfolio"
-            class="mt-4 inline-flex items-center rounded-full border border-primary/40 px-6 py-2.5 font-body text-sm font-semibold uppercase tracking-[0.14em] text-primary transition-colors hover:bg-primary/10"
-          >
-            Go to your profile
-          </a>
-        </div>
-      )
-    }
+    {gateState !== "published" && (
+      <EmptyState title="Opportunities open with a published profile" headingLevel={2}>
+        {gateMessage}
+        <ButtonLink slot="action" href={profilePath} variant={gateState === "no_profile" ? "primary" : "quiet"}>
+          {gateState === "no_profile" ? "Create your profile" : "Go to your profile"}
+        </ButtonLink>
+      </EmptyState>
+    )}
 
-    {
-      gateState === "published" && (
-        <>
-          <p class="mt-2 font-body text-sm text-ink-secondary">
-            Approved client projects looking for builders. If there is a fit,
-            the TTV team makes the introduction.
-          </p>
+    {gateState === "published" && projects.length === 0 && (
+      <EmptyState title="No approved projects right now" headingLevel={2}>
+        When the team approves a client project, it's listed here for you to raise your hand.
+      </EmptyState>
+    )}
 
-          {interestError && (
-            <p
-              role="alert"
-              class="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 font-body text-sm text-red-300"
-            >
-              {interestError}
-            </p>
-          )}
+    {projects.length > 0 && (
+      <ol class="space-y-6" aria-label="Client projects">
+        {projects.map((project) => {
+          const skills = parseSkillsJson(project.skills);
+          const titleId = `project-${project.id}-title`;
+          const isInterested = project.interest?.status === "INTERESTED";
+          const refusedHere = refused?.projectId === project.id ? refused : null;
+          return (
+            <li id={opportunityAnchor(project.id)} class="scroll-mt-24" data-opportunity>
+              <Card as="article" aria-labelledby={titleId}>
+                <h2 id={titleId} class="font-body text-lg leading-snug font-bold break-words text-ink-primary">{project.title}</h2>
+                <p class="mt-0.5 text-sm break-words text-ink-secondary">{project.organization}</p>
+                <p class="mt-3 text-[0.9375rem] leading-relaxed break-words whitespace-pre-line text-ink-secondary">{project.description}</p>
+                {skills.length > 0 && (
+                  <ul class="mt-4 flex flex-wrap gap-2" aria-label="Skills">
+                    {skills.map((skill) => <li class="max-w-full"><Chip>{skill}</Chip></li>)}
+                  </ul>
+                )}
+                <p class="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-muted">
+                  <span>{budgetBandLabel(project.budgetBand)}</span>
+                  {project.timeline && <span>{project.timeline}</span>}
+                  {project.createdAt && <span>Posted {formatMomentDate(project.createdAt)}</span>}
+                </p>
 
-          {interestSuccess && (
-            <p
-              role="status"
-              class="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 font-body text-sm text-green-300"
-            >
-              {interestSuccess}
-            </p>
-          )}
-
-          {projects.length === 0 ? (
-            <div class="mt-8 rounded-xl border border-[color:var(--color-rule)] bg-dark/40 p-8 text-center">
-              <p class="font-body text-lg text-ink-secondary">
-                No approved projects right now. Check back soon.
-              </p>
-            </div>
-          ) : (
-            <div class="mt-6 space-y-6">
-              {projects.map((project) => {
-                const skills = parseSkillsJson(project.skills);
-                const isInterested =
-                  project.interest?.status === "INTERESTED";
-                return (
-                  <article id={opportunityAnchor(project.id)} class="scroll-mt-6 rounded-xl border border-[color:var(--color-rule)] bg-dark/40 p-6">
+                <div class="mt-5 border-t border-hairline pt-5">
+                  {isInterested ? (
                     <div class="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p class="font-body text-xs font-medium uppercase tracking-wider text-ink-muted">
-                          {project.organization}
-                        </p>
-                        <h2 class="mt-1 text-lg font-semibold text-ink-primary">
-                          {project.title}
-                        </h2>
+                      <div class="min-w-0">
+                        <Chip tone="ring">Hand raised</Chip>
+                        {project.interest?.note && (
+                          <p class="mt-2 text-sm break-words whitespace-pre-line text-ink-secondary">Your note: {project.interest.note}</p>
+                        )}
                       </div>
-                      <Badge variant="approved" />
+                      <form method="POST">
+                        <input type="hidden" name="_action" value="withdraw" />
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <Button type="submit" size="sm" aria-describedby={titleId}>Withdraw</Button>
+                      </form>
                     </div>
-
-                    <p class="mt-3 font-body text-[15px] leading-relaxed text-ink-secondary">
-                      {project.description}
-                    </p>
-
-                    {skills.length > 0 && (
-                      <div class="mt-4 flex flex-wrap gap-2">
-                        {skills.map((skill) => (
-                          <span class="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-body text-xs text-primary">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div class="mt-4 flex flex-wrap gap-x-6 gap-y-1 font-body text-sm text-ink-muted">
-                      <span>{budgetBandLabel(project.budgetBand)}</span>
-                      {project.timeline && <span>{project.timeline}</span>}
-                      {project.createdAt && (
-                        <span>Posted {formatDate(project.createdAt)}</span>
-                      )}
-                    </div>
-
-                    <div class="mt-5 border-t border-[color:var(--color-rule)] pt-5">
-                      {isInterested ? (
-                        <div>
-                          <p class="font-body text-sm font-medium text-green-400">
-                            You have raised your hand for this project.
-                          </p>
-                          {project.interest?.note && (
-                            <p class="mt-1 font-body text-sm text-ink-muted">
-                              Your note: {project.interest.note}
-                            </p>
-                          )}
-                          <form method="POST" class="mt-3">
-                            <input
-                              type="hidden"
-                              name="_action"
-                              value="withdraw"
-                            />
-                            <input
-                              type="hidden"
-                              name="projectId"
-                              value={project.id}
-                            />
-                            <button
-                              type="submit"
-                              class="rounded-full border border-red-500/40 px-5 py-2 font-body text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                            >
-                              Withdraw
-                            </button>
-                          </form>
-                        </div>
-                      ) : (
-                        <form method="POST" class="space-y-3">
-                          <input
-                            type="hidden"
-                            name="_action"
-                            value="interest"
-                          />
-                          <input
-                            type="hidden"
-                            name="projectId"
-                            value={project.id}
-                          />
-                          <textarea
-                            name="note"
-                            maxlength="500"
-                            rows="2"
-                            class="block w-full rounded-lg border border-[color:var(--color-rule)] bg-dark/40 px-4 py-2.5 font-body text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            placeholder="Why you're a fit — the team includes this in the intro"
-                          />
-                          <button
-                            type="submit"
-                            class="rounded-full bg-primary px-5 py-2 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
-                          >
-                            Raise your hand
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )
-    }
+                  ) : (
+                    <form method="POST" class="space-y-3">
+                      <input type="hidden" name="_action" value="interest" />
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <TextAreaField
+                        id={`note-${project.id}`}
+                        name="note"
+                        label="Why you're a fit"
+                        hint="The team includes it in the introduction. Up to 500 characters."
+                        optional
+                        rows={2}
+                        maxLength={500}
+                        defaultValue={refusedHere?.note}
+                        error={refusedHere ? failure : undefined}
+                      />
+                      <Button type="submit" aria-describedby={titleId}>Raise your hand</Button>
+                    </form>
+                  )}
+                </div>
+              </Card>
+            </li>
+          );
+        })}
+      </ol>
+    )}
   </div>
 </SpacePage>
