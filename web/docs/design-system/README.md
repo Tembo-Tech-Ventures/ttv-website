@@ -93,11 +93,15 @@ spellings.
 
 ## Older parts, and moving off them
 
-The `form-control` utility in `global.css` predates the kit (as `components/common/Button.astro`, `Card.astro` and `Badge.astro` did; they are gone). Pages that already
-use them are listed in `src/components/common/legacy-ui.test.ts`, which fails
-if any other file starts using them, and also if a listed file stops using
-them, so the lists only shrink. When you move a page onto the kit, delete its
-line there.
+The parts the kit replaced are gone: `components/common/Button.astro`, `Card.astro`
+and `Badge.astro`, the `form-control` utility, the `spaces/PageTitle.astro` shim and
+the status-tint patches the spaces shell carried for them. `src/test/kit-compliance.test.ts`
+keeps them gone: it counts raw colour utilities, inline `rgb()`, `form-control`, the
+shim's import and query-string status flags in every page and component, freezes each
+file at its count, and fails when a file gains one, or loses some without lowering its
+number. When your change takes matches out of a file, the failing test names the rows to
+lower in `kit-compliance.frozen.ts`. `e2e/style-compliance.spec.ts` checks the rendered
+result on every signed-in route.
 
 | Older | Kit |
 |---|---|
@@ -105,7 +109,7 @@ line there.
 | `common/Button.astro` without `href` (removed) | `Button` (`secondary` is `quiet`) |
 | `common/Card.astro` (removed) | `Card` |
 | `common/Badge.astro` (removed once its last page moved) | `Chip` with a status tone (`success`, `warning`, `danger`, or `neutral`/`peach`), or `RoleBadge` for a person's role |
-| `class="form-control"` | `TextField`, `TextAreaField`, `SelectField` |
+| `class="form-control"` (removed) | `TextField`, `TextAreaField`, `SelectField` |
 | hand-written red/green alert boxes | `Notice` |
 | hand-written "Nothing here" paragraphs | `EmptyState` |
 | link rows with `aria-current` (the old `ModerationTabs`) | `PillNav` |
@@ -135,7 +139,7 @@ has a clear contract. Before merging one:
 | `src/lib/design/tokens.test.ts` | The style guide's token data matches `global.css` |
 | `src/components/style-guide/catalogue.test.tsx` | The public catalogue covers every kit export and renders on the server |
 | `src/pages/style-guide/_tests/style-guide.render.test.ts` | Each guide page's outline, tab file, contents, ids, landmarks and printed values |
-| `src/components/common/legacy-ui.test.ts` | Nothing new uses the older parts |
+| `src/test/kit-compliance.test.ts` | No page or component gains a raw colour, `form-control`, the PageTitle shim or a query-string status flag; each file's count only goes down |
 | `e2e/style-guide.spec.ts` | axe at WCAG 2.2 AA, no sideways scroll from 320px, tab geometry, keyboard, no-JS, the live demonstrations, reduced motion |
 | `e2e/platform-ui.spec.ts` | The primitives harness: geometry, contrast, focus, touch targets, reduced motion |
 | `e2e/style-compliance.spec.ts` | Every signed-in route (`style-compliance.routes.ts`), as the person it is for: one h1 in the display face, at most one peach action, every control from the kit, axe WCAG 2.2 AA at 1440 and 320, 44px targets on a phone, no sideways scroll at 320. A route's `pending` checks are skipped, and against the local seed a pending check that passes fails, so delete it |

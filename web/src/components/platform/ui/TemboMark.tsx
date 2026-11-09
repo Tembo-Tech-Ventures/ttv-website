@@ -29,7 +29,7 @@ export default function TemboMark({ size = "md", decorative = false, className }
       aria-label={decorative ? undefined : "Tembo"}
       aria-hidden={decorative || undefined}
       className={cx(
-        "inline-grid shrink-0 place-items-center rounded-full border-primary bg-dark font-heading leading-none text-primary select-none",
+        "inline-grid shrink-0 place-items-center rounded-full border-primary bg-dark font-heading leading-none text-peach-ink select-none",
         SIZES[size],
         size === "marker" ? "border" : "border-[1.5px]",
         className,

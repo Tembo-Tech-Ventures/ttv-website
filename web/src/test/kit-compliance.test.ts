@@ -10,8 +10,9 @@ import { scanKitCompliance } from "./kit-compliance.scan";
  * flags in the query string, and on the platform, eyebrows and the older
  * surface tokens. Every file is frozen at its count in kit-compliance.frozen.ts.
  * A file may not gain a match; when one loses some, its number must come down
- * too, so nothing can quietly come back. legacy-ui.test.ts does the same for
- * the form-control utility.
+ * too, so nothing can quietly come back. The parts themselves (common/Button,
+ * Card and Badge, the form-control utility, the PageTitle shim) are deleted, so
+ * the counts for them stay at zero.
  */
 const SCAN = scanKitCompliance();
 

@@ -3,27 +3,11 @@ import { loadRenderers } from "astro:container";
 import { getContainerRenderer } from "@astrojs/react/container-renderer";
 import { beforeAll, describe, expect, it } from "vitest";
 
-const { default: SpacesPageTitle } = await import("@/components/platform/spaces/PageTitle.astro");
 const { default: PageHeaderInAstro } = await import("./_fixtures/PageHeaderInAstro.astro");
 
 let container: AstroContainer;
 beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
-});
-
-describe("the spaces PageTitle, kept for pages not yet on the kit", () => {
-  it("draws the kit's PageTitle in the spaces shell, markup in the title included", async () => {
-    const html = await container.renderToString(SpacesPageTitle, { props: { spaces: true }, slots: { default: "Cohort <em>05</em>" } });
-    expect(html).toBe(
-            '<h1 data-page-title="true" class="my-[0.2em] font-heading leading-[1.1] tracking-heading text-[clamp(1.75rem,9vw,2.25rem)] text-balance wrap-anywhere text-ink-primary sm:text-5xl lg:text-6xl">Cohort <em>05</em></h1>',
-    );
-  });
-
-  it("keeps a title inside a card at its old size until that page moves to the kit", async () => {
-    const html = await container.renderToString(SpacesPageTitle, { props: { spaces: true, size: "card" }, slots: { default: "Amina Hassan" } });
-    expect(html).toBe('<h1 class="tracking-heading break-words text-2xl text-ink-primary sm:text-3xl">Amina Hassan</h1>');
-    expect(html).not.toContain("data-page-title");
-  });
 });
 
 describe("PageHeader from an .astro page", () => {
