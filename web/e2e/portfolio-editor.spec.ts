@@ -25,7 +25,7 @@ test.describe("authenticated portfolio editor", () => {
     ).toBeVisible();
 
     const isLocked = await page
-      .getByText(/your portfolio unlocks/i)
+      .getByText(/opens when you complete a cohort/i)
       .isVisible()
       .catch(() => false);
 
@@ -52,7 +52,7 @@ test.describe("authenticated portfolio editor", () => {
     await page.goto("/dashboard/portfolio");
 
     const isLocked = await page
-      .getByText(/your portfolio unlocks/i)
+      .getByText(/opens when you complete a cohort/i)
       .isVisible()
       .catch(() => false);
     if (isLocked) {
@@ -80,9 +80,10 @@ test.describe("authenticated portfolio editor", () => {
     await expect(page.locator('textarea[name="bio"]')).toHaveValue(sentinelBio);
     await expect(page.locator('input[name="skills"]')).toHaveValue(invalidSkill);
     await expect(page.locator("#skills-error")).toContainText("30");
+    // One focused danger notice; the error itself sits under the field.
     await expect(
-      page.getByRole("alert").getByRole("link", { name: /first error: skills/i }),
-    ).toHaveAttribute("href", "#skills");
+      page.getByRole("alert").filter({ hasText: "Your profile wasn't saved" }),
+    ).toBeFocused();
     await page.screenshot({
       path: `test-results/evidence/${testInfo.project.name}-portfolio-invalid-skill.png`,
       fullPage: true,
@@ -101,7 +102,7 @@ test.describe("authenticated portfolio editor", () => {
     await page.goto("/dashboard/portfolio");
 
     const isLocked = await page
-      .getByText(/your portfolio unlocks/i)
+      .getByText(/opens when you complete a cohort/i)
       .isVisible()
       .catch(() => false);
     if (isLocked) {
@@ -152,7 +153,7 @@ test.describe("authenticated portfolio editor", () => {
     await page.goto("/dashboard/portfolio");
 
     const isLocked = await page
-      .getByText(/your portfolio unlocks/i)
+      .getByText(/opens when you complete a cohort/i)
       .isVisible()
       .catch(() => false);
     if (isLocked) {

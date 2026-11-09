@@ -308,7 +308,7 @@ const draft = profile?.status === "DRAFT";
           <TextField label="Skills" name="skills" optional pattern={skillsPattern} placeholder="TypeScript, React, Python" defaultValue={values.skills} error={errors.skills}
             hint="Up to 12, separated by commas, each up to 30 characters." />
           <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
-            <legend class={LABEL}>Open to <span class={HINT}>(optional)</span></legend>
+            <legend class={LABEL}>Open to <span class="font-normal text-ink-muted">(optional)</span></legend>
             <Checkbox label="Freelance work" name="openToFreelance" defaultChecked={availability.openToFreelance} />
             <Checkbox label="Full-time roles" name="openToRoles" defaultChecked={availability.openToRoles} />
           </fieldset>
