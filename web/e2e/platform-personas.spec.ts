@@ -53,7 +53,9 @@ function evidence(name: string) {
 async function open(page: Page, path: string) {
   const response = await page.goto(path);
   expect(response?.status(), path).toBe(200);
-  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+  // Every island that hydrates on load has; a client:visible one below the fold (the profile editor's
+  // GitHub highlights) waits, by design, until it is scrolled to.
+  await expect(page.locator('astro-island[ssr]:not([client="visible"])')).toHaveCount(0);
   // astro dev's toolbar sits over the bottom bar in local evidence.
   if (!process.env.PLAYWRIGHT_BASE_URL) await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
   await page.evaluate(() => document.fonts.ready);

@@ -108,6 +108,7 @@ const PAGES = {
   "profile overview": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: STUDENT },
   "profile overview, published": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: BUILDER },
   "your feedback": { path: () => "/dashboard/feedback", page: () => import("@/pages/dashboard/feedback.astro"), user: STUDENT },
+  "public profile editor": { path: () => "/dashboard/me/portfolio", page: () => import("@/pages/dashboard/portfolio.astro"), user: BUILDER },
   "visitor messages": { path: () => "/dashboard/me/leads", page: () => import("@/pages/dashboard/leads.astro"), user: BUILDER },
   writing: { path: () => "/dashboard/me/writing", page: () => import("@/pages/dashboard/writing/index.astro"), user: BUILDER },
   opportunities: { path: () => "/dashboard/me/opportunities", page: () => import("@/pages/dashboard/opportunities.astro"), user: BUILDER },
@@ -241,6 +242,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   attention: { d1: 10, depth: 2 },
   "admin home": { d1: 19, depth: 2 },
   account: { d1: 16, depth: 2 },
+  // The profile with its highlights and the GitHub account start beside the space context, and eligibility
+  // comes from the frame's journey; the GET no longer calls GitHub or reads the account twice (depth 9 in the audit).
+  "public profile editor": { d1: 16, depth: 3 },
   // Depth 6 (23 queries) for a published builder before the style-guide rollout: the journey, then the
   // profile, then its messages and drafts, then the opportunities, in turn. Now one round trip after the
   // router's, the profile's dependents found through it by subquery: four more queries for someone with

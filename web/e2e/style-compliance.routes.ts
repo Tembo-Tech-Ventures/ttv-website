@@ -87,7 +87,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
 
   // Profile
   { path: "/dashboard/me", persona: "alumna" },
-  { path: "/dashboard/me/portfolio", persona: "alumna", pending: { checks: ["kit-controls", "targets", "overflow"], todo: LANE_M("Public profile editor, M13") } },
+  { path: "/dashboard/me/portfolio", persona: "alumna" },
   { path: "/dashboard/me/writing", persona: "alumna" },
   { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ["h1", "kit-controls", "targets", "overflow", "axe-320"], todo: LANE_M("Post editor, M14") } },
   { path: "/dashboard/me/opportunities", persona: "alumna", pending: { preview: ["kit-controls", "targets"], todo: LANE_M("Opportunities, #393: the no-profile empty state") } },

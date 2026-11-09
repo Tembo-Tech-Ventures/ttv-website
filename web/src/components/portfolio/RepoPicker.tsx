@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  PiArrowUpBold,
-  PiArrowDownBold,
-  PiArrowsClockwiseBold,
-  PiCheckBold,
-  PiWarningCircleDuotone,
-} from "react-icons/pi";
+import { PiArrowDownBold, PiArrowUpBold, PiArrowsClockwiseBold, PiXBold } from "react-icons/pi";
+import { Button, Chip, ChoiceCard, HINT, IconButton, Notice, TextAreaField } from "@/components/platform/ui";
 
 interface GitHubRepo {
   full_name: string;
@@ -88,7 +83,7 @@ export default function RepoPicker({
       }
       setFetchState({ status: "loaded", repos: data.repos ?? [] });
     } catch {
-      setFetchState({ status: "error", message: "Network error" });
+      setFetchState({ status: "error", message: "That didn't reach GitHub. Check your connection and reload the page." });
     }
   }, [hasGitHubToken]);
 
@@ -156,14 +151,14 @@ export default function RepoPicker({
       if (!res.ok) {
         setSaveMessage({
           type: "error",
-          text: data.error ?? "Failed to save highlights",
+          text: data.error ?? "Your highlights weren't saved",
           details: data.moderationMessages,
         });
       } else {
         setSaveMessage({ type: "success", text: "Highlights saved" });
       }
     } catch {
-      setSaveMessage({ type: "error", text: "Network error" });
+      setSaveMessage({ type: "error", text: "That didn't reach us. Check your connection and try again." });
     } finally {
       setSaving(false);
     }
@@ -183,237 +178,143 @@ export default function RepoPicker({
       if (!res.ok) {
         setSaveMessage({
           type: "error",
-          text: data.error ?? "Failed to refresh",
+          text: data.error ?? "Your highlights weren't refreshed",
           details: data.moderationMessages,
         });
       } else {
         setSaveMessage({
           type: "success",
-          text: "Snapshots refreshed from GitHub",
+          text: "Highlights refreshed from GitHub",
         });
       }
     } catch {
-      setSaveMessage({ type: "error", text: "Network error" });
+      setSaveMessage({ type: "error", text: "That didn't reach us. Check your connection and try again." });
     } finally {
       setRefreshing(false);
     }
   }
 
   if (fetchState.status === "idle" || fetchState.status === "loading") {
-    return <p className="text-ink-secondary">Fetching your repositories…</p>;
+    return <p className="m-0 text-ink-secondary">Fetching your repositories…</p>;
   }
 
   if (fetchState.status === "no_token") {
     return (
-      <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-4">
-        <PiWarningCircleDuotone className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
-        <p className="text-amber-300">
-          We couldn't reach your GitHub account. Your highlights will appear
-          here once your GitHub connection is available.
-        </p>
-      </div>
+      <Notice tone="warning" title="GitHub isn't connected">
+        We couldn't reach your GitHub account. Your repositories appear here once the connection works.
+      </Notice>
     );
   }
 
   if (fetchState.status === "auth_error") {
     return (
-      <div className="flex items-start gap-3 rounded-md border border-red-500/30 bg-red-500/10 p-4">
-        <PiWarningCircleDuotone className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" />
-        <p className="text-red-300">
-          Sign out and back in to reconnect GitHub.
-        </p>
-      </div>
+      <Notice tone="danger" title="GitHub needs you to sign in again">
+        Sign out and back in to reconnect GitHub.
+      </Notice>
     );
   }
 
   if (fetchState.status === "error") {
     return (
-      <div className="flex items-start gap-3 rounded-md border border-red-500/30 bg-red-500/10 p-4">
-        <PiWarningCircleDuotone className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" />
-        <p className="text-red-300">{fetchState.message}</p>
-      </div>
+      <Notice tone="danger" title="Your repositories didn't load">
+        {fetchState.message}
+      </Notice>
     );
   }
 
   const repos = fetchState.repos;
 
   return (
-    <div className="space-y-6">
-      {/* Selected repos panel */}
+    <div className="flex flex-col gap-6">
       {selected.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-white/90">
-            Selected ({selected.length}/{MAX_HIGHLIGHTS})
-          </h4>
-          {selected.map((entry, index) => {
-            const repo = repos.find((r) => r.full_name === entry.repoFullName);
-            return (
-              <div
-                key={entry.repoFullName}
-                className="rounded-md border border-primary/30 bg-primary/5 p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-white">
-                    {entry.repoFullName}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => moveUp(index)}
-                      disabled={index === 0}
-                      className="rounded p-1 text-ink-secondary hover:bg-white/10 disabled:opacity-30"
-                      aria-label={`Move ${entry.repoFullName} up`}
-                    >
-                      <PiArrowUpBold className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveDown(index)}
-                      disabled={index === selected.length - 1}
-                      className="rounded p-1 text-ink-secondary hover:bg-white/10 disabled:opacity-30"
-                      aria-label={`Move ${entry.repoFullName} down`}
-                    >
-                      <PiArrowDownBold className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleRepo(entry.repoFullName)}
-                      className="rounded p-1 text-red-400 hover:bg-red-500/10"
-                      aria-label={`Remove ${entry.repoFullName}`}
-                    >
-                      ✕
-                    </button>
+        <section aria-labelledby="highlights-chosen" className="flex flex-col gap-3">
+          <h3 id="highlights-chosen" className="m-0 text-base leading-snug text-ink-primary">
+            Chosen ({selected.length} of {MAX_HIGHLIGHTS})
+          </h3>
+          <ol className="m-0 flex list-none flex-col gap-3 p-0">
+            {selected.map((entry, index) => {
+              const repo = repos.find((r) => r.full_name === entry.repoFullName);
+              return (
+                <li key={entry.repoFullName} data-highlight={entry.repoFullName} className="flex flex-col gap-3 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="m-0 text-sm font-semibold break-all text-ink-primary">{entry.repoFullName}</p>
+                      {repo?.description && <p className={`m-0 mt-1 ${HINT}`}>{repo.description}</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <IconButton size="sm" label={`Move ${entry.repoFullName} up`} icon={<PiArrowUpBold aria-hidden />} onClick={() => moveUp(index)} disabled={index === 0} />
+                      <IconButton size="sm" label={`Move ${entry.repoFullName} down`} icon={<PiArrowDownBold aria-hidden />} onClick={() => moveDown(index)} disabled={index === selected.length - 1} />
+                      <IconButton size="sm" label={`Remove ${entry.repoFullName}`} icon={<PiXBold aria-hidden />} onClick={() => toggleRepo(entry.repoFullName)} />
+                    </div>
                   </div>
-                </div>
-                {repo?.description && (
-                  <p className="mt-1 text-xs text-ink-muted">
-                    {repo.description}
-                  </p>
-                )}
-                <textarea
-                  value={entry.blurb}
-                  onChange={(e) =>
-                    updateBlurb(entry.repoFullName, e.target.value)
-                  }
-                  maxLength={MAX_BLURB}
-                  rows={2}
-                  placeholder="What you built, your role, the stack"
-                  className="mt-2 w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  aria-label={`Blurb for ${entry.repoFullName}`}
-                />
-                <p className="mt-1 text-right text-xs text-ink-muted">
-                  {entry.blurb.length}/{MAX_BLURB}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+                  <TextAreaField
+                    label={`About ${entry.repoFullName}`}
+                    hint={`What you built, your part in it, the stack. ${entry.blurb.length} of ${MAX_BLURB} characters.`}
+                    name={`blurb-${index}`}
+                    value={entry.blurb}
+                    onChange={(e) => updateBlurb(entry.repoFullName, e.target.value)}
+                    maxLength={MAX_BLURB}
+                    rows={2}
+                  />
+                </li>
+              );
+            })}
+          </ol>
+        </section>
       )}
 
-      {/* Repo list */}
-      <div className="space-y-2">
-        <h4 className="text-sm font-medium text-white/90">Your Repositories</h4>
-        {repos.length === 0 && (
-          <p className="text-sm text-ink-secondary">
-            No public repositories found.
-          </p>
+      <section aria-labelledby="highlights-repos" className="flex flex-col gap-3">
+        <h3 id="highlights-repos" className="m-0 text-base leading-snug text-ink-primary">Your repositories</h3>
+        {repos.length === 0 ? (
+          <p className="m-0 text-sm text-ink-secondary">No public repositories found.</p>
+        ) : (
+          <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
+            {repos.map((repo) => {
+              const checked = isSelected(repo.full_name);
+              return (
+                <ChoiceCard
+                  key={repo.full_name}
+                  type="checkbox"
+                  name="highlight"
+                  value={repo.full_name}
+                  label={repo.full_name}
+                  hint={repo.description ?? undefined}
+                  detail={repo.language || repo.stargazers_count > 0 ? (
+                    <>
+                      {repo.language && <Chip>{repo.language}</Chip>}
+                      {repo.stargazers_count > 0 && <span className={HINT}>{repo.stargazers_count} {repo.stargazers_count === 1 ? "star" : "stars"}</span>}
+                    </>
+                  ) : undefined}
+                  checked={checked}
+                  disabled={!checked && selected.length >= MAX_HIGHLIGHTS}
+                  onChange={() => toggleRepo(repo.full_name)}
+                />
+              );
+            })}
+          </div>
         )}
-        <div className="max-h-80 space-y-1 overflow-y-auto">
-          {repos.map((repo) => {
-            const checked = isSelected(repo.full_name);
-            const disabled = !checked && selected.length >= MAX_HIGHLIGHTS;
-            return (
-              <button
-                key={repo.full_name}
-                type="button"
-                onClick={() => toggleRepo(repo.full_name)}
-                disabled={disabled}
-                className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors ${
-                  checked
-                    ? "border-primary/40 bg-primary/10"
-                    : disabled
-                      ? "cursor-not-allowed border-teal/10 opacity-50"
-                      : "border-teal/20 hover:border-teal/40 hover:bg-dark/50"
-                }`}
-                aria-label={`${checked ? "Deselect" : "Select"} ${repo.full_name}`}
-              >
-                <div
-                  className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border ${
-                    checked
-                      ? "border-primary bg-primary text-dark"
-                      : "border-teal/40"
-                  }`}
-                >
-                  {checked && <PiCheckBold className="h-3 w-3" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-white">
-                      {repo.full_name}
-                    </span>
-                    {repo.language && (
-                      <span className="rounded bg-teal/20 px-1.5 py-0.5 text-xs text-ink-secondary">
-                        {repo.language}
-                      </span>
-                    )}
-                    {repo.stargazers_count > 0 && (
-                      <span className="text-xs text-ink-muted">
-                        ★ {repo.stargazers_count}
-                      </span>
-                    )}
-                  </div>
-                  {repo.description && (
-                    <p className="mt-0.5 truncate text-xs text-ink-muted">
-                      {repo.description}
-                    </p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      </section>
 
-      {/* Save message */}
       {saveMessage && (
-        <div
-          className={`rounded-md border p-3 text-sm ${
-            saveMessage.type === "success"
-              ? "border-green-500/30 bg-green-500/10 text-green-300"
-              : "border-red-500/30 bg-red-500/10 text-red-300"
-          }`}
-        >
-          <p>{saveMessage.text}</p>
+        <Notice tone={saveMessage.type === "success" ? "success" : "danger"} title={saveMessage.text}>
           {saveMessage.details && saveMessage.details.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5">
+            <ul className="m-0 list-disc space-y-1 pl-5">
               {saveMessage.details.map((detail) => (
                 <li key={detail}>{detail}</li>
               ))}
             </ul>
           )}
-        </div>
+        </Notice>
       )}
 
-      {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save Highlights"}
-        </button>
+        <Button onClick={handleSave} loading={saving}>
+          {saving ? "Saving…" : "Save highlights"}
+        </Button>
         {existingHighlights.length > 0 && (
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-md border border-teal/40 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal/20 disabled:opacity-50"
-          >
-            <PiArrowsClockwiseBold className="h-4 w-4" />
+          <Button variant="ghost" onClick={handleRefresh} loading={refreshing} icon={<PiArrowsClockwiseBold aria-hidden />}>
             {refreshing ? "Refreshing…" : "Refresh from GitHub"}
-          </button>
+          </Button>
         )}
       </div>
     </div>

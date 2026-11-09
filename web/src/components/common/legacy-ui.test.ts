@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 /*
  * A ratchet on the parts the TTV UI kit replaces (docs/design-system/README.md).
  *
- * `common/Button.astro`, `common/Card.astro`, `common/Badge.astro` and the
- * `form-control` utility predate the kit in `components/platform/ui`. The files
+ * `common/Button.astro`, `common/Card.astro` and the `form-control` utility
+ * predate the kit in `components/platform/ui`. The files
  * below still use them; nothing new may. When you move a file onto the kit,
  * delete its line here too: the second test fails until you do, so the lists
  * only ever shrink.
@@ -18,7 +18,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     pattern: /common\/Button(\.astro)?["']/,
     files: [
     "pages/dashboard/apply.astro",
-    "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
     ],
   },
@@ -26,21 +25,13 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     pattern: /common\/Card(\.astro)?["']/,
     files: [
     "pages/dashboard/apply.astro",
-    "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
-    ],
-  },
-  "common/Badge.astro": {
-    pattern: /common\/Badge(\.astro)?["']/,
-    files: [
-    "pages/dashboard/portfolio.astro",
     ],
   },
   "the form-control utility": {
     pattern: /\bform-control\b/,
     files: [
     "components/blog/editor/PlainPostForm.astro",
-    "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
     ],
   },

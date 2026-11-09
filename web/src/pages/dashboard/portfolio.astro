@@ -1,19 +1,29 @@
 ---
+/**
+ * The public profile editor (/dashboard/me/portfolio), on the kit (style-guide rollout M13, audit
+ * A§16): the profile's state as a Notice with its StatusChip (publishing a draft is the page's one
+ * primary), kit fields, and the GitHub highlights island below the form, hydrated when it scrolls in.
+ * Its reads start beside the space frame, and a GET makes no call to GitHub. A saved form answers 303
+ * with a read-once flash; a refused one renders again with every value kept, the error under each
+ * field and a focused danger Notice (400, or 422 when Tembo's check holds it); a failure that isn't
+ * the person's is a 503.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
-import Card from "@/components/common/Card.astro";
-import Badge from "@/components/common/Badge.astro";
-import Button from "@/components/common/Button.astro";
+import {
+  Button, ButtonLink, Card, Checkbox, EmptyState, HINT, LABEL, Notice, PageHeader, PrefixField, StatusChip,
+  TextAreaField, TextField, linkClass,
+} from "@/components/platform/ui";
 import RepoPicker from "@/components/portfolio/RepoPicker";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { hasCompletedCohort } from "@/lib/talent/eligibility";
+import { getStudentJourney } from "@/lib/student/journey";
 import { parseSkillsJson } from "@/lib/talent/profile";
-import { fetchGitHubLogin } from "@/lib/talent/github";
 import { preserveFormTextValues } from "@/lib/form-values";
 import { isAgentSession } from "@/lib/agent-auth";
 import {
@@ -33,11 +43,16 @@ import {
   type ProfileContentCheck,
   type ProfileFormResult,
 } from "@/components/portfolio/portfolio-handlers";
+import { PORTFOLIO_COPY } from "@/lib/student/portfolio-page";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
+// The frame starts first, beside whatever the request does (PERF-2). Whether the person has completed a
+// cohort comes from their journey, which the frame reads anyway (one read per request): its sidebar
+// offers the profile link exactly then.
+const resolving = resolveSpacePageWith(Astro.locals, "portfolio", async () => null);
+const eligibility = getStudentJourney(db, user.id).then((journey) => journey.visibleLinkIds.includes("profile"));
 
-const eligible = await hasCompletedCohort(db, user.id);
 const previewModeration = previewProfileModerationResult(
   env.DEPLOYMENT_ENVIRONMENT,
   isAgentSession(Astro.locals.session?.userAgent),
@@ -107,585 +122,220 @@ const PROFILE_TEXT_FIELDS = [
 type ProfileTextField = (typeof PROFILE_TEXT_FIELDS)[number];
 
 let result: ProfileFormResult | null = null;
-let successMessage: string | null = null;
-let saveFailed = false;
+/** Which form was refused: the editor ("save") or the draft's publish button. */
+let refused: "save" | "publish" | null = null;
+let unavailable = false;
 let submittedProfileValues: Record<ProfileTextField, string> | null = null;
-let submittedAvailability = {
-  openToFreelance: false,
-  openToRoles: false,
-};
+let submittedAvailability = { openToFreelance: false, openToRoles: false };
 
-if (Astro.request.method === "POST" && eligible) {
-  const formData = await Astro.request.formData();
-  const action = formData.get("_action") as string;
+if (Astro.request.method === "POST") {
+  if (!(await eligibility)) {
+    // Nothing to save before a cohort is complete: the page says why.
+    Astro.response.status = 403;
+  } else {
+    try {
+      const formData = await Astro.request.formData();
+      const action = formData.get("_action");
+      const existing = await db.query.studentProfile.findFirst({
+        where: eq(schema.studentProfile.userId, user.id),
+        columns: { id: true },
+      });
 
-  if (action === "save") {
-    submittedProfileValues = preserveFormTextValues(
-      formData,
-      PROFILE_TEXT_FIELDS,
-    );
-    submittedAvailability = {
-      openToFreelance: formData.get("openToFreelance") === "on",
-      openToRoles: formData.get("openToRoles") === "on",
-    };
-    const existing = await db.query.studentProfile.findFirst({
-      where: eq(schema.studentProfile.userId, user.id),
-      columns: { id: true },
-    });
-    result = await withModeratedSnapshotCleanup(() =>
-      saveProfile(
-        db,
-        user.id,
-        formData,
-        existing?.id,
-        moderateProfile,
-      ),
-    );
-    if (!result.success) {
-      saveFailed = true;
-      Astro.response.status = 400;
-    } else {
-      successMessage = result.published
-        ? "Your changes are live."
-        : existing
-          ? "Draft saved."
-          : "Profile created as a draft.";
-    }
-  } else if (action === "publish") {
-    const existing = await db.query.studentProfile.findFirst({
-      where: eq(schema.studentProfile.userId, user.id),
-      columns: { id: true },
-    });
-    if (existing) {
-      result = await withModeratedSnapshotCleanup(() =>
-        publishProfile(db, user.id, existing.id, moderateProfile),
-      );
-      if (result.success) {
-        successMessage = "Your profile is live.";
-      } else {
+      if (action === "save") {
+        submittedProfileValues = preserveFormTextValues(formData, PROFILE_TEXT_FIELDS);
+        submittedAvailability = {
+          openToFreelance: formData.get("openToFreelance") === "on",
+          openToRoles: formData.get("openToRoles") === "on",
+        };
+        result = await withModeratedSnapshotCleanup(() => saveProfile(db, user.id, formData, existing?.id, moderateProfile));
+        if (result.success) {
+          const title = result.published ? PORTFOLIO_COPY.live : existing ? PORTFOLIO_COPY.draftSaved : PORTFOLIO_COPY.created;
+          return redirectWithFlash(Astro, SPACE_PAGE_PATHS.portfolio, { tone: "success", title });
+        }
+        refused = "save";
         Astro.response.status = result.moderationOutcome === "hold" ? 422 : 400;
+      } else if (action === "publish") {
+        result = existing
+          ? await withModeratedSnapshotCleanup(() => publishProfile(db, user.id, existing.id, moderateProfile))
+          : { success: false, error: "Create your profile first." };
+        if (result.success) {
+          return redirectWithFlash(Astro, SPACE_PAGE_PATHS.portfolio, { tone: "success", title: PORTFOLIO_COPY.published });
+        }
+        refused = "publish";
+        Astro.response.status = result.moderationOutcome === "hold" ? 422 : 400;
+      } else {
+        refused = "save";
+        result = { success: false, error: "That form didn't arrive whole. Try again." };
+        Astro.response.status = 400;
       }
-    } else {
-      result = { success: false, error: "Create your profile first" };
-      Astro.response.status = 400;
+    } catch {
+      unavailable = true;
+      Astro.response.status = 503;
     }
   }
 }
 
-const profile = eligible
-  ? await db.query.studentProfile.findFirst({
-      where: eq(schema.studentProfile.userId, user.id),
-      with: { highlights: true },
-    })
-  : null;
-
-const skills = profile ? parseSkillsJson(profile.skills) : [];
-const skillsValue = skills.join(", ");
-
-let defaultHandle = "";
-if (eligible && !profile) {
-  try {
-    const ghAccount = await db.query.account.findFirst({
-      where: eq(schema.account.userId, user.id),
-      columns: { accessToken: true, providerId: true },
-    });
-    if (ghAccount?.providerId === "github" && ghAccount.accessToken) {
-      defaultHandle = await fetchGitHubLogin(ghAccount.accessToken);
-    }
-  } catch {
-    // GitHub unavailable — leave blank
-  }
-}
-
-const isEditable = !profile || profile.status === "DRAFT" || profile.status === "PUBLISHED";
-
-const invalidProfileValues = saveFailed ? submittedProfileValues : null;
-const profileFormValues: Record<ProfileTextField, string> = {
-  handle: invalidProfileValues?.handle ?? profile?.handle ?? defaultHandle,
-  headline: invalidProfileValues?.headline ?? profile?.headline ?? "",
-  bio: invalidProfileValues?.bio ?? profile?.bio ?? "",
-  location: invalidProfileValues?.location ?? profile?.location ?? "",
-  country: invalidProfileValues?.country ?? profile?.country ?? "",
-  skills: invalidProfileValues?.skills ?? skillsValue,
-  portfolioUrl: invalidProfileValues?.portfolioUrl ?? profile?.portfolioUrl ?? "",
-  linkedinUrl: invalidProfileValues?.linkedinUrl ?? profile?.linkedinUrl ?? "",
-};
-const profileAvailability = saveFailed
-  ? submittedAvailability
-  : {
-      openToFreelance: profile?.openToFreelance ?? false,
-      openToRoles: profile?.openToRoles ?? false,
-    };
-
-const profileFieldErrors: Partial<Record<ProfileTextField, string>> = {};
-if (result?.handleError) profileFieldErrors.handle = result.handleError;
-for (const field of PROFILE_TEXT_FIELDS) {
-  if (field === "handle") continue;
-  const directError = result?.fieldErrors?.[field];
-  const nestedError = Object.entries(result?.fieldErrors ?? {}).find(
-    ([path]) => path.startsWith(`${field}.`),
-  )?.[1];
-  const fieldError = directError ?? nestedError;
-  if (fieldError) profileFieldErrors[field] = fieldError;
-}
-
-const PROFILE_FIELD_LABELS: Record<ProfileTextField, string> = {
-  handle: "Handle",
-  headline: "Headline",
-  bio: "Bio",
-  location: "City / Region",
-  country: "Country",
-  skills: "Skills",
-  portfolioUrl: "Portfolio URL",
-  linkedinUrl: "LinkedIn URL",
-};
-const firstProfileError = PROFILE_TEXT_FIELDS.find(
-  (field) => profileFieldErrors[field],
-);
-const profileFieldDescription = (
-  field: ProfileTextField,
-  helperId?: string,
-) =>
-  [helperId, profileFieldErrors[field] ? `${field}-error` : undefined]
-    .filter(Boolean)
-    .join(" ") || undefined;
-const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
-
-const existingHighlights = profile?.highlights
-  ? profile.highlights
-      .toSorted((a, b) => a.sortOrder - b.sortOrder)
-      .map((h) => ({
-        repoFullName: h.repoFullName,
-        blurb: h.blurb ?? "",
-        sortOrder: h.sortOrder,
-      }))
-  : [];
-
-const hasGitHubAccount = profile
-  ? await db.query.account
-      .findFirst({
-        where: eq(schema.account.userId, user.id),
-        columns: { accessToken: true, providerId: true },
-      })
-      .then((a) => a?.providerId === "github" && !!a.accessToken)
-  : false;
-const spaces = await resolveSpacePage(Astro.locals, "portfolio");
+const [landing, eligible, profile, github] = await Promise.all([
+  resolving,
+  eligibility,
+  db.query.studentProfile.findFirst({
+    where: eq(schema.studentProfile.userId, user.id),
+    with: { highlights: true },
+  }),
+  db.query.account.findFirst({
+    where: and(eq(schema.account.userId, user.id), eq(schema.account.providerId, "github")),
+    columns: { accessToken: true },
+  }),
+]);
+const spaces = landing?.[0] ?? null;
 // Someone who chose to mentor or find people, and not to build and learn, is not sent to apply (QAO-07).
 // A partner who has completed a cohort keeps their profile, and the page that goes with it.
-// Without onboarding (null), the page reads exactly as before.
 const partnerLocked = !eligible && spaces?.onboarding?.framing === "partner";
+const editable = eligible && (!profile || profile.status === "DRAFT" || profile.status === "PUBLISHED");
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+
+const kept = refused === "save" ? submittedProfileValues : null;
+const values: Record<ProfileTextField, string> = {
+  handle: kept?.handle ?? profile?.handle ?? "",
+  headline: kept?.headline ?? profile?.headline ?? "",
+  bio: kept?.bio ?? profile?.bio ?? "",
+  location: kept?.location ?? profile?.location ?? "",
+  country: kept?.country ?? profile?.country ?? "",
+  skills: kept?.skills ?? (profile ? parseSkillsJson(profile.skills).join(", ") : ""),
+  portfolioUrl: kept?.portfolioUrl ?? profile?.portfolioUrl ?? "",
+  linkedinUrl: kept?.linkedinUrl ?? profile?.linkedinUrl ?? "",
+};
+const availability = kept
+  ? submittedAvailability
+  : { openToFreelance: profile?.openToFreelance ?? false, openToRoles: profile?.openToRoles ?? false };
+
+const errors: Partial<Record<ProfileTextField, string>> = {};
+if (refused === "save") {
+  if (result?.handleError) errors.handle = result.handleError;
+  for (const field of PROFILE_TEXT_FIELDS) {
+    if (field === "handle") continue;
+    const nested = Object.entries(result?.fieldErrors ?? {}).find(([path]) => path.startsWith(`${field}.`))?.[1];
+    const error = result?.fieldErrors?.[field] ?? nested;
+    if (error) errors[field] = error;
+  }
+}
+const fieldErrors = Object.keys(errors).length > 0;
+const moderationMessages = result?.moderationMessages ?? [];
+const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
+
+const existingHighlights = (profile?.highlights ?? [])
+  .toSorted((a, b) => a.sortOrder - b.sortOrder)
+  .map((h) => ({ repoFullName: h.repoFullName, blurb: h.blurb ?? "", sortOrder: h.sortOrder }));
+const draft = profile?.status === "DRAFT";
 ---
 
-<SpacePage context={spaces} title={spaces ? "Public profile" : "Portfolio"}>
-  <div class="space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{spaces ? "Public profile" : "Portfolio"}</PageTitle>
-      {!partnerLocked && (
-        <p class="mt-1 text-ink-secondary">
-          Showcase your work and connect with opportunities.
-        </p>
-      )}
-    </div>
+<SpacePage context={spaces} title="Public profile" titlePrefix={refused || unavailable ? "Error: " : ""}>
+  <div class="flex max-w-3xl flex-col gap-8">
+    <PageHeader title="Public profile">
+      {!partnerLocked && "Show your work, and be found for what you can do."}
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+
+    {unavailable && (
+      <Notice tone="danger" focusOnLoad id="portfolio-failure" title={PORTFOLIO_COPY.notSaved}>{PORTFOLIO_COPY.unavailable}</Notice>
+    )}
+    {refused && (
+      <Notice tone="danger" focusOnLoad id="portfolio-failure" title={refused === "publish" ? PORTFOLIO_COPY.notPublished : PORTFOLIO_COPY.notSaved}>
+        <p class="m-0">{fieldErrors ? PORTFOLIO_COPY.fixBelow : result?.error}</p>
+        {moderationMessages.length > 0 && (
+          <ul class="m-0 mt-2 list-disc space-y-1 pl-5">
+            {moderationMessages.map((message) => <li>{message}</li>)}
+          </ul>
+        )}
+      </Notice>
+    )}
 
     {partnerLocked && <PartnerProfileNote />}
 
     {!eligible && !partnerLocked && (
-      <Card>
-        <div class="py-8 text-center">
-          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+      <EmptyState title="Your public profile opens when you complete a cohort" headingLevel={2}>
+        Then you can build it, choose your best projects, and be found for opportunities across the community.
+        <Fragment slot="action"><ButtonLink href={SPACE_PAGE_PATHS.apply} variant="primary">Browse cohorts</ButtonLink></Fragment>
+      </EmptyState>
+    )}
+
+    {eligible && profile && (
+      <div data-profile-status={profile.status}>
+        {profile.status === "DRAFT" && (
+          <Notice tone="info" title="Your profile is a draft">
+            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> Only you can see it. Publish it when you're ready.</span>
+            <Fragment slot="actions">
+              <form method="POST">
+                <input type="hidden" name="_action" value="publish" />
+                <Button type="submit" variant="primary" size="sm">Publish profile</Button>
+              </form>
+            </Fragment>
+          </Notice>
+        )}
+        {profile.status === "PUBLISHED" && (
+          <Notice tone="success" title="Your profile is live">
+            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="PUBLISHED" /> <span>Live at <a href={`/talent/${profile.handle}`} class={linkClass()}>/talent/{profile.handle}</a>.</span></span>
+            Saved edits go live straight away. An automatic check runs as you save, and if it holds an edit for the team, you'll see why.
+          </Notice>
+        )}
+        {profile.status === "SUSPENDED" && (
+          <Notice tone="warning" title="Your profile is paused">
+            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="SUSPENDED" /> Reach out to the team for next steps.</span>
+          </Notice>
+        )}
+      </div>
+    )}
+
+    {editable && (
+      <Card as="section" aria-labelledby="profile-editor-title" className="flex flex-col gap-5">
+        <h2 id="profile-editor-title" class="text-xl leading-snug text-ink-primary">{profile ? "Edit your profile" : "Create your profile"}</h2>
+        <form id="profile-editor" method="POST" class="flex flex-col gap-5">
+          <input type="hidden" name="_action" value="save" />
+          <PrefixField
+            label="Handle" name="handle" prefix="/talent/" required maxLength={39} autoComplete="off" spellCheck={false}
+            defaultValue={values.handle} error={errors.handle}
+            hint="3 to 39 characters: lowercase letters, numbers and hyphens. Your GitHub username works well."
+          />
+          <TextField label="Headline" name="headline" optional maxLength={120} placeholder="Full-stack developer in Kisumu" defaultValue={values.headline} error={errors.headline} />
+          <TextAreaField label="Bio" name="bio" optional rows={5} maxLength={4000} defaultValue={values.bio} error={errors.bio}
+            hint="Who you are, what you've built, and what you're building next." />
+          <div class="grid gap-5 sm:grid-cols-2">
+            <TextField label="City or region" name="location" optional maxLength={120} autoComplete="address-level2" defaultValue={values.location} error={errors.location} />
+            <TextField label="Country" name="country" optional maxLength={56} autoComplete="country-name" defaultValue={values.country} error={errors.country} />
           </div>
-          <p class="text-lg font-semibold text-white">
-            Your portfolio unlocks when you complete a cohort
-          </p>
-          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
-            Once you finish a training program, you'll be able to build your
-            portfolio, highlight your best projects, and connect with
-            opportunities across the ecosystem.
-          </p>
-          <Button href="/dashboard/apply" class="mt-6">
-            Browse programs
-          </Button>
-        </div>
+          <TextField label="Skills" name="skills" optional pattern={skillsPattern} placeholder="TypeScript, React, Python" defaultValue={values.skills} error={errors.skills}
+            hint="Up to 12, separated by commas, each up to 30 characters." />
+          <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
+            <legend class={LABEL}>Open to <span class="font-normal text-ink-muted">(optional)</span></legend>
+            <Checkbox label="Freelance work" name="openToFreelance" defaultChecked={availability.openToFreelance} />
+            <Checkbox label="Full-time roles" name="openToRoles" defaultChecked={availability.openToRoles} />
+          </fieldset>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <TextField label="Portfolio link" name="portfolioUrl" type="url" optional maxLength={300} placeholder="https://your-site.com" defaultValue={values.portfolioUrl} error={errors.portfolioUrl} />
+            <TextField label="LinkedIn link" name="linkedinUrl" type="url" optional maxLength={300} placeholder="https://linkedin.com/in/you" defaultValue={values.linkedinUrl} error={errors.linkedinUrl} />
+          </div>
+          <div>
+            <Button type="submit" variant={draft ? "quiet" : "primary"}>{!profile ? "Create profile" : draft ? "Save draft" : "Save changes"}</Button>
+          </div>
+        </form>
       </Card>
     )}
 
-    {eligible && (
-      <>
-        {/* Status banner */}
-        {profile && (
-          <div class:list={[
-            "rounded-md border p-4",
-            profile.status === "DRAFT" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
-            profile.status === "PUBLISHED" && "border-green-500/30 bg-green-500/10 text-green-300",
-            profile.status === "SUSPENDED" && "border-red-500/30 bg-red-500/10 text-red-300",
-          ]}>
-            <div class="flex items-center justify-between gap-4">
-              <div class="flex items-center gap-3">
-                <Badge variant={profile.status.toLowerCase() as "draft" | "published" | "suspended"} />
-                {profile.status === "DRAFT" && (
-                  <span>Your profile is a draft. Publish it when you&rsquo;re ready.</span>
-                )}
-                {profile.status === "PUBLISHED" && (
-                  <span>
-                    Live at{" "}
-                    <a
-                      href={`/talent/${profile.handle}`}
-                      class="underline hover:text-white"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >/talent/{profile.handle}</a>
-                    {" "}— saved edits go live straight away. An automatic check runs as you save, and if it holds an edit for the team, you&rsquo;ll see why.
-                  </span>
-                )}
-                {profile.status === "SUSPENDED" && (
-                  <span>Your profile is paused — reach out to the team for assistance.</span>
-                )}
-              </div>
-              {profile.status === "DRAFT" && (
-                <form method="POST">
-                  <input type="hidden" name="_action" value="publish" />
-                  <Button type="submit" class="whitespace-nowrap">
-                    Publish Profile
-                  </Button>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Result messages */}
-        {saveFailed && (
-          <div
-            class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300"
-            role="alert"
-          >
-            <p class="font-medium">
-              We couldn&rsquo;t save your profile. Your changes are still in the form.
-            </p>
-            {firstProfileError ? (
-              <a
-                href={`#${firstProfileError}`}
-                class="mt-1 inline-block underline hover:text-white"
-              >
-                Go to the first error: {PROFILE_FIELD_LABELS[firstProfileError]}
-              </a>
-            ) : result?.error ? (
-              <p class="mt-1">{result.error}</p>
-            ) : null}
-            {result?.moderationMessages && result.moderationMessages.length > 0 && (
-              <ul class="mt-2 list-disc space-y-1 pl-5">
-                {result.moderationMessages.map((message) => <li>{message}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {result && !result.success && result.error && !saveFailed && (
-          <div
-            class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300"
-            role="alert"
-          >
-            <p class="font-medium">{result.error}</p>
-            {result.moderationMessages && result.moderationMessages.length > 0 && (
-              <ul class="mt-2 list-disc space-y-1 pl-5">
-                {result.moderationMessages.map((message) => <li>{message}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {result?.success && successMessage && (
-          <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-            {successMessage}
-          </div>
-        )}
-
-        {/* Profile editor */}
-        {isEditable && (
-          <Card>
-            <form id="profile-editor" method="POST" class="space-y-5">
-              <input type="hidden" name="_action" value="save" />
-
-              <h3 class="text-lg font-semibold text-white">
-                {profile ? "Edit your profile" : "Create your profile"}
-              </h3>
-
-              {/* Handle */}
-              <div class="flex flex-col gap-1.5">
-                <label for="handle" class="text-sm font-medium text-white/90">
-                  Handle <span class="text-primary">*</span>
-                </label>
-                <div class="flex items-center gap-2">
-                  <span class="text-ink-muted">/talent/</span>
-                  <input
-                    id="handle"
-                    name="handle"
-                    type="text"
-                    required
-                    maxlength="39"
-                    placeholder="your-handle"
-                    value={profileFormValues.handle}
-                    aria-invalid={Boolean(profileFieldErrors.handle)}
-                    aria-describedby={profileFieldDescription("handle", "handle-help")}
-                    class:list={[
-                      "flex-1 rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      profileFieldErrors.handle ? "border-red-500" : "border-teal focus:border-primary",
-                    ]}
-                  />
-                </div>
-                {profileFieldErrors.handle && (
-                  <p id="handle-error" class="text-sm text-red-400">
-                    {profileFieldErrors.handle}
-                  </p>
-                )}
-                <p id="handle-help" class="text-xs text-ink-muted">
-                  3-39 characters. Lowercase letters, numbers, and hyphens only.
-                </p>
-              </div>
-
-              {/* Headline */}
-              <div class="flex flex-col gap-1.5">
-                <label for="headline" class="text-sm font-medium text-white/90">
-                  Headline
-                </label>
-                <input
-                  id="headline"
-                  name="headline"
-                  type="text"
-                  maxlength="120"
-                  placeholder="e.g. Full-Stack Developer · Lagos, Nigeria"
-                  value={profileFormValues.headline}
-                  aria-invalid={Boolean(profileFieldErrors.headline)}
-                  aria-describedby={profileFieldDescription("headline")}
-                  class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    profileFieldErrors.headline ? "border-red-500" : "border-teal focus:border-primary",
-                  ]}
-                />
-                {profileFieldErrors.headline && (
-                  <p id="headline-error" class="text-sm text-red-400">
-                    {profileFieldErrors.headline}
-                  </p>
-                )}
-              </div>
-
-              {/* Bio */}
-              <div class="flex flex-col gap-1.5">
-                <label for="bio" class="text-sm font-medium text-white/90">
-                  Bio
-                </label>
-                <textarea
-                  id="bio"
-                  name="bio"
-                  rows={4}
-                  maxlength="4000"
-                  placeholder="Tell the community about yourself, your journey, and what you're building."
-                  aria-invalid={Boolean(profileFieldErrors.bio)}
-                  aria-describedby={profileFieldDescription("bio")}
-                  class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    profileFieldErrors.bio ? "border-red-500" : "border-teal focus:border-primary",
-                  ]}
-                >{profileFormValues.bio}</textarea>
-                {profileFieldErrors.bio && (
-                  <p id="bio-error" class="text-sm text-red-400">
-                    {profileFieldErrors.bio}
-                  </p>
-                )}
-              </div>
-
-              {/* Location + Country */}
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div class="flex flex-col gap-1.5">
-                  <label for="location" class="text-sm font-medium text-white/90">
-                    City / Region
-                  </label>
-                  <input
-                    id="location"
-                    name="location"
-                    type="text"
-                    maxlength="120"
-                    placeholder="e.g. Lagos"
-                    value={profileFormValues.location}
-                    aria-invalid={Boolean(profileFieldErrors.location)}
-                    aria-describedby={profileFieldDescription("location")}
-                    class:list={[
-                      "form-control placeholder:text-ink-muted",
-                      profileFieldErrors.location && "border-red-500",
-                    ]}
-                  />
-                  {profileFieldErrors.location && (
-                    <p id="location-error" class="text-sm text-red-400">
-                      {profileFieldErrors.location}
-                    </p>
-                  )}
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label for="country" class="text-sm font-medium text-white/90">
-                    Country
-                  </label>
-                  <input
-                    id="country"
-                    name="country"
-                    type="text"
-                    maxlength="56"
-                    placeholder="e.g. Nigeria"
-                    value={profileFormValues.country}
-                    aria-invalid={Boolean(profileFieldErrors.country)}
-                    aria-describedby={profileFieldDescription("country")}
-                    class:list={[
-                      "form-control placeholder:text-ink-muted",
-                      profileFieldErrors.country && "border-red-500",
-                    ]}
-                  />
-                  {profileFieldErrors.country && (
-                    <p id="country-error" class="text-sm text-red-400">
-                      {profileFieldErrors.country}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Skills */}
-              <div class="flex flex-col gap-1.5">
-                <label for="skills" class="text-sm font-medium text-white/90">
-                  Skills
-                </label>
-                <input
-                  id="skills"
-                  name="skills"
-                  type="text"
-                  pattern={skillsPattern}
-                  title="Use up to 12 comma-separated skills, with 30 characters or fewer in each skill."
-                  placeholder="e.g. TypeScript, React, Node.js, Python"
-                  value={profileFormValues.skills}
-                  aria-invalid={Boolean(profileFieldErrors.skills)}
-                  aria-describedby={profileFieldDescription("skills", "skills-help")}
-                  class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    profileFieldErrors.skills ? "border-red-500" : "border-teal focus:border-primary",
-                  ]}
-                />
-                {profileFieldErrors.skills && (
-                  <p id="skills-error" class="text-sm text-red-400">
-                    {profileFieldErrors.skills}
-                  </p>
-                )}
-                <p id="skills-help" class="text-xs text-ink-muted">
-                  Add up to 12 comma-separated skills. Each skill can be up to 30 characters.
-                </p>
-              </div>
-
-              {/* Availability toggles */}
-              <div class="flex flex-wrap gap-6">
-                <label class="flex items-center gap-2 text-sm text-white/90">
-                  <input
-                    type="checkbox"
-                    name="openToFreelance"
-                    checked={profileAvailability.openToFreelance}
-                    class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
-                  />
-                  Open to freelance work
-                </label>
-                <label class="flex items-center gap-2 text-sm text-white/90">
-                  <input
-                    type="checkbox"
-                    name="openToRoles"
-                    checked={profileAvailability.openToRoles}
-                    class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
-                  />
-                  Open to full-time roles
-                </label>
-              </div>
-
-              {/* URLs */}
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div class="flex flex-col gap-1.5">
-                  <label for="portfolioUrl" class="text-sm font-medium text-white/90">
-                    Portfolio URL
-                  </label>
-                  <input
-                    id="portfolioUrl"
-                    name="portfolioUrl"
-                    type="url"
-                    maxlength="300"
-                    placeholder="https://your-site.com"
-                    value={profileFormValues.portfolioUrl}
-                    aria-invalid={Boolean(profileFieldErrors.portfolioUrl)}
-                    aria-describedby={profileFieldDescription("portfolioUrl")}
-                    class:list={[
-                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      profileFieldErrors.portfolioUrl ? "border-red-500" : "border-teal focus:border-primary",
-                    ]}
-                  />
-                  {profileFieldErrors.portfolioUrl && (
-                    <p id="portfolioUrl-error" class="text-sm text-red-400">
-                      {profileFieldErrors.portfolioUrl}
-                    </p>
-                  )}
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label for="linkedinUrl" class="text-sm font-medium text-white/90">
-                    LinkedIn URL
-                  </label>
-                  <input
-                    id="linkedinUrl"
-                    name="linkedinUrl"
-                    type="url"
-                    maxlength="300"
-                    placeholder="https://linkedin.com/in/your-profile"
-                    value={profileFormValues.linkedinUrl}
-                    aria-invalid={Boolean(profileFieldErrors.linkedinUrl)}
-                    aria-describedby={profileFieldDescription("linkedinUrl")}
-                    class:list={[
-                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      profileFieldErrors.linkedinUrl ? "border-red-500" : "border-teal focus:border-primary",
-                    ]}
-                  />
-                  {profileFieldErrors.linkedinUrl && (
-                    <p id="linkedinUrl-error" class="text-sm text-red-400">
-                      {profileFieldErrors.linkedinUrl}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div class="flex justify-end">
-                <Button type="submit">
-                  {profile ? "Save Changes" : "Create Profile"}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
-        {/* SUSPENDED non-editable state */}
-        {profile && profile.status === "SUSPENDED" && (
-          <Card>
-            <div class="py-4 text-center text-ink-secondary">
-              Your profile is currently paused. Please reach out to the TTV team for next steps.
-            </div>
-          </Card>
-        )}
-
-        {/* GitHub Highlights */}
-        {profile && profile.status !== "SUSPENDED" && (
-          <Card>
-            <h3 class="mb-4 text-lg font-semibold text-white">
-              GitHub Highlights
-            </h3>
-            <RepoPicker
-              client:load
-              profileId={profile.id}
-              existingHighlights={existingHighlights}
-              hasGitHubToken={hasGitHubAccount}
-            />
-          </Card>
-        )}
-      </>
+    {eligible && profile && profile.status !== "SUSPENDED" && (
+      <Card as="section" aria-labelledby="highlights-title" className="flex flex-col gap-4">
+        <div>
+          <h2 id="highlights-title" class="text-xl leading-snug text-ink-primary">GitHub highlights</h2>
+          <p class={`m-0 mt-1 ${HINT}`}>Choose up to six repositories to show on your public profile, each with a line about your part in it.</p>
+        </div>
+        <RepoPicker
+          client:visible
+          profileId={profile.id}
+          existingHighlights={existingHighlights}
+          hasGitHubToken={Boolean(github?.accessToken)}
+        />
+      </Card>
     )}
   </div>
 </SpacePage>

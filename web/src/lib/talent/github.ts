@@ -36,22 +36,6 @@ async function githubFetch(
   return response;
 }
 
-interface GitHubUser {
-  login: string;
-  [key: string]: unknown;
-}
-
-export async function fetchGitHubLogin(
-  accessToken: string
-): Promise<string> {
-  const response = await githubFetch(
-    "https://api.github.com/user",
-    accessToken
-  );
-  const data = (await response.json()) as GitHubUser;
-  return data.login;
-}
-
 interface GitHubRepo {
   full_name: string;
   html_url: string;
