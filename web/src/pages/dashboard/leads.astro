@@ -1,27 +1,27 @@
 ---
 /**
  * Visitor messages: what people who found the builder's public page wrote to them, newest first.
- * Each can be marked read or archived; both post back here, which answers with a 303 to a notice
- * (so a reload never posts again), a 400 when the form names no message of theirs, and a 503 when
- * the write fails.
+ * Each can be marked read or archived; both post back here, which answers with a 303 and a
+ * read-once flash (so a reload never posts again, nor says it again), a 400 when the form names no
+ * message of theirs, and a 503 when the write fails.
  */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { Button, ButtonLink, Card, Chip, EmptyState, Notice, StatusChip, linkClass } from "@/components/platform/ui";
+import { Button, ButtonLink, Card, Chip, EmptyState, Notice, PageTitle, StatusChip, linkClass } from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { formatMomentDate } from "@/lib/display-date";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 const ownProfile = () => db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
   .where(eq(schema.studentProfile.userId, user.id));
 
-const DONE = { READ: "read", ARCHIVED: "archived" } as const;
+const DONE = { READ: "Marked as read", ARCHIVED: "Message archived" } as const;
 let failure = "";
 
 if (Astro.request.method === "POST") {
@@ -37,7 +37,7 @@ if (Astro.request.method === "POST") {
       const updated = await db.update(schema.profileContact).set({ status })
         .where(and(eq(schema.profileContact.id, contactId), inArray(schema.profileContact.profileId, ownProfile())))
         .returning({ id: schema.profileContact.id });
-      if (updated.length > 0) return Astro.redirect(`${Astro.url.pathname}?done=${DONE[status]}`, 303);
+      if (updated.length > 0) return redirectWithFlash(Astro, SPACE_PAGE_PATHS.leads, { tone: "success", title: DONE[status] });
       Astro.response.status = 400;
       failure = "That message isn't here any more.";
     } catch (error) {
@@ -59,8 +59,8 @@ const [profile, contacts, spaces] = await Promise.all([
 ]);
 const unreadCount = contacts.filter((contact) => contact.status === "NEW").length;
 
-const done = Astro.request.method === "GET" ? Astro.url.searchParams.get("done") : null;
-const notice = done === "read" ? "Marked as read." : done === "archived" ? "Message archived." : "";
+// A POST never carries a flash, and a rejected one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
 const title = spaces ? "Visitor messages" : "Leads";
 ---
 
@@ -68,7 +68,7 @@ const title = spaces ? "Visitor messages" : "Leads";
   <div class="max-w-3xl space-y-6">
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div class="min-w-0 basis-80 grow">
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
+        <PageTitle>{title}</PageTitle>
         <p class="mt-3 text-base leading-relaxed text-ink-secondary">
           Messages from people who found you through your public profile.
         </p>
@@ -76,7 +76,7 @@ const title = spaces ? "Visitor messages" : "Leads";
       {unreadCount > 0 && <Chip tone="peach">{unreadCount} unread</Chip>}
     </header>
 
-    {notice && <Notice tone="success" focusOnLoad>{notice}</Notice>}
+    {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
     {failure && <Notice tone="danger" focusOnLoad>{failure}</Notice>}
 
     {!profile && (

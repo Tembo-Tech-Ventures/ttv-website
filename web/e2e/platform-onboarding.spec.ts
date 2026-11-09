@@ -179,6 +179,8 @@ test.describe("the real page, /dashboard/welcome", () => {
     await open(page, "/dashboard/welcome");
     await expect(heading(page)).toBeFocused();
     await expectContained(page);
+    // The wordmark home is a 44px target on a touch screen, like every other control.
+    expect((await page.locator(".onboarding-brand").boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await runAxe(page, test.info(), "real welcome step, phone");
   });
 });

@@ -40,6 +40,13 @@
   white-space: nowrap;
 }
 
+/* On a touch screen the wordmark is a 44px target; the padding keeps its words on their baseline. */
+@media (pointer: coarse) {
+  .onboarding-brand {
+    padding-block: 0.875rem;
+  }
+}
+
 .onboarding-stack {
   position: relative;
   display: flex;

@@ -1,10 +1,9 @@
 ---
 import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import {
-  Button, Card, Checkbox, Chip, FOCUS_RING, Notice, SelectField, TextAreaField, TextField, type ChipTone,
+  Button, Card, Checkbox, Chip, FOCUS_RING, Notice, PageTitle, SelectField, TextAreaField, TextField, type ChipTone,
 } from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { getFeedback, updateFeedback } from "@/lib/feedback/store";
@@ -137,7 +136,7 @@ const TEXT_LINK = `rounded-sm text-peach-ink hover:underline ${FOCUS_RING}`;
     )}
 
     <header class="space-y-3">
-      <PageTitle spaces>Feedback from {feedback.user.name}</PageTitle>
+      <PageTitle>Feedback from {feedback.user.name}</PageTitle>
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <Chip tone={NOTE_TONES[feedback.status]}>{FEEDBACK_ADMIN_STATUS_LABELS[feedback.status]}</Chip>
         <span class="text-sm font-medium text-ink-primary">{FEEDBACK_KIND_LABELS[feedback.kind]}</span>

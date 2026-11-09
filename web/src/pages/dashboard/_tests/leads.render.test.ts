@@ -13,7 +13,7 @@ import { linkClass } from "@/components/platform/ui";
  * /dashboard/me/leads, Visitor messages, on the style guide (S13): each message is a kit card with
  * its state in words, its sender a heading the row's small buttons point at (aria-describedby), so
  * "Mark read, Mark read" tells a screen reader whose; the address is a prose link; nothing says
- * "leads". A post answers 303 to a notice, 400 for a message that isn't the person's, and changes
+ * "leads". A post answers 303 with a read-once flash, 400 for a message that isn't the person's, and changes
  * nobody else's. Through the real middleware and page on SQLite with every migration; authentication
  * is mocked.
  */
@@ -63,11 +63,20 @@ beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
 });
 
-async function visit({ search = "", form }: { search?: string; form?: Record<string, string> } = {}) {
+/** The Set-Cookie lines of a response, read the way the adapter writes them. */
+const setCookies = (response: Response): string[] => {
+  const cookies = Reflect.get(response, Symbol.for("astro.cookies")) as { consume(): Iterable<string> } | undefined;
+  return [...response.headers.getSetCookie(), ...(cookies ? cookies.consume() : [])];
+};
+
+const FLASH = `ttv-flash=${encodeURIComponent(JSON.stringify({ tone: "success", title: "Marked as read", path: PATH }))}`;
+
+async function visit({ search = "", form, cookie }: { search?: string; form?: Record<string, string>; cookie?: string } = {}) {
   const url = new URL(PATH + search, ORIGIN);
+  const headers: Record<string, string> = { ...(cookie && { cookie }) };
   const request = () => form
-    ? new Request(url, { method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form) })
-    : new Request(url);
+    ? new Request(url, { method: "POST", headers: { ...headers, Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form) })
+    : new Request(url, { headers });
   const user = { id: BUILDER, name: "Achieng Otieno", email: "achieng@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${BUILDER}-session`, userId: BUILDER, userAgent: "Mozilla/5.0" } });
   const locals = {} as App.Locals;
@@ -80,7 +89,7 @@ async function visit({ search = "", form }: { search?: string; form?: Record<str
     container.renderToResponse(Page, { request: request(), locals })) as Response;
   const { document } = new Window();
   document.body.innerHTML = await response.text();
-  return { status: response.status, location: response.headers.get("location"), body: document.body };
+  return { status: response.status, location: response.headers.get("location"), body: document.body, response };
 }
 
 describe("Visitor messages", () => {
@@ -111,14 +120,34 @@ describe("Visitor messages", () => {
     expect(page.querySelector("[data-chip]")?.textContent).toBe("1 unread");
   });
 
-  it("marks a message read with a 303 to a notice, so a reload never posts again", async () => {
+  it("marks a message read with a 303 and a flash, never ?done=, so a reload never posts again", async () => {
     seeded();
     const posted = await visit({ form: { contactId: "new", status: "READ" } });
     expect(posted.status).toBe(303);
-    expect(posted.location).toBe(`${PATH}?done=read`);
+    expect(posted.location).toBe(PATH);
     expect(statusOf("new")).toBe("READ");
-    const { body } = await visit({ search: "?done=read" });
-    expect(body.querySelector("[role='status']")?.textContent).toContain("Marked as read.");
+    const [line] = setCookies(posted.response);
+    expect(line).toMatch(/^ttv-flash=/);
+    expect(line).toContain(`Path=${PATH}`);
+    expect(JSON.parse(decodeURIComponent(line!.split(";")[0]!.slice("ttv-flash=".length)))).toMatchObject({ tone: "success", title: "Marked as read" });
+  });
+
+  it("says the flash once on the next GET, and an old ?done= link says nothing", async () => {
+    seeded();
+    const { body, response } = await visit({ cookie: FLASH });
+    expect(body.querySelector("[role='status']")?.textContent).toContain("Marked as read");
+    // The space shell also remembers this space (ttv-last-space); the flash's own line clears it.
+    expect(setCookies(response).filter((line) => line.startsWith("ttv-flash="))).toEqual([expect.stringMatching(/^ttv-flash=deleted;/)]);
+    const stale = await visit({ search: "?done=read" });
+    expect(stale.body.querySelector("[role='status']")).toBeNull();
+  });
+
+  it("archives with its own words", async () => {
+    seeded();
+    const posted = await visit({ form: { contactId: "read", status: "ARCHIVED" } });
+    expect(posted.status).toBe(303);
+    expect(statusOf("read")).toBe("ARCHIVED");
+    expect(decodeURIComponent(setCookies(posted.response)[0]!)).toContain('"title":"Message archived"');
   });
 
   it("answers 400 and changes nothing for another builder's message or a bad form", async () => {

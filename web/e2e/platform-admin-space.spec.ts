@@ -235,6 +235,11 @@ test.describe("every admin page", () => {
     await expect(david.getByRole("cell").nth(2)).toHaveText("Mentor");
     await expect(david.getByRole("cell").nth(3)).toHaveText(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/);
     expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    // At 320 the rows stack, and a long email breaks inside its cell rather than widening the screen.
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.locator(".spaces-shell__main").evaluate((main) => main.scrollWidth - main.clientWidth)).toBeLessThanOrEqual(0);
+    await page.setViewportSize(size);
     await david.getByRole("link", { name: "David Kamau" }).click();
     await expect(page).toHaveURL(/\/admin\/users\/ttv-local-persona-mentor$/);
 

@@ -1,9 +1,8 @@
 ---
 import { PiArrowRight } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { Card, Chip, EmptyState, FOCUS_RING, PillNav, type ChipTone } from "@/components/platform/ui";
+import { Card, Chip, EmptyState, FOCUS_RING, PageTitle, PillNav, type ChipTone } from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { countFeedbackByStatus, listFeedback } from "@/lib/feedback/store";
 import { feedbackAttachmentPath } from "@/lib/feedback/api";
@@ -59,7 +58,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
   <div class="space-y-6">
     <header class="space-y-2">
       <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <PageTitle spaces>Feedback</PageTitle>
+        <PageTitle>Feedback</PageTitle>
         <a href={`${FEEDBACK_PATH}/themes`} class:list={["inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-peach-ink hover:underline", FOCUS_RING]}>
           Themes
           <PiArrowRight className="size-4 shrink-0" aria-hidden="true" />
