@@ -337,7 +337,7 @@ No Docker needed. Wrangler handles local D1 database emulation.
 - **UI kit**: Build UI from the TTV UI kit, `@/components/platform/ui` (buttons, links, fields, notices,
   empty states, chips, avatars, cards, sheets and the tab file). In `.astro` files a kit component with no
   `client:` directive renders as static HTML. Where a component cannot go, use its recipe (`buttonClass`,
-  `FOCUS_RING`) rather than copying classes. The older `form-control` utility is frozen to the files that already use it (`legacy-ui.test.ts`);
-  the older `common/Button`, `Card` and `Badge` are gone. The guide is
+  `FOCUS_RING`) rather than copying classes. The older `common/Button`, `Card`, `Badge` and the `form-control`
+  utility are gone, and `src/test/kit-compliance.test.ts` keeps raw colours and legacy parts from coming back. The guide is
   `web/docs/design-system/`; the public version, with every component live, is `/style-guide`.
 - **Theme colors**: Use Tailwind classes (`text-primary`, `bg-dark`, `text-ink-primary`, etc.)

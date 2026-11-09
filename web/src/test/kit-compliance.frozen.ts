@@ -43,10 +43,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "pages/dev/certificate-print/b.astro": 2,
     "pages/dev/certificate-print/c.astro": 2,
   },
-  "the form-control utility": {
-  },
-  "the spaces/PageTitle.astro shim": {
-  },
   "status flags in the query string": {
     "components/platform/mentors/DirectoryRequests.tsx": 1,
     "components/platform/mentors/MentorsDirectory.astro": 1,

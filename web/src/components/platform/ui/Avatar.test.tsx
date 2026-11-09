@@ -99,7 +99,9 @@ describe("TemboMark", () => {
     expect(html).toContain("font-heading");
     expect(html).toContain("bg-dark");
     expect(html).toContain("border-primary");
-    expect(html).toContain("text-primary");
+    // Its T is the peach ink, the platform's peach for text, which the spaces shell no longer swaps in for it.
+    expect(html).toContain("text-peach-ink");
+    expect(html).not.toContain("text-primary");
     expect(html).toMatch(/>T<\/span>/);
   });
 

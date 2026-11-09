@@ -10,7 +10,6 @@ vi.mock("@/components/admin/admin-nav-server", () => ({
 }));
 
 const { default: AdminLayout } = await import("./AdminLayout.astro");
-const { default: PageTitle } = await import("@/components/platform/spaces/PageTitle.astro");
 
 let container: AstroContainer;
 beforeAll(async () => {
@@ -47,24 +46,5 @@ describe("AdminLayout without a spaces context (T14)", () => {
     const response = await container.renderToResponse(AdminLayout, { request: request(), locals, props: { title: "Users", spaces: null } });
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("/dashboard");
-  });
-});
-
-describe("PageTitle outside the spaces shell", () => {
-  it("is exactly the h2 the admin page always drew", async () => {
-    const html = await container.renderToString(PageTitle, {
-      props: { spaces: false, legacyClass: "text-2xl font-bold text-white" }, slots: { default: "Users" },
-    });
-    expect(html).toBe('<h2 class="text-2xl font-bold text-white">Users</h2>');
-  });
-
-  it("draws nothing where the page had no title (legacyTag null)", async () => {
-    const html = await container.renderToString(PageTitle, { props: { spaces: false, legacyTag: null }, slots: { default: "Cohort 05" } });
-    expect(html.trim()).toBe("");
-  });
-
-  it("is the screen's one h1 in the spaces shell, the kit's PageTitle", async () => {
-    const html = await container.renderToString(PageTitle, { props: { spaces: true, legacyTag: null }, slots: { default: "Cohort 05" } });
-    expect(html).toMatch(/^<h1 data-page-title="true" class="[^"]*tracking-heading[^"]*">Cohort 05<\/h1>$/);
   });
 });
