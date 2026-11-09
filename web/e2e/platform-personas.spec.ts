@@ -282,9 +282,10 @@ test.describe("a cohort member", () => {
       headers: { Origin: new URL(baseURL!).origin },
       maxRedirects: 0,
     });
-    expect(posted.status()).toBe(200);
+    // Refused (400) with the reason under the photo field, rendered in the shell.
+    expect(posted.status()).toBe(400);
     const html = await posted.text();
-    expect(html).toContain("Please choose an image to upload.");
+    expect(html).toContain("Choose an image to upload.");
     expect(html).toContain('class="spaces-shell"');
   });
 });
