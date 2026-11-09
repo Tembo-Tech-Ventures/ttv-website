@@ -54,7 +54,6 @@ const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes
 
 const LANE_M = (page: string) => `TODO(lane M, ${page}): the page goes onto the kit in its own PR`;
 const LANE_X = (what: string) => `TODO(lane X follow-ups): ${what}`;
-const ALL: readonly StyleCheck[] = [...DESKTOP_CHECKS, ...MOBILE_CHECKS];
 
 export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Cohort
@@ -63,7 +62,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/cohort/sessions/[id]", persona: "student", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions") } },
   { path: "/dashboard/cohort/ask", persona: "student", namedH1: true, pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Ask Tembo, #403") } },
   { path: "/dashboard/cohort/apply", persona: "community", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Apply, M11") } },
-  { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ }, pending: { checks: ALL, todo: LANE_M("Application, #405") } },
+  { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ }, pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Application, #405") } },
   { path: "/dashboard/cohort/c/[slug]", persona: "student", namedH1: true, detail: { from: "/dashboard/cohort", link: ID("/dashboard/cohort/c") } },
 
   // Community

@@ -75,7 +75,7 @@ function desktopFacts({ controls, kitRing }: { controls: string; kitRing: string
   const w = window as unknown as { __styleVisible: (el: Element) => boolean; __styleName: (el: Element) => string };
   const probe = document.createElement("span");
   probe.style.color = "var(--color-primary)";
-  document.body.append(probe);
+  document.body.appendChild(probe);
   const peach = getComputedStyle(probe).color;
   probe.remove();
 
@@ -85,7 +85,7 @@ function desktopFacts({ controls, kitRing }: { controls: string; kitRing: string
   return {
     h1: h1s.map((h) => ({ text: (h.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 60), visible: shown(h), font: getComputedStyle(h).fontFamily })),
     peach: onScreen.filter((el) => getComputedStyle(el).backgroundColor === peach && !/^skip to/i.test((el.textContent ?? "").trim())).map(w.__styleName),
-      unkitted: onScreen.filter((el) => !ring.test(el.getAttribute("class") ?? "")).map(w.__styleName),
+    unkitted: onScreen.filter((el) => !ring.test(el.getAttribute("class") ?? "")).map(w.__styleName),
     // Peach is the one primary action, never a link's colour (linkClass is ink, underlined).
     peachLinks: onScreen.filter((el) => el.tagName === "A" && getComputedStyle(el).color === peach && getComputedStyle(el).backgroundColor !== peach).map(w.__styleName),
   };
@@ -96,7 +96,7 @@ function smallTargets({ controls }: { controls: string }) {
   return [...document.querySelectorAll(`${controls},input:not([type=hidden]),select,textarea,[role=tab],[role=link]`)]
     .filter((el) => w.__styleVisible(el))
     // A link inside a sentence is exempt (WCAG 2.5.8, inline).
-    .filter((el) => !(el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p,li,dd,td,blockquote,figcaption")))
+    .filter((el) => !(el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p,li,dd,td,blockquote,figcaption,label,legend")))
     .map((el) => ({ el, rect: el.getBoundingClientRect() }))
     .filter(({ rect }) => Math.min(rect.width, rect.height) < 43.5)
     .map(({ el, rect }) => `${w.__styleName(el)} ${Math.round(rect.width)}x${Math.round(rect.height)}`);
