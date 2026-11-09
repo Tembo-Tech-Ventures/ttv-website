@@ -10,7 +10,7 @@ import {
   setAsideContribution,
   undoSetAside,
 } from "@/components/community/community-client";
-import type { MentorReviewRequest } from "@/components/community/MentorReview";
+import type { MentorReviewRequest } from "@/components/community/community-types";
 import { UiApiError } from "@/components/discovery/ui-errors";
 import type { Flash } from "@/lib/platform/server/flash";
 import { validateMentorMethod, validateMentorNote } from "./review-helpers";

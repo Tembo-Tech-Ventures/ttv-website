@@ -127,7 +127,6 @@ community cards) follows the `ttv-ui-motion` skill in `.agents/skills/` and
 
 ## Icons
 
-Phosphor at its regular weight: `react-icons/pi` in the platform,
-`@phosphor-icons/react` on the homepage. 20px (`size-5`) in controls, 16px
+Phosphor at its regular weight, through `react-icons/pi` everywhere. 20px (`size-5`) in controls, 16px
 (`size-4`) inline. An icon beside words is `aria-hidden`; an icon alone is an
 `IconButton`, which requires a label.

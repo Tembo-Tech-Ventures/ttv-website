@@ -16,7 +16,6 @@ import {
   askProfile,
 } from "./community-client";
 import { UiApiError, displayUiError } from "../discovery/ui-errors";
-import { canOpenWorkspace } from "./CommunityApp";
 
 const profile = {
   userId: "member",
@@ -354,13 +353,6 @@ describe("community API boundary", () => {
     });
     expect(answer.text).not.toContain("Unsupported personal claim");
     expect(answer.limited).toBe(true);
-  });
-  it("does not confuse mentor and institutional permissions", () => {
-    const access = { isAdmin: false, isMentor: true, isInstitution: false };
-    expect(canOpenWorkspace("journey", access)).toBe(true);
-    expect(canOpenWorkspace("mentor", access)).toBe(true);
-    expect(canOpenWorkspace("scout", access)).toBe(false);
-    expect(canOpenWorkspace("scout", { ...access, isAdmin: true })).toBe(true);
   });
 });
 

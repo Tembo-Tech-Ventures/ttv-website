@@ -6,9 +6,7 @@ import type {
   EvidenceAnswer,
   ScoutCriteria,
 } from "../discovery/types";
-import type { EditableCommunityProfile } from "./ProfileEditor";
-import type { ClaimDraft } from "./JourneyWorkspace";
-import type { MentorReviewRequest, MentorReviewDecision } from "./MentorReview";
+import type { ClaimDraft, EditableCommunityProfile, MentorReviewDecision, MentorReviewRequest } from "./community-types";
 import { UiApiError } from "../discovery/ui-errors";
 
 // Validate the network boundary independently from server-side authorization.

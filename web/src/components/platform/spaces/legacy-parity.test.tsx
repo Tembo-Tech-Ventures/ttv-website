@@ -1,8 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import ChatApp from "@/components/chat/ChatApp";
-import CommunityApp from "@/components/community/CommunityApp";
-import DiscoveryShell, { CommunityNavigation } from "@/components/discovery/DiscoveryShell";
 import SessionViewer from "@/components/recordings/SessionViewer";
 import type { ChatSession } from "@/components/chat/types";
 
@@ -39,7 +37,6 @@ import type { ChatSession } from "@/components/chat/types";
  *   EmptyState; sources are cards with chips; Tembo has its mark and AI badge;
  *   the site links and focus rings are the kit's, in the platform's tokens.
  */
-const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };
 
 const cases: Record<string, () => string> = {
@@ -54,23 +51,6 @@ const cases: Record<string, () => string> = {
         unreadLeadCount={2}
         canDiscover
       />,
-    ),
-  "community-journey": () => renderToStaticMarkup(<CommunityApp view="journey" />),
-  "community-scout": () => renderToStaticMarkup(<CommunityApp view="scout" />),
-  "community-mentor": () => renderToStaticMarkup(<CommunityApp view="mentor" />),
-  "discovery-shell": () =>
-    renderToStaticMarkup(
-      <CommunityNavigation.Provider value={VIEWS}>
-        <DiscoveryShell active="scout">
-          <p>Workspace</p>
-        </DiscoveryShell>
-      </CommunityNavigation.Provider>,
-    ),
-  "discovery-shell-demo": () =>
-    renderToStaticMarkup(
-      <DiscoveryShell active="journey" demo>
-        <p>Workspace</p>
-      </DiscoveryShell>,
     ),
   "session-viewer": () =>
     renderToStaticMarkup(
