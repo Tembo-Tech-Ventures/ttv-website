@@ -13,6 +13,7 @@ import {
 import type { MentorReviewRequest } from "@/components/community/MentorReview";
 import { UiApiError } from "@/components/discovery/ui-errors";
 import type { Flash } from "@/lib/platform/server/flash";
+import { validateMentorMethod, validateMentorNote } from "./review-helpers";
 
 export type ConfirmIntent = "confirm" | "set-aside" | "undo";
 
@@ -40,20 +41,6 @@ export type ConfirmOutcome =
   | { ok: false; status: number; title: string; detail: string; kept: ConfirmKept | null };
 
 const INTENTS: readonly ConfirmIntent[] = ["confirm", "set-aside", "undo"];
-
-export function validateMentorNote(note: string): string | null {
-  const text = note.trim();
-  if (text.length < 20 || text.split(/\s+/u).length < 3) {
-    return "Describe what you personally checked in at least 20 characters and three words.";
-  }
-  if (text.length > 2000) return "Keep your review note within 2,000 characters.";
-  return null;
-}
-
-export function validateMentorMethod(method: string): string | null {
-  const length = method.trim().length;
-  return length < 3 || length > 500 ? "Describe how you checked it in 3 to 500 characters." : null;
-}
 
 /** The form's fields, or null when it isn't one of this page's forms. */
 export function readConfirmPost(form: FormData): ConfirmPost | null {

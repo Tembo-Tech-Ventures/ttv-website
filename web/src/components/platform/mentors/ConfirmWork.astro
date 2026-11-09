@@ -6,7 +6,7 @@
  * works without a script. No action here is the page's primary: each card has its own, and they are quiet.
  */
 import type { MentorReviewRequest } from "@/components/community/MentorReview";
-import { evidenceDestination, safeMentorEvidenceUrl } from "@/components/community/MentorReview";
+import { evidenceDestination, safeMentorEvidenceUrl } from "./review-helpers";
 import { awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
 import { Button, Card, EmptyState, HINT, TextAreaField, TextField, linkClass } from "@/components/platform/ui";
 import { splitContributions, type ConfirmKept } from "./confirm-state";
