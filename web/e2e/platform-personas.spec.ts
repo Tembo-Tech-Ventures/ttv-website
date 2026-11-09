@@ -328,7 +328,7 @@ test.describe("an institution", () => {
     await signIn(context, baseURL!, session);
 
     await open(page, "/dashboard/discover");
-    await expect(page.getByRole("heading", { level: 1, name: "Find the person. See the work." })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Discover" })).toBeVisible();
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Discover people");
     await open(page, "/dashboard/community");
     // Onboarding (U-O.2) frames Community by how a person takes part. An institution that has not

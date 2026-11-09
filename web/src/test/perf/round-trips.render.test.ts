@@ -30,6 +30,7 @@ const ADMIN = "synthetic-amina";
 const MENTOR = "synthetic-david";
 const DIRECT = "synthetic-direct";
 const BUILDER = "synthetic-achieng";
+const INSTITUTION = "synthetic-joseph";
 const databases: { close(): void }[] = [];
 afterEach(() => databases.splice(0).forEach((database) => database.close()));
 
@@ -47,6 +48,8 @@ function seeded() {
     INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','${ADMIN}',id FROM Roles WHERE name='ADMIN';
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MENTOR}',id FROM Roles WHERE name='MENTOR';
+    INSERT INTO user(id,name,email) VALUES ('${INSTITUTION}','Joseph Mutua','joseph@example.test');
+    INSERT INTO UserRoles(id,userId,roleId) SELECT 'institution-role','${INSTITUTION}',id FROM Roles WHERE name='INSTITUTION';
     INSERT INTO mentor_profile(userId,headline,bio,areas,formats,monthlyCapacity,paused) VALUES
       ('${MENTOR}','Backend engineer','Reviews APIs.','["Code review"]','["WRITTEN_REVIEW"]',3,0);
     INSERT INTO feedback(id,userId,kind,message,pageUrl,createdAt,updatedAt) VALUES ('feedback','${STUDENT}','CONFUSING','Fictional note.','/dashboard/cohort/sessions',0,0);
@@ -55,6 +58,7 @@ function seeded() {
     INSERT INTO studentProfile(id,userId,handle,status,headline) VALUES ('profile','synthetic-achieng','achieng-otieno','PUBLISHED','Fictional builder');
     INSERT INTO profileContact(id,profileId,fromName,fromEmail,organization,message) VALUES ('lead','profile','Grace Wanjiru','grace@example.test','Chama Savings','Fictional message.');
     INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown) VALUES ('draft','profile','first-draft','A first draft','Fictional.');
+    INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals) VALUES ('synthetic-achieng','Fictional builder','Builds savings tools.','["TypeScript"]','A first role');
     INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('contribution','synthetic-achieng','Savings tracker','Fictional work.','2026-01-01','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmation','contribution','${MENTOR}','Fictional statement.','REVIEWED_WORK',1);
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description,status) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.','APPROVED');
@@ -89,6 +93,8 @@ const PAGES = {
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
   conduct: { path: () => "/dashboard/community/conduct", page: () => import("@/pages/dashboard/community/conduct.astro"), user: ADMIN },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
+  discover: { path: () => "/dashboard/discover", page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
+  "discover, a person": { path: () => `/dashboard/discover?profile=${BUILDER}`, page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
   "mentoring home": { path: () => "/dashboard/mentoring", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
   "mentoring confirm": { path: () => "/dashboard/mentoring/confirm", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
   "mentoring availability": { path: () => "/dashboard/mentoring/availability", page: () => import("@/pages/dashboard/mentoring/availability.astro"), user: MENTOR },
@@ -210,6 +216,11 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // after them, so a person with no entries pays a query that finds none.
   community: { d1: 19, depth: 3 },
   conduct: { d1: 14, depth: 3 },
+  // No island (the island's API calls after hydration before): the criteria form is the frame alone, the
+  // Discover space being its access check. A person's profile, journey and confirmations are one round trip,
+  // read beside their access check and started beside the space context.
+  discover: { d1: 12, depth: 2 },
+  "discover, a person": { d1: 16, depth: 3 },
   mentors: { d1: 20, depth: 3 },
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
   // Its channel list, requests and availability start beside onboarding (depth 5 before).

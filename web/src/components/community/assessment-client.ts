@@ -12,6 +12,7 @@ import {
 export async function assessProfile(
   profile: CommunityProfile,
   rubric: AssessmentRubric,
+  fetcher: typeof fetch = fetch,
 ) {
   const input = assessmentRubricSchema.safeParse(rubric);
   if (!input.success) throw new UiApiError(400);
@@ -20,6 +21,7 @@ export async function assessProfile(
     z.object({ assessment: evidenceAssessmentSchema }),
     "POST",
     input.data,
+    fetcher,
   );
   if (!matchesAssessmentRequest(assessment, profile, input.data))
     throw new UiApiError(502);

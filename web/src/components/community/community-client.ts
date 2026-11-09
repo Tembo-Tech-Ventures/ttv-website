@@ -145,7 +145,7 @@ export async function communityRequest<T>(
 const ownProfileSchema = z.object({ profile: profileSchema });
 const journeySchema = z.object({ entries: z.array(entrySchema) });
 
-export const loadAccess = () => communityRequest("access", accessSchema);
+export const loadAccess = (fetcher: typeof fetch = fetch) => communityRequest("access", accessSchema, "GET", undefined, fetcher);
 export async function loadOwnProfile() {
   const [profile, entries] = await Promise.all([
     communityRequest("profile", ownProfileSchema),
@@ -165,10 +165,13 @@ export function parseOwnJourney(profile: unknown, journey: unknown): CommunityPr
   if (!parsedProfile.success || !parsedJourney.success) return null;
   return mapProfile(parsedProfile.data.profile, parsedJourney.data.entries);
 }
-export async function loadProfile(id: string) {
+export async function loadProfile(id: string, fetcher: typeof fetch = fetch) {
   const data = await communityRequest(
     `profiles/${encodeURIComponent(id)}`,
     detailSchema,
+    "GET",
+    undefined,
+    fetcher,
   );
   return mapProfile(data.profile, data.entries);
 }
@@ -206,11 +209,11 @@ export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft)
   if(!saved || saved.version<=claim.version)throw new UiApiError(502);
   return mapJourney(saved);
 }
-export async function discoverPeople(criteria: ScoutCriteria) {
-  const result = await communityRequest("profiles/discover", z.object({profiles:z.array(z.object({profile:profileSchema,matches:z.array(matchSchema)})),evaluated:z.number(),searched:z.number()}),"POST",criteria);
+export async function discoverPeople(criteria: ScoutCriteria, fetcher: typeof fetch = fetch) {
+  const result = await communityRequest("profiles/discover", z.object({profiles:z.array(z.object({profile:profileSchema,matches:z.array(matchSchema)})),evaluated:z.number(),searched:z.number()}),"POST",criteria,fetcher);
   return result.profiles.map(item=>({...mapProfile(item.profile),matches:item.matches,discovery:{evaluated:result.evaluated,searched:result.searched}}));
 }
-export async function searchProfiles(criteria: ScoutCriteria) {
+export async function searchProfiles(criteria: ScoutCriteria, fetcher: typeof fetch = fetch) {
   // Both filters are evaluated by the service before its result limit.
   const query = new URLSearchParams({
     query: criteria.query,
@@ -220,6 +223,9 @@ export async function searchProfiles(criteria: ScoutCriteria) {
   const result = await communityRequest(
     `profiles?${query}`,
     z.object({ profiles: z.array(profileSchema) }),
+    "GET",
+    undefined,
+    fetcher,
   );
   return result.profiles.map((profile) => mapProfile(profile));
 }
@@ -304,12 +310,13 @@ export async function askProfile(
   profile: CommunityProfile,
   question: string,
   criteria: ScoutCriteria,
+  fetcher: typeof fetch = fetch,
 ): Promise<EvidenceAnswer> {
   const answer = await communityRequest("chat", chatSchema, "POST", {
     message: question,
     profileId: profile.id,
     context: `${criteria.context.slice(0, 1000)}\nSkills of interest: ${criteria.skills.slice(0, 300)}`,
-  });
+  }, fetcher);
   if (!answer.grounded)
     return {
       text: "An evidence-grounded answer could not be produced. Narrow your question or review the published contributions directly.",

@@ -1,0 +1,92 @@
+---
+/**
+ * Discover's first step: scouting by criteria, a form that posts (the
+ * opportunity can be confidential, so it never enters an address), or looking
+ * up someone by name, a form that gets. Each works without a script.
+ */
+import { Button, Notice, TextAreaField, TextField } from "@/components/platform/ui";
+import {
+  CONTEXT_MAX, DISCOVER_PATH, QUERY_MAX, SKILLS_TEXT_MAX, type Carried, type Problem, type SearchErrors,
+} from "./discover-state";
+
+interface Props {
+  carried: Carried;
+  errors?: SearchErrors;
+  problem?: Problem | null;
+}
+
+const { carried, errors = {}, problem = null } = Astro.props;
+const count = Object.keys(errors).length;
+---
+
+<section aria-labelledby="discover-criteria-title" class="flex max-w-3xl flex-col gap-6" data-discover-criteria={carried.lookup ? "lookup" : "scout"}>
+  <h2 id="discover-criteria-title" class="text-2xl text-ink-primary">
+    {carried.lookup ? "Whose work would you like to explore?" : "Who would move your work forward?"}
+  </h2>
+  {carried.lookup ? (
+    <form method="GET" action={DISCOVER_PATH} class="flex flex-col gap-6">
+      <input type="hidden" name="lookup" value="1" />
+      <input type="hidden" name="scout" value="results" />
+      {count > 0 && <Notice tone="danger" focusOnLoad title="One thing to fix before you search">{errors.query}</Notice>}
+      {problem && <Notice tone="danger" focusOnLoad title={problem.title}>{problem.detail}</Notice>}
+      <TextField
+        name="query"
+        label="Name to look up"
+        hint="Finds members who have saved a community profile, by name, without your scouting skills or opportunity criteria. Nobody else appears here."
+        placeholder="Enter their name"
+        maxLength={QUERY_MAX}
+        defaultValue={carried.query}
+        error={errors.query}
+        required
+      />
+      <div><Button type="submit" variant="primary" size="lg">Look up person</Button></div>
+    </form>
+  ) : (
+    <form method="POST" action={DISCOVER_PATH} class="flex flex-col gap-6">
+      <input type="hidden" name="form" value="scout" />
+      {count > 0 && (
+        <Notice tone="danger" focusOnLoad title={`${count === 1 ? "One thing" : `${count} things`} to fix before you search`}>
+          Everything you wrote is still here.
+        </Notice>
+      )}
+      {problem && <Notice tone="danger" focusOnLoad title={problem.title}>{problem.detail}</Notice>}
+      <TextAreaField
+        name="context"
+        label="What are you working on?"
+        hint="Describe the opportunity and what a good contribution looks like. We use your full description to find and compare published evidence. Avoid confidential information."
+        placeholder="We're building an accessible product and looking for a frontend engineer…"
+        rows={4}
+        maxLength={CONTEXT_MAX}
+        defaultValue={carried.context}
+        error={errors.context}
+      />
+      <TextField
+        name="skills"
+        label="Skills to explore"
+        optional
+        hint="Separate skills with commas, up to 10. These supplement your full description."
+        placeholder="React, TypeScript, accessibility"
+        maxLength={SKILLS_TEXT_MAX}
+        defaultValue={carried.skills}
+        error={errors.skills}
+      />
+      <TextField
+        name="query"
+        label="Already have someone in mind?"
+        optional
+        placeholder="Search a name or area of work"
+        maxLength={QUERY_MAX}
+        defaultValue={carried.query}
+        error={errors.query}
+      />
+      <div class="flex flex-col items-start gap-3">
+        <Button type="submit" variant="primary" size="lg" data-busy-label="Finding people…">Discover people</Button>
+        <p class="text-sm text-ink-muted">Tembo reads the published evidence, so a search can take up to a minute.</p>
+      </div>
+    </form>
+  )}
+  <Notice tone="info" title="A profile is a starting point">
+    Evidence opens the conversation. Look at what someone made, how they contributed, and what a mentor actually
+    checked. No single score tells a person's whole story.
+  </Notice>
+</section>

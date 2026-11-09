@@ -1,0 +1,34 @@
+---
+/** The sources attached to a piece of work, each opening in a new tab, or saying it can't. */
+import { PiArrowUpRight } from "react-icons/pi";
+import { linkClass } from "@/components/platform/ui";
+import { evidenceHref, type EvidenceSource } from "./types";
+
+interface Props {
+  sources: readonly EvidenceSource[];
+  /** What they are the sources of, for screen readers: "Sources for Chama savings ledger". */
+  label: string;
+}
+
+const { sources, label } = Astro.props;
+---
+
+{sources.length > 0 && (
+  <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label={label}>
+    {sources.map((source) => {
+      const href = evidenceHref(source.url);
+      return (
+        <li>
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1")}>
+              {source.title}<span class="sr-only"> ({source.kind}, opens in a new tab)</span>
+              <PiArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
+            </a>
+          ) : (
+            <span>{source.title}: source link unavailable</span>
+          )}
+        </li>
+      );
+    })}
+  </ul>
+)}

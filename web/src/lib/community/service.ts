@@ -77,21 +77,30 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   async function requireProfileAccess(target: string) {
     await requireFixtureTarget(target);
     if (target === actorId) return;
-    const caller = await requireInstitution();
+    // The institution's eligibility read starts beside the role check rather than after it. It decides
+    // nothing on its own: a caller without institutional access is refused whatever it finds, and staff
+    // keep their reach, so for an admin its answer is unused.
+    const eligible = discoverableMember("u.id", { id: actorId, isAdmin: false });
+    const [caller, row] = await Promise.all([
+      requireInstitution(),
+      db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first(),
+    ]);
     // Staff keep their reach: an admin may open any account, as before.
     if (caller.isAdmin) return;
-    const eligible = discoverableMember("u.id", caller);
-    const row = await db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first();
     if (!row) throw new CommunityError("Profile not found.", 404);
   }
-  async function getProfile(target: string): Promise<CommunityProfile> {
-    await requireProfileAccess(target);
-    const row = await db.prepare(`${PROFILE_SELECT} WHERE u.id=?`).bind(target).first<ProfileRow>();
+  // Profiles and journeys are read beside their access check rather than after it, and nothing is returned
+  // unless the check passes: a refused check rejects the whole read and its rows are discarded. The reads
+  // never reject on their own account, so a missing person is said only after the check passes: a refused
+  // caller learns nothing, not even whether the account exists.
+  function readProfileRow(target: string) {
+    return db.prepare(`${PROFILE_SELECT} WHERE u.id=?`).bind(target).first<ProfileRow>();
+  }
+  function profileOrMissing(row: ProfileRow | null): CommunityProfile {
     if (!row) throw new CommunityError("Profile not found.", 404);
     return profile(row);
   }
-  async function listJourney(target = actorId): Promise<CommunityJourney[]> {
-    await requireProfileAccess(target);
+  async function readJourney(target: string): Promise<CommunityJourney[]> {
     const mentorScope = fixtureScope("c.mentorId");
     // The confirmations are read beside the entries rather than after them: one round trip, not two.
     const [{ results }, { results: confirmations }] = await Promise.all([
@@ -102,6 +111,19 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         WHERE j.userId=? AND (?=j.userId OR j.visibility='institution')${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId,...mentorScope.values).all<CommunityConfirmation>(),
     ]);
     return results.map((entry) => ({ ...entry, confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
+  }
+  async function getProfile(target: string): Promise<CommunityProfile> {
+    const [, row] = await Promise.all([requireProfileAccess(target), readProfileRow(target)]);
+    return profileOrMissing(row);
+  }
+  async function listJourney(target = actorId): Promise<CommunityJourney[]> {
+    const [, entries] = await Promise.all([requireProfileAccess(target), readJourney(target)]);
+    return entries;
+  }
+  /** A profile with its journey, as GET profiles/:id answers: one access check for both. */
+  async function getProfileWithJourney(target: string): Promise<{ profile: CommunityProfile; entries: CommunityJourney[] }> {
+    const [, row, entries] = await Promise.all([requireProfileAccess(target), readProfileRow(target), readJourney(target)]);
+    return { profile: profileOrMissing(row), entries };
   }
   /**
    * The Confirm page's rows: the 50 newest contributions shared beyond their
@@ -140,7 +162,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     return a;
   }
   return {
-    access, getProfile, listJourney,
+    access, getProfile, listJourney, getProfileWithJourney,
     getOwnProfile: () => getProfile(actorId),
     async updateOwnProfile(input: unknown) {
       requireWritable();

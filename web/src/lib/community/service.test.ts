@@ -91,6 +91,27 @@ describe("community service real SQL boundaries", () => {
       await expect(f.institution.getProfile(id)).rejects.toMatchObject({status:404});
     }
   });
+  it("refuses a caller without institutional access the same way whether or not the person exists", async () => {
+    const f = fixture();
+    await f.member.updateOwnProfile(profile);
+    for (const target of ["member", "nobody-at-all"]) {
+      await expect(f.mentor.getProfile(target)).rejects.toMatchObject({ status: 403 });
+      await expect(f.mentor.listJourney(target)).rejects.toMatchObject({ status: 403 });
+      await expect(f.mentor.getProfileWithJourney(target)).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(f.institution.getProfileWithJourney("nobody-at-all")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("reads a profile with its journey under one check, as the separate reads do", async () => {
+    const f = fixture();
+    await f.member.updateOwnProfile(profile);
+    await f.member.createJourney(entry);
+    expect(await f.institution.getProfileWithJourney("member")).toEqual({
+      profile: await f.institution.getProfile("member"),
+      entries: await f.institution.listJourney("member"),
+    });
+  });
+
   it("AND matches skill criteria before limiting results", async () => {
     const f = fixture();
     await f.member.updateOwnProfile({...profile,skills:["React","TypeScript"]});

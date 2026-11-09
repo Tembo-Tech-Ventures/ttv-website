@@ -94,7 +94,7 @@ async function dynamicRoute(ctx: RouteContext) {
   }
   if (parts[0] === "journey" && parts[2] === "set-aside" && parts.length === 3) return setAsideRoute(ctx,parts[1]);
   if (parts[0] !== "profiles" || parts.length < 2) return communityJson({error:"Route not found."},404);
-  if (parts.length === 2 && ctx.request.method === "GET") return communityJson({profile: await ctx.service.getProfile(parts[1]),entries: await ctx.service.listJourney(parts[1])});
+  if (parts.length === 2 && ctx.request.method === "GET") return communityJson(await ctx.service.getProfileWithJourney(parts[1]));
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {
     const probe = stagingAssessmentProbe(ctx.db, ctx.env?.DEPLOYMENT_ENVIRONMENT, ctx.actor);
     const measurement: { claimed: boolean; payloadBytes: number; payloadCharacters: number; outputReason?: AssessmentOutputReason } = { claimed: false, payloadBytes: 0, payloadCharacters: 0 };
