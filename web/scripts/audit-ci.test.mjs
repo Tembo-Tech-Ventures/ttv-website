@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TTV_IMAGE_SERVICE } from "../astro.config.mjs";
-import { evaluateAudit } from "./audit-ci.mjs";
+import { ALLOWLISTED_ADVISORIES, evaluateAudit } from "./audit-ci.mjs";
 
 const advisory = (id, title = "Example advisory") => ({
   url: `https://github.com/advisories/${id}`,
@@ -57,44 +57,28 @@ describe("evaluateAudit", () => {
     expect(evaluateAudit({ vulnerabilities: { "better-auth": { severity: "critical", via } } }).ok).toBe(false);
   });
 
-  it("allows the reviewed Astro 6 image-pipeline advisories", () => {
-    const result = evaluateAudit({
-      vulnerabilities: {
-        astro: {
-          severity: "critical",
-          via: [
-            advisory("GHSA-376h-93r7-7g6f"),
-            advisory("GHSA-26w7-cxv4-gfx2"),
-          ],
-        },
-        sharp: {
-          severity: "high",
-          via: [
-            advisory("GHSA-rgj7-g3m4-5g8c"),
-            advisory("GHSA-wq5f-xc86-pv6w"),
-          ],
-        },
-      },
-    });
-
-    expect(result.ok).toBe(true);
-    expect(result.failures).toEqual([]);
-    expect(result.allowed.map(({ name }) => name)).toEqual(["astro", "sharp"]);
+  it("allowlists nothing by default", () => {
+    expect(ALLOWLISTED_ADVISORIES.size).toBe(0);
   });
 
-  it("allows the dev-only braces advisory until an upstream patch exists", () => {
+  it.each([
+    ["astro", "GHSA-4g3v-8h47-v7g6"],
+    ["astro", "GHSA-f48w-9m4c-m7f5"],
+    ["astro", "GHSA-7pw4-f3q4-r2p2"],
+    ["astro", "GHSA-376h-93r7-7g6f"],
+    ["astro", "GHSA-26w7-cxv4-gfx2"],
+    ["sharp", "GHSA-f88m-g3jw-g9cj"],
+    ["sharp", "GHSA-rgj7-g3m4-5g8c"],
+    ["sharp", "GHSA-wq5f-xc86-pv6w"],
+    ["braces", "GHSA-vfj7-8cjw-p6xm"],
+  ])("rejects the retired %s exception %s if it is reported again", (name, id) => {
     const result = evaluateAudit({
-      vulnerabilities: {
-        braces: {
-          severity: "high",
-          via: [advisory("GHSA-vfj7-8cjw-p6xm")],
-        },
-      },
+      vulnerabilities: { [name]: { severity: "high", via: [advisory(id)] } },
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.failures).toEqual([]);
-    expect(result.allowed.map(({ name }) => name)).toEqual(["braces"]);
+    expect(result.ok).toBe(false);
+    expect(result.allowed).toEqual([]);
+    expect(result.failures[0].advisories[0].id).toBe(id);
   });
 
   it("fails when a package mixes allowlisted and unlisted advisories", () => {

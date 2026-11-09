@@ -6,39 +6,13 @@ import { execFileSync } from "node:child_process";
  * Fails on any high/critical advisory that is not allowlisted below. The
  * allowlist exists for advisories whose only fix is a breaking upgrade tracked
  * separately, each with the reason its attack surface is not exercised here.
- * For Astro those surfaces (View Transition directives, spread attribute
- * names, the Sharp asset pipeline) are not exercised by this codebase. The
- * Cloudflare adapter is explicitly pinned to its Cloudflare Images binding,
- * and the app does not use `astro:assets`.
- * Remove the entries when Astro 7 lands — a stale entry costs nothing, a
- * missing one fails the build loudly.
+ * Remove an entry as soon as its fix lands, so a regression fails loudly.
+ *
+ * Empty since 2026-11-09. Astro 7.3 and Sharp 0.35.5 patch the earlier Astro
+ * and Sharp exceptions, and GitHub withdrew the braces advisory
+ * (GHSA-vfj7-8cjw-p6xm) on 2026-10-23.
  */
-export const ALLOWLISTED_ADVISORIES = new Set([
-  // No patched braces release exists. The only installed path is the dev-only
-  // eslint-plugin-astro -> astro-eslint-parser globbing stack, which receives
-  // repository-controlled paths rather than untrusted network patterns.
-  // Remove this when braces publishes a fix or the separately reviewed
-  // eslint-plugin-astro 3 migration removes fast-glob from the parser.
-  "GHSA-vfj7-8cjw-p6xm",
-  // Astro XSS advisories fixed only in astro@7 (major); View Transitions and
-  // spread-attribute rendering are unused here.
-  "GHSA-4g3v-8h47-v7g6",
-  "GHSA-f48w-9m4c-m7f5",
-  "GHSA-7pw4-f3q4-r2p2",
-  // Requires a configured non-root base. TTV uses Astro's default root base.
-  "GHSA-376h-93r7-7g6f",
-  // Requires an untrusted AVIF to reach Sharp. TTV has no Astro asset calls,
-  // and the adapter is pinned to Cloudflare Images.
-  "GHSA-26w7-cxv4-gfx2",
-  // Sharp (transitive via Astro's unused asset pipeline); fixes ship with the
-  // same Astro major. Runtime images use Cloudflare Images instead.
-  "GHSA-f88m-g3jw-g9cj",
-  "GHSA-rgj7-g3m4-5g8c",
-  // Sharp's librsvg fix requires sharp@0.35.5, outside Astro 6's ^0.34.0
-  // range. TTV does not use astro:assets, and the adapter routes runtime image
-  // processing through the Cloudflare Images binding. Remove with Astro 7.
-  "GHSA-wq5f-xc86-pv6w",
-]);
+export const ALLOWLISTED_ADVISORIES = new Set();
 
 const FAILING_SEVERITIES = new Set(["high", "critical"]);
 
