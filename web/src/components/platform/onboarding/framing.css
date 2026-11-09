@@ -191,11 +191,6 @@
   cursor: pointer;
 }
 
-.onboarding-switch:focus-visible {
-  outline: 2px solid var(--color-peach-ink);
-  outline-offset: 2px;
-}
-
 .onboarding-switch__track {
   position: relative;
   width: 3.25rem;

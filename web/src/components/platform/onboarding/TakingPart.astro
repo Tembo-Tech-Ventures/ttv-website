@@ -12,6 +12,7 @@
 import { PiHourglassMedium, PiInfo } from "react-icons/pi";
 import type { AccessRequestSummary, AccessRole } from "@/lib/platform/contracts";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 import { CHIP_TONES, type ChipTone } from "@/components/platform/ui/tones";
 import { formatMomentDate } from "@/lib/display-date";
 import {
@@ -80,7 +81,7 @@ const named = (visible: string, role: AccessRole) => `${visible}: ${TAKING_PART.
         <input type="hidden" name={ACTION_FIELD} value="member" />
         <input type="hidden" name="value" value={member ? "off" : "on"} />
         <input type="hidden" name={RETURN_FIELD} value={ACCOUNT_PATH} />
-        <button type="submit" role="switch" aria-checked={member ? "true" : "false"} aria-labelledby="taking-part-member" class="onboarding-switch">
+        <button type="submit" role="switch" aria-checked={member ? "true" : "false"} aria-labelledby="taking-part-member" class:list={["onboarding-switch", FOCUS_RING]}>
           <span aria-hidden="true" class="onboarding-switch__track"><span class="onboarding-switch__knob"></span></span>
         </button>
       </form>
