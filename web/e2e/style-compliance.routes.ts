@@ -62,7 +62,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/cohort/sessions/[id]", persona: "student", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions") } },
   { path: "/dashboard/cohort/ask", persona: "student", namedH1: true, pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Ask Tembo, #403") } },
   { path: "/dashboard/cohort/apply", persona: "community", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Apply, M11") } },
-  { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ }, pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Application, #405") } },
+  { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ } },
   { path: "/dashboard/cohort/c/[slug]", persona: "student", namedH1: true, detail: { from: "/dashboard/cohort", link: ID("/dashboard/cohort/c") } },
 
   // Community

@@ -139,3 +139,4 @@ has a clear contract. Before merging one:
 | `src/components/common/legacy-ui.test.ts` | Nothing new uses the older parts |
 | `e2e/style-guide.spec.ts` | axe at WCAG 2.2 AA, no sideways scroll from 320px, tab geometry, keyboard, no-JS, the live demonstrations, reduced motion |
 | `e2e/platform-ui.spec.ts` | The primitives harness: geometry, contrast, focus, touch targets, reduced motion |
+| `e2e/style-compliance.spec.ts` | Every signed-in route (`style-compliance.routes.ts`), as the person it is for: one h1 in the display face, at most one peach action, every control from the kit, axe WCAG 2.2 AA at 1440 and 320, 44px targets on a phone, no sideways scroll at 320. A route's `pending` checks are skipped, and against the local seed a pending check that passes fails, so delete it |
