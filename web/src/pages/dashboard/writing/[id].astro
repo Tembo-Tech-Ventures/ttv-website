@@ -90,6 +90,7 @@ const draft = {
   <PlainPostForm
     draft={draft}
     status={post.status}
+    saved
     error={result && !result.success
       ? (result.error ?? result.slugError ?? null)
       : null}

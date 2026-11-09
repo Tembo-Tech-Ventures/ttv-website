@@ -58,6 +58,8 @@ async function countScrollableRegions(page: Page) {
 
 async function open(page: Page, state: "empty" | "draft" | "published") {
   await page.goto(`/dev/writing-ui?state=${state}`);
+  // The canvas is on the page before the editor behind it has hydrated, and keys typed into it then are lost.
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Post settings" })).toBeVisible();
   await expect(page.locator("[data-post-body]")).toBeVisible();
   if (state !== "empty") {
@@ -243,7 +245,11 @@ test.describe("the writing surface", () => {
   }, testInfo) => {
     await open(page, "draft");
 
-    await page.getByRole("button", { name: "Edit Markdown" }).click();
+    // One toggle, pressed while the Markdown is showing.
+    const asMarkdown = page.getByRole("button", { name: "Edit as Markdown" });
+    await expect(asMarkdown).toHaveAttribute("aria-pressed", "false");
+    await asMarkdown.click();
+    await expect(asMarkdown).toHaveAttribute("aria-pressed", "true");
     const markdown = page.getByLabel("Post body, as Markdown");
     await expect(markdown).toBeVisible();
     const source = await markdown.inputValue();
@@ -252,7 +258,7 @@ test.describe("the writing surface", () => {
     await shoot(page, testInfo, "markdown");
 
     await markdown.fill(`${source}\n\n## Added by hand`);
-    await page.getByRole("button", { name: "Edit formatted" }).click();
+    await asMarkdown.click();
 
     // The rich editor re-reads the Markdown on the way back. Without that it
     // would return holding the document it had before the switch and silently
@@ -267,7 +273,10 @@ test.describe("the writing surface", () => {
 
     const publish = page.getByRole("button", { name: "Publish" }).first();
     await expect(publish).toBeDisabled();
-    await expect(publish).toHaveAttribute("title", /Add a title/);
+    // Why, in words beside it, not in a title only a mouse can reach.
+    const why = page.locator("#post-publish-hint");
+    await expect(why).toContainText("To publish: add a title");
+    await expect(publish).toHaveAttribute("aria-describedby", "post-publish-hint");
   });
 
   test("reports where the post stands rather than what the save is doing", async ({
@@ -276,7 +285,7 @@ test.describe("the writing surface", () => {
     await open(page, "published");
     // A save indicator reading "Draft" on a published post says the opposite of
     // the truth, which is why the two are separate.
-    await expect(page.getByText("Live", { exact: true })).toBeVisible();
+    await expect(page.getByText("Published", { exact: true })).toBeVisible();
     await expect(page.getByText("Draft", { exact: true })).toHaveCount(0);
   });
 });

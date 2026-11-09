@@ -37,6 +37,27 @@ display moment: the conversation is. Its sections, such as the habits on a
 first visit, are Maven h2s as on any page. (Decision D3, 2026-11-08;
 `ChannelHeader` and `ConversationHeader`.)
 
+## The immersive editor
+
+Writing a post gives the whole screen to the post (`/dashboard/me/writing/new`,
+`/dashboard/me/writing/[id]`). It is the one signed-in page outside the spaces
+frame, and it keeps these rules instead (decision D4, 2026-11-08):
+
+- `ImmersiveLayout` with `space="profile"`: no tabs or sidebar, but the
+  viewport in the Profile sheet's tone, so the author is still in their space.
+- One thin bar: a ghost `ButtonLink` back to Writing, the post's
+  `StatusChip`, the save state, and `IconButton`s, with `Publish` as the one
+  primary. On a phone the bar keeps its 44px targets by moving "Send feedback"
+  into the settings panel, and a draft's chip with it.
+- A named h1 ("New post", "Edit post"), visually hidden: the title the author
+  types is the page's real heading, set in Mattone in the canvas.
+- Why `Publish` is off is written beside it ("To publish: add a title") and
+  tied to the button with `aria-describedby`, never only in a `title`.
+- Formatting and the block menu are `IconButton`s; settings open in a panel
+  built from kit fields, never a modal that hides the post.
+- Without JavaScript, a plain kit form replaces the canvas, with the same
+  actions and a `ConfirmStep` before a draft is deleted.
+
 ## Forms
 
 Server-rendered forms that post (`<form method="POST">`, handled in the

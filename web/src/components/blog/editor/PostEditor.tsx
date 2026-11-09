@@ -435,8 +435,8 @@ function TopBar({
         <span className="sr-only sm:not-sr-only">Writing</span>
       </ButtonLink>
 
-      {/* Where the post stands is in the settings panel too; on a phone the bar keeps its room for actions. */}
-      <span className="hidden sm:inline-flex">
+      {/* A draft's phone bar keeps its room for Publish; the panel says where it stands. */}
+      <span className={status === "DRAFT" ? "hidden sm:inline-flex" : "inline-flex"}>
         <StatusChip domain="profile" status={status} />
       </span>
       <SaveIndicator label={saveLabel} state={saveState} />

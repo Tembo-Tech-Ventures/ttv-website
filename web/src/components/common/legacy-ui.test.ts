@@ -29,7 +29,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "the form-control utility": {
     pattern: /\bform-control\b/,
     files: [
-    "components/blog/editor/PlainPostForm.astro",
     ],
   },
 };
