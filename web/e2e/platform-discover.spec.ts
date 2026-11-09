@@ -14,9 +14,9 @@ const EVIDENCE_DIR = "test-results/evidence/platform-discover";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
 const PATH = "/dashboard/discover";
-// Lookup lists saved community profiles only: locally the seeded alumna, on a preview the staging
-// persona otherMember (Fictional Brian Otieno), the one persona with a saved profile.
-const MEMBER = PREVIEW ? "Brian" : "Achieng";
+// Lookup lists saved community profiles only: locally the seeded alumna, on an agent preview Amina
+// Fixture, whose profile agent-preview-auth.mjs saves for the institution persona to find.
+const MEMBER = PREVIEW ? "Amina" : "Achieng";
 
 const main = (page: Page) => page.locator("#spaces-main");
 const evidence = (name: string) => `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
