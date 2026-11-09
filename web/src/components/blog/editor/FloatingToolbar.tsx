@@ -37,6 +37,7 @@ import {
   PiTextStrikethroughBold,
   PiXBold,
 } from "react-icons/pi";
+import { Button, FOCUS_RING, IconButton, cx } from "@/components/platform/ui";
 import { $blockTypeOfSelection, setBlockType, type BlockType } from "./blocks";
 
 /** Gap between the selection and the toolbar sitting above it. */
@@ -222,7 +223,7 @@ export default function FloatingToolbar({ anchorRef }: FloatingToolbarProps) {
     >
       {/* `max-w` and wrapping so a phone gets two rows rather than a toolbar
           running off both sides of the screen. */}
-      <div className="flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-0.5 rounded-3xl border border-rule bg-dark/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+      <div className="flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-0.5 rounded-2xl border border-hairline bg-ground/95 p-1 shadow-2xl shadow-ground/60 backdrop-blur">
         {linkDraft === null ? (
           <>
             <FormatButton
@@ -320,7 +321,7 @@ export default function FloatingToolbar({ anchorRef }: FloatingToolbarProps) {
               value={linkDraft}
               aria-label="Link URL"
               placeholder="https://example.com"
-              className="w-56 bg-transparent px-1 py-1 text-sm text-ink-primary outline-none placeholder:text-ink-muted"
+              className={cx("w-56 rounded-md bg-transparent px-1 py-1 text-sm text-ink-primary placeholder:text-ink-muted pointer-coarse:min-h-11", FOCUS_RING)}
               onChange={(event) => setLinkDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
@@ -332,23 +333,19 @@ export default function FloatingToolbar({ anchorRef }: FloatingToolbarProps) {
               // The input is the one control here that must take focus.
               onMouseDown={(event) => event.stopPropagation()}
             />
-            <button
-              type="submit"
-              className="rounded-full px-3 py-1 text-sm font-medium text-primary hover:bg-primary/15"
-            >
+            <Button type="submit" variant="ghost" size="sm">
               {linkDraft.trim() === "" ? "Remove" : "Apply"}
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel link"
-              className="rounded-full p-1.5 text-ink-muted hover:bg-white/10 hover:text-ink-primary"
+            </Button>
+            <IconButton
+              label="Cancel link"
+              icon={<PiXBold />}
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setLinkDraft(null);
                 editor.focus();
               }}
-            >
-              <PiXBold />
-            </button>
+            />
           </form>
         )}
       </div>
@@ -357,7 +354,7 @@ export default function FloatingToolbar({ anchorRef }: FloatingToolbarProps) {
 }
 
 function Divider() {
-  return <span className="mx-1 h-5 w-px bg-rule" aria-hidden />;
+  return <span className="mx-1 h-5 w-px bg-hairline" aria-hidden />;
 }
 
 interface FormatButtonProps {
@@ -376,21 +373,15 @@ function FormatButton({
   children,
 }: FormatButtonProps) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={active}
-      title={shortcut ? `${label} (${shortcut})` : label}
+    <IconButton
+      label={label}
+      detail={shortcut}
+      icon={children}
+      variant="ghost"
+      size="sm"
+      pressed={active}
       onClick={onPress}
-      className={[
-        "flex h-8 w-8 items-center justify-center rounded-full text-base transition-colors",
-        active
-          ? "bg-primary text-dark"
-          : "text-ink-secondary hover:bg-white/10 hover:text-ink-primary",
-      ].join(" ")}
-    >
-      {children}
-    </button>
+    />
   );
 }
 

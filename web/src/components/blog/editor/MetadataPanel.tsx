@@ -8,14 +8,19 @@
  * check — the top bar carries the status on its own.
  */
 import React, { useId, useState } from "react";
+import { PiArrowSquareOutBold, PiChatTeardropTextBold, PiClockBold, PiTrashBold, PiXBold } from "react-icons/pi";
 import {
-  PiArrowSquareOutBold,
-  PiClockBold,
-  PiGlobeBold,
-  PiTrashBold,
-  PiWarningCircleBold,
-  PiXBold,
-} from "react-icons/pi";
+  Button,
+  DescriptionItem,
+  DescriptionList,
+  HINT,
+  IconButton,
+  Notice,
+  PrefixField,
+  TextAreaField,
+  linkClass,
+} from "@/components/platform/ui";
+import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { MAX_EXCERPT_LENGTH } from "@/lib/blog/post";
 import { postPath } from "@/lib/blog/feed";
 import type { PostDraft } from "./editor-state";
@@ -73,7 +78,7 @@ export default function MetadataPanel({
         // survives closing the panel, and the slide reads as the same panel
         // returning rather than a new one appearing.
         "absolute right-3 top-3 bottom-3 z-40 flex w-[min(22rem,calc(100%-1.5rem))] flex-col",
-        "rounded-2xl border border-rule bg-dark/90 shadow-2xl shadow-black/50 backdrop-blur-xl",
+        "rounded-2xl border border-hairline bg-ground/95 shadow-2xl shadow-ground/60 backdrop-blur-xl",
         "transition-[transform,visibility] duration-200 ease-out",
         // `visibility` rather than a conditional render or `aria-hidden`: it
         // takes the closed panel out of the tab order and the accessibility
@@ -83,18 +88,9 @@ export default function MetadataPanel({
         open ? "visible translate-x-0" : "invisible translate-x-[calc(100%+1rem)]",
       ].join(" ")}
     >
-      <header className="flex items-center justify-between border-b border-rule px-5 py-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-          Post settings
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close post settings"
-          className="rounded-full p-1.5 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink-primary"
-        >
-          <PiXBold />
-        </button>
+      <header className="flex items-center justify-between gap-3 border-b border-hairline py-3 pr-3 pl-5">
+        <h2 className="m-0 text-lg leading-snug text-ink-primary">Post settings</h2>
+        <IconButton label="Close post settings" icon={<PiXBold />} variant="ghost" onClick={onClose} />
       </header>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
@@ -115,10 +111,10 @@ export default function MetadataPanel({
           onChange={(value) => onChange({ excerpt: value })}
         />
 
-        <section className="grid grid-cols-2 gap-3">
-          <Stat label="Words" value={words.toLocaleString("en-US")} />
-          <Stat label="Read time" value={`${readingMinutes} min`} />
-        </section>
+        <DescriptionList>
+          <DescriptionItem term="Words">{words.toLocaleString("en-US")}</DescriptionItem>
+          <DescriptionItem term="Read time">{readingMinutes} min</DescriptionItem>
+        </DescriptionList>
 
         <PublishingSection
           status={status}
@@ -129,19 +125,15 @@ export default function MetadataPanel({
         />
 
         {canDelete && <DeleteDraft onDelete={onDelete} />}
+
+        {/* On a phone the top bar has no room for it, so it lives here. */}
+        <div className="sm:hidden">
+          <Button variant="ghost" icon={<PiChatTeardropTextBold />} onClick={openFeedbackWidget}>
+            Send feedback
+          </Button>
+        </div>
       </div>
     </aside>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-rule bg-white/[0.03] px-3 py-2">
-      <p className="text-xs uppercase tracking-wider text-ink-muted">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums text-ink-primary">
-        {value}
-      </p>
-    </div>
   );
 }
 
@@ -173,43 +165,20 @@ function SlugField({
         : "Lowercase letters, numbers and hyphens.";
 
   return (
-    <section className="space-y-2">
-      <label
-        htmlFor={id}
-        className="block text-xs font-semibold uppercase tracking-wider text-ink-muted"
-      >
-        Address
-      </label>
-      <div
-        className={[
-          "flex items-center rounded-lg border bg-dark/60 px-3 py-2 focus-within:border-primary",
-          error ? "border-red-500" : "border-teal",
-        ].join(" ")}
-      >
-        <span className="shrink-0 text-sm text-ink-muted">
-          /blog/{handle ?? "you"}/
-        </span>
-        <input
-          id={id}
-          value={value}
-          placeholder={derived || "your-post"}
-          maxLength={80}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          onChange={(event) => onChange(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted/70"
-        />
-      </div>
-      {error ? (
-        <p className="flex items-start gap-1.5 text-sm text-red-400">
-          <PiWarningCircleBold className="mt-0.5 shrink-0" aria-hidden />
-          {error}
-        </p>
-      ) : (
-        <p className="text-xs text-ink-muted">{hint}</p>
-      )}
-    </section>
+    <PrefixField
+      id={id}
+      label="Address"
+      prefix={`/blog/${handle ?? "you"}/`}
+      value={value}
+      placeholder={derived || "your-post"}
+      maxLength={80}
+      spellCheck={false}
+      autoCapitalize="off"
+      autoCorrect="off"
+      onChange={(event) => onChange(event.target.value)}
+      hint={error ? undefined : hint}
+      error={error ?? undefined}
+    />
   );
 }
 
@@ -224,40 +193,19 @@ function ExcerptField({ id, value, derived, onChange }: ExcerptFieldProps) {
   const remaining = MAX_EXCERPT_LENGTH - value.length;
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-baseline justify-between">
-        <label
-          htmlFor={id}
-          className="text-xs font-semibold uppercase tracking-wider text-ink-muted"
-        >
-          Excerpt
-        </label>
-        <span
-          className={[
-            "text-xs tabular-nums",
-            remaining < 40 ? "text-accent-bright" : "text-ink-muted",
-          ].join(" ")}
-        >
-          {value.length}/{MAX_EXCERPT_LENGTH}
-        </span>
-      </div>
-      <textarea
-        id={id}
-        rows={4}
-        maxLength={MAX_EXCERPT_LENGTH}
-        value={value}
-        // The derived excerpt as the placeholder, so leaving this blank shows
-        // what will be published rather than nothing at all.
-        placeholder={derived || "A line or two for the blog index."}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full resize-none rounded-lg border border-teal bg-dark/60 px-3 py-2 text-sm leading-relaxed text-ink-primary outline-none focus:border-primary placeholder:text-ink-muted/70"
-      />
-      <p className="text-xs text-ink-muted">
-        {value.trim() === ""
-          ? "Left blank, the opening of your post is used."
-          : "Shown on the blog index and in link previews."}
-      </p>
-    </section>
+    <TextAreaField
+      id={id}
+      label="Excerpt"
+      optional
+      rows={4}
+      maxLength={MAX_EXCERPT_LENGTH}
+      value={value}
+      // The derived excerpt as the placeholder, so leaving this blank shows
+      // what will be published rather than nothing at all.
+      placeholder={derived || "A line or two for the blog index."}
+      onChange={(event) => onChange(event.target.value)}
+      hint={`${value.trim() === "" ? "Left blank, the opening of your post is used." : "Shown on the blog index and in link previews."} ${value.length} of ${MAX_EXCERPT_LENGTH} characters, ${remaining} left.`}
+    />
   );
 }
 
@@ -277,34 +225,23 @@ function PublishingSection({
   actions,
 }: PublishingSectionProps) {
   return (
-    <section className="space-y-2 border-t border-rule pt-5">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
-        Publishing
-      </h3>
+    <section aria-labelledby="post-publishing" className="flex flex-col gap-2 border-t border-hairline pt-5">
+      <h3 id="post-publishing" className="m-0 text-base leading-snug text-ink-primary">Publishing</h3>
       {path && status === "PUBLISHED" ? (
-        <a
-          href={path}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 text-sm text-primary hover:underline"
-        >
-          <PiGlobeBold className="shrink-0" aria-hidden />
+        <a href={path} target="_blank" rel="noopener noreferrer" className={linkClass("inline-flex min-w-0 items-center gap-2 self-start text-sm")}>
           <span className="truncate">{path}</span>
           <PiArrowSquareOutBold className="shrink-0" aria-hidden />
+          <span className="sr-only">(opens in a new tab)</span>
         </a>
       ) : (
-        <p className="text-sm text-ink-secondary">
-          {status === "SUSPENDED"
-            ? "This post has been taken down by an admin."
-            : "Not published yet — only you can see this."}
+        <p className="m-0 text-sm text-ink-secondary">
+          {status === "SUSPENDED" ? "An admin has taken this post down." : "Not published yet: only you can see it."}
         </p>
       )}
       {(updatedLabel || publishedLabel) && (
-        <p className="flex items-center gap-2 text-xs text-ink-muted">
+        <p className={`m-0 flex items-center gap-2 ${HINT}`}>
           <PiClockBold className="shrink-0" aria-hidden />
-          {publishedLabel
-            ? `Published ${publishedLabel}`
-            : `Last saved ${updatedLabel}`}
+          {publishedLabel ? `Published ${publishedLabel}` : `Last saved ${updatedLabel}`}
         </p>
       )}
       <div className="pt-1">{actions}</div>
@@ -321,38 +258,24 @@ function DeleteDraft({ onDelete }: { onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="border-t border-rule pt-5">
+    <section className="border-t border-hairline pt-5">
       {confirming ? (
-        <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-          <p className="text-sm text-red-200">
-            Delete this draft? This cannot be undone.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onDelete}
-              className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-400"
-            >
-              Delete draft
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              className="rounded-md px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:text-ink-primary"
-            >
-              Keep it
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="flex items-center gap-2 text-sm text-ink-muted transition-colors hover:text-red-400"
+        <Notice
+          tone="warning"
+          title="Delete this draft?"
+          actions={
+            <>
+              <Button variant="danger" size="sm" onClick={onDelete}>Delete draft</Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>Keep it</Button>
+            </>
+          }
         >
-          <PiTrashBold aria-hidden />
+          It can't be brought back.
+        </Notice>
+      ) : (
+        <Button variant="ghost" icon={<PiTrashBold />} onClick={() => setConfirming(true)}>
           Delete draft
-        </button>
+        </Button>
       )}
     </section>
   );

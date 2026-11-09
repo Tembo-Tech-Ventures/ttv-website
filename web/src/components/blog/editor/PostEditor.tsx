@@ -43,11 +43,11 @@ import {
   PiChatTeardropTextBold,
   PiCloudCheckBold,
   PiMarkdownLogoBold,
-  PiNotePencilBold,
   PiSidebarSimpleBold,
   PiSpinnerGapBold,
   PiWarningCircleBold,
 } from "react-icons/pi";
+import { Button, ButtonLink, HINT, IconButton, Notice, StatusChip, cx } from "@/components/platform/ui";
 import { estimateReadingMinutes } from "@/lib/blog/post";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { BlockInsertBar, BlockInsertGutter } from "./BlockInsertMenu";
@@ -295,6 +295,8 @@ export default function PostEditor({
 
   return (
     <div className="post-editor relative flex min-h-0 flex-1 flex-col">
+      {/* The immersive editor's h1 is named, not shown: the title the author types is the page's real heading (patterns.md). */}
+      <h1 className="sr-only">{postId === null ? "New post" : "Edit post"}</h1>
       <TopBar
         status={status}
         saveLabel={saveStatusLabel(state)}
@@ -308,10 +310,21 @@ export default function PostEditor({
         publishHint={blockers.join(" · ")}
       />
 
-      {(serverError || adminNote) && (
-        <p className="shrink-0 border-b border-red-500/30 bg-red-500/10 px-5 py-3 text-sm text-red-200">
-          {serverError ?? `Taken down by an admin: ${adminNote}`}
+      {status === "DRAFT" && editable && blockers.length > 0 && (
+        // Why Publish is off, in words beside it rather than in a tooltip only a mouse can reach.
+        <p id={PUBLISH_HINT_ID} className={`m-0 shrink-0 border-b border-hairline px-4 py-1.5 text-right ${HINT}`}>
+          To publish: {blockers.join(", ").toLowerCase()}.
         </p>
+      )}
+
+      {(serverError || adminNote) && (
+        <div className="shrink-0 px-4 pt-3">
+          {serverError ? (
+            <Notice tone="danger" focusOnLoad title="That didn't save">{serverError}</Notice>
+          ) : (
+            <Notice tone="warning" title="An admin has taken this post down">{adminNote}</Notice>
+          )}
+        </div>
       )}
 
       {/*
@@ -353,22 +366,14 @@ export default function PostEditor({
         onDelete={() => submitAction("delete")}
         actions={
           status === "PUBLISHED" ? (
-            <button
-              type="button"
-              onClick={() => submitAction("unpublish")}
-              className="w-full rounded-lg border border-teal px-4 py-2 text-sm font-medium text-ink-primary transition-colors hover:border-primary hover:text-primary"
-            >
+            <Button className="w-full" onClick={() => submitAction("unpublish")}>
               Move back to drafts
-            </button>
+            </Button>
           ) : status === "DRAFT" ? (
-            <button
-              type="button"
-              disabled={blockers.length > 0}
-              onClick={() => submitAction("publish")}
-              className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-dark transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {blockers.length > 0 ? blockers.join(" · ") : "Publish"}
-            </button>
+            // The top bar's Publish is the page's one primary; this one is quiet.
+            <Button className="w-full" disabled={blockers.length > 0} aria-describedby={blockers.length > 0 ? PUBLISH_HINT_ID : undefined} onClick={() => submitAction("publish")}>
+              Publish
+            </Button>
             ) : null
           }
         />
@@ -425,123 +430,57 @@ function TopBar({
   publishHint,
 }: TopBarProps) {
   return (
-    <header className="z-30 flex shrink-0 items-center gap-3 border-b border-rule bg-dark/40 px-4 py-2.5 backdrop-blur">
-      <a
-        href="/dashboard/writing"
-        className="flex items-center gap-2 rounded-full px-2 py-1.5 text-sm text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary"
-      >
-        <PiArrowLeftBold aria-hidden />
-        <span className="hidden sm:inline">Writing</span>
-      </a>
+    <header className="z-30 flex shrink-0 items-center gap-1.5 border-b border-hairline bg-ground/60 px-3 py-1.5 backdrop-blur sm:gap-3 sm:px-4">
+      <ButtonLink href="/dashboard/writing" variant="ghost" icon={<PiArrowLeftBold />} className="pointer-coarse:min-w-11">
+        <span className="sr-only sm:not-sr-only">Writing</span>
+      </ButtonLink>
 
-      <span className="h-5 w-px bg-rule" aria-hidden />
-
-      <StatusPill status={status} />
+      {/* A draft's phone bar keeps its room for Publish; the panel says where it stands. */}
+      <span className={status === "DRAFT" ? "hidden sm:inline-flex" : "inline-flex"}>
+        <StatusChip domain="profile" status={status} />
+      </span>
       <SaveIndicator label={saveLabel} state={saveState} />
 
-      <div className="ml-auto flex items-center gap-1.5">
-        <button
-          type="button"
+      <div className="ml-auto flex items-center gap-1">
+        <IconButton
+          label="Send feedback"
+          icon={<PiChatTeardropTextBold />}
+          variant="ghost"
           onClick={openFeedbackWidget}
-          aria-label="Send feedback"
-          title="Send feedback"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary"
-        >
-          <PiChatTeardropTextBold />
-        </button>
-
-        <button
-          type="button"
+          className="hidden sm:inline-flex"
+        />
+        <IconButton
+          label="Edit as Markdown"
+          icon={<PiMarkdownLogoBold />}
+          variant="ghost"
+          pressed={mode === "markdown"}
           onClick={onToggleMode}
-          aria-pressed={mode === "markdown"}
-          title={
-            mode === "rich"
-              ? "Edit the raw Markdown"
-              : "Back to the formatted editor"
-          }
-          className={[
-            "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
-            mode === "markdown"
-              ? "bg-primary/20 text-primary"
-              : "text-ink-secondary hover:bg-white/10 hover:text-ink-primary",
-          ].join(" ")}
-        >
-          {mode === "rich" ? <PiMarkdownLogoBold /> : <PiNotePencilBold />}
-          <span className="sr-only">
-            {mode === "rich" ? "Edit Markdown" : "Edit formatted"}
-          </span>
-        </button>
-
+        />
         {status === "DRAFT" && (
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={onPublish}
             disabled={!canPublish}
-            title={canPublish ? "Publish this post" : publishHint}
-            className={[
-              "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
-              canPublish
-                ? "bg-primary text-dark hover:bg-primary/90"
-                : // Not a faded primary: at 40% opacity the orange turns to mud
-                  // against the teal and reads as a rendering fault rather than
-                  // as a button waiting for a title.
-                  "cursor-not-allowed border border-rule text-ink-muted",
-            ].join(" ")}
+            aria-describedby={canPublish || !publishHint ? undefined : PUBLISH_HINT_ID}
           >
             Publish
-          </button>
+          </Button>
         )}
-
-        <button
-          type="button"
-          onClick={onTogglePanel}
+        <IconButton
+          label="Post settings"
+          icon={<PiSidebarSimpleBold />}
+          variant="ghost"
+          pressed={panelOpen}
           aria-expanded={panelOpen}
-          aria-label="Post settings"
-          className={[
-            "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
-            panelOpen
-              ? "bg-primary/20 text-primary"
-              : "text-ink-secondary hover:bg-white/10 hover:text-ink-primary",
-          ].join(" ")}
-        >
-          <PiSidebarSimpleBold />
-        </button>
+          onClick={onTogglePanel}
+        />
       </div>
     </header>
   );
 }
 
-const STATUS_PILL: Record<PostStatus, { label: string; className: string }> = {
-  DRAFT: {
-    label: "Draft",
-    className: "border-teal/60 bg-teal/20 text-ink-secondary",
-  },
-  PUBLISHED: {
-    label: "Live",
-    className: "border-emerald-400/40 bg-emerald-400/15 text-emerald-200",
-  },
-  SUSPENDED: {
-    label: "Suspended",
-    className: "border-red-400/40 bg-red-400/15 text-red-200",
-  },
-};
-
-/**
- * Where the post stands, which is a different question from whether the last
- * keystroke reached the server. Keeping them apart is the point: the save
- * indicator used to read "Draft" when it had nothing to say, which on a
- * published post said the opposite of the truth.
- */
-function StatusPill({ status }: { status: PostStatus }) {
-  const { label, className } = STATUS_PILL[status];
-  return (
-    <span
-      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${className}`}
-    >
-      {label}
-    </span>
-  );
-}
+/** The line that says why Publish is off, which both Publish buttons point at. */
+const PUBLISH_HINT_ID = "post-publish-hint";
 
 function SaveIndicator({
   label,
@@ -566,10 +505,7 @@ function SaveIndicator({
       // whether their work is safe should not have to watch a pixel for it.
       // `<output>` carries the status role natively.
       aria-live="polite"
-      className={[
-        "flex items-center gap-1.5 text-sm",
-        state === "error" ? "text-red-300" : "text-ink-muted",
-      ].join(" ")}
+      className={cx("flex min-w-0 items-center gap-1.5 text-sm", state === "error" ? "text-danger-ink" : "text-ink-muted")}
     >
       <Icon
         className={state === "saving" ? "animate-spin" : undefined}
@@ -616,7 +552,7 @@ function TitleField({ value, editable, onChange }: TitleFieldProps) {
           document.querySelector<HTMLElement>("[data-post-body]")?.focus();
         }
       }}
-      className="mb-7 w-full resize-none overflow-hidden bg-transparent font-heading text-[2.1rem] leading-[1.15] tracking-display text-ink-primary outline-none placeholder:text-ink-muted/45 sm:text-[2.6rem]"
+      className="mb-7 w-full resize-none overflow-hidden bg-transparent font-heading text-[2.1rem] leading-[1.15] tracking-display text-ink-primary outline-none placeholder:text-ink-muted pointer-coarse:min-h-11 sm:text-[2.6rem]"
     />
   );
 }
@@ -690,11 +626,11 @@ function RichCanvas({
             placeholder={
               !mounted ? null : (
               <div className="pointer-events-none absolute inset-x-0 top-0 select-none">
-                <p className="post-body text-ink-muted/55">Tell the story.</p>
+                <p className="post-body text-ink-muted">Tell the story.</p>
                 {/* The shortcuts are the fastest way to write in this editor
                     and the only part of it that is invisible, so the empty
                     canvas is where they are worth a line. */}
-                <p className="mt-2 text-sm text-ink-muted/40">
+                <p className={`mt-2 ${HINT}`}>
                   <span className="font-mono">##</span> makes a heading,{" "}
                   <span className="font-mono">-</span> a list,{" "}
                   <span className="font-mono">&gt;</span> a quote. Select text to
@@ -765,7 +701,7 @@ function MarkdownCanvas({
         spellCheck={false}
         placeholder="Write in Markdown…"
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-[60vh] w-full resize-none bg-transparent font-mono text-[0.95rem] leading-relaxed text-ink-primary outline-none placeholder:text-ink-muted/30"
+        className="min-h-[60vh] w-full resize-none bg-transparent font-mono text-[0.95rem] leading-relaxed text-ink-primary outline-none placeholder:text-ink-muted"
       />
     </Column>
   );

@@ -19,6 +19,7 @@ import {
   type LexicalEditor,
 } from "lexical";
 import React, { useCallback, useEffect, useState } from "react";
+import { IconButton } from "@/components/platform/ui";
 import {
   PiCheckSquareBold,
   PiCodeBold,
@@ -131,9 +132,11 @@ export function BlockInsertGutter({ anchorRef }: GutterMenuProps) {
       style={{ top, left }}
     >
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Insert block"
+        <IconButton
+          label="Insert block"
+          icon={<PiPlusBold />}
+          size="sm"
+          pressed={open}
           aria-expanded={open}
           // Pressing a control here must not take focus out of the editor: the
           // caret is the position the chosen block applies to, and a blur
@@ -144,39 +147,30 @@ export function BlockInsertGutter({ anchorRef }: GutterMenuProps) {
             setOpen((wasOpen) => !wasOpen);
             editor.focus();
           }}
-          className={[
-            "flex h-8 w-8 items-center justify-center rounded-full border border-rule text-ink-secondary transition",
-            open
-              ? "rotate-45 border-primary bg-primary text-dark"
-              : "hover:border-primary hover:text-primary",
-          ].join(" ")}
-        >
-          <PiPlusBold />
-        </button>
+          className={open ? "rotate-45" : undefined}
+        />
 
         {open && (
           <div
             role="menu"
             aria-label="Insert block"
-            className="flex items-center gap-0.5 rounded-full border border-rule bg-dark/95 p-1 shadow-2xl shadow-black/40 backdrop-blur"
+            className="flex items-center gap-0.5 rounded-xl border border-hairline bg-ground/95 p-1 shadow-2xl shadow-ground/60 backdrop-blur"
           >
             {ITEMS.map((item) => (
-              <button
+              <IconButton
                 key={item.label}
-                type="button"
                 role="menuitem"
-                aria-label={item.label}
-                title={item.label}
+                label={item.label}
+                icon={item.icon}
+                variant="ghost"
+                size="sm"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
                   item.apply(editor);
                   setOpen(false);
                   editor.focus();
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary"
-              >
-                {item.icon}
-              </button>
+              />
             ))}
           </div>
         )}
@@ -200,22 +194,21 @@ export function BlockInsertBar() {
       role="toolbar"
       aria-label="Insert block"
       tabIndex={-1}
-      className="flex items-center gap-1 overflow-x-auto border-t border-rule bg-dark/80 px-3 py-2 backdrop-blur lg:hidden"
+      className="flex items-center gap-1 overflow-x-auto border-t border-hairline bg-ground/80 px-3 py-1.5 backdrop-blur lg:hidden"
     >
       {ITEMS.map((item) => (
-        <button
+        <IconButton
           key={item.label}
-          type="button"
-          aria-label={item.label}
+          label={item.label}
+          icon={item.icon}
+          variant="ghost"
+          className="shrink-0"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             item.apply(editor);
             editor.focus();
           }}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary"
-        >
-          {item.icon}
-        </button>
+        />
       ))}
     </div>
   );

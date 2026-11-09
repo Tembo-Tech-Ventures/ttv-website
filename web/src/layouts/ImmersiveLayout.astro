@@ -20,9 +20,16 @@ import Feedback from "@/components/feedback/Feedback.astro";
 
 interface Props {
   title: string;
+  /**
+   * The space the page belongs to: the viewport takes that space's sheet tone, so the immersive editor
+   * still reads as part of Profile with its tabs out of the way (patterns.md, "Immersive editor").
+   */
+  space?: "profile";
 }
 
-const { title } = Astro.props;
+const { title, space } = Astro.props;
+// Literal classes, so Tailwind sees them.
+const SHEET = { profile: "bg-sheet-profile" } as const;
 ---
 
 <!doctype html>
@@ -38,8 +45,8 @@ const { title } = Astro.props;
     <title>{title}</title>
     {Astro.locals.user && <ClientErrorBuffer />}
   </head>
-  <body class="h-full overflow-hidden overscroll-none bg-dark">
-    <div class="immersive-viewport flex flex-col bg-gradient-to-br from-surface to-dark">
+  <body class="h-full overflow-hidden overscroll-none bg-ground">
+    <div class:list={["immersive-viewport flex flex-col", space ? SHEET[space] : "bg-ground"]}>
       {/* Children are flex items in a container of definite height: any child
           that wants to scroll needs `min-h-0 flex-1` plus `overflow-y-auto`. */}
       <slot />

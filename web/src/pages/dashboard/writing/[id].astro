@@ -71,7 +71,7 @@ const draft = {
 };
 ---
 
-<ImmersiveLayout title={`${post.title || "Untitled"} | TTV`}>
+<ImmersiveLayout title={`${post.title || "Untitled"} | TTV`} space="profile">
   <PostEditor
     client:load
     postId={post.id}
@@ -90,6 +90,7 @@ const draft = {
   <PlainPostForm
     draft={draft}
     status={post.status}
+    saved
     error={result && !result.success
       ? (result.error ?? result.slugError ?? null)
       : null}

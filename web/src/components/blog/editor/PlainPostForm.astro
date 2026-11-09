@@ -5,20 +5,40 @@
  * `PostEditor` is a client island, so with scripting off the page would
  * otherwise render an inert title box and a canvas that cannot be typed into.
  * This form replaces it: the same fields, the same action names, submitted to
- * the same handler. The `<style>` inside `<noscript>` is what hides the island —
- * it only reaches the document when scripting is off, which makes it the one
- * mechanism that cannot get the two states out of step.
+ * the same handler, on the kit. The `<style>` inside `<noscript>` is what hides
+ * the island — it only reaches the document when scripting is off, which makes
+ * it the one mechanism that cannot get the two states out of step.
+ *
+ * Deleting a draft is a step of its own (`?confirm=delete`, then a ConfirmStep
+ * that posts), never a single press.
  */
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  ConfirmStep,
+  Notice,
+  PageTitle,
+  TextAreaField,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  withoutConfirm,
+} from "@/components/platform/ui";
 import type { PostDraft } from "./editor-state";
 
 interface Props {
   draft: PostDraft;
   status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
   error: string | null;
+  /** The post exists (not `/new`), so a draft can be deleted. */
+  saved?: boolean;
 }
 
-const { draft, status, error } = Astro.props;
+const { draft, status, error, saved = false } = Astro.props;
 const editable = status !== "SUSPENDED";
+const canDelete = saved && status === "DRAFT";
+const deleting = canDelete && confirmingAction(Astro.url, ["delete"] as const) === "delete";
 ---
 
 <noscript>
@@ -29,139 +49,88 @@ const editable = status !== "SUSPENDED";
   </style>
 
   <div class="min-h-0 flex-1 overflow-y-auto">
-    <div class="mx-auto w-full max-w-[44rem] space-y-5 px-5 py-10">
-      <a
-        href="/dashboard/writing"
-        class="text-sm text-ink-secondary underline hover:text-ink-primary"
-      >
-        &larr; Back to Writing
-      </a>
+    <div class="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-5 py-8">
+      <BackLink href="/dashboard/writing">Writing</BackLink>
 
-      <h1 class="font-heading text-3xl tracking-display text-ink-primary">
-        {editable ? "Edit post" : "Post suspended"}
-      </h1>
+      <PageTitle>{editable ? (saved ? "Edit post" : "New post") : "Post taken down"}</PageTitle>
 
-      {
-        error && (
-          <p class="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {error}
-          </p>
-        )
-      }
+      {error && <Notice tone="danger" title="That didn't save">{error}</Notice>}
 
       {
         editable && (
-          <form method="POST" class="space-y-4">
-            <div class="flex flex-col gap-1.5">
-              <label for="plain-title" class="text-sm font-medium">Title</label>
-              <input
-                id="plain-title"
-                name="title"
-                type="text"
-                required
-                maxlength="200"
-                value={draft.title}
-                class="form-control"
-              />
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label for="plain-slug" class="text-sm font-medium">Slug</label>
-              <input
-                id="plain-slug"
-                name="slug"
-                type="text"
-                maxlength="80"
-                value={draft.slug}
-                placeholder="auto-generated-from-title"
-                class="form-control"
-              />
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label for="plain-body" class="text-sm font-medium">
-                Content (Markdown)
-              </label>
-              <textarea
-                id="plain-body"
-                name="contentMarkdown"
-                required
-                rows="18"
-                maxlength="40000"
-                class="form-control font-mono text-sm">{draft.contentMarkdown}</textarea
-              >
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label for="plain-excerpt" class="text-sm font-medium">Excerpt</label>
-              <textarea
-                id="plain-excerpt"
-                name="excerpt"
-                rows="2"
-                maxlength="300"
-                class="form-control">{draft.excerpt}</textarea
-              >
-            </div>
+          <form method="POST" class="flex flex-col gap-5">
+            <TextField id="plain-title" label="Title" name="title" required maxLength={200} defaultValue={draft.title} />
+            <TextField
+              id="plain-slug"
+              label="Address"
+              name="slug"
+              optional
+              maxLength={80}
+              defaultValue={draft.slug}
+              hint="Taken from the title when left blank. Lowercase letters, numbers and hyphens."
+            />
+            <TextAreaField
+              id="plain-body"
+              label="Post"
+              name="contentMarkdown"
+              required
+              rows={18}
+              maxLength={40000}
+              defaultValue={draft.contentMarkdown}
+              hint="Markdown: ## makes a heading, - a list, > a quote."
+            />
+            <TextAreaField
+              id="plain-excerpt"
+              label="Excerpt"
+              name="excerpt"
+              optional
+              rows={2}
+              maxLength={300}
+              defaultValue={draft.excerpt}
+              hint="Left blank, the opening of your post is used."
+            />
 
             <div class="flex flex-wrap gap-3">
-              <button
-                type="submit"
-                name="_action"
-                value="save"
-                class="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark"
-              >
-                Save
-              </button>
-              {
-                status === "DRAFT" && (
-                  <button
-                    type="submit"
-                    name="_action"
-                    value="publish"
-                    class="rounded-md border border-teal px-4 py-2 text-sm font-medium"
-                  >
-                    Save and publish
-                  </button>
-                )
-              }
-              {
-                status === "PUBLISHED" && (
-                  <button
-                    type="submit"
-                    name="_action"
-                    value="unpublish"
-                    class="rounded-md border border-teal px-4 py-2 text-sm font-medium"
-                  >
-                    Move back to drafts
-                  </button>
-                )
-              }
+              {status === "DRAFT" ? (
+                <>
+                  {/* Save comes first: Enter in a field submits the form's first button, and that must never publish. */}
+                  <Button type="submit" name="_action" value="save">Save draft</Button>
+                  <Button type="submit" name="_action" value="publish" variant="primary">Save and publish</Button>
+                </>
+              ) : (
+                <>
+                  <Button type="submit" name="_action" value="save" variant="primary">Save changes</Button>
+                  <Button type="submit" name="_action" value="unpublish">Move back to drafts</Button>
+                </>
+              )}
             </div>
           </form>
         )
       }
 
       {
-        status === "DRAFT" && (
-          <form method="POST">
-            <button
-              type="submit"
-              name="_action"
-              value="delete"
-              class="text-sm text-ink-muted underline"
+        canDelete &&
+          (deleting ? (
+            <ConfirmStep
+              title="Delete this draft?"
+              confirmLabel="Delete draft"
+              cancelHref={withoutConfirm(Astro.url)}
+              fields={{ _action: "delete" }}
             >
-              Delete draft
-            </button>
-          </form>
-        )
+              It can't be brought back.
+            </ConfirmStep>
+          ) : (
+            <div>
+              <ButtonLink href={confirmHref(Astro.url, "delete")} variant="ghost">Delete draft</ButtonLink>
+            </div>
+          ))
       }
 
       {
         !editable && (
-          <p class="text-ink-secondary">
-            An admin has taken this post down. Contact the TTV team for next
-            steps.
-          </p>
+          <Notice tone="warning" title="An admin has taken this post down">
+            Write to the TTV team through Feedback for next steps.
+          </Notice>
         )
       }
     </div>
