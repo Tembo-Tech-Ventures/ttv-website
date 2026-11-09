@@ -3,9 +3,6 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: ".",
   testMatch: [
-    "community-assessment.spec.ts",
-    "community-workspace.spec.ts",
-    "staging-community-journey.spec.mjs",
     "feedback-error.spec.ts",
     "community-entry.spec.ts",
     "community-audience.spec.ts",

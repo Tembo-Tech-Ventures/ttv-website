@@ -29,7 +29,7 @@ The entire application lives inside the `web/` directory as a single Astro proje
 | ORM | Drizzle ORM |
 | Authentication | better-auth (GitHub OAuth) |
 | File Storage | Cloudflare R2 |
-| Icons | Phosphor Icons, react-icons |
+| Icons | Phosphor icons through react-icons (`react-icons/pi`) |
 | ID Generation | CUID2 |
 | Deployment | Cloudflare Workers |
 | CI/CD | GitHub Actions |

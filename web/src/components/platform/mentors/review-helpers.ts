@@ -1,6 +1,6 @@
 /**
- * What a mentor's confirmation must say, and how its evidence links are shown: shared by the Confirm work
- * page (confirm-state.ts, ConfirmWork.astro) and the older MentorReview island, so the two can't drift.
+ * What a mentor's confirmation must say, and how its evidence links are shown, for the Confirm work page
+ * (confirm-state.ts, ConfirmWork.astro).
  */
 export function validateMentorNote(note: string): string | null {
   const text = note.trim();

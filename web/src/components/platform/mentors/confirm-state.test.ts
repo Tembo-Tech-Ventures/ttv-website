@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readConfirmPost, runConfirmPost, splitContributions } from "./confirm-state";
-import type { MentorReviewRequest } from "@/components/community/MentorReview";
+import type { MentorReviewRequest } from "@/components/community/community-types";
 
 const form = (fields: Record<string, string>) => {
   const data = new FormData();

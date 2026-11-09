@@ -78,12 +78,13 @@ describe("the four space homes", () => {
   const page = (name: string) => readFileSync(join(process.cwd(), "src/pages/dashboard", `${name}.astro`), "utf8");
 
   it.each([
-    ["index", "</section>"],
+    ["index", "<ButtonLink variant=\"primary\""],
     ["mentorship", "<MentoringOverview"],
-    ["community", "<CommunityApp"],
-    ["discover", "<CommunityApp"],
+    ["community", "<PageHeader"],
+    ["discover", "<PageHeader"],
   ])("%s places the card after the part that holds its title and primary", (name, before) => {
     const source = page(name);
+    expect(source.indexOf(before), `${name} has ${before}`).toBeGreaterThan(-1);
     expect(source.indexOf("<OnboardingPrompt")).toBeGreaterThan(source.indexOf(before));
     expect(source).not.toMatch(/ExistingAccountCard/);
   });

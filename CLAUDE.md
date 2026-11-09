@@ -31,7 +31,7 @@ npm test                      # Run Vitest tests
 - **Styling**: Tailwind CSS 4 with custom theme in `src/styles/global.css`. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
 - **Fonts**: Mattone Black (the h1 by default, and the public site's display h2s through `font-display`; self-hosted from `src/assets/fonts/`, OFL 1.1), Maven Pro (body and h2-h6, also self-hosted there, OFL 1.1; layouts preload it with `FontPreload`). No third-party font origin. Display tracking comes from the `--tracking-display` / `--tracking-heading` / `--tracking-subhead` theme tokens — use `tracking-*` utilities, not inline `letter-spacing`.
 - **Database**: Drizzle ORM + SQLite via Cloudflare D1. Schema in `src/lib/db/schema.ts`.
-- **Icons**: Phosphor Icons (`@phosphor-icons/react`) for homepage, react-icons (`react-icons/pi`) for admin/dashboard shells
+- **Icons**: Phosphor icons through `react-icons/pi`
 
 ## Authentication
 
