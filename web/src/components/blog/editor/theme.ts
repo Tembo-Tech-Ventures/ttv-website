@@ -8,6 +8,7 @@
  * hair of `/blog/<handle>/<slug>`.
  */
 import type { EditorThemeClasses } from "lexical";
+import { linkClass } from "@/components/platform/ui";
 
 export const POST_EDITOR_THEME: EditorThemeClasses = {
   paragraph: "post-body my-5 first:mt-0",
@@ -24,8 +25,8 @@ export const POST_EDITOR_THEME: EditorThemeClasses = {
   quote:
     "post-body my-6 border-l-2 border-primary/60 pl-5 italic text-ink-secondary",
   list: {
-    ul: "post-body my-5 list-disc pl-6 marker:text-primary/70",
-    ol: "post-body my-5 list-decimal pl-6 marker:text-primary/70",
+    ul: "post-body my-5 list-disc pl-6 marker:text-peach-ink",
+    ol: "post-body my-5 list-decimal pl-6 marker:text-peach-ink",
     listitem: "my-1.5 pl-1",
     // A list nested inside a list already has the parent's margin above it.
     nested: { listitem: "list-none" },
@@ -41,7 +42,8 @@ export const POST_EDITOR_THEME: EditorThemeClasses = {
     ],
   },
   code: "post-code-block",
-  link: "text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary",
+  // The kit's prose link, ink and its underline: peach is too dark to read on the Profile sheet.
+  link: linkClass(),
   hr: "post-hr",
   text: {
     bold: "font-semibold text-ink-primary",
