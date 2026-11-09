@@ -294,7 +294,7 @@ const draft = profile?.status === "DRAFT";
         <form id="profile-editor" method="POST" class="flex flex-col gap-5">
           <input type="hidden" name="_action" value="save" />
           <PrefixField
-            label="Handle" name="handle" prefix="/talent/" required maxLength={39} autocomplete="off" spellcheck={false}
+            label="Handle" name="handle" prefix="/talent/" required maxLength={39} autoComplete="off" spellCheck={false}
             defaultValue={values.handle} error={errors.handle}
             hint="3 to 39 characters: lowercase letters, numbers and hyphens. Your GitHub username works well."
           />
@@ -302,8 +302,8 @@ const draft = profile?.status === "DRAFT";
           <TextAreaField label="Bio" name="bio" optional rows={5} maxLength={4000} defaultValue={values.bio} error={errors.bio}
             hint="Who you are, what you've built, and what you're building next." />
           <div class="grid gap-5 sm:grid-cols-2">
-            <TextField label="City or region" name="location" optional maxLength={120} autocomplete="address-level2" defaultValue={values.location} error={errors.location} />
-            <TextField label="Country" name="country" optional maxLength={56} autocomplete="country-name" defaultValue={values.country} error={errors.country} />
+            <TextField label="City or region" name="location" optional maxLength={120} autoComplete="address-level2" defaultValue={values.location} error={errors.location} />
+            <TextField label="Country" name="country" optional maxLength={56} autoComplete="country-name" defaultValue={values.country} error={errors.country} />
           </div>
           <TextField label="Skills" name="skills" optional pattern={skillsPattern} placeholder="TypeScript, React, Python" defaultValue={values.skills} error={errors.skills}
             hint="Up to 12, separated by commas, each up to 30 characters." />
