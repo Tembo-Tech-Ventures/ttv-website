@@ -165,10 +165,10 @@ describe("Confirm work", () => {
     seeded();
     for (const path of ["/dashboard/mentoring", PATH]) {
       const { status, body } = await visit({ path, as: ADMIN });
-      expect(status, path).toBe(200);
-      expect(body, path).toMatch(/class="spaces-shell[^"]*"[^>]*data-space="admin"|data-space="admin"[^>]*class="spaces-shell/);
-      expect(main(body).querySelector("h1")?.textContent, path).toBe("Mentor review");
-      expect(card(body), path).not.toBeNull();
+      expect(status, `${path}`).toBe(200);
+      expect(body, `${path}`).toMatch(/class="spaces-shell[^"]*"[^>]*data-space="admin"|data-space="admin"[^>]*class="spaces-shell/);
+      expect(main(body).querySelector("h1")?.textContent, `${path}`).toBe("Mentor review");
+      expect(card(body), `${path}`).not.toBeNull();
     }
   });
 
