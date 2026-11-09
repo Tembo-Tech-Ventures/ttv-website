@@ -1,0 +1,189 @@
+---
+/**
+ * Confirm work, the list a mentor confirms from, on the kit (style-guide rollout M17, D5): one card per
+ * shared contribution with its evidence, its confirmation history and, while it waits for this mentor,
+ * a form to confirm it and a private "Set aside". Every action is a plain POST to the page, so all of it
+ * works without a script. No action here is the page's primary: each card has its own, and they are quiet.
+ */
+import type { MentorReviewRequest } from "@/components/community/MentorReview";
+import { evidenceDestination, safeMentorEvidenceUrl } from "@/components/community/MentorReview";
+import { awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
+import { Button, Card, EmptyState, HINT, TextAreaField, TextField, linkClass } from "@/components/platform/ui";
+import { splitContributions, type ConfirmKept } from "./confirm-state";
+
+interface Props {
+  requests: readonly MentorReviewRequest[];
+  /** What a refused confirmation keeps: the mentor's words and the error under each field. */
+  kept: ConfirmKept | null;
+}
+
+const { requests, kept } = Astro.props;
+const { listed, setAside, waiting } = splitContributions(requests);
+const role = (value: string) => (value === "MENTOR" ? "Mentor" : value === "ADMIN" ? "Administrator" : "Role not recorded");
+---
+
+<div class="flex flex-col gap-8">
+  <div class="flex max-w-prose flex-col gap-3 text-ink-secondary">
+    <p class="m-0">
+      Confirm only the contribution and evidence you checked yourself, not the whole person. Members share this
+      work so mentors can confirm the parts they've checked; nobody has sent you a review request. A Tembo answer
+      never confirms anything.
+    </p>
+    {requests.length > 0 && (
+      <p class="m-0 font-semibold text-ink-primary" data-awaiting-confirmation={waiting}>
+        {waiting > 0 ? awaitingConfirmationText(waiting) : "Nothing here is waiting for your confirmation."}
+      </p>
+    )}
+  </div>
+
+  {requests.length === 0 ? (
+    <EmptyState title="No shared contributions to review yet" headingLevel={2}>
+      When members share work with its evidence, it appears here for you to check.
+    </EmptyState>
+  ) : (
+    <ul class="m-0 flex list-none flex-col gap-5 p-0" aria-label="Shared contributions">
+      {listed.map((request) => {
+        const key = `contribution-${request.id}`;
+        const mine = kept?.id === request.id ? kept : null;
+        return (
+          <li data-contribution={request.id}>
+            <Card as="article" aria-labelledby={`${key}-title`} className="flex flex-col gap-4">
+              <div class="flex flex-col gap-1">
+                <p class={`m-0 ${HINT}`}>{request.memberName} · Revision {request.version}</p>
+                <h2 id={`${key}-title`} class="m-0 text-xl leading-snug text-ink-primary">{request.claimTitle}</h2>
+                {request.status === "pending" && (
+                  <p class="m-0 text-sm font-semibold text-ink-primary" data-waiting>Waiting for your confirmation of this revision.</p>
+                )}
+              </div>
+              <p class="m-0 max-w-prose leading-relaxed text-ink-secondary">{request.claimDescription}</p>
+
+              <section aria-labelledby={`${key}-evidence`} class="flex flex-col gap-2">
+                <h3 id={`${key}-evidence`} class="m-0 text-base text-ink-primary">Evidence</h3>
+                {request.evidence.length > 0 ? (
+                  <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
+                    {request.evidence.map((item) => {
+                      const href = safeMentorEvidenceUrl(item.url);
+                      return (
+                        <li>
+                          {href ? (
+                            <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("break-words")}>
+                              {item.title} <span class="font-normal text-ink-secondary">{evidenceDestination(href)}</span>
+                              <span class="sr-only"> (opens in a new tab)</span>
+                            </a>
+                          ) : (
+                            <span class="text-ink-secondary">{item.title}: the link can't be opened</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p class="m-0 text-ink-secondary">No evidence links shared. Missing evidence is not evidence against the member.</p>
+                )}
+              </section>
+
+              {(request.confirmations?.length ?? 0) > 0 && (
+                <section aria-labelledby={`${key}-history`} class="flex flex-col gap-2">
+                  <h3 id={`${key}-history`} class="m-0 text-base text-ink-primary">Confirmation history</h3>
+                  <ul class="m-0 flex list-none flex-col gap-3 p-0">
+                    {request.confirmations!.map((confirmation) => (
+                      <li class="flex flex-col gap-1 border-l-2 border-hairline pl-3">
+                        <p class="m-0 font-semibold text-ink-primary">
+                          {confirmation.journeyVersion === request.version ? "Checked by" : "An earlier revision checked by"} {confirmation.mentorName}
+                        </p>
+                        <p class="m-0 text-ink-secondary">{confirmation.note}</p>
+                        <p class="m-0 text-ink-secondary">How it was checked: {confirmation.method}</p>
+                        <p class={`m-0 ${HINT}`}>
+                          {confirmation.date} · Revision {confirmation.journeyVersion} · {role(confirmation.mentorRole)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {request.status === "confirmed" ? (
+                <p class="m-0 font-semibold text-success-ink" data-confirmed>You've confirmed this revision.</p>
+              ) : (
+                <>
+                  <form method="POST" class="flex flex-col gap-4 border-t border-hairline pt-4" aria-labelledby={`${key}-form`}>
+                    <h3 id={`${key}-form`} class="m-0 text-base text-ink-primary">Confirm what you checked</h3>
+                    <input type="hidden" name="intent" value="confirm" />
+                    <input type="hidden" name="id" value={request.id} />
+                    <input type="hidden" name="revision" value={String(request.version)} />
+                    <input type="hidden" name="title" value={request.claimTitle} />
+                    <TextField
+                      id={`${key}-method`}
+                      label="How did you check it?"
+                      name="method"
+                      required
+                      minLength={3}
+                      maxLength={500}
+                      defaultValue={mine?.method ?? ""}
+                      error={mine?.errors.method}
+                      hint="Ran it, read the code, watched a demo, talked it through…"
+                    />
+                    <TextAreaField
+                      id={`${key}-note`}
+                      label="What did you personally check?"
+                      name="note"
+                      required
+                      minLength={20}
+                      maxLength={2000}
+                      rows={4}
+                      defaultValue={mine?.note ?? ""}
+                      error={mine?.errors.note}
+                      hint="The evidence or work you checked, what it supports, and any limits. At least 20 characters and three words; nothing private or sensitive."
+                    />
+                    <div>
+                      <Button type="submit" aria-describedby={`${key}-title`}>Confirm this revision</Button>
+                    </div>
+                  </form>
+                  <form method="POST" class="flex flex-col gap-1">
+                    <input type="hidden" name="intent" value="set-aside" />
+                    <input type="hidden" name="id" value={request.id} />
+                    <input type="hidden" name="revision" value={String(request.version)} />
+                    <input type="hidden" name="title" value={request.claimTitle} />
+                    <div>
+                      <Button type="submit" variant="ghost" aria-describedby={`${key}-title ${key}-aside`}>Set aside: I can't confirm this</Button>
+                    </div>
+                    <p id={`${key}-aside`} class={`m-0 ${HINT}`}>Only you see this. It leaves your waiting list, and the member isn't told.</p>
+                  </form>
+                </>
+              )}
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+
+  {setAside.length > 0 && (
+    <section aria-labelledby="set-aside-title" class="flex flex-col gap-3 border-t border-hairline pt-6" data-set-aside>
+      <div>
+        <h2 id="set-aside-title" class="m-0 text-xl text-ink-primary">Set aside ({setAside.length})</h2>
+        <p class={`m-0 mt-1 max-w-prose ${HINT}`}>
+          Only you see this list. Setting work aside doesn't tell the member or change anything about their work. If
+          they share a new revision, it comes back to your waiting list.
+        </p>
+      </div>
+      <ul class="m-0 flex list-none flex-col gap-2 p-0">
+        {setAside.map((request) => (
+          <li class="flex flex-wrap items-center justify-between gap-3 border-b border-hairline py-2" data-set-aside-item={request.id}>
+            <span class="min-w-0">
+              <span class="font-semibold text-ink-primary">{request.claimTitle}</span>
+              <span class={`block ${HINT}`}>{request.memberName} · Revision {request.version}</span>
+            </span>
+            <form method="POST">
+              <input type="hidden" name="intent" value="undo" />
+              <input type="hidden" name="id" value={request.id} />
+              <input type="hidden" name="revision" value={String(request.version)} />
+              <input type="hidden" name="title" value={request.claimTitle} />
+              <Button type="submit" variant="ghost" size="sm" aria-label={`Undo: put ${request.claimTitle} back in your waiting list`}>Undo</Button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+</div>

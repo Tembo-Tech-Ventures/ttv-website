@@ -102,11 +102,12 @@ test("a mentor sees the same waiting count everywhere, and it follows their conf
 
     // Confirming the new contribution leaves one fewer waiting, on the page and on the next load.
     const claim = mentor.locator("article", { has: mentor.getByRole("heading", { name: title }) });
-    await claim.getByLabel("Decision").selectOption("confirmed");
     await claim.getByLabel("How did you check it?").fill("Read the repository and its tests");
     await claim.getByLabel("What did you personally check?").fill("I read the fictional tracker's code and ran its tests.");
-    await claim.getByRole("button", { name: "Save review" }).click();
-    await expect(claim.getByText(`Claim confirmed: ${title}`)).toBeVisible();
+    // A plain form: the page answers with a 303 to itself and says it once.
+    await claim.getByRole("button", { name: "Confirm this revision" }).click();
+    await expect(mentor.getByRole("status").filter({ hasText: `Confirmed: ${title}` })).toBeVisible();
+    await expect(claim.getByText("You've confirmed this revision.")).toBeVisible();
     await expect(summary).toHaveAttribute("data-awaiting-confirmation", String(before - 1));
     expect(await overviewCount(mentor)).toBe(before - 1);
   } finally {
@@ -137,7 +138,7 @@ test("a mentor can privately set aside work they can't confirm, and undo it", as
   try {
     const summary = mentor.locator("#spaces-main [data-awaiting-confirmation]");
     const claim = mentor.locator("article", { has: mentor.getByRole("heading", { name: title }) });
-    const setAside = mentor.locator("details.mentor-set-aside");
+    const setAside = mentor.locator("[data-set-aside]");
     async function openConfirm(): Promise<number> {
       await mentor.goto("/dashboard/mentoring/confirm");
       await expect(summary).toBeVisible({ timeout: 30_000 });
@@ -148,18 +149,19 @@ test("a mentor can privately set aside work they can't confirm, and undo it", as
     const before = await openConfirm();
     await expect(claim).toBeVisible();
     await claim.getByRole("button", { name: "Set aside: I can't confirm this" }).click();
-    await expect(mentor.locator(".mentor-set-aside-notice output")).toHaveText(`You've set aside ${title}. The member isn't told.`);
+    const aside = mentor.getByRole("status").filter({ hasText: `You've set aside ${title}` });
+    await expect(aside).toBeVisible();
+    await expect(aside).toContainText("The member isn't told.");
     await expect(claim).toHaveCount(0);
     await expect(summary).toHaveAttribute("data-awaiting-confirmation", String(before - 1));
-    await setAside.locator("summary").click();
-    await expect(setAside.getByRole("listitem").filter({ hasText: title })).toContainText("You've set this aside. The member isn't told.");
+    await expect(setAside.getByRole("listitem").filter({ hasText: title })).toBeVisible();
     await runAxe(mentor, testInfo, "confirm-set-aside");
 
     // It stays set aside on the next load, and the overview counts the same work as the page.
     const reloaded = await openConfirm();
     await expect(claim).toHaveCount(0);
     await expect(mentor.getByText(WAITING)).toHaveCount(reloaded);
-    await expect(setAside.locator("summary")).toContainText("Set aside (");
+    await expect(setAside.getByRole("heading", { level: 2 })).toContainText("Set aside (");
     expect(await overviewCount(mentor)).toBe(reloaded);
 
     // The member sees nothing of it.
@@ -177,16 +179,15 @@ test("a mentor can privately set aside work they can't confirm, and undo it", as
     expect(revised.status).toBe(200);
     await openConfirm();
     await expect(claim).toBeVisible();
-    await expect(claim.getByText("Claim revision 2")).toBeVisible();
+    await expect(claim.getByText(/Revision 2$/)).toBeVisible();
     await expect(claim.getByText(WAITING)).toBeVisible();
 
     // Set aside again, then undo from the set-aside list: it waits again.
     const waiting = Number(await summary.getAttribute("data-awaiting-confirmation"));
     await claim.getByRole("button", { name: "Set aside: I can't confirm this" }).click();
     await expect(summary).toHaveAttribute("data-awaiting-confirmation", String(waiting - 1));
-    await setAside.locator("summary").click();
     await setAside.getByRole("button", { name: `Undo: put ${title} back in your waiting list` }).click();
-    await expect(mentor.locator(".mentor-set-aside-notice output")).toHaveText(`${title} is back in your waiting list.`);
+    await expect(mentor.getByRole("status").filter({ hasText: `${title} is back in your waiting list` })).toBeVisible();
     await expect(claim).toBeVisible();
     await expect(summary).toHaveAttribute("data-awaiting-confirmation", String(waiting));
     await runAxe(mentor, testInfo, "confirm-set-aside-undone");

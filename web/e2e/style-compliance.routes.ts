@@ -79,7 +79,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/mentoring", persona: "mentor" },
   { path: "/dashboard/mentoring/requests", persona: "mentor" },
   { path: "/dashboard/mentoring/availability", persona: "mentor" },
-  { path: "/dashboard/mentoring/confirm", persona: "mentor", pending: { checks: ["h1", "kit-controls"], todo: LANE_M("Confirm work, M17") } },
+  { path: "/dashboard/mentoring/confirm", persona: "mentor" },
 
   // Discover
   { path: "/dashboard/discover", persona: "institution" },
