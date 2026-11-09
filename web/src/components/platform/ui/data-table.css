@@ -74,7 +74,8 @@
  */
 @media (pointer: coarse) {
   .kit-table__cell[data-primary] a {
-    padding-block: 0.75rem;
-    margin-block: -0.75rem;
+    /* 0.875rem twice around a 0.875rem name's 17-18px box: 45px, past the 44px a touch target needs. */
+    padding-block: 0.875rem;
+    margin-block: -0.875rem;
   }
 }

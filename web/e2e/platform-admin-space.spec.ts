@@ -240,6 +240,10 @@ test.describe("every admin page", () => {
     await page.setViewportSize({ width: 320, height: 800 });
     expect(await page.locator(".spaces-shell__main").evaluate((main) => main.scrollWidth - main.clientWidth)).toBeLessThanOrEqual(0);
     await page.setViewportSize(size);
+    // On a touch screen the name that opens the row is a 44px target.
+    if (test.info().project.name === "mobile-chromium") {
+      expect((await david.getByRole("link", { name: "David Kamau" }).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
     await david.getByRole("link", { name: "David Kamau" }).click();
     await expect(page).toHaveURL(/\/admin\/users\/ttv-local-persona-mentor$/);
 
