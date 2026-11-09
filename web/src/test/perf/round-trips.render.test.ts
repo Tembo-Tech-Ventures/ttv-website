@@ -108,6 +108,7 @@ const PAGES = {
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
+  "admin new cohort": { path: () => "/admin/programs/new", page: () => import("@/pages/admin/programs/new.astro"), user: ADMIN },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
   "admin recording": { path: () => "/admin/recordings/recording", page: () => import("@/pages/admin/recordings/[id].astro"), user: ADMIN, id: "recording" },
   // In staging, where the importer works.
@@ -248,6 +249,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 7 before the style-guide rollout: the flag, the curricula, the cohort, every user, every role and
   // the space were read in turn; now together, with community mentors found in SQL.
   "admin cohort": { d1: 17, depth: 2 },
+  // Depth 4 before the style-guide rollout: the curricula, then the space.
+  "admin new cohort": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: every recording with its cohort, then the space.
   "admin recordings": { d1: 15, depth: 2 },
   // Depth 5 before the style-guide rollout: the recording with every segment, the cohorts and the space in turn;
