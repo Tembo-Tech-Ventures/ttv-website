@@ -34,7 +34,22 @@ function sessionFor(persona: StylePersona) {
 async function open(page: Page, path: string): Promise<void> {
   const response = await page.goto(path);
   expect(response?.status(), `${path} answers 200`).toBe(200);
+  // A client:visible island hydrates only once it is in view: bring each one there, a frame at a time.
+  const islands = await page.locator("astro-island[ssr]").count();
+  for (let index = 0; index < islands; index++) {
+    await page.evaluate((at) => new Promise<void>((settled) => {
+      const island = document.querySelectorAll("astro-island[ssr]")[at];
+      (island?.firstElementChild ?? island)?.scrollIntoView({ block: "center" });
+      requestAnimationFrame(() => requestAnimationFrame(() => settled()));
+    }), index);
+  }
   await expect(page.locator("astro-island[ssr]"), `${path} hydrates`).toHaveCount(0);
+  // An island may fetch what it shows after hydrating: check the page it settles on.
+  await page.waitForLoadState("networkidle").catch(() => undefined);
+  await page.evaluate(() => {
+    document.querySelector(".spaces-shell__main")?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  });
   await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
   await page.evaluate(() => document.fonts.ready);
 }
@@ -124,7 +139,9 @@ for (const route of STYLE_ROUTES) {
     test.skip(typeof session === "string", typeof session === "string" ? session : "");
     if (typeof session === "string") return;
     const phone = testInfo.project.name === "mobile-chromium";
-    const owed = new Set<StyleCheck>(IGNORE_PENDING ? [] : route.pending?.checks ?? []);
+    test.skip(!LOCAL && route.browserOnly === true, "The page refuses an agent's delegated session, and the preview's staff persona is one.");
+    const everywhere = route.pending?.checks ?? [];
+    const owed = new Set<StyleCheck>(IGNORE_PENDING ? [] : [...everywhere, ...(LOCAL ? [] : route.pending?.preview ?? [])]);
     const runs = phone ? MOBILE_CHECKS : DESKTOP_CHECKS;
     test.skip(runs.every((name) => owed.has(name)), route.pending?.todo ?? "");
 
@@ -142,7 +159,7 @@ for (const route of STYLE_ROUTES) {
       const found = await failures();
       if (owed.has(name)) {
         testInfo.annotations.push({ type: "pending", description: `${name}: ${route.pending?.todo}` });
-        if (found.length === 0) nowPassing.push(name);
+        if (found.length === 0 && everywhere.includes(name)) nowPassing.push(name);
         return;
       }
       expect.soft(found, `${name} on ${path}`).toEqual([]);
