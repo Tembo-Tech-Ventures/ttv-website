@@ -57,11 +57,21 @@ beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
 });
 
-async function visit({ search = "", form }: { search?: string; form?: Record<string, string> } = {}) {
+/** The Set-Cookie lines of a response, read the way the adapter writes them. */
+const setCookies = (response: Response): string[] => {
+  const cookies = Reflect.get(response, Symbol.for("astro.cookies")) as { consume(): Iterable<string> } | undefined;
+  return [...response.headers.getSetCookie(), ...(cookies ? cookies.consume() : [])];
+};
+
+/** The flash a 303 carries, as the next GET's Cookie header. */
+const flashCookie = (response: Response) => setCookies(response).find((line) => line.startsWith("ttv-flash="))!.split(";")[0]!;
+
+async function visit({ search = "", form, cookie }: { search?: string; form?: Record<string, string>; cookie?: string } = {}) {
   const url = new URL(PATH + search, ORIGIN);
+  const headers: Record<string, string> = { ...(cookie && { cookie }) };
   const request = () => form
-    ? new Request(url, { method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form) })
-    : new Request(url);
+    ? new Request(url, { method: "POST", headers: { ...headers, Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form) })
+    : new Request(url, { headers });
   const user = { id: BUILDER, name: "Achieng Otieno", email: "achieng@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${BUILDER}-session`, userId: BUILDER, userAgent: "Mozilla/5.0" } });
   const locals = {} as App.Locals;
@@ -74,7 +84,7 @@ async function visit({ search = "", form }: { search?: string; form?: Record<str
     container.renderToResponse(Page, { request: request(), locals })) as Response;
   const { document } = new Window();
   document.body.innerHTML = await response.text();
-  return { status: response.status, location: response.headers.get("location"), body: document.body };
+  return { status: response.status, location: response.headers.get("location"), body: document.body, response };
 }
 
 describe("Opportunities", () => {
@@ -110,20 +120,25 @@ describe("Opportunities", () => {
     expect(body.querySelector("[role='alert']")?.textContent).toContain("500 characters or fewer");
   });
 
-  it("raises a hand and withdraws it, each with a 303 to a notice", async () => {
+  it("raises a hand and withdraws it, each with a 303 and a read-once flash, never ?done=", async () => {
     seeded();
     const raised = await visit({ form: { _action: "interest", projectId: "savings", note: "I built a savings ledger." } });
     expect(raised.status).toBe(303);
-    expect(raised.location).toBe(`${PATH}?done=raised`);
+    expect(raised.location).toBe(PATH);
+    expect(setCookies(raised.response).find((line) => line.startsWith("ttv-flash="))).toContain(`Path=${PATH}`);
     expect(interest()).toEqual({ status: "INTERESTED", note: "I built a savings ledger." });
-    const after = await visit({ search: "?done=raised" });
+    const after = await visit({ cookie: flashCookie(raised.response) });
     expect(after.body.querySelector("[role='status']")?.textContent).toContain("You raised your hand for this project.");
+    expect(setCookies(after.response).filter((line) => line.startsWith("ttv-flash="))).toEqual([expect.stringMatching(/^ttv-flash=deleted;/)]);
+    // An old ?done= link says nothing.
+    expect((await visit({ search: "?done=raised" })).body.querySelector("[role='status']")).toBeNull();
     const card = after.body.querySelector("[data-opportunity]");
     expect(card?.textContent).toContain("Hand raised");
     expect(card?.textContent).toContain("Your note: I built a savings ledger.");
     const withdrawn = await visit({ form: { _action: "withdraw", projectId: "savings" } });
     expect(withdrawn.status).toBe(303);
-    expect(withdrawn.location).toBe(`${PATH}?done=withdrawn`);
+    expect(withdrawn.location).toBe(PATH);
+    expect(decodeURIComponent(flashCookie(withdrawn.response))).toContain("You withdrew your interest.");
     expect(interest()?.status).toBe("WITHDRAWN");
   });
 
