@@ -74,7 +74,7 @@ const confirmTitle = spaces?.space === "admin" ? "Mentor review" : "Confirm work
       </MentoringOverview>
     </SpacePage>
   ) : (
-    <SpacePage context={spaces} title={confirmTitle} titlePrefix={Astro.response.status >= 400 ? "Error: " : ""}>
+    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused || contributions?.failed ? "Error: " : ""}>
       <div class="flex max-w-4xl flex-col gap-8">
         <PageHeader title={confirmTitle} />
         {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
