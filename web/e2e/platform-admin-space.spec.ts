@@ -443,6 +443,46 @@ test.describe("every admin page", () => {
     await context.close();
   });
 
+  test("recording imports: a source refused in words with what was written kept, then saved paused, turned on and removed after a confirm step, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Adding a source writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/import");
+    const main = page.locator("main");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    const name = `e2e source ${Date.now().toString(36)}`;
+    const form = main.locator("form[data-create]");
+    await form.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await form.getByRole("combobox", { name: "Cohort" }).selectOption({ label: "Cohort 05" });
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("not a folder");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(form.getByRole("alert").filter({ hasText: "The source wasn't saved" })).toBeVisible();
+    await expect(form.getByText("That isn't a Drive folder's address or ID.", { exact: false })).toBeVisible();
+    await expect(form.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
+
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpE2e");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(page).toHaveURL(/\/admin\/recordings\/import$/);
+    await expect(main.getByText("Import source saved, paused")).toBeVisible();
+    const row = main.locator("li[data-source]").filter({ has: page.getByRole("heading", { name, exact: true }) });
+    await expect(row).toContainText("Paused");
+
+    await press(row.getByRole("button", { name: `Turn on ${name}` }));
+    await expect(main.getByText(`Automatic scans on for ${name}`)).toBeVisible();
+    await expect(row).toContainText("Automatic");
+
+    await press(row.getByRole("link", { name: `Remove ${name}` }));
+    await expect(page.getByRole("region", { name: `Remove ${name}?` })).toBeVisible();
+    await press(row.getByRole("button", { name: "Remove source" }));
+    await expect(main.getByText(`${name} removed`)).toBeVisible();
+    await expect(row).toHaveCount(0);
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -558,7 +598,7 @@ test.describe("every admin page", () => {
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
       ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"],
-      ["/admin/recordings/upload", "recordings-upload"]]) {
+      ["/admin/recordings/upload", "recordings-upload"], ["/admin/recordings/import", "recordings-import"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);

@@ -114,6 +114,7 @@ const PAGES = {
   // In staging, where the importer works.
   "admin data migration": { path: () => "/admin/data-migration", page: () => import("@/pages/admin/data-migration.astro"), user: ADMIN, env: { DEPLOYMENT_ENVIRONMENT: "staging" } },
   "admin upload recording": { path: () => "/admin/recordings/upload", page: () => import("@/pages/admin/recordings/upload.astro"), user: ADMIN },
+  "admin import recordings": { path: () => "/admin/recordings/import", page: () => import("@/pages/admin/recordings/import.astro"), user: ADMIN },
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
   "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
@@ -260,6 +261,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin data migration": { d1: 13, depth: 2 },
   // Depth 4 before the style-guide rollout: the cohorts, then the space.
   "admin upload recording": { d1: 14, depth: 2 },
+  // Depth 4 before the style-guide rollout: the credential, then the cohorts and sources, then the space.
+  "admin import recordings": { d1: 15, depth: 2 },
   // Depth 4 before the style-guide rollout: the tokens, then the space.
   "admin tokens": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the sessions, then the space.
