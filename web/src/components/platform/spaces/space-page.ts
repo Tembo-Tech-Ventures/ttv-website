@@ -46,8 +46,8 @@ export function pickSpace(me: Me | null, page: SpacePageKey): SpaceId | null {
 }
 
 /**
- * The spaces context for this request, or null when the page keeps its
- * existing dashboard frame: the `spaces` flag is off for the person, the caller
+ * The spaces context for this request, or null when the page renders in
+ * PlainFrame instead: the `spaces` flag is off for the person, the caller
  * is a personal access token (`Me` is browser-session only), or the context
  * could not be loaded. That last case is deliberate. B-1.2 lets a legacy URL
  * fall through to its unchanged handler when the context fails, after every

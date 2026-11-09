@@ -78,16 +78,6 @@ describe("ChatApp", () => {
     expect(html).not.toContain("Source ");
   });
 
-  it("keeps its own way back and site navigation in the immersive frame", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode />);
-    expect(html).toContain("Back to dashboard");
-    expect(html).toContain('aria-label="Site"');
-    // The assistant is Tembo everywhere (owner decision, 31 Oct 2026), not only in the spaces shell,
-    // and this page is named apart from a channel's "Ask Tembo here" (QA3-03).
-    expect(html).toContain(">Ask Tembo privately</h2>");
-    expect(html).not.toContain("Ask AI");
-  });
-
   it("leaves navigation to the spaces shell and introduces itself as Ask Tembo there", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode />);
     expect(html).not.toContain("Back to dashboard");

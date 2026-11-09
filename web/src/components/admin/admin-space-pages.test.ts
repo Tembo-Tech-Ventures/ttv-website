@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ADMIN_SPACE_PAGES } from "@/components/platform/spaces/sidebar";
-import { ADMIN_PAGE_HREFS, adminSectionFor, type AdminPageNavKey } from "./admin-nav";
+import { adminSectionFor, type AdminPageNavKey } from "./admin-nav";
 
 /**
  * Every admin page is drawn in the Admin space while `spaces` is on for the admin (T02, T14), and in
