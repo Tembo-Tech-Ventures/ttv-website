@@ -7,10 +7,6 @@
 export const FROZEN: Record<string, Record<string, number>> = {
   "raw white or black": {
     "components/auth/GitHubSignInButton.tsx": 1,
-    "components/blog/editor/BlockInsertMenu.tsx": 3,
-    "components/blog/editor/FloatingToolbar.tsx": 3,
-    "components/blog/editor/MetadataPanel.tsx": 4,
-    "components/blog/editor/PostEditor.tsx": 4,
     "components/common/Sidebar.tsx": 6,
     "components/platform/shell/harness/StubOverlays.tsx": 1,
     "components/shells/AdminShell.tsx": 2,
@@ -20,9 +16,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
   },
   "Tailwind palette colours": {
     "components/auth/GitHubSignInButton.tsx": 1,
-    "components/blog/editor/MetadataPanel.tsx": 8,
-    "components/blog/editor/PlainPostForm.astro": 3,
-    "components/blog/editor/PostEditor.tsx": 10,
     "components/common/Button.astro": 3,
     "components/talent/TalentCard.astro": 4,
     "pages/dashboard/apply.astro": 7,
@@ -54,7 +47,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "pages/dev/certificate-print/c.astro": 2,
   },
   "the form-control utility": {
-    "components/blog/editor/PlainPostForm.astro": 4,
   },
   "the spaces/PageTitle.astro shim": {
     "pages/dashboard/apply.astro": 1,
@@ -78,15 +70,10 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "pages/dev/platform-mentors.astro": 2,
   },
   "eyebrows (uppercase tracked labels)": {
-    "components/blog/editor/MetadataPanel.tsx": 5,
     "components/blog/editor/theme.ts": 2,
     "components/community/CommunityIntro.tsx": 1,
   },
   "the older surface tokens": {
-    "components/blog/editor/BlockInsertMenu.tsx": 3,
-    "components/blog/editor/FloatingToolbar.tsx": 1,
-    "components/blog/editor/MetadataPanel.tsx": 5,
-    "components/blog/editor/PostEditor.tsx": 2,
     "pages/dev/shell-preview.astro": 1,
   },
 };
