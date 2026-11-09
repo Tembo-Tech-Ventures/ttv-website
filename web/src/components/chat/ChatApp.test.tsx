@@ -9,6 +9,7 @@ import {
   truncate,
 } from "./ConversationList";
 import { toPlainText } from "./Transcript";
+import { RAISED } from "@/components/platform/ui";
 import type { ChatSession } from "./types";
 
 const SESSION: ChatSession = {
@@ -98,20 +99,34 @@ describe("ChatApp", () => {
     expect(html).toContain('aria-label="Conversations"');
   });
 
-  it("puts the conversation title in the page heading", () => {
+  it("puts the conversation title in the heading under the page's h1", () => {
     const html = renderToStaticMarkup(
       <ChatApp mockMode initialSessions={[{ ...SESSION, title: "Pricing questions" }]} />
     );
 
-    // Scoped to the <h1>, so the conversation list rendering the same string
-    // cannot make this pass on its own.
-    const heading = /<h1[^>]*>(.*?)<\/h1>/s.exec(html)?.[1] ?? "";
+    // Scoped to the title's <h2>, so the conversation list rendering the same
+    // string cannot make this pass on its own.
+    const heading = /<h2[^>]*data-chat-title[^>]*>(.*?)<\/h2>/s.exec(html)?.[1] ?? "";
     expect(heading).toContain("Pricing questions");
+  });
+
+  it("has one h1, the kit's Mattone page title, visually hidden so the chat keeps the screen", () => {
+    for (const variant of ["immersive", "space"] as const) {
+      const html = renderToStaticMarkup(<ChatApp mockMode variant={variant} initialSessions={[SESSION]} />);
+      const h1s = [...html.matchAll(/<h1([^>]*)>(.*?)<\/h1>/gs)];
+      expect(h1s).toHaveLength(1);
+      expect(h1s[0]![2]).toBe("Ask Tembo");
+      expect(h1s[0]![1]).toContain("data-page-title");
+      expect(h1s[0]![1]).toContain("sr-only");
+      // The conversation's title is body type: no display face, no hand-set weight.
+      const title = /<h2([^>]*data-chat-title[^>]*)>/.exec(html)?.[1] ?? "";
+      expect(title).not.toMatch(/font-heading|font-semibold|tracking-display/);
+    }
   });
 
   it("exposes the heading as a switcher on mobile and plain text on desktop", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
-    const heading = /<h1[^>]*>(.*?)<\/h1>/s.exec(html)?.[1] ?? "";
+    const heading = /<h2[^>]*data-chat-title[^>]*>(.*?)<\/h2>/s.exec(html)?.[1] ?? "";
 
     // The desktop title must not be a control. A button hidden with
     // `pointer-events-none` is still keyboard-activatable, and activating it
@@ -127,7 +142,92 @@ describe("ChatApp", () => {
     expect(html).toContain("Ask Tembo");
     expect(html).toContain("Ask about your sessions, your program, or anything you need help with.");
     expect(html).toContain("What were the main action items from mentor hours?");
-    expect(html).toContain("Your saved chats will appear here");
+  });
+
+  it("says what the empty list is for in the kit's EmptyState", () => {
+    const html = renderToStaticMarkup(<ChatApp mockMode />);
+    const empty = /<div[^>]*data-empty-state[^>]*>(.*?)<\/div><\/div>/s.exec(html)?.[1] ?? "";
+    expect(empty).toContain(">No conversations yet</h3>");
+    expect(empty).toContain("Your chats are saved here after your first question.");
+    expect(html).not.toContain("border-dashed border-rule");
+  });
+
+  it("keeps peach for Send alone: New chat is quiet and every icon control is the kit's", () => {
+    for (const variant of ["immersive", "space"] as const) {
+      const html = renderToStaticMarkup(<ChatApp mockMode variant={variant} initialSessions={[SESSION]} />);
+      const primaries = [...html.matchAll(/<button[^>]*data-variant="primary"[^>]*>/g)].map((match) => match[0]);
+      expect(primaries).toHaveLength(1);
+      expect(primaries[0]).toContain('aria-label="Send message"');
+      expect(primaries[0]).toContain('type="submit"');
+      // The rail's "New chat" (desktop) and the header's "Start a new chat" (phone).
+      expect(html).toMatch(/<button[^>]*data-variant="quiet"[^>]*>(?:(?!<\/button>).)*New chat<\/button>/s);
+      expect(html).toMatch(/<button[^>]*aria-label="Start a new chat"[^>]*data-variant="ghost"/);
+      expect(html).not.toMatch(/bg-primary\/(10|15|20)/);
+    }
+  });
+
+  it("gives each conversation row the kit's focus ring, its current state, and 44px on touch", () => {
+    const other: ChatSession = { ...SESSION, id: "session-2", title: "Pricing" };
+    const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION, other]} />);
+    // The rail's list, then the phone sheet's: the same rows twice.
+    const rows = [...html.matchAll(/<li><button([^>]*)>/g)].map((match) => match[1]!);
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      expect(row).toContain("focus-visible:outline-peach-ink");
+      expect(row).toContain("pointer-coarse:min-h-11");
+      expect(row).not.toContain("disabled:opacity");
+      // Only the others are refused mid-answer, and they go quiet, not faded.
+      if (!row.includes("aria-current")) expect(row).toContain("disabled:cursor-not-allowed disabled:text-ink-muted");
+    }
+    expect(rows.map((row) => row.includes('aria-current="true"'))).toEqual([true, false, true, false]);
+  });
+
+  it("writes no uppercase eyebrows and no colours outside the platform tokens", () => {
+    for (const variant of ["immersive", "space"] as const) {
+      const html = renderToStaticMarkup(
+        <ChatApp
+          mockMode
+          variant={variant}
+          initialSessions={[SESSION]}
+          initialMessages={[
+            { role: "user", content: "Where?" },
+            {
+              role: "assistant",
+              content: "In `week 3`, see [the session](/dashboard/sessions/r1).\n\n```\ncode\n```",
+              citations: [{ sourceNumber: 1, recordingId: "r1", title: "Week 3", startTime: 92, endTime: 100, text: "Quote." }],
+            },
+          ]}
+        />
+      );
+      expect(html).not.toContain("uppercase");
+      expect(html).toContain(">Recent</h2>");
+      // Peach is checked above (Send alone); TemboMark's own peach T is the kit's.
+      expect(html).not.toMatch(/border-rule|bg-dark\/|bg-bg-raised|text-red-|text-white|shadow-2xl|shadow-lg|focus:outline-none/);
+    }
+  });
+
+  it("shows sources as kit cards with sentence-case chips, and Tembo by its mark and AI badge", () => {
+    const html = renderToStaticMarkup(
+      <ChatApp
+        mockMode
+        initialMessages={[
+          {
+            role: "assistant",
+            content: "Answer. [1]",
+            citations: [{ sourceNumber: 1, recordingId: "r1", title: "Week 3", startTime: 92, endTime: 100, text: "Quote." }],
+          },
+        ]}
+      />
+    );
+    const source = /<a href="\/dashboard\/sessions\/r1\?t=92"([^>]*)>(.*?)<\/a>/s.exec(html);
+    expect(source?.[1]).toContain("focus-visible:outline-peach-ink");
+    expect(source?.[1]).toContain("border-hairline");
+    expect(source?.[1]).toContain(RAISED);
+    expect(source?.[2]).toMatch(/data-chip="neutral"[^>]*><span class="truncate">Source 1<\/span>/);
+    expect(source?.[2]).toMatch(/data-chip="neutral"[^>]*><span class="truncate">1:32<\/span>/);
+    const author = /<p[^>]*data-chat-author="true"[^>]*>(.*?)<\/p>/s.exec(html)?.[1] ?? "";
+    expect(author).toContain("data-tembo-mark");
+    expect(author).toMatch(/data-role-badge="AI"[^>]*>AI<\/span>$/);
   });
 
   it("keeps every dashboard destination reachable, logout included", () => {

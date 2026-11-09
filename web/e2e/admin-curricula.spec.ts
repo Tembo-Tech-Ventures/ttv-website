@@ -245,9 +245,9 @@ test.describe("admin curriculum management", () => {
     expect(documentWidth.scrollWidth).toBeLessThanOrEqual(
       documentWidth.clientWidth
     );
-    await page.getByRole("link", { name: "New Cohort" }).click();
+    await page.getByRole("link", { name: "New cohort", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Create Cohort", exact: true })
+      page.getByRole("heading", { level: 1, name: "New cohort", exact: true })
     ).toBeVisible();
 
     const nameInput = page.locator('input[name="name"]');
@@ -261,7 +261,7 @@ test.describe("admin curriculum management", () => {
     await page
       .locator('select[name="curriculumId"]')
       .selectOption("ttv-fixture-curriculum");
-    await page.getByRole("button", { name: "Create Cohort" }).click();
+    await page.getByRole("button", { name: "Create cohort" }).click();
 
     await expect(page.getByText("Enter a cohort name.")).toBeVisible();
     await expect(nameInput).toHaveValue("   ");
@@ -269,7 +269,7 @@ test.describe("admin curriculum management", () => {
     await expect(applicationsOpen).not.toBeChecked();
 
     await nameInput.fill(`  ${cohortName}  `);
-    await page.getByRole("button", { name: "Create Cohort" }).click();
+    await page.getByRole("button", { name: "Create cohort" }).click();
     await expect(page).toHaveURL(/\/admin\/programs\/[^/]+$/);
 
     await page.goto("/admin/programs");

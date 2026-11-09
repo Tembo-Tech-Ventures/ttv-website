@@ -109,10 +109,13 @@ const PAGES = {
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
+  "admin new cohort": { path: () => "/admin/programs/new", page: () => import("@/pages/admin/programs/new.astro"), user: ADMIN },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
   "admin recording": { path: () => "/admin/recordings/recording", page: () => import("@/pages/admin/recordings/[id].astro"), user: ADMIN, id: "recording" },
   // In staging, where the importer works.
   "admin data migration": { path: () => "/admin/data-migration", page: () => import("@/pages/admin/data-migration.astro"), user: ADMIN, env: { DEPLOYMENT_ENVIRONMENT: "staging" } },
+  "admin upload recording": { path: () => "/admin/recordings/upload", page: () => import("@/pages/admin/recordings/upload.astro"), user: ADMIN },
+  "admin import recordings": { path: () => "/admin/recordings/import", page: () => import("@/pages/admin/recordings/import.astro"), user: ADMIN },
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
   "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
@@ -220,6 +223,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "mentoring requests": { d1: 15, depth: 3 },
   // The application is read beside the space context (16 queries 6 deep in the style-guide audit).
   application: { d1: 15, depth: 3 },
+  // The same before the style-guide rollout: the journey and the request's capabilities (shared with the
+  // space context) start beside it through resolveSpacePageWith, instead of after it.
   ask: { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list waited for the whole space context, and the cohort name for the list.
   attention: { d1: 10, depth: 2 },
@@ -249,6 +254,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // Depth 7 before the style-guide rollout: the flag, the curricula, the cohort, every user, every role and
   // the space were read in turn; now together, with community mentors found in SQL.
   "admin cohort": { d1: 17, depth: 2 },
+  // Depth 4 before the style-guide rollout: the curricula, then the space.
+  "admin new cohort": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: every recording with its cohort, then the space.
   "admin recordings": { d1: 15, depth: 2 },
   // Depth 5 before the style-guide rollout: the recording with every segment, the cohorts and the space in turn;
@@ -256,6 +263,10 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin recording": { d1: 16, depth: 2 },
   // Depth 4 before the style-guide rollout, with the whole task in a client script.
   "admin data migration": { d1: 13, depth: 2 },
+  // Depth 4 before the style-guide rollout: the cohorts, then the space.
+  "admin upload recording": { d1: 14, depth: 2 },
+  // Depth 4 before the style-guide rollout: the credential, then the cohorts and sources, then the space.
+  "admin import recordings": { d1: 15, depth: 2 },
   // Depth 4 before the style-guide rollout: the tokens, then the space.
   "admin tokens": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the sessions, then the space.

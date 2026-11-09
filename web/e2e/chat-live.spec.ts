@@ -63,7 +63,7 @@ test.describe("authenticated Ask Tembo page", () => {
         return main.scrollHeight - main.clientHeight;
       });
       expect(sheetOverflow).toBeLessThanOrEqual(1);
-      await expect(page.getByRole("heading", { name: "Ask Tembo" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: "Ask Tembo" })).toBeVisible();
     }
 
     await page.screenshot({
@@ -88,7 +88,7 @@ test.describe("authenticated Ask Tembo page", () => {
     // Dropping DashboardLayout must not strand anyone without a sign-out. On a
     // phone that lives in the conversation sheet, so open it to check.
     if (testInfo.project.name.includes("mobile")) {
-      await page.locator("h1 button").click();
+      await page.locator("[data-chat-title] button").click();
       await expect(page.getByRole("dialog")).toBeVisible();
     }
     await expect(page.getByRole("link", { name: "Logout" })).toBeVisible();

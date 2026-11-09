@@ -143,11 +143,11 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
-  { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
+  { path: "/admin/programs/new", heading: "New cohort", current: "Cohorts", retired: true },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
-  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
+  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings", retired: true },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
@@ -398,6 +398,91 @@ test.describe("every admin page", () => {
     await context.close();
   });
 
+  test("uploading a recording: one primary, and a file that isn't a video refused in words, with what was written kept", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/upload");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload and process"]);
+    await main.getByRole("textbox", { name: "Title" }).fill("Week 5: e2e upload");
+    await main.getByRole("combobox", { name: /^Cohort/ }).selectOption({ label: "Cohort 05" });
+    await main.getByLabel(/^Video/).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a video") });
+    const upload = main.getByRole("button", { name: "Upload and process" });
+    await upload.focus();
+    await upload.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The recording wasn't uploaded" })).toBeVisible();
+    await expect(main.getByText("notes.txt isn't a video. Choose a video file, such as an MP4.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue("Week 5: e2e upload");
+    await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue("ttv-local-persona-cohort-05");
+    await context.close();
+  });
+
+  test("a new cohort: a refused form keeps what was written and says what to fix, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/programs/new");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Create cohort"]);
+    await main.getByRole("textbox", { name: "Name" }).fill("Cohort e2e");
+    await main.getByRole("textbox", { name: "Description" }).fill("Kept description.");
+    await main.getByRole("combobox", { name: "Curriculum" }).selectOption({ index: 1 });
+    await main.getByLabel(/^Starts on/).fill("2027-04-02");
+    await main.getByLabel(/^Ends on/).fill("2027-01-11");
+    await main.getByRole("checkbox", { name: "Applications open" }).check();
+    const create = main.getByRole("button", { name: "Create cohort" });
+    await create.focus();
+    await create.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The cohort wasn't created" })).toBeVisible();
+    await expect(main.getByText("End date must be on or after start date.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Description" })).toHaveValue("Kept description.");
+    await expect(main.getByRole("checkbox", { name: "Applications open" })).toBeChecked();
+    await context.close();
+  });
+
+  test("recording imports: a source refused in words with what was written kept, then saved paused, turned on and removed after a confirm step, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Adding a source writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/import");
+    const main = page.locator("main");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    const name = `e2e source ${Date.now().toString(36)}`;
+    const form = main.locator("form[data-create]");
+    await form.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await form.getByRole("combobox", { name: "Cohort" }).selectOption({ label: "Cohort 05" });
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("not a folder");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(form.getByRole("alert").filter({ hasText: "The source wasn't saved" })).toBeVisible();
+    await expect(form.getByText("That isn't a Drive folder's address or ID.", { exact: false })).toBeVisible();
+    await expect(form.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
+
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpE2e");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(page).toHaveURL(/\/admin\/recordings\/import$/);
+    await expect(main.getByText("Import source saved, paused")).toBeVisible();
+    const row = main.locator("li[data-source]").filter({ has: page.getByRole("heading", { name, exact: true }) });
+    await expect(row).toContainText("Paused");
+
+    await press(row.getByRole("button", { name: `Turn on ${name}` }));
+    await expect(main.getByText(`Automatic scans on for ${name}`)).toBeVisible();
+    await expect(row).toContainText("Automatic");
+
+    await press(row.getByRole("link", { name: `Remove ${name}` }));
+    await expect(page.getByRole("region", { name: `Remove ${name}?` })).toBeVisible();
+    await press(row.getByRole("button", { name: "Remove source" }));
+    await expect(main.getByText(`${name} removed`)).toBeVisible();
+    await expect(row).toHaveCount(0);
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -512,7 +597,8 @@ test.describe("every admin page", () => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
-      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"]]) {
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"],
+      ["/admin/recordings/upload", "recordings-upload"], ["/admin/recordings/import", "recordings-import"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);

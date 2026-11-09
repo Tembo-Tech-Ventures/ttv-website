@@ -118,7 +118,7 @@ test("sends a message and keeps the layout intact afterwards", async ({ page }, 
 
 /** Desktop lists conversations in the rail; mobile needs the sheet opened. */
 async function openConversationList(page: Page) {
-  const sheetTrigger = page.locator("h1 button");
+  const sheetTrigger = page.locator("[data-chat-title] button");
   if (await sheetTrigger.isVisible()) {
     await sheetTrigger.click();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -371,4 +371,12 @@ test("two quick conversation taps land on the second one", async ({ page }) => {
   await page.waitForTimeout(SLOW_LOAD_MS * 2);
   await expect(transcript(page).getByText("Charge for the outcome")).toBeVisible();
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
+});
+
+test("the composer is a 44px target at 320 wide, one line tall", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await gotoChat(page);
+  const box = await page.locator("#chat-composer").boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 });

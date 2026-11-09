@@ -236,7 +236,7 @@ test.describe("a member without a cohort", () => {
     await open(page, "/dashboard/cohort/ask");
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Ask Tembo");
-    await expect(page.getByRole("heading", { name: "Ask Tembo" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Ask Tembo" })).toBeVisible();
     const composer = page.getByPlaceholder("Ask about your sessions…");
     await expect(composer).toBeInViewport();
     // The chat fills the sheet: neither the document nor the sheet scrolls; the transcript does.

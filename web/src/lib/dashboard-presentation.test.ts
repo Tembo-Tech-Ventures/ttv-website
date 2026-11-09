@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dashboardNextStep, hasDiscoveryAccess, restrictedQaNextStep } from "./dashboard-presentation";
-import { getDashboardLinks } from "../components/shells/DashboardShell";
+import { getDashboardLinks } from "../components/shells/dashboard-links";
 import { getAppNav } from "../components/chat/ChatApp";
 const memberStep = { title: "Find your next cohort", description: "Apply", detail: null, action: { href: "/dashboard/apply", label: "Apply" } };
 describe("institution dashboard presentation", () => {
