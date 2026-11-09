@@ -58,7 +58,6 @@ export interface StyleRoute {
 const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes)$)[^/?#]+$`);
 
 const LANE_M = (page: string) => `TODO(lane M, ${page}): the page goes onto the kit in its own PR`;
-const LANE_X = (what: string) => `TODO(lane X follow-ups): ${what}`;
 
 export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Cohort
@@ -90,7 +89,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/me/portfolio", persona: "alumna" },
   { path: "/dashboard/me/writing", persona: "alumna" },
   { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ["h1", "kit-controls", "targets", "overflow", "axe-320"], todo: LANE_M("Post editor, M14") } },
-  { path: "/dashboard/me/opportunities", persona: "alumna", pending: { preview: ["kit-controls", "targets"], todo: LANE_M("Opportunities, #393: the no-profile empty state") } },
+  { path: "/dashboard/me/opportunities", persona: "alumna" },
   { path: "/dashboard/me/leads", persona: "alumna" },
   { path: "/dashboard/account", persona: "alumna" },
 
@@ -125,7 +124,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/projects/[id]", persona: "staff", detail: { from: "/admin/projects", link: ID("/admin/projects") } },
   { path: "/admin/recordings", persona: "staff" },
   { path: "/admin/recordings/[id]", persona: "staff", detail: { from: "/admin/recordings", link: ID("/admin/recordings") } },
-  { path: "/admin/recordings/import", persona: "staff", pending: { preview: ["peach"], todo: LANE_X("a second peach action on the preview's import sources, before #397") } },
+  { path: "/admin/recordings/import", persona: "staff" },
   { path: "/admin/recordings/upload", persona: "staff" },
   { path: "/admin/settings/integrations", persona: "staff" },
   { path: "/admin/users", persona: "staff" },
