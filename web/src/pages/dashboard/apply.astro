@@ -144,8 +144,8 @@ const Name = showOtherCohortsHeading ? "h3" : "h2";
     {availablePrograms.length > 0 ? (
       <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" aria-label="Cohorts taking applications">
         {availablePrograms.map((program) => (
-          <li class="flex" data-cohort-id={program.id}>
-            <Card as="article" aria-labelledby={`cohort-${program.id}`} className="flex flex-1 flex-col gap-3">
+          <li class="flex min-w-0" data-cohort-id={program.id}>
+            <Card as="article" aria-labelledby={`cohort-${program.id}`} className="flex min-w-0 flex-1 flex-col gap-3">
               <Name id={`cohort-${program.id}`} class="text-lg leading-snug text-ink-primary">{program.name}</Name>
               {program.description && <p class="text-sm leading-relaxed text-ink-secondary">{program.description}</p>}
               {program.curriculum && <div><Chip>{program.curriculum.title}</Chip></div>}
@@ -157,7 +157,10 @@ const Name = showOtherCohortsHeading ? "h3" : "h2";
               )}
               <form method="POST" class="mt-auto pt-2">
                 <input type="hidden" name="programId" value={program.id} />
-                <Button type="submit" className="w-full">Apply to {program.name}</Button>
+                <Button type="submit" className="w-full">
+                  {/* A long cohort name ellipsises here; its heading above says it in full. */}
+                  <span class="min-w-0 truncate">Apply to {program.name}</span>
+                </Button>
               </form>
             </Card>
           </li>
