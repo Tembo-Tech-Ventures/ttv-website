@@ -93,8 +93,9 @@ const deleting = canDelete && confirmingAction(Astro.url, ["delete"] as const) =
             <div class="flex flex-wrap gap-3">
               {status === "DRAFT" ? (
                 <>
-                  <Button type="submit" name="_action" value="publish" variant="primary">Save and publish</Button>
+                  {/* Save comes first: Enter in a field submits the form's first button, and that must never publish. */}
                   <Button type="submit" name="_action" value="save">Save draft</Button>
+                  <Button type="submit" name="_action" value="publish" variant="primary">Save and publish</Button>
                 </>
               ) : (
                 <>

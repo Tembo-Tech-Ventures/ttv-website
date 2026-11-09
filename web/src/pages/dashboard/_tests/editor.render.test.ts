@@ -92,6 +92,8 @@ describe("Post editor", () => {
     expect(form.querySelector("h1")?.textContent).toBe("Edit post");
     expect(form.querySelector("input[name='title']")?.getAttribute("value")).toBe("What ledgers taught me");
     expect([...form.querySelectorAll("[data-variant='primary']")].map((b) => b.textContent)).toEqual(["Save and publish"]);
+    // Enter in a field submits the first button: it saves, it never publishes.
+    expect(form.querySelector("form button[type='submit']")?.getAttribute("value")).toBe("save");
     const remove = form.querySelector("a[href*='confirm=delete']")!;
     expect(remove.textContent).toBe("Delete draft");
     expect(form.querySelector("button[value='delete']")).toBeNull();
