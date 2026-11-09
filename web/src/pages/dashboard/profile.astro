@@ -224,7 +224,7 @@ const photoError = failed === "photo" && fieldError ? fieldError : undefined;
       </div>
       <form method="POST" class="flex flex-col gap-4" data-account-name>
         <input type="hidden" name="action" value="profile" />
-        <TextField label="Name" name="name" required autocomplete="name" defaultValue={submittedName ?? user.name} error={nameError} />
+        <TextField label="Name" name="name" required autoComplete="name" defaultValue={submittedName ?? user.name} error={nameError} />
         <TextField label="Email" id="account-email" type="email" defaultValue={user.email} disabled hint={ACCOUNT_COPY.emailHint} />
         <div><Button type="submit" variant="primary">Save name</Button></div>
       </form>
