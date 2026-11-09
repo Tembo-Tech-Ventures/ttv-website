@@ -16,7 +16,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "components/shells/AdminShell.tsx": 2,
     "components/shells/DashboardShell.tsx": 2,
     "pages/dashboard/apply.astro": 4,
-    "pages/dashboard/opportunities.astro": 1,
     "pages/dev/shell-preview.astro": 1,
   },
   "Tailwind palette colours": {
@@ -59,7 +58,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
   },
   "the spaces/PageTitle.astro shim": {
     "pages/dashboard/apply.astro": 1,
-    "pages/dashboard/opportunities.astro": 1,
   },
   "status flags in the query string": {
     "components/platform/mentors/DirectoryRequests.tsx": 1,
@@ -77,7 +75,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "pages/dashboard/apply.astro": 2,
     "pages/dashboard/community/mentors.astro": 1,
     "pages/dashboard/mentoring/availability.astro": 2,
-    "pages/dashboard/opportunities.astro": 2,
     "pages/dev/platform-mentors.astro": 2,
   },
   "eyebrows (uppercase tracked labels)": {
