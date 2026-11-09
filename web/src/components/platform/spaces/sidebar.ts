@@ -365,11 +365,11 @@ function community(facts: SidebarFacts): SidebarModel {
       ]),
       ...channels(facts, "community"),
       ...conversations(facts),
-      // The directories are the website's public pages, outside the app: say so before the click.
-      ...group(facts, "Public directory", [
-        { key: "members", href: "/community/members", label: "Members", icon: "people", publicPage: true },
-        // Kept with mentor requests open too: the in-app page is where time is asked for. The public page is for people who
-        // mentor, not a list of them, so it is named for what it is (QA4-19), as the public Community page names it.
+      // The website's pages about taking part, outside the app: say so before the click. Neither is a
+      // directory of people, so each is named for who it is written for (QA4-19), as the public Community page names them.
+      ...group(facts, "On the website", [
+        { key: "members-public", href: "/community/members", label: "For members", icon: "people", publicPage: true },
+        // Kept with mentor requests open too: the in-app Mentors page is where time is asked for.
         { key: "mentors-public", href: "/community/mentors", label: "For mentors", icon: "mentors", publicPage: true },
       ]),
       ...(apply ? group(facts, "Cohorts", [{ key: "apply", page: "apply", label: "Apply to a cohort", icon: "apply" }]) : []),
