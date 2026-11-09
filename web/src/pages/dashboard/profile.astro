@@ -1,12 +1,20 @@
 ---
+/**
+ * Account (/dashboard/account), on the kit (style-guide rollout M12, audit A§15): how you take part
+ * (onboarding), your name, and your photo, as the shell draws you (one look per person). Each form
+ * posts here: a saved one answers 303 with a read-once flash; a refused one renders again with what
+ * was typed, a focused danger Notice and the error under its field (400; 409 when the profile moved
+ * during the check, 422 when Tembo's check holds it); a failure that isn't the person's is a 503.
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { onboardingFor, resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { onboardingFor, resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import TakingPart from "@/components/platform/onboarding/TakingPart.astro";
 import { ACTION_FIELD, handleAccountAction } from "@/components/platform/onboarding/account-actions";
 import { accountActions } from "@/components/platform/onboarding/server-actions";
-import Card from "@/components/common/Card.astro";
-import Button from "@/components/common/Button.astro";
+import { Avatar, Button, Card, FileField, Notice, PageHeader, TextField } from "@/components/platform/ui";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { expireSessionCache } from "@/lib/auth-session";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
@@ -30,12 +38,18 @@ import {
   discardUnreferencedProfilePhoto,
 } from "@/components/profile/profile-photo-cleanup";
 import type { ProfileContentCheck } from "@/components/portfolio/portfolio-handlers";
+import { ACCOUNT_COPY } from "@/lib/student/account-page";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
+// The frame starts first, beside whatever the request does (PERF-2); the page has no reads of its own.
+const resolving = resolveSpacePageWith(Astro.locals, "account", async () => null);
 
-let success = "";
+/** Which form a refusal belongs to, so its error sits under that form's field. */
+let failed: "name" | "photo" | null = null;
+/** What the danger Notice says; `fieldError`, when the refusal is about what was typed or chosen. */
 let error = "";
+let fieldError = "";
 let moderationMessages: string[] = [];
 let submittedName: string | null = null;
 
@@ -76,7 +90,7 @@ const discardAvatar = async (imageUrl: string | null | undefined) => {
 async function answerOnboardingForm(form: FormData): Promise<Response> {
   const respond = (status: number, headers: Record<string, string> = {}) =>
     new Response(status === 404 ? "Not found." : null, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
-  const context = await resolveSpacePage(Astro.locals, "account");
+  const context = (await resolving)?.[0];
   if (!context || !onboardingFor(Astro.locals, context.me)) return respond(404);
   const result = await handleAccountAction(form, accountActions(env.DB, user.id));
   return result.kind === "refuse" ? respond(result.status) : respond(303, { Location: result.location });
@@ -87,23 +101,22 @@ if (Astro.request.method === "POST") {
   try {
     formData = await Astro.request.formData();
   } catch {
-    error = "Something went wrong. Please try again.";
+    error = ACCOUNT_COPY.unreadable;
+    Astro.response.status = 400;
   }
 }
 const onboardingAnswer = formData?.has(ACTION_FIELD) ? await answerOnboardingForm(formData) : null;
 if (onboardingAnswer) return onboardingAnswer;
 
-// Handle POST — update user profile or avatar
 if (formData) {
+  const action = formData.get("action");
+  failed = action === "avatar" ? "photo" : "name";
   let uploadedAvatarUrl: string | null = null;
   try {
-    const action = formData.get("action");
-
     if (action === "avatar") {
       const avatarFile = formData.get("avatar");
-
-      if (!(avatarFile instanceof File)) {
-        throw new AvatarUploadError("Please choose an image to upload.");
+      if (!(avatarFile instanceof File) || avatarFile.size === 0) {
+        throw new AvatarUploadError(ACCOUNT_COPY.noPhoto);
       }
 
       const previousImageUrl = user.image;
@@ -119,177 +132,111 @@ if (formData) {
       });
       uploadedAvatarUrl = uploadedAvatar.imageUrl;
 
-      const result = await saveProfileIdentity(
-        db,
-        user.id,
-        { avatarUrl: uploadedAvatar.imageUrl },
-        moderateProfile,
-      );
+      const result = await saveProfileIdentity(db, user.id, { avatarUrl: uploadedAvatar.imageUrl }, moderateProfile);
       if (!result.success) {
         await discardAvatar(uploadedAvatarUrl);
         uploadedAvatarUrl = null;
-        error = result.error ?? "The profile photo could not be updated.";
+        fieldError = result.error ?? ACCOUNT_COPY.photoNotSaved;
+        error = ACCOUNT_COPY.fixBelow;
         moderationMessages = result.moderationMessages ?? [];
         Astro.response.status = result.moderationOutcome === "hold" ? 422 : 409;
       } else {
-        user.image = uploadedAvatar.imageUrl;
-        success = "Profile photo updated successfully!";
         await discardReplacedProfilePhotos({
           db,
           bucket: env.BUCKET,
           userId: user.id,
           imageUrls: [previousImageUrl, previousProfile?.publicAvatarUrl],
         });
+        expireSessionCache(Astro.request, Astro.cookies);
+        return redirectWithFlash(Astro, SPACE_PAGE_PATHS.account, { tone: "success", title: ACCOUNT_COPY.photoSaved });
       }
     } else {
-      const name = (formData.get("name") as string)?.trim();
-
+      const name = String(formData.get("name") ?? "").trim();
+      submittedName = name;
       if (!name) {
-        error = "Name is required.";
+        fieldError = ACCOUNT_COPY.noName;
+        error = ACCOUNT_COPY.fixBelow;
+        Astro.response.status = 400;
       } else {
-        submittedName = name;
         const input: ProfileIdentityInput = { name };
-        const result = await saveProfileIdentity(
-          db,
-          user.id,
-          input,
-          moderateProfile,
-        );
+        const result = await saveProfileIdentity(db, user.id, input, moderateProfile);
         if (!result.success) {
-          error = result.error ?? "The profile could not be updated.";
+          fieldError = result.error ?? ACCOUNT_COPY.nameNotSaved;
+          error = ACCOUNT_COPY.fixBelow;
           moderationMessages = result.moderationMessages ?? [];
           Astro.response.status = result.moderationOutcome === "hold" ? 422 : 409;
         } else {
-          user.name = name;
-          submittedName = null;
-          success = "Profile updated successfully!";
+          // The shell and this form read the person from the session cache: let the next request read D1.
+          expireSessionCache(Astro.request, Astro.cookies);
+          return redirectWithFlash(Astro, SPACE_PAGE_PATHS.account, { tone: "success", title: ACCOUNT_COPY.nameSaved });
         }
       }
     }
-  } catch (e) {
+  } catch (caught) {
     await discardAvatar(uploadedAvatarUrl);
-    error =
-      e instanceof AvatarUploadError
-        ? e.message
-        : "Something went wrong. Please try again.";
+    if (caught instanceof AvatarUploadError) {
+      fieldError = caught.message;
+      error = ACCOUNT_COPY.fixBelow;
+      Astro.response.status = 400;
+    } else {
+      error = ACCOUNT_COPY.unavailable;
+      Astro.response.status = 503;
+    }
   }
 }
-const spaces = await resolveSpacePage(Astro.locals, "account");
+
+const spaces = (await resolving)?.[0] ?? null;
 const onboarding = spaces?.onboarding ?? null;
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const nameError = failed === "name" && fieldError ? fieldError : undefined;
+const photoError = failed === "photo" && fieldError ? fieldError : undefined;
 ---
 
-<SpacePage context={spaces} title={spaces ? "Account" : "Profile"}>
-  <div class="space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{spaces ? "Account" : "Your Profile"}</PageTitle>
-      <p class="mt-1 text-ink-secondary">
-        Manage your account information.
-      </p>
-    </div>
+<SpacePage context={spaces} title="Account" titlePrefix={error ? "Error: " : ""}>
+  <div class="flex max-w-3xl flex-col gap-8">
+    <PageHeader title="Account">{ACCOUNT_COPY.lead}</PageHeader>
 
-    {success && (
-      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        {success}
-      </div>
-    )}
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
 
     {error && (
-      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        <p>{error}</p>
-        {moderationMessages.length > 0 && (
-          <ul class="mt-2 list-disc space-y-1 pl-5">
+      <Notice tone="danger" focusOnLoad id="account-failure" title={failed === "photo" ? ACCOUNT_COPY.photoNotSaved : failed === "name" ? ACCOUNT_COPY.nameNotSaved : ACCOUNT_COPY.notSaved}>
+        {moderationMessages.length > 0 ? (
+          <ul class="m-0 list-disc space-y-1 pl-5">
             {moderationMessages.map((message) => <li>{message}</li>)}
           </ul>
+        ) : (
+          error
         )}
-      </div>
+      </Notice>
     )}
 
     {onboarding && <TakingPart view={onboarding} />}
 
-    <div class="grid gap-6 lg:grid-cols-3">
-      {/* Avatar section */}
-      <Card>
-        <div class="flex flex-col items-center gap-4 text-center">
-          {user.image ? (
-            <img
-              src={user.image}
-              alt={user.name}
-              class="h-24 w-24 rounded-full border-2 border-primary"
-            />
-          ) : (
-            <div class="flex h-24 w-24 items-center justify-center rounded-full bg-teal text-3xl font-bold text-white">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <p class="text-lg font-semibold text-white">{user.name}</p>
-            <p class="text-sm text-ink-secondary">{user.email}</p>
-          </div>
-          <form method="POST" enctype="multipart/form-data" class="w-full space-y-3">
-            <input type="hidden" name="action" value="avatar" />
-            <div class="flex flex-col gap-1.5 text-left">
-              <label for="avatar" class="text-sm font-medium text-white/90">
-                Profile photo
-              </label>
-              <input
-                id="avatar"
-                name="avatar"
-                type="file"
-                accept="image/*"
-                required
-                class="block w-full cursor-pointer rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:font-medium file:text-dark hover:file:bg-primary/90 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-              <p class="text-xs text-ink-muted">
-                Upload a PNG, JPG, GIF, or WebP image. Files are resized to a maximum of 1024x1024 before storage.
-              </p>
-            </div>
-            <Button type="submit" class="w-full">
-              Upload Photo
-            </Button>
-          </form>
+    <Card as="section" aria-labelledby="account-details-title" className="flex flex-col gap-5">
+      <h2 id="account-details-title" class="text-xl leading-snug text-ink-primary">Your details</h2>
+      <div class="flex min-w-0 items-center gap-4">
+        <Avatar id={user.id} name={user.name} src={user.image ?? undefined} size="xl" decorative />
+        <div class="min-w-0">
+          <p class="m-0 font-semibold break-words text-ink-primary">{user.name}</p>
+          <p class="m-0 text-sm break-all text-ink-secondary">{user.email}</p>
         </div>
-      </Card>
+      </div>
+      <form method="POST" class="flex flex-col gap-4" data-account-name>
+        <input type="hidden" name="action" value="profile" />
+        <TextField label="Name" name="name" required autoComplete="name" defaultValue={submittedName ?? user.name} error={nameError} />
+        <TextField label="Email" id="account-email" type="email" defaultValue={user.email} disabled hint={ACCOUNT_COPY.emailHint} />
+        <div><Button type="submit" variant="primary">Save name</Button></div>
+      </form>
+    </Card>
 
-      {/* Edit form */}
-      <Card class="lg:col-span-2">
-        <h3 class="mb-4 text-lg font-semibold text-white">Edit Profile</h3>
-        <form method="POST" class="space-y-4">
-          <input type="hidden" name="action" value="profile" />
-          <div class="flex flex-col gap-1.5">
-            <label for="name" class="text-sm font-medium text-white/90">
-              Name <span class="text-primary">*</span>
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              value={submittedName ?? user.name}
-              class="form-control placeholder:text-ink-muted"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label for="email" class="text-sm font-medium text-white/90">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={user.email}
-              disabled
-              class="form-control text-ink-muted cursor-not-allowed"
-            />
-            <p class="text-xs text-ink-muted">
-              Email is managed by your sign-in provider and cannot be changed here.
-            </p>
-          </div>
-
-          <Button type="submit">
-            Save Changes
-          </Button>
-        </form>
-      </Card>
-    </div>
+    <Card as="section" aria-labelledby="account-photo-title" className="flex flex-col gap-5">
+      <h2 id="account-photo-title" class="text-xl leading-snug text-ink-primary">Photo</h2>
+      <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4" data-account-photo>
+        <input type="hidden" name="action" value="avatar" />
+        <FileField label="Profile photo" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp" required hint={ACCOUNT_COPY.photoHint} error={photoError} />
+        <div><Button type="submit">Upload photo</Button></div>
+      </form>
+    </Card>
   </div>
 </SpacePage>

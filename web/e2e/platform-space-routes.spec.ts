@@ -90,9 +90,9 @@ test.describe("space routes without JavaScript", () => {
     const response = await spaceRouteRequest(request, baseURL!, "/dashboard/account", {
       method: "POST", form: { action: "avatar" }, headers: { Origin: new URL(baseURL!).origin },
     });
-    // The avatar action with no file proves the body arrived without writing data.
-    expect(response.status()).toBe(200);
-    expect(await response.text()).toContain("Please choose an image to upload.");
+    // The avatar action with no file proves the body arrived without writing data: a refusal (400) that names it.
+    expect(response.status()).toBe(400);
+    expect(await response.text()).toContain("Choose an image to upload.");
     expect(response.headers().location).toBeUndefined();
   });
 });

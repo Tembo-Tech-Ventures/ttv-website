@@ -157,7 +157,7 @@ test.describe.serial("talent platform integration journey", () => {
       const mobilePage = await mobileContext.newPage();
       await mobilePage.goto("/dashboard/profile");
       await mobilePage.locator('input[name="name"]').fill(heldName);
-      await mobilePage.getByRole("button", { name: "Save Changes" }).click();
+      await mobilePage.getByRole("button", { name: "Save name" }).click();
       await expect(
         mobilePage.getByText(
           /remove phone numbers, email addresses, or id numbers/i,
@@ -184,8 +184,10 @@ test.describe.serial("talent platform integration journey", () => {
     });
     await page.goto("/dashboard/profile");
     await page.locator('input[name="name"]').fill(checkedName);
-    await page.getByRole("button", { name: "Save Changes" }).click();
-    await expect(page.getByText("Profile updated successfully!")).toBeVisible();
+    await page.getByRole("button", { name: "Save name" }).click();
+    // A 303 to the canonical page, which says it once.
+    await expect(page).toHaveURL(/\/dashboard\/account$/);
+    await expect(page.getByRole("status").filter({ hasText: "Name saved" })).toBeVisible();
     await page.goto("/talent/preview-agent");
     await expect(
       page.getByRole("heading", { name: checkedName }),

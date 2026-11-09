@@ -92,7 +92,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ["h1", "kit-controls", "targets", "overflow", "axe-320"], todo: LANE_M("Post editor, M14") } },
   { path: "/dashboard/me/opportunities", persona: "alumna", pending: { preview: ["kit-controls", "targets"], todo: LANE_M("Opportunities, #393: the no-profile empty state") } },
   { path: "/dashboard/me/leads", persona: "alumna" },
-  { path: "/dashboard/account", persona: "alumna", pending: { checks: ["peach", "kit-controls", "targets"], todo: LANE_M("Account, M12") } },
+  { path: "/dashboard/account", persona: "alumna" },
 
   // Outside the spaces
   { path: "/dashboard/attention", persona: "student" },
