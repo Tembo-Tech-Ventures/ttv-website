@@ -58,8 +58,11 @@ const confirmReads = fetcher
   : null;
 const spaces = landing?.[0] ?? confirmReads?.[0] ?? null;
 const contributions = confirmReads?.[1] ?? null;
-// The space already allowed this page; if its list can't be read (a session the review refuses, or the
-// service down), the page still renders and says so, as the island did, rather than failing whole.
+// The space already allowed this page; if its list can't be read, the page still renders and says why, under
+// a 403 for a session the review refuses (an agent's delegated one) or a 503 for the service.
+const failed = contributions?.failed ?? null;
+const readRefused = failed === 401 || failed === 403;
+if (failed && !outcome) Astro.response.status = readRefused ? 403 : 503;
 const refused = outcome && !outcome.ok ? outcome : null;
 // A POST never carries a flash, and a refused one says what went wrong instead.
 const flash = fetcher && Astro.request.method === "GET" ? takeFlash(Astro) : null;
@@ -77,18 +80,18 @@ const confirmTitle = spaces?.space === "admin" ? "Mentor review" : "Confirm work
       </MentoringOverview>
     </SpacePage>
   ) : (
-    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused ? "Error: " : ""}>
+    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused || (failed && !readRefused) ? "Error: " : ""}>
       <div class="flex max-w-4xl flex-col gap-8">
         <PageHeader title={confirmTitle} />
         {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
         {refused && (
           <Notice tone="danger" focusOnLoad id="confirm-failure" title={refused.title}>{refused.detail}</Notice>
         )}
-        {contributions?.failed === 403 || contributions?.failed === 401 ? (
+        {readRefused ? (
           <Notice tone="info" title="Reviewing shared work needs your own browser session">
             Mentors and administrators review shared work signed in themselves; a token or a delegated session can't.
           </Notice>
-        ) : contributions?.failed ? (
+        ) : failed ? (
           <Notice tone="danger" title="Shared work didn't load">Please try again in a moment.</Notice>
         ) : (
           <ConfirmWork requests={contributions?.list ?? []} kept={refused?.kept ?? null} />

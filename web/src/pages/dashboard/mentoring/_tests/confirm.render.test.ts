@@ -176,8 +176,19 @@ describe("Confirm work", () => {
     seeded();
     // An agent's delegated session reaches the page through its space, but the review takes a person's own browser session.
     const { status, body } = await visit({ userAgent: "ttv-agent:synthetic/1.0" });
-    expect(status).toBe(200);
-    expect(main(body).querySelector("[data-notice]")?.textContent).toMatch(/own browser session|didn't load/);
+    expect(status).toBe(403);
+    expect(main(body).querySelector("[data-notice]")?.textContent).toMatch(/own browser session/);
+    expect(card(body)).toBeNull();
+  });
+
+  it("answers a 503 that still renders the page when the service fails", async () => {
+    seeded();
+    sqlite.exec("DROP TABLE communityConfirmation");
+    const { status, body } = await visit();
+    expect(status).toBe(503);
+    expect(body).toMatch(/<title>Error: /);
+    expect(main(body).querySelector("h1")?.textContent).toBe("Confirm work");
+    expect(main(body).querySelector("[data-notice='danger']")?.textContent).toMatch(/didn't load/);
     expect(card(body)).toBeNull();
   });
 });

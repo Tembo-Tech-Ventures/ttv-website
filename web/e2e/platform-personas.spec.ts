@@ -361,7 +361,14 @@ test.describe("staff", () => {
     test.skip(capabilities.isMentor, "This staff persona is also a mentor.");
     expect(spaces).not.toContain("mentoring");
 
-    await open(page, "/dashboard/mentoring");
+    // The review takes a person's own browser session; the preview's staff persona, an agent's delegated
+    // session, gets the page in its space under a 403 that says so.
+    const response = await page.goto("/dashboard/mentoring");
+    if (response?.status() === 403) {
+      await expect(page.getByText("Reviewing shared work needs your own browser session")).toBeVisible();
+    } else {
+      expect(response?.status(), "/dashboard/mentoring").toBe(200);
+    }
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Mentor review");
     await expect(page.locator("#space-sidebar a", { hasText: "Admin home" })).toHaveAttribute("href", "/admin");
