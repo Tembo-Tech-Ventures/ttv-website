@@ -15,7 +15,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
   },
   "Tailwind palette colours": {
     "components/auth/GitHubSignInButton.tsx": 1,
-    "components/common/Button.astro": 3,
     "components/talent/TalentCard.astro": 4,
     "pages/hire/index.astro": 16,
     "pages/talent/[handle].astro": 17,
