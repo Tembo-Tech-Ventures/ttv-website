@@ -60,7 +60,7 @@ ttv-website/
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
 │   │   │   ├── style-guide/      # The public /style-guide's frame, catalogue and specimens
-│   │   │   ├── common/           # Shared UI (Card, Badge, Sidebar, Grain)
+│   │   │   ├── common/           # Shared UI (Card, Sidebar, Grain)
 │   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
 │   │   │   ├── platform/         # ui/ (the TTV UI kit), spaces shell, overlays, mentors, onboarding (READMEs inside)
 │   │   │   ├── channels/         # Channel view, composer, embeds, Tembo cards
@@ -337,7 +337,7 @@ No Docker needed. Wrangler handles local D1 database emulation.
 - **UI kit**: Build UI from the TTV UI kit, `@/components/platform/ui` (buttons, links, fields, notices,
   empty states, chips, avatars, cards, sheets and the tab file). In `.astro` files a kit component with no
   `client:` directive renders as static HTML. Where a component cannot go, use its recipe (`buttonClass`,
-  `FOCUS_RING`) rather than copying classes. The older `common/Button.astro`, `Card.astro`, `Badge.astro` and the
+  `FOCUS_RING`) rather than copying classes. The older `common/Button.astro`, `Card.astro` and the
   `form-control` utility are frozen to the files that already use them (`legacy-ui.test.ts`). The guide is
   `web/docs/design-system/`; the public version, with every component live, is `/style-guide`.
 - **Theme colors**: Use Tailwind classes (`text-primary`, `bg-dark`, `text-ink-primary`, etc.)
