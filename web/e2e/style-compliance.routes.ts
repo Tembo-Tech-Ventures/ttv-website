@@ -97,7 +97,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Outside the spaces
   { path: "/dashboard/attention", persona: "student" },
   { path: "/dashboard/feedback", persona: "student" },
-  { path: "/dashboard/welcome", persona: "newcomer", pending: { checks: ["targets"], todo: LANE_X("the 17px-tall wordmark link home") } },
+  { path: "/dashboard/welcome", persona: "newcomer" },
 
   // Admin
   { path: "/admin", persona: "staff" },
@@ -128,6 +128,6 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/recordings/import", persona: "staff", pending: { preview: ["peach"], todo: LANE_X("a second peach action on the preview's import sources, before #397") } },
   { path: "/admin/recordings/upload", persona: "staff" },
   { path: "/admin/settings/integrations", persona: "staff", pending: { preview: ["kit-controls", "targets"], todo: LANE_X("the hand-rolled \"Where to get this credential\" summary") } },
-  { path: "/admin/users", persona: "staff", pending: { checks: ["overflow"], todo: LANE_X("the users table is 2px too wide at 320") } },
+  { path: "/admin/users", persona: "staff" },
   { path: "/admin/users/[id]", persona: "staff", detail: { from: "/admin/users", link: ID("/admin/users") } },
 ];
