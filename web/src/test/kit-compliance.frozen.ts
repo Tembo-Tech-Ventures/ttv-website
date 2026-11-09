@@ -11,14 +11,11 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "components/platform/shell/harness/StubOverlays.tsx": 1,
     "components/shells/AdminShell.tsx": 2,
     "components/shells/DashboardShell.tsx": 2,
-    "pages/dashboard/apply.astro": 4,
     "pages/dev/shell-preview.astro": 1,
   },
   "Tailwind palette colours": {
     "components/auth/GitHubSignInButton.tsx": 1,
-    "components/common/Button.astro": 3,
     "components/talent/TalentCard.astro": 4,
-    "pages/dashboard/apply.astro": 7,
     "pages/hire/index.astro": 16,
     "pages/talent/[handle].astro": 17,
   },
@@ -49,7 +46,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
   "the form-control utility": {
   },
   "the spaces/PageTitle.astro shim": {
-    "pages/dashboard/apply.astro": 1,
   },
   "status flags in the query string": {
     "components/platform/mentors/DirectoryRequests.tsx": 1,
@@ -64,7 +60,6 @@ export const FROZEN: Record<string, Record<string, number>> = {
     "pages/admin/feedback/themes/[id].astro": 2,
     "pages/admin/programs/[id].astro": 1,
     "pages/admin/programs/index.astro": 1,
-    "pages/dashboard/apply.astro": 2,
     "pages/dashboard/community/mentors.astro": 1,
     "pages/dashboard/mentoring/availability.astro": 2,
     "pages/dev/platform-mentors.astro": 2,

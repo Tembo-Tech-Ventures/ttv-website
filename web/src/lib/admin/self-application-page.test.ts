@@ -24,16 +24,16 @@ describe("dashboard cohort application page wiring", () => {
   it("returns safe client and server failures without leaking database errors", () => {
     expect(pageSource).toContain("caught instanceof ProgramApplicationError");
     expect(pageSource).toContain("Astro.response.status = 400");
-    expect(pageSource).toContain("Astro.response.status = 500");
+    expect(pageSource).toContain("Astro.response.status = 503");
     expect(pageSource).toContain(
       'error = "The application could not be submitted. Please try again."'
     );
-    expect(pageSource).toContain('role="alert"');
+    expect(pageSource).toContain('<Notice tone="danger" focusOnLoad');
   });
 
   it("redirects successful posts to prevent duplicate browser resubmission", () => {
-    expect(pageSource).toContain(
-      'Astro.redirect("/dashboard/apply?notice=application-submitted")'
-    );
+    // A 303 to the canonical page with a read-once flash, never a `?notice=` that a reload repeats.
+    expect(pageSource).toContain("return redirectWithFlash(Astro, SPACE_PAGE_PATHS.apply,");
+    expect(pageSource).not.toContain("?notice=");
   });
 });

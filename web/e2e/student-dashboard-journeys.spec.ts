@@ -142,9 +142,9 @@ for (const persona of personas) {
           const apply = await page.goto(persona.actionHref);
           expect(apply?.status()).toBe(200);
           await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
-          await expect(page.getByRole("heading", { level: 1, name: "Apply to a Cohort" })).toBeVisible();
+          await expect(page.getByRole("heading", { level: 1, name: "Apply to a cohort" })).toBeVisible();
           await expect(
-            page.locator("[data-cohort-id]").getByRole("button", { name: "Apply", exact: true }).first()
+            page.locator("[data-cohort-id]").getByRole("button", { name: /^Apply to / }).first()
           ).toBeEnabled();
           await expect(current).toHaveText("Apply to a cohort");
           await page.screenshot({ path: evidence(persona.name), fullPage: true });

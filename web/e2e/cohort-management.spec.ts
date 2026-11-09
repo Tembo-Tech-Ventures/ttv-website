@@ -278,7 +278,7 @@ test.describe("admin cohort management", () => {
       });
 
     await expect(
-      page.getByRole("heading", { name: "Apply to a Cohort" })
+      page.getByRole("heading", { name: "Apply to a cohort" })
     ).toBeVisible();
     const applicationCard = page.locator(
       `[data-cohort-id="${programId}"]`
@@ -291,7 +291,7 @@ test.describe("admin cohort management", () => {
     ).toHaveCount(0);
 
     await applicationCard.getByRole("button", { name: "Apply" }).click();
-    await expect(page).toHaveURL(/notice=application-submitted/);
+    await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
     await expect(
       page.getByText("Your cohort application was submitted.")
     ).toBeVisible();

@@ -11,7 +11,7 @@ import { scanKitCompliance } from "./kit-compliance.scan";
  * surface tokens. Every file is frozen at its count in kit-compliance.frozen.ts.
  * A file may not gain a match; when one loses some, its number must come down
  * too, so nothing can quietly come back. legacy-ui.test.ts does the same for
- * common/Button, Card and Badge.
+ * the form-control utility.
  */
 const SCAN = scanKitCompliance();
 

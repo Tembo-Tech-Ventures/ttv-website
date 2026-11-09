@@ -65,7 +65,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/cohort/sessions", persona: "student" },
   { path: "/dashboard/cohort/sessions/[id]", persona: "student", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions") } },
   { path: "/dashboard/cohort/ask", persona: "student", namedH1: true },
-  { path: "/dashboard/cohort/apply", persona: "community", pending: { checks: ["kit-controls", "targets"], preview: ["peach"], todo: LANE_M("Apply, #406") } },
+  { path: "/dashboard/cohort/apply", persona: "community" },
   { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ } },
   { path: "/dashboard/cohort/c/[slug]", persona: "student", namedH1: true, detail: { from: "/dashboard/cohort", link: ID("/dashboard/cohort/c") } },
 

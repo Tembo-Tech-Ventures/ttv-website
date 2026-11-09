@@ -1,10 +1,17 @@
 ---
+/**
+ * Apply to a cohort (/dashboard/cohort/apply), on the kit (style-guide rollout
+ * M11): the cohorts taking applications, each a kit card with a quiet "Apply to
+ * {cohort}" that posts here. A submitted application answers 303 to this page,
+ * which says so once (a flash, not a query string), and nothing on it contradicts
+ * that (applyPageState).
+ */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
-import Card from "@/components/common/Card.astro";
-import Button from "@/components/common/Button.astro";
+import { Button, ButtonLink, Card, Chip, EmptyState, HINT, Notice, PageHeader } from "@/components/platform/ui";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -16,14 +23,14 @@ import {
   createSelfApplication,
   throwSelfApplicationFailure,
 } from "@/lib/admin/program-application";
-import { applyPageState } from "@/lib/student/apply-page";
+import { APPLICATION_SUBMITTED, applyPageState } from "@/lib/student/apply-page";
 import { formatCalendarDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
-const spaces = await resolveSpacePage(Astro.locals, "apply");
+// The frame starts first; a GET reads its cohorts beside it (PERF-2).
+const resolving = resolveSpacePageWith(Astro.locals, "apply", async () => null);
 
-const notice = Astro.url.searchParams.get("notice");
 let error = "";
 
 if (Astro.request.method === "POST") {
@@ -72,125 +79,102 @@ if (Astro.request.method === "POST") {
       });
     }
 
-    return Astro.redirect("/dashboard/apply?notice=application-submitted");
+    return redirectWithFlash(Astro, SPACE_PAGE_PATHS.apply, { tone: "success", title: APPLICATION_SUBMITTED });
   } catch (caught) {
     if (caught instanceof ProgramApplicationError) {
       error = caught.message;
       Astro.response.status = 400;
     } else {
       error = "The application could not be submitted. Please try again.";
-      Astro.response.status = 500;
+      Astro.response.status = 503;
     }
   }
 }
 
-// Get user's existing applications to filter them out
-const userApplications = await db.query.programApplication.findMany({
-  where: eq(schema.programApplication.userId, user.id),
-  columns: { programId: true },
-});
-const appliedProgramIds = userApplications
-  .map((a) => a.programId)
-  .filter(Boolean) as string[];
-
-// Query only open cohorts; filtering after the query could expose a newly
-// closed cohort while this response is being assembled.
-const allPrograms = await db.query.program.findMany({
-  where: eq(schema.program.applicationsOpen, true),
-  with: { curriculum: true },
-});
-
-// Filter out programs already applied to
-const availablePrograms = allPrograms.filter(
-  (p) => !appliedProgramIds.includes(p.id)
-);
+const [landing, userApplications, allPrograms] = await Promise.all([
+  resolving,
+  db.query.programApplication.findMany({
+    where: eq(schema.programApplication.userId, user.id),
+    columns: { programId: true },
+  }),
+  // Only open cohorts: filtering after the query could expose a newly closed
+  // cohort while this response is being assembled.
+  db.query.program.findMany({
+    where: eq(schema.program.applicationsOpen, true),
+    with: { curriculum: true },
+  }),
+]);
+const spaces = landing?.[0] ?? null;
+const appliedProgramIds = userApplications.map((a) => a.programId).filter(Boolean) as string[];
+const availablePrograms = allPrograms.filter((p) => !appliedProgramIds.includes(p.id));
 
 // After a successful post the page confirms the application and nothing else
 // contradicts it: the cohort list only offers the other open cohorts, and the
 // "nothing open" message is left out.
+const flash = Astro.request.method === "POST" ? null : takeFlash(Astro);
 const { submitted, showSubtitle, showOtherCohortsHeading, emptyMessage } = applyPageState({
-  notice,
+  submittedNow: flash?.title === APPLICATION_SUBMITTED,
   appliedCount: appliedProgramIds.length,
   openCount: allPrograms.length,
   availableCount: availablePrograms.length,
 });
-const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
+const applicationsHref = SPACE_PATHS.cohort;
+const Name = showOtherCohortsHeading ? "h3" : "h2";
 ---
 
-<SpacePage context={spaces} title="Apply to a Cohort" legacyTitle="Apply">
-  <div class="space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Apply to a Cohort</PageTitle>
-      {showSubtitle && (
-        <p class="mt-1 text-ink-secondary">
-          Browse cohorts accepting applications and submit yours.
-        </p>
-      )}
-    </div>
+<SpacePage context={spaces} title="Apply to a cohort" titlePrefix={error ? "Error: " : ""}>
+  <div class="flex max-w-5xl flex-col gap-8">
+    <PageHeader title="Apply to a cohort">
+      {showSubtitle && "Browse cohorts accepting applications and submit yours."}
+    </PageHeader>
 
     {submitted && (
-      <div role="status" data-application-submitted class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        <p class="font-medium">Your cohort application was submitted.</p>
-        <p class="mt-1 text-sm text-green-200/90">
-          It's with the team now. You can follow its status {spaces ? "on your Cohort page" : "from your dashboard"}.
-        </p>
-        <Button href={applicationsHref} class="mt-3">
-          View your applications
-        </Button>
+      <div data-application-submitted>
+        <Notice tone="success" focusOnLoad title={APPLICATION_SUBMITTED}>
+          It's with the team now. You can follow its status on your Cohort page.
+          <Fragment slot="actions"><ButtonLink href={applicationsHref} size="sm">View your applications</ButtonLink></Fragment>
+        </Notice>
       </div>
     )}
 
-    {error && (
-      <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        {error}
-      </div>
-    )}
+    {error && <Notice tone="danger" focusOnLoad title="Your application wasn't submitted">{error}</Notice>}
 
-    {showOtherCohortsHeading && (
-      <h2 class="font-body text-lg font-semibold text-white">Other open cohorts</h2>
-    )}
+    {showOtherCohortsHeading && <h2 class="text-2xl text-ink-primary">Other open cohorts</h2>}
 
     {availablePrograms.length > 0 ? (
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" aria-label="Cohorts taking applications">
         {availablePrograms.map((program) => (
-          <div data-cohort-id={program.id}>
-            <Card>
-              <div class="flex flex-col gap-3">
-                <h3 class="text-lg font-semibold text-white">{program.name}</h3>
-                <p class="text-sm text-ink-secondary">{program.description}</p>
-                {program.curriculum && (
-                  <div class="rounded bg-teal/20 px-2 py-1 text-xs text-white/70">
-                    {program.curriculum.title}
-                  </div>
-                )}
-                {program.startDate && (
-                  <p class="text-xs text-ink-muted">
-                    Starts {formatCalendarDate(program.startDate)}
-                    {program.endDate && ` — Ends ${formatCalendarDate(program.endDate)}`}
-                  </p>
-                )}
-                <form method="POST" class="mt-2">
-                  <input type="hidden" name="programId" value={program.id} />
-                  <Button type="submit" class="w-full">
-                    Apply
-                  </Button>
-                </form>
-              </div>
+          <li class="flex min-w-0" data-cohort-id={program.id}>
+            <Card as="article" aria-labelledby={`cohort-${program.id}`} className="flex min-w-0 flex-1 flex-col gap-3">
+              <Name id={`cohort-${program.id}`} class="text-lg leading-snug text-ink-primary">{program.name}</Name>
+              {program.description && <p class="text-sm leading-relaxed text-ink-secondary">{program.description}</p>}
+              {program.curriculum && <div><Chip>{program.curriculum.title}</Chip></div>}
+              {program.startDate && (
+                <p class={HINT}>
+                  Starts {formatCalendarDate(program.startDate)}
+                  {program.endDate && ` — Ends ${formatCalendarDate(program.endDate)}`}
+                </p>
+              )}
+              <form method="POST" class="mt-auto pt-2">
+                <input type="hidden" name="programId" value={program.id} />
+                <Button type="submit" className="w-full">
+                  {/* A long cohort name ellipsises here; its heading above says it in full. */}
+                  <span class="min-w-0 truncate">Apply to {program.name}</span>
+                </Button>
+              </form>
             </Card>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     ) : emptyMessage && (
-      <Card>
-        <div class="text-center py-8" data-apply-empty>
-          <p class="text-ink-secondary">{emptyMessage}</p>
+      <div data-apply-empty>
+        <EmptyState title={emptyMessage} headingLevel={2}>
+          {appliedProgramIds.length > 0 ? "Your applications and their status are on your Cohort page." : "New cohorts appear here when they open for applications."}
           {appliedProgramIds.length > 0 && (
-            <Button href={applicationsHref} class="mt-4">
-              View your applications
-            </Button>
+            <Fragment slot="action"><ButtonLink href={applicationsHref} variant="primary">View your applications</ButtonLink></Fragment>
           )}
-        </div>
-      </Card>
+        </EmptyState>
+      </div>
     )}
   </div>
 </SpacePage>

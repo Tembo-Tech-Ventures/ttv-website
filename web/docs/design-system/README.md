@@ -93,7 +93,7 @@ spellings.
 
 ## Older parts, and moving off them
 
-`components/common/Button.astro`, `Card.astro` and the `form-control` utility in `global.css` predate the kit. Pages that already
+The `form-control` utility in `global.css` predates the kit (as `components/common/Button.astro`, `Card.astro` and `Badge.astro` did; they are gone). Pages that already
 use them are listed in `src/components/common/legacy-ui.test.ts`, which fails
 if any other file starts using them, and also if a listed file stops using
 them, so the lists only shrink. When you move a page onto the kit, delete its
@@ -101,9 +101,9 @@ line there.
 
 | Older | Kit |
 |---|---|
-| `common/Button.astro` with `href` | `ButtonLink` |
-| `common/Button.astro` without `href` | `Button` (`secondary` is `quiet`) |
-| `common/Card.astro` | `Card` |
+| `common/Button.astro` with `href` (removed) | `ButtonLink` |
+| `common/Button.astro` without `href` (removed) | `Button` (`secondary` is `quiet`) |
+| `common/Card.astro` (removed) | `Card` |
 | `common/Badge.astro` (removed once its last page moved) | `Chip` with a status tone (`success`, `warning`, `danger`, or `neutral`/`peach`), or `RoleBadge` for a person's role |
 | `class="form-control"` | `TextField`, `TextAreaField`, `SelectField` |
 | hand-written red/green alert boxes | `Notice` |
