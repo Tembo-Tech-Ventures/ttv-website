@@ -21,7 +21,7 @@ test.describe("legacy import containment", () => {
     await page.goto("/admin/data-migration");
 
     await expect(
-      page.getByRole("heading", { name: "Data Migration" })
+      page.getByRole("heading", { level: 1, name: "Data migration" })
     ).toBeVisible();
     await expect(page.getByText("Migration testing only")).toBeVisible();
     await expect(
@@ -34,21 +34,25 @@ test.describe("legacy import containment", () => {
       "cannot run a legacy import"
     );
 
-    const minimalExport = {
+    // Privilege records only: the review runs the import's checks and writes nothing.
+    const privilegeOnlyExport = {
       version: 1,
       exportedAt: "2026-08-01T12:00:00.000Z",
+      roles: [{ id: "legacy-role", name: "ADMIN" }],
     };
     await page.getByLabel("Legacy JSON export").setInputFiles({
       name: "export.json",
       mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(minimalExport)),
+      buffer: Buffer.from(JSON.stringify(privilegeOnlyExport)),
     });
-    await expect(page.getByText("Record Preview")).toBeVisible();
+    await page.getByRole("button", { name: "Review export" }).click();
     await expect(
-      page.getByRole("button", {
-        name: "Import unavailable for agent sessions",
-      })
-    ).toBeDisabled();
+      page.getByRole("table", { name: "Records in this export" })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Import unavailable for agent sessions", { exact: false })
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Import / })).toHaveCount(0);
 
     await page.screenshot({
       path: `test-results/evidence/${testInfo.project.name}-import-containment.png`,

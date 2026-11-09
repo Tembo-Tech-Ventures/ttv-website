@@ -152,7 +152,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
-  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
+  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", retired: true },
   { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", retired: true },
 ];
 
@@ -366,6 +366,38 @@ test.describe("every admin page", () => {
     await context.close();
   });
 
+  test("data migration: an export reviewed, then imported, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Importing writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/data-migration");
+    const main = page.locator("main");
+    test.skip(await main.getByTestId("legacy-import-disabled").isVisible(), "The importer works only in staging and agent-* environments (DEPLOYMENT_ENVIRONMENT).");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Review export"]);
+
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from("{ not json") });
+    await press(main.getByRole("button", { name: "Review export" }));
+    await expect(main.getByRole("alert").filter({ hasText: "That file isn't JSON." })).toBeVisible();
+
+    const id = `e2e-legacy-${Date.now().toString(36)}`;
+    const legacyExport = { version: 1, exportedAt: "2026-08-01T12:00:00.000Z", users: [{ id, name: "Legacy Learner", email: `${id}@example.test` }] };
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacyExport)) });
+    await press(main.getByRole("button", { name: "Review export" }));
+    const table = main.getByRole("table", { name: "Records in this export" });
+    await expect(table.getByRole("row").filter({ hasText: "Users" })).toContainText("1");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Import 1 record"]);
+    await press(main.getByRole("button", { name: "Import 1 record" }));
+    await expect(page).toHaveURL(/\/admin\/data-migration$/);
+    await expect(main.getByText("Import complete")).toBeVisible();
+    await expect(main.getByText("1 rows changed", { exact: false })).toBeVisible();
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -480,7 +512,7 @@ test.describe("every admin page", () => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
-      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"]]) {
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);
