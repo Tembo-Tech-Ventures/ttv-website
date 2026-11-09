@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
-  fetchGitHubLogin,
   fetchPublicRepos,
   toHighlightSnapshot,
   GitHubAuthError,
@@ -23,32 +22,6 @@ function mockFetchResponse(data: unknown, status = 200) {
     headers: new Headers(),
   } as Response);
 }
-
-describe("fetchGitHubLogin", () => {
-  it("returns the login from the GitHub user endpoint", async () => {
-    mockFetchResponse({ login: "octocat" });
-    const login = await fetchGitHubLogin("test-token");
-    expect(login).toBe("octocat");
-
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(call[0]).toBe("https://api.github.com/user");
-    expect(call[1].headers.Authorization).toBe("Bearer test-token");
-    expect(call[1].headers["User-Agent"]).toBe("ttv-website");
-    expect(call[1].headers.Accept).toBe("application/vnd.github+json");
-  });
-
-  it("throws GitHubAuthError on 401", async () => {
-    mockFetchResponse({}, 401);
-    await expect(fetchGitHubLogin("bad-token")).rejects.toThrow(
-      /invalid/i
-    );
-  });
-
-  it("throws GitHubAuthError on 403 (rate limit)", async () => {
-    mockFetchResponse({}, 403);
-    await expect(fetchGitHubLogin("token")).rejects.toThrow(GitHubAuthError);
-  });
-});
 
 describe("fetchPublicRepos", () => {
   it("returns non-fork, non-archived repos", async () => {
