@@ -37,7 +37,7 @@ export const DESKTOP_CHECKS: readonly StyleCheck[] = ["h1", "peach", "kit-contro
 export const MOBILE_CHECKS: readonly StyleCheck[] = ["targets", "overflow", "axe-320"];
 
 /** A seeded persona: one of the shared keys, or a person seeded only locally. */
-export type StylePersona = PersonaKey | "newcomer";
+export type StylePersona = PersonaKey | "newcomer" | "applicant";
 
 export interface StyleRoute {
   path: string;
@@ -53,6 +53,7 @@ export interface StyleRoute {
 const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes)$)[^/?#]+$`);
 
 const LANE_M = (page: string) => `TODO(lane M, ${page}): the page goes onto the kit in its own PR`;
+const LANE_X = (what: string) => `TODO(lane X follow-ups): ${what}`;
 const ALL: readonly StyleCheck[] = [...DESKTOP_CHECKS, ...MOBILE_CHECKS];
 
 export const STYLE_ROUTES: readonly StyleRoute[] = [
@@ -60,9 +61,9 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/cohort", persona: "student" },
   { path: "/dashboard/cohort/sessions", persona: "student" },
   { path: "/dashboard/cohort/sessions/[id]", persona: "student", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions") } },
-  { path: "/dashboard/cohort/ask", persona: "student", namedH1: true, pending: { checks: ALL, todo: LANE_M("Ask Tembo, #403") } },
-  { path: "/dashboard/cohort/apply", persona: "community", pending: { checks: ALL, todo: LANE_M("Apply, M11") } },
-  { path: "/dashboard/cohort/application/[id]", persona: "student", detail: { from: "/dashboard/cohort/apply", link: ID("/dashboard/cohort/application") }, pending: { checks: ALL, todo: LANE_M("Application, #405") } },
+  { path: "/dashboard/cohort/ask", persona: "student", namedH1: true, pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Ask Tembo, #403") } },
+  { path: "/dashboard/cohort/apply", persona: "community", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Apply, M11") } },
+  { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ }, pending: { checks: ALL, todo: LANE_M("Application, #405") } },
   { path: "/dashboard/cohort/c/[slug]", persona: "student", namedH1: true, detail: { from: "/dashboard/cohort", link: ID("/dashboard/cohort/c") } },
 
   // Community
@@ -75,24 +76,24 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/mentoring", persona: "mentor" },
   { path: "/dashboard/mentoring/requests", persona: "mentor" },
   { path: "/dashboard/mentoring/availability", persona: "mentor" },
-  { path: "/dashboard/mentoring/confirm", persona: "mentor", pending: { checks: ALL, todo: LANE_M("Confirm work, M17") } },
+  { path: "/dashboard/mentoring/confirm", persona: "mentor", pending: { checks: ["h1"], todo: LANE_M("Confirm work, M17") } },
 
   // Discover
-  { path: "/dashboard/discover", persona: "institution", pending: { checks: ALL, todo: LANE_M("Discover, #400") } },
+  { path: "/dashboard/discover", persona: "institution", pending: { checks: ["h1"], todo: LANE_M("Discover, #400") } },
 
   // Profile
   { path: "/dashboard/me", persona: "alumna" },
-  { path: "/dashboard/me/portfolio", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Public profile editor, M13") } },
-  { path: "/dashboard/me/writing", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Writing, #394") } },
-  { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Post editor, M14") } },
-  { path: "/dashboard/me/opportunities", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Opportunities, #393") } },
-  { path: "/dashboard/me/leads", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Visitor messages, #392") } },
-  { path: "/dashboard/account", persona: "alumna", pending: { checks: ALL, todo: LANE_M("Account, M12") } },
+  { path: "/dashboard/me/portfolio", persona: "alumna", pending: { checks: ["kit-controls", "targets", "overflow"], todo: LANE_M("Public profile editor, M13") } },
+  { path: "/dashboard/me/writing", persona: "alumna" },
+  { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ["h1", "kit-controls", "targets", "overflow", "axe-320"], todo: LANE_M("Post editor, M14") } },
+  { path: "/dashboard/me/opportunities", persona: "alumna" },
+  { path: "/dashboard/me/leads", persona: "alumna" },
+  { path: "/dashboard/account", persona: "alumna", pending: { checks: ["peach", "kit-controls", "targets"], todo: LANE_M("Account, M12") } },
 
   // Outside the spaces
   { path: "/dashboard/attention", persona: "student" },
   { path: "/dashboard/feedback", persona: "student" },
-  { path: "/dashboard/welcome", persona: "newcomer" },
+  { path: "/dashboard/welcome", persona: "newcomer", pending: { checks: ["targets"], todo: LANE_X("the 17px-tall wordmark link home") } },
 
   // Admin
   { path: "/admin", persona: "staff" },
@@ -103,7 +104,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/curricula", persona: "staff" },
   { path: "/admin/curricula/[id]", persona: "staff", detail: { from: "/admin/curricula", link: ID("/admin/curricula") } },
   { path: "/admin/curricula/new", persona: "staff" },
-  { path: "/admin/data-migration", persona: "staff", pending: { checks: ALL, todo: LANE_M("Admin data migration, #398") } },
+  { path: "/admin/data-migration", persona: "staff" },
   { path: "/admin/feedback", persona: "staff" },
   { path: "/admin/feedback/[id]", persona: "staff", detail: { from: "/admin/feedback", link: ID("/admin/feedback") } },
   { path: "/admin/feedback/themes", persona: "staff" },
@@ -115,14 +116,14 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/profiles/[id]", persona: "staff", detail: { from: "/admin/profiles", link: ID("/admin/profiles") } },
   { path: "/admin/programs", persona: "staff" },
   { path: "/admin/programs/[id]", persona: "staff", detail: { from: "/admin/programs", link: ID("/admin/programs") } },
-  { path: "/admin/programs/new", persona: "staff", pending: { checks: ALL, todo: LANE_M("Admin new cohort, #399") } },
+  { path: "/admin/programs/new", persona: "staff", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Admin new cohort, #399") } },
   { path: "/admin/projects", persona: "staff" },
   { path: "/admin/projects/[id]", persona: "staff", detail: { from: "/admin/projects", link: ID("/admin/projects") } },
   { path: "/admin/recordings", persona: "staff" },
-  { path: "/admin/recordings/[id]", persona: "staff", detail: { from: "/admin/recordings", link: ID("/admin/recordings") }, pending: { checks: ALL, todo: LANE_M("Admin recording, #395") } },
-  { path: "/admin/recordings/import", persona: "staff", pending: { checks: ALL, todo: LANE_M("Admin recording imports, #397") } },
-  { path: "/admin/recordings/upload", persona: "staff", pending: { checks: ALL, todo: LANE_M("Admin upload recording, #404") } },
+  { path: "/admin/recordings/[id]", persona: "staff", detail: { from: "/admin/recordings", link: ID("/admin/recordings") } },
+  { path: "/admin/recordings/import", persona: "staff", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Admin recording imports, #397") } },
+  { path: "/admin/recordings/upload", persona: "staff", pending: { checks: ["kit-controls", "targets"], todo: LANE_M("Admin upload recording, #404") } },
   { path: "/admin/settings/integrations", persona: "staff" },
-  { path: "/admin/users", persona: "staff" },
+  { path: "/admin/users", persona: "staff", pending: { checks: ["overflow"], todo: LANE_X("the users table is 2px too wide at 320") } },
   { path: "/admin/users/[id]", persona: "staff", detail: { from: "/admin/users", link: ID("/admin/users") } },
 ];

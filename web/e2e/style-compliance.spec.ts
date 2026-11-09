@@ -64,8 +64,14 @@ const PAGE_HELPERS = `
 `;
 
 const CONTROLS = "a[href],button,input[type=submit],input[type=button],input[type=reset],summary,[role=button]";
+/**
+ * The kit draws every control's focus the same way: FOCUS_RING or INSET_FOCUS_RING in its classes,
+ * or, for the space tabs, the same ring in platform-ui.css. A control with neither was written by hand.
+ */
+const KIT_RING = String.raw`\bfocus-visible:outline-peach-ink\b|\bspace-tab__link\b`;
 
-function desktopFacts({ controls }: { controls: string }) {
+function desktopFacts({ controls, kitRing }: { controls: string; kitRing: string }) {
+  const ring = new RegExp(kitRing);
   const w = window as unknown as { __styleVisible: (el: Element) => boolean; __styleName: (el: Element) => string };
   const probe = document.createElement("span");
   probe.style.color = "var(--color-primary)";
@@ -79,8 +85,7 @@ function desktopFacts({ controls }: { controls: string }) {
   return {
     h1: h1s.map((h) => ({ text: (h.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 60), visible: shown(h), font: getComputedStyle(h).fontFamily })),
     peach: onScreen.filter((el) => getComputedStyle(el).backgroundColor === peach && !/^skip to/i.test((el.textContent ?? "").trim())).map(w.__styleName),
-    // The kit draws every control's focus the same way (FOCUS_RING, INSET_FOCUS_RING); a control without it was written by hand.
-    unkitted: onScreen.filter((el) => !/\bfocus-visible:outline-peach-ink\b/.test(el.getAttribute("class") ?? "")).map(w.__styleName),
+      unkitted: onScreen.filter((el) => !ring.test(el.getAttribute("class") ?? "")).map(w.__styleName),
     // Peach is the one primary action, never a link's colour (linkClass is ink, underlined).
     peachLinks: onScreen.filter((el) => el.tagName === "A" && getComputedStyle(el).color === peach && getComputedStyle(el).backgroundColor !== peach).map(w.__styleName),
   };
@@ -123,6 +128,8 @@ for (const route of STYLE_ROUTES) {
     const runs = phone ? MOBILE_CHECKS : DESKTOP_CHECKS;
     test.skip(runs.every((name) => owed.has(name)), route.pending?.todo ?? "");
 
+    // A detail route opens its list first, and astro dev compiles each page on its first visit.
+    test.slow();
     await signIn(page.context(), baseURL!, session);
     await page.addInitScript(PAGE_HELPERS);
     const path = await resolvePath(page, route);
@@ -142,7 +149,7 @@ for (const route of STYLE_ROUTES) {
     };
 
     if (!phone) {
-      const facts = await page.evaluate(desktopFacts, { controls: CONTROLS });
+      const facts = await page.evaluate(desktopFacts, { controls: CONTROLS, kitRing: KIT_RING });
       await check("h1", () => {
         const visible = facts.h1.filter((h) => h.visible);
         if (route.namedH1) return facts.h1.length === 1 ? [] : [`expected one named h1, found ${facts.h1.length}`];
