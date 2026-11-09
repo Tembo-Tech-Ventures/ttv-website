@@ -11,15 +11,3 @@ test("public community entry explains membership and retains both sign-in destin
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/community-entry-${test.info().project.name}.png`, fullPage: true });
 });
-
-test("a member without cohort access can reach their journey from dashboard navigation and context", async ({ page, baseURL }, testInfo) => {
-  test.skip(baseURL !== "http://127.0.0.1:4322", "Local component preview; no live authentication.");
-  await page.goto("/community-entry.html?dashboard");
-  await expect(page.getByRole("link", { name: "Open my profile and journey" })).toHaveAttribute("href", "/dashboard/community");
-  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open navigation" }).click();
-  await expect(page.getByRole("link", { name: "Community", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Community", exact: true })).toHaveAttribute("href", "/dashboard/community");
-  await expect(page.getByRole("link", { name: "Sessions", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Profile", exact: true })).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});

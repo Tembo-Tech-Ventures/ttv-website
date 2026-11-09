@@ -247,12 +247,15 @@ type Entry = Omit<SidebarItem, "current" | "href"> & (
   | { href: string; page?: never; current?: boolean }
 );
 
-function item(facts: SidebarFacts, entry: Entry): SidebarItem {
+/** What a list of entries reads: the page, to mark its entry current, and the allowlist. */
+type EntryFacts = { page?: SpacePageKey; allowed?: (href: string) => boolean };
+
+function item(facts: EntryFacts, entry: Entry): SidebarItem {
   const { page, href, current = false, ...rest } = entry;
   return page === undefined ? { ...rest, href, current } : { ...rest, href: SPACE_PAGE_PATHS[page], current: page === facts.page };
 }
 
-function group(facts: SidebarFacts, label: string | undefined, entries: (Entry | false)[]): SidebarGroupModel[] {
+function group(facts: EntryFacts, label: string | undefined, entries: (Entry | false)[]): SidebarGroupModel[] {
   const allowed = facts.allowed ?? (() => true);
   const items = entries.filter((entry): entry is Entry => entry !== false).map((entry) => item(facts, entry)).filter((entry) => allowed(entry.href));
   return items.length > 0 ? [{ ...(label ? { label } : {}), items }] : [];
@@ -450,7 +453,7 @@ const ADMIN_ICONS: Record<AdminNavKey, SidebarIcon> = {
  * page admins keep beside Moderation. Its counts come from the page (facts.admin); without them the
  * entries are listed bare, as for an admin with nothing waiting and channels off.
  */
-function admin(facts: SidebarFacts): SidebarModel {
+function admin(facts: EntryFacts & Pick<SidebarFacts, "admin">): SidebarModel {
   const known = facts.admin ?? NO_ADMIN_FACTS;
   // The queue only renders while `channels` is on, so on it the Moderation entry is always listed.
   const nav = adminSpaceEntries(facts.page === "moderation" && known.pendingModeration === null ? { ...known, pendingModeration: 0 } : known);
@@ -512,4 +515,12 @@ const BUILDERS: Record<SpaceId, (facts: SidebarFacts) => SidebarModel> = {
 
 export function spaceSidebar(space: SpaceId, facts: SidebarFacts): SidebarModel {
   return BUILDERS[space](facts);
+}
+
+/**
+ * The Admin space's sidebar for a page drawn without a spaces context (PlainFrame): its entries
+ * read only the page and the admin navigation's facts, never the person's `Me`.
+ */
+export function adminSidebar(page: SpacePageKey | undefined, facts: AdminNavFacts): SidebarModel {
+  return admin({ page, admin: facts });
 }

@@ -2,13 +2,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ADMIN_SPACE_PAGES } from "@/components/platform/spaces/sidebar";
-import { ADMIN_PAGE_HREFS, type AdminPageNavKey } from "./admin-nav";
+import { ADMIN_PAGE_HREFS, adminSectionFor, type AdminPageNavKey } from "./admin-nav";
 
 /**
  * Every admin page is drawn in the Admin space while `spaces` is on for the admin (T02, T14), and in
- * the existing admin shell otherwise. resolveSpacePage decides which (space-page.test.ts: null with
- * spaces off, for a personal access token, a non-admin or a failed context), and AdminLayout draws
- * AdminShell for null. This holds each page to that wiring: it resolves the key of the section it
+ * a plain frame with the admin navigation otherwise. resolveSpacePage decides which (space-page.test.ts:
+ * null with spaces off, for a personal access token, a non-admin or a failed context), and AdminLayout
+ * draws PlainFrame for null. This holds each page to that wiring: it resolves the key of the section it
  * sits under, so that sidebar entry is current, hands the context to AdminLayout, and draws its
  * title as the screen's h1 in the spaces shell and as the h2 it always had (or nothing) otherwise.
  * A page on the style guide has retired that flag-off title (decision D1): its h1 is the same in both.
@@ -27,12 +27,8 @@ function route(file: string): string {
   return `/admin/${relative(PAGES, file).replace(/\.astro$/, "").replace(/(^|\/)index$/, "")}`.replace(/\/$/, "");
 }
 
-/** The admin section a route sits under: the longest admin page path that is it or a parent of it. */
-function section(path: string): AdminPageNavKey {
-  const keys = Object.keys(ADMIN_PAGE_HREFS) as AdminPageNavKey[];
-  const under = keys.filter((key) => path === ADMIN_PAGE_HREFS[key] || path.startsWith(`${ADMIN_PAGE_HREFS[key]}/`));
-  return under.toSorted((a, b) => ADMIN_PAGE_HREFS[b].length - ADMIN_PAGE_HREFS[a].length)[0]!;
-}
+/** The admin section a route sits under (admin-nav.ts). */
+const section = (path: string): AdminPageNavKey => adminSectionFor(path)!;
 
 const pages = files(PAGES).map((file) => ({ path: route(file), source: readFileSync(file, "utf8") }));
 

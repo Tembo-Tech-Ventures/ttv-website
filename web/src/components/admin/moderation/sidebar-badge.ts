@@ -2,10 +2,9 @@ import { MODERATION_HREF } from "@/components/admin/admin-nav";
 import { MODERATION_PENDING_EVENT } from "./case-model";
 
 /*
- * The Moderation count in the Admin space's sidebar (spaces shell). The sidebar is server-rendered,
- * so after a decision swaps the queue in place (enhance.ts reports the queue's new waiting count),
- * this rewrites the badge's number and its spoken label, as AdminShell's state does in the existing
- * shell. The open request-note checks are part of the badge too (QA4-04), so the page hands them in.
+ * The Moderation count in the Admin space's sidebar (the spaces shell's, or PlainFrame's). The sidebar
+ * is server-rendered, so after a decision swaps the queue in place (enhance.ts reports the queue's new
+ * waiting count), this rewrites the badge's number and its spoken label. The open request-note checks are part of the badge too (QA4-04), so the page hands them in.
  * A badge the server did not draw (nothing was waiting) stays absent until the next load: a decision
  * needs something waiting, so the count can only have gone down.
  */

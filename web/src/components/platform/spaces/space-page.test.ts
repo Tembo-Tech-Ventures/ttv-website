@@ -9,7 +9,6 @@ vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
 vi.mock("@/lib/platform/server/space-context", () => ({ getSpaceContext: mocks.getSpaceContext }));
 vi.mock("@/lib/onboarding/service", () => ({ getOnboardingState: mocks.getOnboardingState }));
 vi.mock("@/lib/observability/errors", () => ({ recordError: mocks.recordError }));
-import { DASHBOARD_LINKS } from "@/components/shells/dashboard-links";
 import type { StudentNextStep } from "@/lib/student/journey";
 import {
   linkAllowed,
@@ -19,7 +18,6 @@ import {
   onboardingFor,
   pickSpace,
   resolveSpacePage,
-  restrictedHrefs,
   restrictedNextStep,
   restrictionsFor,
 } from "./space-page";
@@ -221,17 +219,6 @@ describe("restricted identities", () => {
     expect(restrictedNextStep(qa, sessions).description).toContain("not available in this session");
   });
 
-  it("see only the existing dashboard links their allowlists open; everyone else sees them all", () => {
-    const hrefs = DASHBOARD_LINKS.map((link) => link.href);
-    expect(restrictedHrefs({}, hrefs)).toBeUndefined();
-    expect(restrictedHrefs({ demo: true }, hrefs)).toBeUndefined();
-    const forFixture = restrictedHrefs(fixture, hrefs)!;
-    expect(forFixture).toContain("/dashboard/community");
-    expect(forFixture).not.toContain("/dashboard/sessions");
-    expect(forFixture).not.toContain("/dashboard/profile");
-    expect(forFixture.every((href) => linkAllowed(fixture, href))).toBe(true);
-    expect(restrictedHrefs(qa, hrefs)!.every((href) => linkAllowed(qa, href))).toBe(true);
-  });
 });
 
 describe("loadCertificates", () => {

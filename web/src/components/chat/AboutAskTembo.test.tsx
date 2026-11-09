@@ -41,9 +41,9 @@ describe("what the private Ask Tembo page says about itself (QA3-03, QA3-04)", (
   });
 
   it("is on the page in both frames, above the box, and labels every answer as AI", () => {
-    for (const variant of ["immersive", "space"] as const) {
+    {
       const markup = renderToStaticMarkup(
-        <ChatApp mockMode variant={variant} scope="COHORTS" initialMessages={[{ role: "user", content: "Hi" }, { role: "assistant", content: "Hello [1]" }]} />,
+        <ChatApp mockMode scope="COHORTS" initialMessages={[{ role: "user", content: "Hi" }, { role: "assistant", content: "Hello [1]" }]} />,
       );
       expect(markup.indexOf("data-about-ask")).toBeLessThan(markup.indexOf('id="chat-composer"'));
       expect(text(markup)).toContain(PRIVATE_ASK_SEES.COHORTS);

@@ -50,9 +50,11 @@ const hasSidebar = Astro.slots.has("sidebar");
     </header>
     <div class:list={["platform-sheet mx-2 flex min-h-0 flex-1 gap-6 px-4 pt-6 pb-16 sm:mx-4 sm:px-8", hasSidebar && "flex-col lg:flex-row"]} data-space-tone={space}>
       {hasSidebar && (
-        <nav aria-label="Sections" class="lg:w-64 lg:shrink-0" data-plain-sidebar>
-          <slot name="sidebar" />
-        </nav>
+        <aside id="space-sidebar" class="lg:w-64 lg:shrink-0" data-plain-sidebar>
+          <nav aria-label="Sections">
+            <slot name="sidebar" />
+          </nav>
+        </aside>
       )}
       <main id="spaces-main" tabindex="-1" class:list={["min-w-0 flex-1 focus:outline-none", fill && "flex min-h-0 flex-col"]}>
         <slot />

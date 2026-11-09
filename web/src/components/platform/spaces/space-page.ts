@@ -242,15 +242,6 @@ export function linkAllowed({ qaPersona, demo, fixture }: Restrictions, href: st
 }
 
 /**
- * The existing dashboard's links a QA persona or staging fixture may follow,
- * or undefined for everyone else (nothing is filtered). Demo sessions keep
- * their existing sidebar, as before.
- */
-export function restrictedHrefs({ qaPersona, fixture }: Restrictions, hrefs: readonly string[]): string[] | undefined {
-  return qaPersona || fixture ? hrefs.filter((href) => linkAllowed({ qaPersona, fixture }, href)) : undefined;
-}
-
-/**
  * The journey's next step, unless a restricted synthetic identity cannot
  * follow it. A QA persona keeps its existing replacement step; a staging
  * fixture gets the same way back to its journey, in words that fit it. Real
