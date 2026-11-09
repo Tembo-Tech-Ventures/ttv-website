@@ -53,18 +53,17 @@ ttv-website/
 │   │   ├── layouts/              # Astro layouts
 │   │   │   ├── BaseLayout.astro  # Root HTML shell
 │   │   │   ├── PublicLayout.astro # Marketing pages (nav + footer)
-│   │   │   ├── AdminLayout.astro  # Admin pages (sidebar shell)
-│   │   │   ├── DashboardLayout.astro # User dashboard (sidebar shell)
+│   │   │   ├── AdminLayout.astro  # Admin pages: the Admin space, or PlainFrame with the admin sidebar
 │   │   │   ├── SpacesLayout.astro # Spaces shell (flag `spaces`)
+│   │   │   ├── ImmersiveLayout.astro # Full-height editor frame (the post editor)
 │   │   │   └── CertificateLayout.astro # Minimal layout
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
 │   │   │   ├── style-guide/      # The public /style-guide's frame, catalogue and specimens
-│   │   │   ├── common/           # Shared UI (Sidebar, Grain, FontPreload)
+│   │   │   ├── common/           # Shared UI (Grain, FontPreload)
 │   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
 │   │   │   ├── platform/         # ui/ (the TTV UI kit), spaces shell, overlays, mentors, onboarding (READMEs inside)
-│   │   │   ├── channels/         # Channel view, composer, embeds, Tembo cards
-│   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
+│   │   │   └── channels/         # Channel view, composer, embeds, Tembo cards
 │   │   ├── lib/                  # Core libraries
 │   │   │   ├── auth.ts           # better-auth server config
 │   │   │   ├── auth-client.ts    # better-auth client helpers
@@ -105,12 +104,12 @@ Astro uses file-based routing in `src/pages/`. Layouts provide shared UI shells.
 BaseLayout (HTML shell, global CSS, meta tags)
 ├── PublicLayout  → Nav bar, footer, grain overlay, gradient background
 │   └── index.astro  →  /  (cohorts and skills map, builders, community, hire, principles)
-├── AdminLayout   → the Admin space in SpacesLayout (flag `spaces`), else AdminShell (React island with sidebar)
+├── AdminLayout   → the Admin space in SpacesLayout, or PlainFrame with the admin sidebar without a spaces context
 │   └── admin/*  (users, applications, programs, moderation, feedback, recordings, …)
-├── DashboardLayout → DashboardShell (React island with sidebar)
-│   └── dashboard/*  (apply, applications, profile)
 ├── SpacesLayout → space tabs, per-space sidebar, attention, search (flag `spaces`)
-│   └── dashboard/*  (the same pages through SpacePage, plus channels, mentoring, attention)
+│   └── dashboard/*  (every signed-in page, through SpacePage, plus channels, mentoring, attention)
+├── PlainFrame → a sheet with the TEMBO mark home and sign-out, no `Me` (decision D2): SpacePage's and AdminLayout's
+│   frame for a legacy address with no spaces context (a personal access token, the flag off, a failed context load)
 ├── CertificateLayout → Minimal (no nav, no footer)
 │   └── certificate/[id].astro
 ├── (no layout) → auth/*, blog/*, api/*
@@ -310,7 +309,7 @@ No Docker needed. Wrangler handles local D1 database emulation.
 ### Adding a New Page
 
 1. Create `src/pages/<path>.astro` (or `src/pages/<path>/index.astro`)
-2. Import and wrap with the appropriate layout (`PublicLayout`, `DashboardLayout`, `AdminLayout`)
+2. Import and wrap with the appropriate layout (`PublicLayout`, `SpacePage` for a signed-in page, `AdminLayout`)
 3. Auth is handled by middleware — no need for per-page auth checks
 4. Access database via `drizzle(env.DB, { schema })`
 5. Use Astro components by default; React islands only for interactivity
