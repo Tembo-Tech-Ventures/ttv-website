@@ -39,6 +39,8 @@ export interface CommunityProfile {
   id: string;
   version?: number;
   name: string;
+  /** Their photo, when they have one. */
+  image?: string | null;
   headline: string;
   location: string;
   goal: string;

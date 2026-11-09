@@ -146,13 +146,13 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
-  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", legacy: null },
+  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
   { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
-  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
+  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", retired: true },
   { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", retired: true },
 ];
 
@@ -333,6 +333,71 @@ test.describe("every admin page", () => {
     await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
   });
 
+  test("a recording: one primary, its details saved without JavaScript, and a confirm step before transcribing again", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Saving writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    const path = "/admin/recordings/ttv-local-persona-recording-05";
+    await page.goto(path);
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Save details"]);
+    await expect(main.getByText("Ready", { exact: true }).first()).toBeVisible();
+
+    // Saved as the page showed it: the seed is unchanged, and the page says so once.
+    const save = main.getByRole("button", { name: "Save details" });
+    await save.focus();
+    await save.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(main.getByText("Details saved")).toBeVisible();
+    await page.reload();
+    await expect(main.getByText("Details saved")).toHaveCount(0);
+
+    const again = main.getByRole("link", { name: "Transcribe again" });
+    await again.focus();
+    await again.press("Enter");
+    await expect(page).toHaveURL(/\?confirm=reprocess$/);
+    const step = page.getByRole("region", { name: "Transcribe Week 4: SQL joins and indexes again?" });
+    await expect(step).toContainText("including any edits saved below");
+    const cancel = main.getByRole("link", { name: "Cancel" });
+    await cancel.focus();
+    await cancel.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await context.close();
+  });
+
+  test("data migration: an export reviewed, then imported, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Importing writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/data-migration");
+    const main = page.locator("main");
+    test.skip(await main.getByTestId("legacy-import-disabled").isVisible(), "The importer works only in staging and agent-* environments (DEPLOYMENT_ENVIRONMENT).");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Review export"]);
+
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from("{ not json") });
+    await press(main.getByRole("button", { name: "Review export" }));
+    await expect(main.getByRole("alert").filter({ hasText: "That file isn't JSON." })).toBeVisible();
+
+    const id = `e2e-legacy-${Date.now().toString(36)}`;
+    const legacyExport = { version: 1, exportedAt: "2026-08-01T12:00:00.000Z", users: [{ id, name: "Legacy Learner", email: `${id}@example.test` }] };
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacyExport)) });
+    await press(main.getByRole("button", { name: "Review export" }));
+    const table = main.getByRole("table", { name: "Records in this export" });
+    await expect(table.getByRole("row").filter({ hasText: "Users" })).toContainText("1");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Import 1 record"]);
+    await press(main.getByRole("button", { name: "Import 1 record" }));
+    await expect(page).toHaveURL(/\/admin\/data-migration$/);
+    await expect(main.getByText("Import complete")).toBeVisible();
+    await expect(main.getByText("1 rows changed", { exact: false })).toBeVisible();
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -446,7 +511,8 @@ test.describe("every admin page", () => {
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
-    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"]]) {
+    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);

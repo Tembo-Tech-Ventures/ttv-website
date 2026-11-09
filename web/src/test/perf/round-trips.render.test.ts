@@ -94,17 +94,24 @@ const PAGES = {
   "mentoring availability": { path: () => "/dashboard/mentoring/availability", page: () => import("@/pages/dashboard/mentoring/availability.astro"), user: MENTOR },
   "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
+  application: { path: () => "/dashboard/cohort/application/application", page: () => import("@/pages/dashboard/application/[id].astro"), user: STUDENT, id: "application" },
   ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
   attention: { path: () => "/dashboard/attention", page: () => import("@/pages/dashboard/attention.astro"), user: STUDENT },
   "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
   account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
   "profile overview": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: STUDENT },
   "profile overview, published": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: BUILDER },
+  "your feedback": { path: () => "/dashboard/feedback", page: () => import("@/pages/dashboard/feedback.astro"), user: STUDENT },
+  "visitor messages": { path: () => "/dashboard/me/leads", page: () => import("@/pages/dashboard/leads.astro"), user: BUILDER },
+  writing: { path: () => "/dashboard/me/writing", page: () => import("@/pages/dashboard/writing/index.astro"), user: BUILDER },
   "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
   "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
   "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
   "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
   "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
+  "admin recording": { path: () => "/admin/recordings/recording", page: () => import("@/pages/admin/recordings/[id].astro"), user: ADMIN, id: "recording" },
+  // In staging, where the importer works.
+  "admin data migration": { path: () => "/admin/data-migration", page: () => import("@/pages/admin/data-migration.astro"), user: ADMIN, env: { DEPLOYMENT_ENVIRONMENT: "staging" } },
   "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
   "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
@@ -210,6 +217,8 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // The same before the style-guide rollout: this page reads no onboarding, so starting its reads with the
   // context (resolveSpacePageWith) keeps the depth rather than cuts it. "Worth another look" reads its access first.
   "mentoring requests": { d1: 15, depth: 3 },
+  // The application is read beside the space context (16 queries 6 deep in the style-guide audit).
+  application: { d1: 15, depth: 3 },
   ask: { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the list waited for the whole space context, and the cohort name for the list.
   attention: { d1: 10, depth: 2 },
@@ -221,6 +230,12 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // no profile (19 before), none of them waiting.
   "profile overview": { d1: 23, depth: 3 },
   "profile overview, published": { d1: 21, depth: 3 },
+  // Depth 5 before the style-guide rollout: the notes and their screenshots, then the space context.
+  "your feedback": { d1: 16, depth: 3 },
+  // Depth 4 before the style-guide rollout: the profile, then its messages, then the space context.
+  "visitor messages": { d1: 14, depth: 3 },
+  // Depth 4 before the style-guide rollout: the profile, its posts, then the space context, in turn.
+  writing: { d1: 14, depth: 3 },
   // One more since the style-guide rollout: the list is paged, and the count that says "of 133" is
   // read beside the page of people, in the same round trip.
   "admin users": { d1: 15, depth: 2 },
@@ -232,6 +247,11 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin cohort": { d1: 17, depth: 2 },
   // Depth 4 before the style-guide rollout: every recording with its cohort, then the space.
   "admin recordings": { d1: 15, depth: 2 },
+  // Depth 5 before the style-guide rollout: the recording with every segment, the cohorts and the space in turn;
+  // now together, with the segments counted in SQL.
+  "admin recording": { d1: 16, depth: 2 },
+  // Depth 4 before the style-guide rollout, with the whole task in a client script.
+  "admin data migration": { d1: 13, depth: 2 },
   // Depth 4 before the style-guide rollout: the tokens, then the space.
   "admin tokens": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: the sessions, then the space.
