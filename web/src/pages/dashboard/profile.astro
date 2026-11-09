@@ -14,6 +14,7 @@ import { ACTION_FIELD, handleAccountAction } from "@/components/platform/onboard
 import { accountActions } from "@/components/platform/onboarding/server-actions";
 import { Avatar, Button, Card, FileField, Notice, PageHeader, TextField } from "@/components/platform/ui";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { expireSessionCache } from "@/lib/auth-session";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
@@ -146,6 +147,7 @@ if (formData) {
           userId: user.id,
           imageUrls: [previousImageUrl, previousProfile?.publicAvatarUrl],
         });
+        expireSessionCache(Astro.request, Astro.cookies);
         return redirectWithFlash(Astro, SPACE_PAGE_PATHS.account, { tone: "success", title: ACCOUNT_COPY.photoSaved });
       }
     } else {
@@ -164,6 +166,8 @@ if (formData) {
           moderationMessages = result.moderationMessages ?? [];
           Astro.response.status = result.moderationOutcome === "hold" ? 422 : 409;
         } else {
+          // The shell and this form read the person from the session cache: let the next request read D1.
+          expireSessionCache(Astro.request, Astro.cookies);
           return redirectWithFlash(Astro, SPACE_PAGE_PATHS.account, { tone: "success", title: ACCOUNT_COPY.nameSaved });
         }
       }
@@ -210,7 +214,7 @@ const photoError = failed === "photo" && fieldError ? fieldError : undefined;
     {onboarding && <TakingPart view={onboarding} />}
 
     <Card as="section" aria-labelledby="account-details-title" className="flex flex-col gap-5">
-      <h2 id="account-details-title" class="text-2xl text-ink-primary">Your details</h2>
+      <h2 id="account-details-title" class="text-xl leading-snug text-ink-primary">Your details</h2>
       <div class="flex min-w-0 items-center gap-4">
         <Avatar id={user.id} name={user.name} src={user.image ?? undefined} size="xl" decorative />
         <div class="min-w-0">
@@ -227,7 +231,7 @@ const photoError = failed === "photo" && fieldError ? fieldError : undefined;
     </Card>
 
     <Card as="section" aria-labelledby="account-photo-title" className="flex flex-col gap-5">
-      <h2 id="account-photo-title" class="text-2xl text-ink-primary">Photo</h2>
+      <h2 id="account-photo-title" class="text-xl leading-snug text-ink-primary">Photo</h2>
       <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4" data-account-photo>
         <input type="hidden" name="action" value="avatar" />
         <FileField label="Profile photo" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp" required hint={ACCOUNT_COPY.photoHint} error={photoError} />

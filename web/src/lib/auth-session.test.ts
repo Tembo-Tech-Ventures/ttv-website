@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readBrowserSession, withSessionCookies } from "./auth-session";
+import { expireSessionCache, readBrowserSession, withSessionCookies } from "./auth-session";
 
 /*
  * better-auth's five-minute `session_data` cookie spares two D1 reads on most navigations, but only
@@ -98,5 +98,28 @@ describe("withSessionCookies", () => {
     const page = new Response("ok");
     expect(withSessionCookies(page, [])).toBe(page);
     expect(page.headers.getSetCookie()).toEqual([]);
+  });
+});
+
+describe("expireSessionCache", () => {
+  it("expires every session_data cookie the request carried, chunks and the secure prefix included, and nothing else", () => {
+    const deleted: Array<[string, unknown]> = [];
+    const request = new Request("https://ttv.invalid/dashboard/account", {
+      headers: {
+        cookie: "better-auth.session_token=t; better-auth.session_data=a; __Secure-better-auth.session_data.0=b; __Secure-better-auth.session_data.1=c; better-auth.session_dataX=d; ttv-flash=e",
+      },
+    });
+    expireSessionCache(request, { delete: (name, options) => void deleted.push([name, options]) });
+    expect(deleted).toEqual([
+      ["better-auth.session_data", { path: "/", secure: false }],
+      ["__Secure-better-auth.session_data.0", { path: "/", secure: true }],
+      ["__Secure-better-auth.session_data.1", { path: "/", secure: true }],
+    ]);
+  });
+
+  it("does nothing without cookies", () => {
+    const remove = vi.fn();
+    expireSessionCache(new Request("https://ttv.invalid/"), { delete: remove });
+    expect(remove).not.toHaveBeenCalled();
   });
 });

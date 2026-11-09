@@ -1,3 +1,4 @@
+import type { AstroCookies } from "astro";
 import type { Auth } from "./auth";
 
 export interface BrowserSession {
@@ -46,3 +47,19 @@ export function withSessionCookies(response: Response, cookies: readonly string[
 }
 
 const cookieName = (cookie: string) => cookie.slice(0, cookie.indexOf("=")).trim();
+
+/** better-auth's five-minute cache of the session and user, and its chunks: `session_data.0`, … */
+const SESSION_CACHE = /^(?:__Secure-)?better-auth\.session_data(?:\.\d+)?$/;
+
+/**
+ * After a write to the signed-in person's own user row (their name, their photo), expires the
+ * `session_data` cache the request carried, so the next request reads the user from D1 instead of
+ * showing the old name for up to five minutes. A cookie the response sets itself wins over the one
+ * the middleware's read refreshed (`withSessionCookies`), so the expiry reaches the browser.
+ */
+export function expireSessionCache(request: Request, cookies: Pick<AstroCookies, "delete">): void {
+  for (const pair of (request.headers.get("cookie") ?? "").split(";")) {
+    const name = pair.slice(0, pair.includes("=") ? pair.indexOf("=") : undefined).trim();
+    if (SESSION_CACHE.test(name)) cookies.delete(name, { path: "/", secure: name.startsWith("__Secure-") });
+  }
+}

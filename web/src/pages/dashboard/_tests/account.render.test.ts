@@ -13,8 +13,8 @@ import { ACCOUNT_COPY } from "@/lib/student/account-page";
 /*
  * /dashboard/account on the kit (style-guide rollout M12, audit A§15): the person drawn as the shell
  * draws them (kit Avatar), kit fields, one primary ("Save name"), a quiet "Upload photo", and each
- * form answered with a 303 plus a read-once flash, or a refusal that keeps what was typed beside a
- * focused danger Notice. Through the real middleware and page on SQLite with every migration;
+ * form answered with a 303 plus a read-once flash (expiring the session cache, which holds the old
+ * name), or a refusal that keeps what was typed beside a focused danger Notice. Through the real middleware and page on SQLite with every migration;
  * authentication is mocked. Onboarding's own rows are covered by its specs.
  */
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
@@ -69,7 +69,10 @@ async function visit({ body, cookie }: { body?: URLSearchParams | FormData; cook
     redirect: (location: string, status = 302) => new Response(null, { status, headers: { location } }),
   };
   const response = await onRequest(context as never, async () => container.renderToResponse(Page, { request: request(), locals })) as Response;
-  return { status: response.status, headers: response.headers, body: await response.text() };
+  const cookies = Reflect.get(response, Symbol.for("astro.cookies")) as { consume(): Iterable<string> } | undefined;
+  // The Set-Cookie lines, read the way the adapter writes them.
+  const setCookies = [...response.headers.getSetCookie(), ...(cookies ? cookies.consume() : [])];
+  return { status: response.status, headers: response.headers, setCookies, body: await response.text() };
 }
 
 const main = (html: string) => {
@@ -97,9 +100,14 @@ describe("Account", () => {
 
   it("saves a name with a 303 to this page, which says so once", async () => {
     seeded();
-    const { status, headers } = await visit({ body: new URLSearchParams({ action: "profile", name: "  Akinyi Achieng  " }) });
+    const { status, headers, setCookies } = await visit({
+      body: new URLSearchParams({ action: "profile", name: "  Akinyi Achieng  " }),
+      cookie: "better-auth.session_data=cached-old-name",
+    });
     expect(status).toBe(303);
     expect(headers.get("location")).toBe(PATH);
+    // The cached session still holds the old name: it is expired, so the next request reads D1.
+    expect(setCookies.find((cookie) => cookie.startsWith("better-auth.session_data="))).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
     expect(sqlite.prepare("SELECT name FROM user WHERE id = ?").get(MEMBER)).toEqual({ name: "Akinyi Achieng" });
     const page = main((await visit({ cookie: flashCookie(ACCOUNT_COPY.nameSaved) })).body);
     expect(page.querySelector("[data-notice='success']")?.textContent).toContain(ACCOUNT_COPY.nameSaved);
