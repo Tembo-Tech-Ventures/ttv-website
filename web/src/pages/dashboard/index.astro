@@ -35,7 +35,7 @@ const greetingName = getDashboardGreetingName(user.name);
 const allowedStep = restrictedNextStep(restrictionsFor(Astro.locals), proposedStep);
 const nextStep = allowedStep;
 // Link straight to the step's space path rather than through its redirect.
-const nextStepHref = spaces ? canonicalSpacePath(nextStep.action.href) ?? nextStep.action.href : nextStep.action.href;
+const nextStepHref = canonicalSpacePath(nextStep.action.href) ?? nextStep.action.href;
 const hasVisitedDashboard =
   Astro.cookies.get("ttv-dashboard-visited")?.value === user.id;
 
@@ -48,7 +48,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
 });
 ---
 
-<SpacePage context={spaces} title="Cohort" journey={journey} canDiscover={canDiscover} channels={channels}>
+<SpacePage context={spaces} title="Cohort" journey={journey} channels={channels}>
   <div class="max-w-3xl space-y-6">
     <header>
       <PageTitle>Cohort</PageTitle>

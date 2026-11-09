@@ -1,0 +1,62 @@
+---
+/**
+ * The frame for a signed-in page with no spaces context: a personal access
+ * token on a legacy address, the `spaces` flag off for this person, or a
+ * context that failed to load (space-page.ts). Every platform flag is at ALL
+ * in production, so people reach their pages through SpacesLayout; this keeps
+ * the rest working without the per-user shell (decision D2), and replaces the
+ * old DashboardLayout and AdminShell.
+ *
+ * The TEMBO mark leads home, the page sits on a platform sheet in its space's
+ * tone, and a page may pass a sidebar (the Admin navigation, which needs no
+ * per-user context). No space tabs, search, attention or Tembo allowance:
+ * those all read `Me`.
+ *
+ *   <PlainFrame title="Users" space="admin"><SpaceSidebar slot="sidebar" model={model} />…</PlainFrame>
+ */
+// oxlint-disable-next-line import/no-unassigned-import -- the platform sheet and its space tones
+import "@/components/platform/ui/platform-ui.css";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { FOCUS_RING } from "@/components/platform/ui";
+import type { SpaceId } from "@/lib/platform/contracts";
+
+interface Props {
+  /** The page's name, for the browser tab. */
+  title: string;
+  /** Prepended to the tab title only: "Error: " after a rejected form. */
+  titlePrefix?: string;
+  /** The space whose sheet tone the page takes (Community's when the page names none). */
+  space?: SpaceId;
+  /** A full-height view (a chat) that sizes itself to the sheet instead of scrolling in it. */
+  fill?: boolean;
+}
+
+const { title, titlePrefix = "", space = "community", fill = false } = Astro.props;
+const hasSidebar = Astro.slots.has("sidebar");
+---
+
+<BaseLayout title={`${titlePrefix}${title}`} noIndex>
+  <div class="flex min-h-dvh flex-col bg-ground" data-plain-frame>
+    <a href="#spaces-main" class:list={["sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-dark focus:px-4 focus:py-2", FOCUS_RING]}>
+      Skip to content
+    </a>
+    <header class="flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
+      {/* Named by the words it shows (WCAG 2.5.3, label in name), with "home" for screen readers. */}
+      <a href="/" class:list={["flex items-baseline gap-3 rounded-lg whitespace-nowrap pointer-coarse:py-3.5", FOCUS_RING]}>
+        <span class="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">TEMBO</span>
+        <span class="font-body text-xs font-semibold text-ink-muted">Tech Ventures</span>
+        <span class="sr-only">home</span>
+      </a>
+    </header>
+    <div class:list={["platform-sheet mx-2 flex min-h-0 flex-1 gap-6 px-4 pt-6 pb-16 sm:mx-4 sm:px-8", hasSidebar && "flex-col lg:flex-row"]} data-space-tone={space}>
+      {hasSidebar && (
+        <nav aria-label="Sections" class="lg:w-64 lg:shrink-0" data-plain-sidebar>
+          <slot name="sidebar" />
+        </nav>
+      )}
+      <main id="spaces-main" tabindex="-1" class:list={["min-w-0 flex-1 focus:outline-none", fill && "flex min-h-0 flex-col"]}>
+        <slot />
+      </main>
+    </div>
+  </div>
+</BaseLayout>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { PiArrowLeftBold, PiCaretUpDownBold, PiPlusBold } from "react-icons/pi";
+import { PiCaretUpDownBold, PiPlusBold } from "react-icons/pi";
 import Composer, { type ComposerHandle } from "@/components/chat/Composer";
 import ConversationList, {
   conversationTitle,
@@ -10,13 +10,9 @@ import Transcript from "@/components/chat/Transcript";
 import AboutAskTembo from "@/components/chat/AboutAskTembo";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
-// The plain list, not DashboardShell: that module brings its Sidebar and Headless UI into this island.
-import { DASHBOARD_LINKS, getDashboardLinks } from "@/components/shells/dashboard-links";
-import { BackLink, Button, ButtonLink, IconButton, Notice, PageTitle, buttonClass, linkClass } from "@/components/platform/ui";
+import { Button, ButtonLink, IconButton, Notice, PageTitle } from "@/components/platform/ui";
 import { signInHref } from "@/components/platform/overlays/sign-in";
-import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import type { PrivateAskScope } from "@/lib/tembo/private-ask";
-import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 
 /**
  * How long a conversation load may take before it is worth saying so. Below
@@ -27,21 +23,6 @@ const LOAD_INDICATOR_DELAY_MS = 300;
 
 /** Matches Tailwind's `lg:`, the breakpoint the rail appears at. */
 const DESKTOP_QUERY = "(min-width: 64rem)";
-
-/**
- * Links back into the rest of the dashboard. Taken from the shell this route no
- * longer renders, so nothing — Logout in particular — becomes unreachable just
- * because the user is on the chat page. "Ask Tembo" is dropped as the current page.
- */
-export function getAppNav(
-  visibleLinkIds: StudentDashboardLinkId[],
-  unreadLeadCount = 0,
-  canDiscover = false
-) {
-  return getDashboardLinks(visibleLinkIds, unreadLeadCount, false, canDiscover).filter(
-    (link) => link.id !== "ask"
-  );
-}
 
 /** How many prior turns to send back as context. Matches the previous UI. */
 const HISTORY_TURNS = 8;
@@ -68,15 +49,6 @@ interface ChatAppProps {
    */
   mockLatencyMs?: number;
   mockLoadMs?: number;
-  visibleLinkIds?: StudentDashboardLinkId[];
-  unreadLeadCount?: number;
-  canDiscover?: boolean;
-  /**
-   * "space" renders inside the spaces shell, which already provides the way
-   * around the product and the feedback form: the page drops its own back
-   * links and site navigation, and the assistant is Tembo.
-   */
-  variant?: "immersive" | "space";
   /** What Tembo reads for this person (privateAskScope), said on the page; omitted by mock pages. */
   scope?: PrivateAskScope;
 }
@@ -84,8 +56,8 @@ interface ChatAppProps {
 /**
  * The Ask Tembo page.
  *
- * Layout contract, which the rest of the components depend on: this renders
- * inside `ImmersiveLayout`, a container of definite height that cannot scroll. The
+ * Layout contract, which the rest of the components depend on: this fills the
+ * spaces sheet (SpacePage `fill`), a container of definite height that cannot scroll. The
  * header, the conversation rail and the composer are fixed-size flex children;
  * the transcript is the only region with `overflow-y-auto`. Anything added here
  * must keep that true, or the composer starts sliding off the bottom of a phone
@@ -98,13 +70,8 @@ export default function ChatApp({
   mockTranscripts = NO_TRANSCRIPTS,
   mockLatencyMs = MOCK_LATENCY_MS,
   mockLoadMs = MOCK_LOAD_MS,
-  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id).filter((id) => id !== "community" && id !== "discover"),
-  unreadLeadCount = 0,
-  canDiscover = false,
-  variant = "immersive",
   scope,
 }: ChatAppProps) {
-  const inSpace = variant === "space";
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     initialSessions[0]?.id ?? null
@@ -136,7 +103,6 @@ export default function ChatApp({
    */
   const conversationEpochRef = useRef(0);
   const composerRef = useRef<ComposerHandle | null>(null);
-  const appNav = getAppNav(visibleLinkIds, unreadLeadCount, canDiscover);
 
   function beginNewTranscript() {
     conversationEpochRef.current += 1;
@@ -450,13 +416,8 @@ export default function ChatApp({
       */}
       <PageTitle className="sr-only">Ask Tembo</PageTitle>
 
-      {/* Desktop rail. The way back into the product stays visible at both ends. */}
+      {/* Desktop rail. The spaces shell around it is the way back into the product. */}
       <aside className="hidden w-72 shrink-0 flex-col border-r border-hairline lg:flex">
-        {!inSpace && (
-          <div className="shrink-0 border-b border-hairline px-4 py-3">
-            <BackLink href="/dashboard">Back to dashboard</BackLink>
-          </div>
-        )}
         <div className="shrink-0 px-3 py-3">
           <NewChatButton full onClick={startNewChat} />
         </div>
@@ -467,34 +428,10 @@ export default function ChatApp({
           <h2 className="px-3 pb-2 text-xs text-ink-muted">Recent</h2>
           {conversationList}
         </nav>
-        {!inSpace && (
-          <nav aria-label="Site" className="flex shrink-0 flex-col items-start gap-1 border-t border-hairline px-4 py-3">
-            {appNav.map((item) => (
-              <a key={item.href} href={item.href} className={linkClass("inline-flex items-center text-sm pointer-coarse:min-h-11")}>
-                {item.label}
-                {item.badge !== undefined && item.badge > 0
-                  ? ` (${item.badge} unread)`
-                  : ""}
-              </a>
-            ))}
-            <Button variant="ghost" size="sm" onClick={openFeedbackWidget} className="-ml-3">
-              Send feedback
-            </Button>
-          </nav>
-        )}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-1 border-b border-hairline px-2 sm:px-4 lg:px-6">
-          {!inSpace && (
-            <a
-              href="/dashboard"
-              aria-label="Back to dashboard"
-              className={buttonClass({ variant: "ghost", iconOnly: true, className: "lg:hidden" })}
-            >
-              <PiArrowLeftBold className="size-4" aria-hidden="true" />
-            </a>
-          )}
 
           {/*
             On mobile the title doubles as the conversation switcher, so history
@@ -575,31 +512,6 @@ export default function ChatApp({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
           {conversationList}
         </div>
-        {!inSpace && (
-          <nav
-            aria-label="Site"
-            className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-hairline px-4 py-3"
-          >
-            {appNav.map((item) => (
-              <a key={item.href} href={item.href} className={linkClass("inline-flex items-center text-sm pointer-coarse:min-h-11")}>
-                {item.label}
-                {item.badge !== undefined && item.badge > 0
-                  ? ` (${item.badge} unread)`
-                  : ""}
-              </a>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSheetOpen(false);
-                openFeedbackWidget();
-              }}
-            >
-              Send feedback
-            </Button>
-          </nav>
-        )}
       </ConversationSheet>
     </div>
   );
