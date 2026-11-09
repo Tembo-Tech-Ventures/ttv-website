@@ -127,7 +127,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/admin/recordings/[id]", persona: "staff", detail: { from: "/admin/recordings", link: ID("/admin/recordings") } },
   { path: "/admin/recordings/import", persona: "staff", pending: { preview: ["peach"], todo: LANE_X("a second peach action on the preview's import sources, before #397") } },
   { path: "/admin/recordings/upload", persona: "staff" },
-  { path: "/admin/settings/integrations", persona: "staff", pending: { preview: ["kit-controls", "targets"], todo: LANE_X("the hand-rolled \"Where to get this credential\" summary") } },
+  { path: "/admin/settings/integrations", persona: "staff" },
   { path: "/admin/users", persona: "staff" },
   { path: "/admin/users/[id]", persona: "staff", detail: { from: "/admin/users", link: ID("/admin/users") } },
 ];

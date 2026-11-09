@@ -156,12 +156,14 @@ for (const route of STYLE_ROUTES) {
     await open(page, path!);
 
     const nowPassing: StyleCheck[] = [];
+    const passingOnPreview: StyleCheck[] = [];
     const check = async (name: StyleCheck, failures: () => Promise<string[]> | string[]) => {
       if (!runs.includes(name)) return;
       const found = await failures();
       if (owed.has(name)) {
         testInfo.annotations.push({ type: "pending", description: `${name}: ${route.pending?.todo}` });
         if (found.length === 0 && everywhere.includes(name)) nowPassing.push(name);
+        else if (found.length === 0) passingOnPreview.push(name);
         return;
       }
       expect.soft(found, `${name} on ${path}`).toEqual([]);
@@ -183,6 +185,13 @@ for (const route of STYLE_ROUTES) {
       await page.setViewportSize({ width: 320, height: 800 });
       await check("overflow", () => page.evaluate(sidewaysScroll));
       await check("axe-320", () => axeFailures(page));
+    }
+
+    // A preview's data changes between runs, so a `preview` check that passes there is reported, not failed: prune it by hand.
+    if (passingOnPreview.length > 0) {
+      const note = `${route.path} passes its pending.preview checks ${passingOnPreview.join(", ")}: delete them from style-compliance.routes.ts`;
+      testInfo.annotations.push({ type: "pending-passes", description: note });
+      console.log(`STYLE-COMPLIANCE ${note}`);
     }
 
     // The seed is fixed locally, so a pending check that passes there is done: the list only shrinks.

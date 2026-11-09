@@ -109,7 +109,8 @@ describe("integrations on the style guide", () => {
   it("without a credential: the help open, a form of kit fields with one primary to save, and no activity", async () => {
     store.read.mockResolvedValue({ credential: null, activity: [] });
     const { body } = await visit();
-    expect(body).toMatch(/<details open[^>]*><summary[^>]*>Where to get this credential<\/summary>/);
+    // The kit's Disclosure, open while nothing is set up.
+    expect(body).toMatch(/<details data-disclosure="true"[^>]* open=""[^>]*><summary[^>]*><span[^>]*>Where to get this credential<\/span>/);
     expect(body).toMatch(/<label for="serviceAccountJson"[^>]*>Service account JSON<\/label>/);
     expect(body).toMatch(/<label for="impersonatedUser"[^>]*>Impersonated user[\s\S]*?optional/);
     expect(count(body, /data-variant="primary"/g)).toBe(1);
