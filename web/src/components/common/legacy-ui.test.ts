@@ -37,7 +37,8 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return sources(path);
+    // src/test holds test helpers and the kit-compliance ratchet's data, which name these parts without using them.
+    if (statSync(path).isDirectory()) return relative(SRC, path) === "test" ? [] : sources(path);
     return /\.(astro|tsx?)$/.test(name) && !/\.test\./.test(name) ? [relative(SRC, path)] : [];
   });
 }
