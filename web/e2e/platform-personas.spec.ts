@@ -216,13 +216,13 @@ test.describe("a member without a cohort", () => {
     await apply.click();
 
     await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Apply to a Cohort" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Apply to a cohort" })).toBeVisible();
     // Still in Community: they have no Cohort space until they apply.
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Apply to a cohort");
     const cohorts = page.locator("[data-cohort-id]");
     if ((await cohorts.count()) > 0) {
-      await expect(cohorts.first().getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
+      await expect(cohorts.first().getByRole("button", { name: /^Apply to / })).toBeEnabled();
     } else {
       // Either nothing is open, or they have applied to everything that is.
       await expect(page.locator("[data-apply-empty]")).toHaveText(/No cohorts are accepting applications right now\.|You've applied to every cohort that's open right now\./);
@@ -509,7 +509,7 @@ test.describe("without JavaScript", () => {
     await expect(apply).toBeVisible();
     await page.goto((await apply.getAttribute("href"))!);
     expect(new URL(page.url()).pathname).toBe("/dashboard/cohort/apply");
-    await expect(page.getByRole("heading", { level: 1, name: "Apply to a Cohort" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Apply to a cohort" })).toBeVisible();
     // The application is a plain form: it posts without any script.
     const forms = page.locator("[data-cohort-id] form[method='POST']");
     if ((await forms.count()) > 0) await expect(forms.first().locator("button[type='submit']")).toBeVisible();

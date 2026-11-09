@@ -278,7 +278,7 @@ test.describe("admin cohort management", () => {
       });
 
     await expect(
-      page.getByRole("heading", { name: "Apply to a Cohort" })
+      page.getByRole("heading", { name: "Apply to a cohort" })
     ).toBeVisible();
     const applicationCard = page.locator(
       `[data-cohort-id="${programId}"]`
