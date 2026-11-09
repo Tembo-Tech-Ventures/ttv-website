@@ -9,7 +9,7 @@ vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
 vi.mock("@/lib/platform/server/space-context", () => ({ getSpaceContext: mocks.getSpaceContext }));
 vi.mock("@/lib/onboarding/service", () => ({ getOnboardingState: mocks.getOnboardingState }));
 vi.mock("@/lib/observability/errors", () => ({ recordError: mocks.recordError }));
-import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
+import { DASHBOARD_LINKS } from "@/components/shells/dashboard-links";
 import type { StudentNextStep } from "@/lib/student/journey";
 import {
   linkAllowed,

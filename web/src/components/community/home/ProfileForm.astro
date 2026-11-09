@@ -1,0 +1,64 @@
+---
+/**
+ * The community profile's editor: a plain form that posts to Community
+ * (home-forms.ts), so it saves without a script. A refused save shows what was
+ * typed again, with the reason above the fields and under each one.
+ */
+import { Button, ButtonLink, Notice, TextAreaField, TextField } from "@/components/platform/ui";
+import {
+  BIO_MAX, COMMUNITY_HOME_PATH, GOALS_MAX, HEADLINE_MAX, PROFILE_EDITOR_ID, SKILL_MAX, SKILLS_MAX,
+  type HomeFailure, type ProfileErrors, type ProfileValues,
+} from "./home-forms";
+
+interface Props {
+  values: ProfileValues;
+  errors?: ProfileErrors;
+  failure?: HomeFailure | null;
+}
+
+const { values, errors = {}, failure = null } = Astro.props;
+const count = Object.keys(errors).length;
+---
+
+<section id={PROFILE_EDITOR_ID} aria-labelledby="profile-editor-title" class="scroll-mt-6" data-profile-editor>
+  <h2 id="profile-editor-title" class="text-xl text-ink-primary">Edit your community profile</h2>
+  <p class="mt-2 max-w-prose text-base leading-relaxed text-ink-secondary">
+    Share your experience, skills and the opportunities you want to explore.
+  </p>
+  <form method="POST" action={COMMUNITY_HOME_PATH} class="mt-6 flex flex-col gap-6">
+    <input type="hidden" name="form" value="profile" />
+    {count > 0 && (
+      <Notice tone="danger" focusOnLoad title={`${count === 1 ? "One thing" : `${count} things`} to fix before this can be saved`}>
+        Everything you wrote is still here.
+      </Notice>
+    )}
+    {failure && <Notice tone="danger" focusOnLoad title={failure.title}>{failure.detail}</Notice>}
+    <TextField name="headline" label="Headline" optional maxLength={HEADLINE_MAX} defaultValue={values.headline} error={errors.headline} />
+    <TextAreaField name="bio" label="About your work" optional rows={6} maxLength={BIO_MAX} defaultValue={values.bio} error={errors.bio} />
+    <TextField
+      name="skills"
+      label="Skills"
+      optional
+      hint={`Separate skills with commas. Add up to ${SKILLS_MAX} skills, each no longer than ${SKILL_MAX} characters.`}
+      defaultValue={values.skills}
+      error={errors.skills}
+    />
+    <TextAreaField
+      name="opportunityGoals"
+      label="Opportunity goals"
+      optional
+      rows={4}
+      maxLength={GOALS_MAX}
+      defaultValue={values.opportunityGoals}
+      error={errors.opportunityGoals}
+    />
+    <Notice tone="info" id="profile-visibility">
+      Saving updates the community profile that approved institutions can discover. Only include information you
+      want to share with them.
+    </Notice>
+    <div class="flex flex-wrap items-center gap-3">
+      <Button type="submit" variant="primary" size="lg" aria-describedby="profile-visibility">Save profile</Button>
+      <ButtonLink href={COMMUNITY_HOME_PATH} variant="ghost" size="lg">Cancel</ButtonLink>
+    </div>
+  </form>
+</section>

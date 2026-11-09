@@ -154,29 +154,16 @@ export async function loadOwnProfile() {
   return mapProfile(profile.profile, entries.entries);
 }
 
-/** What the journey view first shows: the caller's access and own profile with its journey. */
-export interface JourneyInitial {
-  access: CommunityAccess;
-  profile: CommunityProfile;
-}
 /**
- * The journey view's first data from the bodies of GET access, profile and
- * journey, validated and mapped as loadAccess and loadOwnProfile do. Null when
- * any body does not match, so the view falls back to loading them itself.
+ * The caller's own profile with its journey, from the bodies of GET profile and
+ * GET journey, validated and mapped as loadOwnProfile does. Null when either
+ * body does not match.
  */
-export function parseJourneyInitial(
-  access: unknown,
-  profile: unknown,
-  journey: unknown,
-): JourneyInitial | null {
-  const parsedAccess = accessSchema.safeParse(access);
+export function parseOwnJourney(profile: unknown, journey: unknown): CommunityProfile | null {
   const parsedProfile = ownProfileSchema.safeParse(profile);
   const parsedJourney = journeySchema.safeParse(journey);
-  if (!parsedAccess.success || !parsedProfile.success || !parsedJourney.success) return null;
-  return {
-    access: parsedAccess.data,
-    profile: mapProfile(parsedProfile.data.profile, parsedJourney.data.entries),
-  };
+  if (!parsedProfile.success || !parsedJourney.success) return null;
+  return mapProfile(parsedProfile.data.profile, parsedJourney.data.entries);
 }
 export async function loadProfile(id: string, fetcher: typeof fetch = fetch) {
   const data = await communityRequest(

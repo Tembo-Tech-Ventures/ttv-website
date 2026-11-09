@@ -1,158 +1,245 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
-import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
-import { formatDuration } from "@/lib/recordings/time-utils";
+import {
+  BackLink,
+  Button,
+  ButtonLink,
+  Card,
+  ConfirmStep,
+  DescriptionItem,
+  DescriptionList,
+  Notice,
+  PageHeader,
+  SelectField,
+  StatusChip,
+  TextAreaField,
+  TextField,
+  confirmHref,
+  confirmingAction,
+  statusTone,
+  withoutConfirm,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { formatDuration } from "@/lib/recordings/time-utils";
+import { formatMomentDate } from "@/lib/display-date";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { RECORDINGS_PATH } from "@/lib/admin/recordings";
+import {
+  TITLE_MAX,
+  detailsFromForm,
+  detailsUpdate,
+  isProcessingStatus,
+  readRecordingDetail,
+  recordedAtField,
+  transcribeAgain,
+  transcriptFromForm,
+  type DetailsErrors,
+  type DetailsValues,
+  type TranscriptErrors,
+  type TranscriptValues,
+} from "@/lib/admin/recording-detail";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
-if (!id) return Astro.redirect("/admin/recordings");
+if (!id) return Astro.redirect(RECORDINGS_PATH);
+
+// The recording, its cohorts and the Admin space are independent reads: one round trip.
+const [detail, spaces] = await Promise.all([readRecordingDetail(db, id), resolveSpacePage(Astro.locals, "adminRecordings")]);
+if (!detail) return Astro.redirect(RECORDINGS_PATH, Astro.request.method === "POST" ? 303 : 302);
+let { recording } = detail;
+const { segments, programs } = detail;
+
+const UNAVAILABLE = "The database didn't answer, so nothing changed. Try again in a moment.";
+const STALE = "Someone changed this recording's processing while you were looking at it. Check its status below before trying again.";
+const SELF = Astro.url.pathname;
+
+let details: DetailsValues | undefined;
+let detailsErrors: DetailsErrors = {};
+let transcript: TranscriptValues | undefined;
+let transcriptErrors: TranscriptErrors = {};
+/** A refusal that isn't about one field: which part of the page it belongs to, and what it says. */
+let failure: { part: "details" | "processing" | "transcript" | "page"; title: string; message: string } | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const action = String(formData.get("action") ?? "");
-
-  if (action === "update") {
-    await db
-      .update(schema.recording)
-      .set({
-        title: String(formData.get("title") ?? ""),
-        description: String(formData.get("description") ?? "") || null,
-        programId: String(formData.get("programId") ?? "") || null,
-        recordedAt: formData.get("recordedAt")
-          ? new Date(String(formData.get("recordedAt")))
-          : null,
-      })
-      .where(eq(schema.recording.id, id));
-  } else if (action === "save-transcript") {
-    await db
-      .update(schema.recording)
-      .set({
-        transcriptText: String(formData.get("transcriptText") ?? ""),
-        transcriptVtt: String(formData.get("transcriptVtt") ?? ""),
-      })
-      .where(eq(schema.recording.id, id));
+  const action = formData.get("action");
+  try {
+    if (action === "update") {
+      ({ values: details, errors: detailsErrors } = detailsFromForm(formData, programs.map((program) => program.id)));
+      if (Object.keys(detailsErrors).length === 0) {
+        const saved = await db.update(schema.recording).set(detailsUpdate(details, recording)).where(eq(schema.recording.id, id)).returning({ id: schema.recording.id });
+        if (saved.length === 0) return Astro.redirect(RECORDINGS_PATH, 303);
+        return redirectWithFlash(Astro, SELF, { tone: "success", title: "Details saved" });
+      }
+      failure = { part: "details", title: "The details weren't saved", message: "Fix the fields marked below. Everything you wrote is kept." };
+      Astro.response.status = 400;
+    } else if (action === "save-transcript") {
+      ({ values: transcript, errors: transcriptErrors } = transcriptFromForm(formData));
+      if (Object.keys(transcriptErrors).length === 0) {
+        const saved = await db.update(schema.recording).set(transcript).where(eq(schema.recording.id, id)).returning({ id: schema.recording.id });
+        if (saved.length === 0) return Astro.redirect(RECORDINGS_PATH, 303);
+        return redirectWithFlash(Astro, SELF, { tone: "success", title: "Transcript saved" });
+      }
+      failure = { part: "transcript", title: "The transcript wasn't saved", message: "Fix the field marked below. Everything you wrote is kept." };
+      Astro.response.status = 400;
+    } else if (action === "reprocess") {
+      const expected = formData.get("expectedStatus");
+      const result = isProcessingStatus(expected) ? await transcribeAgain(db, env.RECORDING_QUEUE, id, expected) : ({ ok: false, reason: "changed" } as const);
+      if (result.ok) {
+        return redirectWithFlash(Astro, SELF, { tone: "success", title: "Queued to transcribe again", message: "It takes a few minutes. Reload this page to see how far it has got." });
+      }
+      if (result.reason === "missing") return Astro.redirect(RECORDINGS_PATH, 303);
+      failure = { part: "processing", title: "It wasn't queued", message: STALE };
+      Astro.response.status = 400;
+    } else if (action === "reindex") {
+      if (segments === 0) {
+        failure = { part: "processing", title: "There's nothing to index yet", message: "Search indexes the transcript's timed segments, and this recording has none. Transcribe it first." };
+        Astro.response.status = 400;
+      } else {
+        await env.RECORDING_QUEUE.send({ type: "reindex_recording", recordingId: id });
+        return redirectWithFlash(Astro, SELF, { tone: "success", title: "Queued to rebuild its search entries", message: "The transcript stays as it is." });
+      }
+    } else {
+      failure = { part: "page", title: "Nothing changed", message: "Choose one of the actions on this page." };
+      Astro.response.status = 400;
+    }
+  } catch {
+    const part = action === "update" ? "details" : action === "save-transcript" ? "transcript" : "processing";
+    failure = { part, title: "Nothing changed", message: action === "reindex" || action === "reprocess" ? "The database or the processing queue didn't answer, so nothing changed. Try again in a moment." : UNAVAILABLE };
+    Astro.response.status = 503;
   }
-
-  return Astro.redirect(`/admin/recordings/${id}`);
+  // A refused change after a read the database may have moved past: show what is stored now.
+  if (failure?.part === "processing") {
+    recording = (await db.query.recording.findFirst({ where: eq(schema.recording.id, id) }).catch(() => recording)) ?? recording;
+  }
 }
 
-const recording = await db.query.recording.findFirst({
-  where: eq(schema.recording.id, id),
-  with: { program: true, segments: true },
-});
-if (!recording) return Astro.redirect("/admin/recordings");
-
-const programs = await db.query.program.findMany({
-  orderBy: (program, { asc }) => [asc(program.name)],
-});
-
-const formatDate = (date: Date | null) =>
-  date ? date.toISOString().split("T")[0] : "";
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const detailsValues: DetailsValues = details ?? {
+  title: recording.title,
+  programId: recording.programId ?? "",
+  recordedAt: recordedAtField(recording.recordedAt),
+  description: recording.description ?? "",
+};
+const transcriptValues: TranscriptValues = transcript ?? {
+  transcriptText: recording.transcriptText ?? "",
+  transcriptVtt: recording.transcriptVtt ?? "",
+};
+const status = recording.processingStatus;
+const statusWord = statusTone("recording", status).label.toLowerCase();
+const inProgress = !["pending", "complete", "failed"].includes(status);
+const confirming = confirmingAction(Astro.url, ["reprocess"]) === "reprocess";
+const cohortName = programs.find((program) => program.id === recording.programId)?.name;
+const cohortOptions = [{ value: "", label: "No cohort" }, ...programs.map((program) => ({ value: program.id, label: program.name }))];
+const FAILURE_IDS = { details: "details-failure", processing: "processing-failure", transcript: "transcript-failure", page: "recording-failure" } as const;
 ---
 
-<AdminLayout title={recording.title} spaces={spaces}>
+<AdminLayout title={recording.title} titlePrefix={failure ? "Error: " : ""} spaces={spaces}>
   <div class="space-y-6">
-    <a href="/admin/recordings" class="text-sm text-primary hover:underline">
-      &larr; Back to Recordings
-    </a>
-    <PageTitle spaces={Boolean(spaces)} legacyTag={null}>{recording.title}</PageTitle>
+    <BackLink href={RECORDINGS_PATH}>Recordings</BackLink>
 
-    <div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_320px]">
+    <PageHeader title={recording.title}>
+      <span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusChip domain="recording" status={status} />
+        <span>{cohortName ?? "No cohort"} · {recording.recordedAt ? `recorded ${formatMomentDate(recording.recordedAt)}` : "no date"}</span>
+      </span>
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    {failure?.part === "page" && (
+      <Notice tone="danger" focusOnLoad id={FAILURE_IDS.page} title={failure.title}>{failure.message}</Notice>
+    )}
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <Card>
-        <h2 class="text-xl font-semibold text-white">Recording Details</h2>
-        <form method="POST" class="mt-5 space-y-4">
+        <form method="POST" action={SELF} class="grid gap-5" aria-labelledby="details-heading" data-details>
+          <h2 id="details-heading" class="text-lg text-ink-primary">Recording details</h2>
+          {failure?.part === "details" && (
+            <Notice tone="danger" focusOnLoad id={FAILURE_IDS.details} title={failure.title}>{failure.message}</Notice>
+          )}
           <input type="hidden" name="action" value="update" />
-          <div class="flex flex-col gap-1.5">
-            <label for="title" class="text-sm font-medium text-white/90">Title *</label>
-            <input id="title" name="title" value={recording.title} required class="form-control" />
+          <TextField label="Title" name="title" required maxLength={TITLE_MAX} defaultValue={detailsValues.title} error={detailsErrors.title} />
+          <div class="grid gap-5 sm:grid-cols-2">
+            <SelectField label="Cohort" name="programId" optional options={cohortOptions} defaultValue={detailsValues.programId} error={detailsErrors.programId} />
+            <TextField label="Recorded on" name="recordedAt" type="date" optional defaultValue={detailsValues.recordedAt} error={detailsErrors.recordedAt} />
           </div>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="flex flex-col gap-1.5">
-              <label for="programId" class="text-sm font-medium text-white/90">Program</label>
-              <select id="programId" name="programId" class="form-control">
-                <option value="">Unassigned</option>
-                {programs.map((program) => (
-                  <option value={program.id} selected={program.id === recording.programId}>
-                    {program.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="recordedAt" class="text-sm font-medium text-white/90">Recorded Date</label>
-              <input type="date" id="recordedAt" name="recordedAt" value={formatDate(recording.recordedAt)} class="form-control" />
-            </div>
+          <TextAreaField label="Description" name="description" optional rows={4} defaultValue={detailsValues.description} error={detailsErrors.description} />
+          <div>
+            <Button type="submit" variant="primary">Save details</Button>
           </div>
-          <div class="flex flex-col gap-1.5">
-            <label for="description" class="text-sm font-medium text-white/90">Description</label>
-            <textarea id="description" name="description" rows="4" class="form-control">{recording.description ?? ""}</textarea>
-          </div>
-          <Button type="submit">
-            Save Details
-          </Button>
         </form>
       </Card>
 
       <Card>
-        <h3 class="text-lg font-semibold text-white">Processing</h3>
-        <div class="mt-4 space-y-3 text-sm text-ink-secondary">
-          <p><ProcessingStatus status={recording.processingStatus} /></p>
-          <p>Duration: <span class="text-white">{formatDuration(recording.durationSeconds)}</span></p>
-          <p>Segments: <span class="text-white">{recording.segments.length}</span></p>
-          {recording.processingError && (
-            <p class="rounded-md bg-red-500/15 p-3 text-red-100">{recording.processingError}</p>
+        <section class="grid gap-4" aria-labelledby="processing-heading" data-processing>
+          <h2 id="processing-heading" class="text-lg text-ink-primary">Processing</h2>
+          {failure?.part === "processing" && (
+            <Notice tone="danger" focusOnLoad id={FAILURE_IDS.processing} title={failure.title}>{failure.message}</Notice>
           )}
-        </div>
-        <form method="POST" action="/api/admin/recordings/process" class="mt-5">
-          <input type="hidden" name="recordingId" value={recording.id} />
-          <Button type="submit" class="w-full">
-            Reprocess
-          </Button>
-        </form>
-        <form method="POST" action="/api/admin/recordings/reindex" class="mt-3">
-          <input type="hidden" name="recordingId" value={recording.id} />
-          <Button type="submit" variant="secondary" class="w-full">
-            Rebuild search index
-          </Button>
-          <p class="mt-2 text-xs text-ink-muted">
-            Re-embeds the existing transcript without re-transcribing.
-          </p>
-        </form>
+          <DescriptionList>
+            <DescriptionItem term="Status"><StatusChip domain="recording" status={status} /></DescriptionItem>
+            <DescriptionItem term="Length">{recording.durationSeconds ? formatDuration(recording.durationSeconds) : "Not known yet"}</DescriptionItem>
+            <DescriptionItem term="Transcript segments">{segments}</DescriptionItem>
+          </DescriptionList>
+          {recording.processingError && (
+            <Notice tone="danger" title="Processing failed"><span class="break-words">{recording.processingError}</span></Notice>
+          )}
+          {confirming ? (
+            <ConfirmStep
+              title={`Transcribe ${recording.title} again?`}
+              confirmLabel="Transcribe again"
+              cancelHref={withoutConfirm(Astro.url)}
+              action={SELF}
+              fields={{ action: "reprocess", expectedStatus: status }}
+            >
+              {inProgress ? `It's ${statusWord} now, and this starts over from the video. ` : ""}A new transcription replaces the transcript, its captions and its search entries, including any edits saved below.
+            </ConfirmStep>
+          ) : (
+            <div class="grid gap-3">
+              <div class="flex flex-wrap gap-3">
+                <ButtonLink variant="quiet" href={confirmHref(Astro.url, "reprocess")}>Transcribe again</ButtonLink>
+                {segments > 0 && (
+                  <form method="POST" action={SELF}>
+                    <input type="hidden" name="action" value="reindex" />
+                    <Button type="submit" variant="quiet" aria-describedby="reindex-hint">Rebuild search index</Button>
+                  </form>
+                )}
+              </div>
+              {segments > 0 && (
+                <p id="reindex-hint" class="text-sm text-ink-secondary">Rebuilding the index keeps the transcript as it is and only renews what search reads.</p>
+              )}
+            </div>
+          )}
+        </section>
       </Card>
     </div>
 
     {recording.r2VideoKey && (
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Preview</h3>
-        <video src={`/api/recordings/${recording.id}/video`} controls class="aspect-video w-full rounded-md bg-black"></video>
+        <section class="grid gap-4" aria-labelledby="preview-heading">
+          <h2 id="preview-heading" class="text-lg text-ink-primary">Preview</h2>
+          <video src={`/api/recordings/${recording.id}/video`} controls preload="metadata" aria-labelledby="preview-heading" class="aspect-video w-full rounded-lg bg-ground"></video>
+        </section>
       </Card>
     )}
 
     <Card>
-      <h3 class="text-lg font-semibold text-white">Transcript</h3>
-      <form method="POST" class="mt-4 space-y-4">
+      <form method="POST" action={SELF} class="grid gap-5" aria-labelledby="transcript-heading" data-transcript>
+        <h2 id="transcript-heading" class="text-lg text-ink-primary">Transcript</h2>
+        {failure?.part === "transcript" && (
+          <Notice tone="danger" focusOnLoad id={FAILURE_IDS.transcript} title={failure.title}>{failure.message}</Notice>
+        )}
         <input type="hidden" name="action" value="save-transcript" />
-        <div class="flex flex-col gap-1.5">
-          <label for="transcriptText" class="text-sm font-medium text-white/90">Transcript text</label>
-          <textarea id="transcriptText" name="transcriptText" rows="10" class="form-control text-sm">{recording.transcriptText ?? ""}</textarea>
+        <TextAreaField label="Transcript text" name="transcriptText" optional hint="What Tembo reads when someone asks about this session." rows={10} defaultValue={transcriptValues.transcriptText} error={transcriptErrors.transcriptText} />
+        <TextAreaField label="Captions (WebVTT)" name="transcriptVtt" optional rows={6} defaultValue={transcriptValues.transcriptVtt} error={transcriptErrors.transcriptVtt} />
+        <div>
+          <Button type="submit" variant="quiet">Save transcript</Button>
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label for="transcriptVtt" class="text-sm font-medium text-white/90">Captions (WebVTT)</label>
-          <textarea id="transcriptVtt" name="transcriptVtt" rows="6" class="form-control font-mono text-xs">{recording.transcriptVtt ?? ""}</textarea>
-        </div>
-        <Button type="submit">
-          Save Transcript
-        </Button>
       </form>
     </Card>
   </div>

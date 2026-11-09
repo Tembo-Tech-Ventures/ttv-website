@@ -201,8 +201,9 @@ test.describe("a member without a cohort", () => {
 
     await open(page, "/dashboard");
     expect(new URL(page.url()).pathname).toBe("/dashboard/community");
-    // Their own journey loads for a browser session.
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Your work.");
+    // Their own journey renders for a browser session.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Community");
+    await expect(page.getByRole("heading", { level: 2, name: "Your journey" })).toBeVisible();
 
     // Visible without opening any menu, at either width.
     const invitation = page.locator("[data-cohort-invitation]");
@@ -235,7 +236,7 @@ test.describe("a member without a cohort", () => {
     await open(page, "/dashboard/cohort/ask");
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Ask Tembo");
-    await expect(page.getByRole("heading", { name: "Ask Tembo" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Ask Tembo" })).toBeVisible();
     const composer = page.getByPlaceholder("Ask about your sessions…");
     await expect(composer).toBeInViewport();
     // The chat fills the sheet: neither the document nor the sheet scrolls; the transcript does.
@@ -429,20 +430,17 @@ test.describe("QA-1 polish (F-3)", () => {
     await expect(directory.getByRole("link", { name: "Mentors (public website)" })).toHaveAttribute("href", "/community/mentors");
   });
 
-  // PERF-3: the journey view arrives with the page instead of three API calls after hydration.
-  test("Community arrives with its journey, and hydrates without asking for it again", async ({ context, page, baseURL }) => {
+  // M15: the journey is the page's own HTML, with no island to hydrate and no API call after it.
+  test("Community arrives with its journey, and asks for nothing after it", async ({ context, page, baseURL }) => {
     await as("community", { context, page, baseURL });
     const html = await (await page.request.get("/dashboard/community")).text();
     expect(html).toContain("Edit your profile");
     expect(html).not.toContain("Loading your workspace");
     const communityCalls: string[] = [];
-    const reactErrors: string[] = [];
     page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/community/")) communityCalls.push(request.url()); });
-    page.on("pageerror", (error) => reactErrors.push(error.message));
-    page.on("console", (message) => { if (message.type() === "error" && /hydrat|#418|#423|#425/i.test(message.text())) reactErrors.push(message.text()); });
     await open(page, "/dashboard/community");
-    await expect(page.getByRole("button", { name: "Edit your profile" })).toBeEnabled();
-    expect(reactErrors).toEqual([]);
+    await expect(page.locator("#spaces-main").getByRole("link", { name: "Edit your profile" })).toBeVisible();
+    await expect(page.locator("#spaces-main astro-island")).toHaveCount(0);
     expect(communityCalls).toEqual([]);
   });
 

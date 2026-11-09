@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { PiArrowUpBold } from "react-icons/pi";
 import { takeAskTemboDraft } from "@/components/platform/search/ask-handoff";
+import { CONTROL, IconButton, cx } from "@/components/platform/ui";
 
 /** Max height before the textarea starts scrolling internally (~6 lines). */
 const MAX_HEIGHT_PX = 168;
@@ -69,13 +70,17 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
   }
 
   return (
-    <div className="shrink-0 border-t border-rule bg-dark/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-6">
+    <div className="shrink-0 border-t border-hairline px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
-        className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-rule bg-ink-primary/[0.05] p-2 focus-within:border-primary/50"
+        // The box is the field, as in a channel's composer: the control's frame, carrying the focus ring while you type.
+        className={cx(
+          CONTROL,
+          "mx-auto flex max-w-3xl items-end gap-2 py-2 pr-2 pl-1.5 focus-within:border-peach-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-peach-ink",
+        )}
       >
         <label className="sr-only" htmlFor="chat-composer">
           Message
@@ -97,16 +102,18 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
           placeholder="Ask about your sessions…"
           // text-base on mobile: iOS Safari zooms the viewport when a focused
           // input is smaller than 16px, which breaks the fixed-height layout.
-          className="max-h-42 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-primary placeholder:text-ink-muted focus:outline-none sm:text-sm"
+          // The ring is the box's (focus-within above), so the textarea draws none of its own.
+          // min-h-11: a 44px target at any width, even one line tall on a 320px phone.
+          className="max-h-42 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-primary placeholder:text-ink-muted focus-visible:outline-none sm:text-sm"
         />
-        <button
+        {/* The page's one primary action. */}
+        <IconButton
           type="submit"
+          variant="primary"
+          label="Send message"
+          icon={<PiArrowUpBold className="size-4" />}
           disabled={disabled || !value.trim()}
-          aria-label="Send message"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-dark transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <PiArrowUpBold className="h-4 w-4" aria-hidden="true" />
-        </button>
+        />
       </form>
     </div>
   );

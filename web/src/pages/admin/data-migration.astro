@@ -1,473 +1,202 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  DataCell,
+  DataRow,
+  DataTable,
+  DescriptionItem,
+  DescriptionList,
+  FileField,
+  Notice,
+  PageHeader,
+} from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { isAgentSession } from "@/lib/agent-auth";
+import { executeLegacyImport, isLegacyImportEnabled, legacyImportDisabledMessage } from "@/lib/admin/import";
 import {
-  isLegacyImportEnabled,
-  legacyImportDisabledMessage,
-} from "@/lib/admin/import";
+  LegacyImportValidationError,
+  MAX_EXPORT_BYTES,
+  exportFromForm,
+  importSummary,
+  reviewExport,
+  type ExportReview,
+} from "@/lib/admin/data-migration";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { formatMomentDateTime } from "@/lib/display-date";
 
+/*
+ * Legacy data migration, as two server forms: choose an export and review
+ * what it holds (the import's own checks run, and nothing is written), then
+ * import what was reviewed. An import writes many rows at once, so a personal
+ * access token can't use this page, and an agent session may review but not
+ * import.
+ */
 Astro.response.headers.set("Cache-Control", "no-store");
+if (Astro.locals.personalAccessToken) {
+  return new Response("Forbidden: personal access tokens cannot run a legacy data migration.", { status: 403 });
+}
 
 const deploymentEnvironment = env.DEPLOYMENT_ENVIRONMENT;
 const importEnabled = isLegacyImportEnabled(deploymentEnvironment);
-const disabledMessage = legacyImportDisabledMessage(deploymentEnvironment);
 const agentSession = isAgentSession(Astro.locals.session?.userAgent);
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
 const spaces = await resolveSpacePage(Astro.locals, "adminMigration");
-// Named as the Admin space's sidebar names it.
-const title = spaces ? "Data migration" : "Data Migration";
+const SELF = Astro.url.pathname;
+
+let review: (ExportReview & { text: string }) | undefined;
+/** What went wrong, said at the top of the review form: a refused import leaves no review on the page. */
+let failure: { title: string; message: string } | undefined;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData().catch(() => null);
+  const action = formData?.get("action");
+  if (!importEnabled) {
+    failure = { title: "Nothing was imported", message: legacyImportDisabledMessage(deploymentEnvironment) };
+    Astro.response.status = 403;
+  } else if (!formData || (action !== "review" && action !== "import")) {
+    failure = { title: "Nothing was reviewed", message: "Choose the export file, then review it." };
+    Astro.response.status = 400;
+  } else if (action === "import" && agentSession) {
+    failure = { title: "Nothing was imported", message: "Agent sessions can review an export, but can't run a legacy import." };
+    Astro.response.status = 403;
+  } else {
+    const file = await exportFromForm(formData);
+    if (!file.ok) {
+      failure = { title: action === "review" ? "The export wasn't reviewed" : "Nothing was imported", message: file.error };
+      Astro.response.status = 400;
+    } else if (action === "review") {
+      try {
+        review = { ...(await reviewExport(env.DB, file.payload)), text: file.text };
+      } catch (error) {
+        failure = error instanceof LegacyImportValidationError
+          ? { title: "The export can't be imported", message: error.message }
+          : { title: "The export wasn't reviewed", message: "The database didn't answer, so the export couldn't be checked. Try again in a moment." };
+        Astro.response.status = error instanceof LegacyImportValidationError ? 400 : 503;
+      }
+    } else {
+      try {
+        const result = await executeLegacyImport(env.DB, file.payload);
+        return redirectWithFlash(Astro, SELF, { tone: "success", title: "Import complete", message: importSummary(result) });
+      } catch (error) {
+        failure = error instanceof LegacyImportValidationError
+          ? { title: "Nothing was imported", message: error.message }
+          : { title: "Nothing was imported", message: "The import failed without applying any changes. Try again in a moment." };
+        Astro.response.status = error instanceof LegacyImportValidationError ? 400 : 503;
+      }
+    }
+  }
+}
+
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const count = (value: number) => value.toLocaleString("en-GB");
+const records = (value: number) => `${count(value)} ${value === 1 ? "record" : "records"}`;
 ---
 
-<AdminLayout title={title} spaces={spaces}>
-  <div class="max-w-5xl space-y-6">
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{title}</PageTitle>
-      <p class="mt-2 text-ink-secondary">
-        Review a legacy Vercel/Prisma export before importing eligible records
-        into this environment.
-      </p>
-    </div>
+<AdminLayout title="Data migration" titlePrefix={failure ? "Error: " : ""} spaces={spaces}>
+  <div class="max-w-4xl space-y-6">
+    <PageHeader title="Data migration">
+      Review a legacy Vercel/Prisma export, then import the records it can into this environment.
+    </PageHeader>
+
+    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
 
     {!importEnabled ? (
-      <section
-        data-testid="legacy-import-disabled"
-        class="rounded-lg border border-amber-400/30 bg-amber-400/10 p-6 text-amber-100 shadow-lg"
-      >
-        <h3 class="text-lg font-semibold">Legacy import unavailable</h3>
-        <p class="mt-2 text-sm leading-6">{disabledMessage}</p>
-        <p class="mt-2 text-sm leading-6">
-          The ADMIN role is migration-owned, and role assignments are managed
-          through guarded admin tools.
-        </p>
-      </section>
+      <div data-testid="legacy-import-disabled">
+        <Notice tone="warning" title="Legacy import unavailable" announce="none">
+          {legacyImportDisabledMessage(deploymentEnvironment)} The ADMIN role is migration-owned, and role assignments are
+          managed through guarded admin tools.
+        </Notice>
+      </div>
     ) : (
       <>
-        <section
-          class="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 text-sm leading-6 text-amber-100"
-        >
-          <h3 class="font-semibold">Migration testing only</h3>
-          <p class="mt-1">
-            This importer is enabled only in staging and isolated agent preview
-            environments. Full OAuth identity reconciliation is deferred; an
-            existing email tied to a different user ID stops the entire import
-            before changes.
-          </p>
-        </section>
-
-        <section
-          data-testid="privilege-import-policy"
-          class="rounded-lg border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-100"
-        >
-          <h3 class="font-semibold">Privilege data is always ignored</h3>
-          <p class="mt-1">
-            <strong>Roles</strong> and <strong>User Roles</strong> never generate
-            import statements or grants. The ADMIN role is migration-owned, and
+        <Notice tone="warning" title="Migration testing only" announce="none">
+          This importer works only in staging and isolated agent previews. Full OAuth identity reconciliation is deferred: an
+          existing email tied to a different user stops the whole import before anything changes.
+        </Notice>
+        <div data-testid="privilege-import-policy">
+          <Notice tone="info" title="Privilege data is always ignored" announce="none">
+            Roles and User roles never become import statements or grants. The ADMIN role is migration-owned, and role
             assignments are managed through guarded admin tools.
-          </p>
-        </section>
-
+          </Notice>
+        </div>
         {agentSession && (
-          <section
-            id="agent-import-warning"
-            data-testid="agent-import-warning"
-            class="rounded-lg border border-sky-400/30 bg-sky-400/10 p-5 text-sm leading-6 text-sky-100"
-          >
-            Temporary agent bearer sessions may review this page, but cannot run
-            a legacy import or create persistent data.
-          </section>
+          <div id="agent-import-warning" data-testid="agent-import-warning">
+            <Notice tone="info" title="Review only" announce="none">
+              Temporary agent bearer sessions may review an export here, but cannot run a legacy import or create persistent data.
+            </Notice>
+          </div>
         )}
 
-        <section class="rounded-lg border border-teal/20 bg-dark/80 p-6 shadow-lg">
-          <h3 class="mb-4 text-lg font-semibold text-white">
-            Upload Export File
-          </h3>
-          <p class="mb-4 text-sm leading-6 text-ink-secondary">
-            Select a JSON export file generated by the legacy export tool. The
-            file must contain a positive
-            <code class="rounded bg-white/10 px-1">version</code> and a valid
-            <code class="rounded bg-white/10 px-1">exportedAt</code> timestamp.
-          </p>
-
-          <label for="file-input" class="mb-2 block text-sm font-medium text-white/80">
-            Legacy JSON export
-          </label>
-          <input
-            id="file-input"
-            type="file"
-            accept=".json,application/json"
-            class="block w-full cursor-pointer rounded-lg border border-teal/20 bg-dark/60 text-sm text-white/80 file:mr-4 file:cursor-pointer file:rounded-l-lg file:border-0 file:bg-primary/80 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary"
-          />
-
-          <div
-            id="file-error"
-            role="alert"
-            class="mt-3 hidden rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-          >
-          </div>
-        </section>
-
-        <section id="preview-section" class="hidden space-y-4">
-          <div class="rounded-lg border border-teal/20 bg-dark/80 p-6 shadow-lg">
-            <h3 class="mb-2 text-lg font-semibold text-white">Export Details</h3>
-            <dl class="mb-5 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-sm">
-              <dt class="text-ink-secondary">Version</dt>
-              <dd id="meta-version" class="text-white"></dd>
-              <dt class="text-ink-secondary">Exported At</dt>
-              <dd id="meta-exported-at" class="text-white"></dd>
-            </dl>
-
-            <h3 class="mb-3 text-lg font-semibold text-white">Record Preview</h3>
-            <div class="overflow-x-auto">
-              <table class="w-full min-w-[32rem] text-left text-sm">
-                <thead>
-                  <tr class="border-b border-teal/20 text-ink-secondary">
-                    <th class="pb-2 pr-4">Table</th>
-                    <th class="pb-2 pr-4">Handling</th>
-                    <th class="pb-2 text-right">Records</th>
-                  </tr>
-                </thead>
-                <tbody id="preview-tbody" class="text-white"></tbody>
-                <tfoot class="font-semibold">
-                  <tr class="border-t border-teal/20 text-primary">
-                    <td class="pt-2 pr-4" colspan="2">Importable records</td>
-                    <td id="preview-importable-total" class="pt-2 text-right"></td>
-                  </tr>
-                  <tr class="text-red-200">
-                    <td class="pt-1 pr-4" colspan="2">Privilege records ignored</td>
-                    <td id="preview-ignored-total" class="pt-1 text-right"></td>
-                  </tr>
-                </tfoot>
-              </table>
+        <Card>
+          <form method="POST" action={SELF} enctype="multipart/form-data" class="grid gap-5" aria-labelledby="review-heading" data-review-form>
+            <div class="grid gap-1">
+              <h2 id="review-heading" class="text-lg text-ink-primary">Review an export</h2>
+              <p class="max-w-prose text-sm text-ink-secondary">
+                Nothing is written while you review. The same checks the import makes run first, so a clash with an
+                existing account or a broken reference shows here.
+              </p>
             </div>
-
-            <div class="mt-6 flex flex-wrap items-center gap-4">
-              <button
-                id="import-btn"
-                type="button"
-                data-agent-blocked={agentSession ? "true" : "false"}
-                disabled={agentSession}
-                aria-describedby={agentSession ? "agent-import-warning" : undefined}
-                class="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-primary/80 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {agentSession ? "Import unavailable for agent sessions" : "Import Data"}
-              </button>
-              <button
-                id="clear-btn"
-                type="button"
-                class="rounded-lg border border-teal/20 px-6 py-2.5 text-sm font-medium text-ink-secondary transition-colors hover:text-white"
-              >
-                Clear
-              </button>
+            {failure && (
+              <Notice tone="danger" focusOnLoad id="migration-failure" title={failure.title}>{failure.message}</Notice>
+            )}
+            <input type="hidden" name="action" value="review" />
+            <FileField
+              label="Legacy JSON export"
+              name="export"
+              required
+              accept=".json,application/json"
+              hint={`The JSON file the legacy export tool wrote, with a version and the time it was exported, up to ${MAX_EXPORT_BYTES / 1024 / 1024} MB.`}
+            />
+            <div>
+              <Button type="submit" variant={review && review.importable > 0 && !agentSession ? "quiet" : "primary"}>Review export</Button>
             </div>
-          </div>
-        </section>
+          </form>
+        </Card>
 
-        <section id="status-section" aria-live="polite" class="hidden">
-          <div id="status-card" class="rounded-lg border p-6 shadow-lg">
-            <h3 id="status-title" class="mb-2 text-lg font-semibold"></h3>
-            <p id="status-message" class="mb-4 text-sm"></p>
-            <div id="status-details" class="hidden overflow-x-auto">
-              <table class="w-full min-w-[36rem] text-left text-sm">
-                <thead>
-                  <tr class="border-b border-teal/20 text-ink-secondary">
-                    <th class="pb-2 pr-4">Table</th>
-                    <th class="pb-2 text-right">Changed</th>
-                    <th class="pb-2 text-right">Skipped</th>
-                    <th class="pb-2 text-right">Ignored</th>
-                  </tr>
-                </thead>
-                <tbody id="status-tbody" class="text-white"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+        {review && (
+          <Card>
+            <section class="grid gap-5" aria-labelledby="preview-heading" data-preview>
+              <h2 id="preview-heading" class="text-lg text-ink-primary">What this export holds</h2>
+              <DescriptionList>
+                <DescriptionItem term="Version">{review.version}</DescriptionItem>
+                <DescriptionItem term="Exported">{formatMomentDateTime(review.exportedAt)}</DescriptionItem>
+                <DescriptionItem term="To import">{records(review.importable)}</DescriptionItem>
+                <DescriptionItem term="Ignored privilege records">{records(review.ignored)}</DescriptionItem>
+              </DescriptionList>
+              <DataTable caption="Records in this export" captionVisible columns={[{ label: "Table" }, { label: "Handling" }, { label: "Records", align: "end" }]}>
+                {review.rows.map((row) => (
+                  <DataRow>
+                    <DataCell label="Table" primary>{row.label}</DataCell>
+                    <DataCell label="Handling">{row.privilege ? "Always ignored" : "Checked, then imported"}</DataCell>
+                    <DataCell label="Records" align="end">{count(row.records)}</DataCell>
+                  </DataRow>
+                ))}
+              </DataTable>
+              {agentSession ? (
+                <p class="text-sm text-ink-secondary">Import unavailable for agent sessions: they can review an export, not import it.</p>
+              ) : review.importable === 0 ? (
+                <p class="text-sm text-ink-secondary">There's nothing to import: this export holds only privilege records, which are always ignored.</p>
+              ) : (
+                <form method="POST" action={SELF} enctype="multipart/form-data" class="flex flex-wrap items-center gap-3">
+                  <input type="hidden" name="action" value="import" />
+                  <input type="hidden" name="exportText" value={review.text} />
+                  <Button type="submit" variant="primary">Import {records(review.importable)}</Button>
+                  <ButtonLink variant="ghost" href={SELF}>Choose another file</ButtonLink>
+                </form>
+              )}
+            </section>
+          </Card>
+        )}
 
-        <script>
-          interface TableDefinition {
-            key: string;
-            label: string;
-            handling: "import" | "ignore";
-          }
-
-          interface ImportResponse {
-            success?: boolean;
-            error?: string;
-            totalChanges?: number;
-            totalSkipped?: number;
-            totalIgnored?: number;
-            imported?: Record<string, number>;
-            skipped?: Record<string, number>;
-            ignored?: Record<string, number>;
-          }
-
-          const TABLE_DEFS: TableDefinition[] = [
-            { key: "users", label: "Users", handling: "import" },
-            { key: "curricula", label: "Curricula", handling: "import" },
-            { key: "programs", label: "Programs", handling: "import" },
-            { key: "programRoles", label: "Program Roles", handling: "import" },
-            {
-              key: "programPartners",
-              label: "Program Partners",
-              handling: "import",
-            },
-            {
-              key: "programApplications",
-              label: "Program Applications",
-              handling: "import",
-            },
-            { key: "roles", label: "Roles", handling: "ignore" },
-            { key: "userRoles", label: "User Roles", handling: "ignore" },
-          ];
-
-          let parsedData: Record<string, unknown> | null = null;
-
-          const fileInput = document.getElementById(
-            "file-input"
-          ) as HTMLInputElement;
-          const fileError = document.getElementById(
-            "file-error"
-          ) as HTMLDivElement;
-          const previewSection = document.getElementById(
-            "preview-section"
-          ) as HTMLElement;
-          const previewTbody = document.getElementById(
-            "preview-tbody"
-          ) as HTMLTableSectionElement;
-          const previewImportableTotal = document.getElementById(
-            "preview-importable-total"
-          ) as HTMLTableCellElement;
-          const previewIgnoredTotal = document.getElementById(
-            "preview-ignored-total"
-          ) as HTMLTableCellElement;
-          const metaVersion = document.getElementById(
-            "meta-version"
-          ) as HTMLElement;
-          const metaExportedAt = document.getElementById(
-            "meta-exported-at"
-          ) as HTMLElement;
-          const importBtn = document.getElementById(
-            "import-btn"
-          ) as HTMLButtonElement;
-          const clearBtn = document.getElementById(
-            "clear-btn"
-          ) as HTMLButtonElement;
-          const statusSection = document.getElementById(
-            "status-section"
-          ) as HTMLElement;
-          const statusCard = document.getElementById(
-            "status-card"
-          ) as HTMLDivElement;
-          const statusTitle = document.getElementById(
-            "status-title"
-          ) as HTMLElement;
-          const statusMessage = document.getElementById(
-            "status-message"
-          ) as HTMLElement;
-          const statusDetails = document.getElementById(
-            "status-details"
-          ) as HTMLDivElement;
-          const statusTbody = document.getElementById(
-            "status-tbody"
-          ) as HTMLTableSectionElement;
-          const agentBlocked = importBtn.dataset.agentBlocked === "true";
-
-          function showError(message: string) {
-            fileError.textContent = message;
-            fileError.classList.remove("hidden");
-            previewSection.classList.add("hidden");
-            parsedData = null;
-          }
-
-          function hideError() {
-            fileError.classList.add("hidden");
-            fileError.textContent = "";
-          }
-
-          function resetUI() {
-            hideError();
-            previewSection.classList.add("hidden");
-            statusSection.classList.add("hidden");
-            parsedData = null;
-            fileInput.value = "";
-          }
-
-          function addPreviewRow(
-            definition: TableDefinition,
-            count: number
-          ): void {
-            const row = document.createElement("tr");
-            row.className = "border-b border-teal/10";
-            const label = document.createElement("td");
-            label.className = "py-1.5 pr-4";
-            label.textContent = definition.label;
-            const handling = document.createElement("td");
-            handling.className =
-              definition.handling === "ignore"
-                ? "py-1.5 pr-4 font-medium text-red-200"
-                : "py-1.5 pr-4 text-emerald-200";
-            handling.textContent =
-              definition.handling === "ignore"
-                ? "Always ignored"
-                : "Preflight, then import";
-            const records = document.createElement("td");
-            records.className = "py-1.5 text-right tabular-nums";
-            records.textContent = String(count);
-            // appendChild rather than the variadic append(): inside an Astro
-            // client script the checker resolves `append` to a 1-2 argument
-            // overload and rejects three nodes.
-            for (const cell of [label, handling, records]) row.appendChild(cell);
-            previewTbody.appendChild(row);
-          }
-
-          fileInput.addEventListener("change", async () => {
-            hideError();
-            statusSection.classList.add("hidden");
-
-            const file = fileInput.files?.[0];
-            if (!file) return;
-
-            try {
-              const text = await file.text();
-              const data: unknown = JSON.parse(text);
-              if (
-                typeof data !== "object" ||
-                data === null ||
-                Array.isArray(data)
-              ) {
-                showError("Invalid export file: the root must be an object.");
-                return;
-              }
-
-              const record = data as Record<string, unknown>;
-              if (
-                !Number.isInteger(record.version) ||
-                Number(record.version) <= 0 ||
-                typeof record.exportedAt !== "string" ||
-                !Number.isFinite(Date.parse(record.exportedAt))
-              ) {
-                showError(
-                  "Invalid export file: check the version and exportedAt fields."
-                );
-                return;
-              }
-
-              parsedData = record;
-              metaVersion.textContent = String(record.version);
-              metaExportedAt.textContent = new Date(
-                record.exportedAt
-              ).toLocaleString();
-
-              previewTbody.replaceChildren();
-              let importableTotal = 0;
-              let ignoredTotal = 0;
-              for (const definition of TABLE_DEFS) {
-                const section = record[definition.key];
-                const count = Array.isArray(section) ? section.length : 0;
-                if (definition.handling === "ignore") ignoredTotal += count;
-                else importableTotal += count;
-                addPreviewRow(definition, count);
-              }
-              previewImportableTotal.textContent = String(importableTotal);
-              previewIgnoredTotal.textContent = String(ignoredTotal);
-              previewSection.classList.remove("hidden");
-            } catch {
-              showError("Failed to parse file. Upload a valid JSON export.");
-            }
-          });
-
-          clearBtn.addEventListener("click", resetUI);
-
-          function showStatusError(title: string, message: string) {
-            statusSection.classList.remove("hidden");
-            statusCard.className =
-              "rounded-lg border border-red-500/30 bg-red-500/10 p-6 shadow-lg";
-            statusTitle.className =
-              "mb-2 text-lg font-semibold text-red-300";
-            statusTitle.textContent = title;
-            statusMessage.className =
-              "mb-4 text-sm leading-6 text-red-200/80";
-            statusMessage.textContent = message;
-            statusDetails.classList.add("hidden");
-          }
-
-          function showStatusSuccess(result: ImportResponse) {
-            statusSection.classList.remove("hidden");
-            statusCard.className =
-              "rounded-lg border border-green-500/30 bg-green-500/10 p-6 shadow-lg";
-            statusTitle.className =
-              "mb-2 text-lg font-semibold text-green-300";
-            statusTitle.textContent = "Import complete";
-            statusMessage.className =
-              "mb-4 text-sm leading-6 text-green-200/80";
-            statusMessage.textContent = `${result.totalChanges ?? 0} rows changed, ${result.totalSkipped ?? 0} existing rows skipped, and ${result.totalIgnored ?? 0} privilege records ignored.`;
-
-            statusTbody.replaceChildren();
-            for (const definition of TABLE_DEFS) {
-              const changed = result.imported?.[definition.key] ?? 0;
-              const skipped = result.skipped?.[definition.key] ?? 0;
-              const ignored = result.ignored?.[definition.key] ?? 0;
-              if (changed === 0 && skipped === 0 && ignored === 0) continue;
-
-              const row = document.createElement("tr");
-              row.className = "border-b border-teal/10";
-              const cells = [
-                definition.label,
-                String(changed),
-                String(skipped),
-                String(ignored),
-              ];
-              for (const [index, value] of cells.entries()) {
-                const cell = document.createElement("td");
-                cell.className =
-                  index === 0
-                    ? "py-1.5 pr-4"
-                    : "py-1.5 text-right tabular-nums";
-                cell.textContent = value;
-                row.appendChild(cell);
-              }
-              statusTbody.appendChild(row);
-            }
-            statusDetails.classList.remove("hidden");
-          }
-
-          importBtn.addEventListener("click", async () => {
-            if (!parsedData || agentBlocked) return;
-
-            importBtn.disabled = true;
-            importBtn.textContent = "Importing…";
-            statusSection.classList.add("hidden");
-
-            try {
-              const response = await fetch("/api/admin/import", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(parsedData),
-              });
-              const result = (await response.json()) as ImportResponse;
-
-              if (response.ok && result.success) {
-                showStatusSuccess(result);
-              } else {
-                showStatusError(
-                  "Import rejected",
-                  result.error ?? "The import request was rejected."
-                );
-              }
-            } catch {
-              showStatusError(
-                "Import unavailable",
-                "The import service could not be reached. No result was reported."
-              );
-            } finally {
-              importBtn.disabled = false;
-              importBtn.textContent = "Import Data";
-            }
-          });
-        </script>
       </>
+    )}
+
+    {!importEnabled && failure && (
+      <Notice tone="danger" focusOnLoad id="migration-failure" title={failure.title}>{failure.message}</Notice>
     )}
   </div>
 </AdminLayout>

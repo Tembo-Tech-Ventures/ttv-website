@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, type ReactNode } from "react";
+import React, { useEffect, type ReactNode } from "react";
+import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 
 interface ConversationSheetProps {
   open: boolean;
@@ -8,10 +9,10 @@ interface ConversationSheetProps {
 }
 
 /**
- * The mobile conversation switcher, built on the native `<dialog>` so the modal
- * behaviours come from the platform rather than hand-rolled listeners:
- * `showModal()` gives a focus trap, an inert background, Escape-to-dismiss, and
- * focus restored to whatever opened it.
+ * The mobile conversation switcher: a modal `<dialog>` through the spaces
+ * overlays' `useModalDialog`, so it behaves as their overlays do. The page
+ * behind goes inert, Tab stays inside, Escape and a tap outside close it, and
+ * focus goes back to whatever opened it.
  *
  * It rises from the bottom rather than sliding in from the left edge. Switching
  * conversation is the control a phone user reaches for most, and a sheet puts
@@ -23,33 +24,31 @@ export default function ConversationSheet({
   label,
   children,
 }: ConversationSheetProps) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const { show, hide, props } = useModalDialog(onClose);
 
+  // ChatApp owns whether it is open; the hook only opens and closes the dialog.
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+    if (open) show(null);
+    else hide();
+  }, [open, show, hide]);
 
   return (
     <dialog
-      ref={dialogRef}
+      {...props}
       aria-label={label}
-      onClose={onClose}
-      className="fixed inset-0 m-0 h-full max-h-full w-full max-w-full border-0 bg-transparent p-0 backdrop:bg-dark/70 backdrop:backdrop-blur-sm lg:hidden"
+      className="fixed inset-0 m-0 h-full max-h-full w-full max-w-full border-0 bg-transparent p-0 backdrop:bg-ground/60 lg:hidden"
     >
       {/*
-        Tap-outside-to-close as a real button rather than a click handler on the
-        dialog: `method="dialog"` closes it without any JS, and it lands in the
-        tab order so keyboard and screen-reader users get the same escape hatch.
+        Tap-outside-to-close as a real button rather than only the backdrop:
+        `method="dialog"` closes it without a handler, and it lands in the tab
+        order so keyboard and screen-reader users get the same way out.
       */}
       <form method="dialog" className="absolute inset-0">
         <button type="submit" aria-label="Close conversations" className="h-full w-full cursor-default" />
       </form>
 
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[75dvh] flex-col rounded-t-3xl border-t border-rule bg-bg-raised pb-[env(safe-area-inset-bottom)] shadow-2xl">
-        <span className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-ink-muted" />
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[75dvh] flex-col rounded-t-3xl border-t border-hairline bg-sheet-community pb-[env(safe-area-inset-bottom)] text-ink-primary shadow-overlay">
+        <span aria-hidden="true" className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-ink-muted" />
         {children}
       </div>
     </dialog>

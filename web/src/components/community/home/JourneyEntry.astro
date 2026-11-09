@@ -1,0 +1,79 @@
+---
+/**
+ * One contribution in Your journey: its title and date, whether only its
+ * author can see it, what they wrote, the source they attached, and what each
+ * mentor checked. A confirmation belongs to the revision it reviewed: once the
+ * contribution changes, it reads as the previous revision's, never as a
+ * confirmation of the new text.
+ */
+import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-icons/pi";
+import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
+import { Chip, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
+import { formatCalendarDate } from "@/lib/display-date";
+import { editHref } from "./home-forms";
+
+interface Props {
+  claim: JourneyClaim;
+}
+
+const { claim } = Astro.props;
+const ROLE = { MENTOR: "Mentor", ADMIN: "Administrator", UNKNOWN: "Not recorded" } as const;
+const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00Z`));
+---
+
+<DataListItem title={claim.title} headingLevel={3}>
+  <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
+  {claim.visibility === "private" && <Fragment slot="status"><Chip>Draft</Chip></Fragment>}
+  <Fragment slot="actions"><RowAction href={editHref(claim)} row={claim.title}>Edit</RowAction></Fragment>
+  <div class="flex flex-col gap-3">
+    {claim.visibility === "private" && <p>Unpublished draft. Only you can see this contribution.</p>}
+    <p class="whitespace-pre-line break-words">{claim.description}</p>
+    {claim.evidence.length > 0 && (
+      <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`Sources for ${claim.title}`}>
+        {claim.evidence.map((source) => {
+          const href = evidenceHref(source.url);
+          return (
+            <li>
+              {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1")}>
+                  {source.title}<span class="sr-only"> ({source.kind}, opens in a new tab)</span>
+                  <PiArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
+                </a>
+              ) : (
+                <span>{source.title}: source link unavailable</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    )}
+    {claim.confirmations.length === 0 ? (
+      <p class="text-ink-muted">Member-reported. No confirmation recorded.</p>
+    ) : (
+      <ul class="m-0 flex list-none flex-col gap-3 p-0" aria-label={`Confirmations of ${claim.title}`}>
+        {claim.confirmations.map((confirmation) => {
+          const current = confirmation.journeyVersion === claim.version;
+          return (
+            <li class="flex gap-3" data-confirmation={current ? "current" : "previous"}>
+              {current
+                ? <PiCheckCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success-ink" />
+                : <PiClockCounterClockwise aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-muted" />}
+              <div class="min-w-0">
+                <p class="font-semibold text-ink-primary">
+                  {current ? "Checked by" : "Previous revision checked by"} {confirmation.mentorName}
+                </p>
+                <p>Role when recorded: {ROLE[confirmation.mentorRole]}</p>
+                <p class="break-words whitespace-pre-line">{confirmation.note}</p>
+                <p>How it was checked: {confirmation.method}</p>
+                <p class="text-[0.8125rem] text-ink-muted">
+                  {calendar(confirmation.date)} · Revision {confirmation.journeyVersion}
+                  {current ? " · Claim-specific confirmation" : ` · Review needed for current revision ${claim.version}`}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </div>
+</DataListItem>

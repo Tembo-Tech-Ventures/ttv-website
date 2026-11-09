@@ -143,16 +143,16 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
-  { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
+  { path: "/admin/programs/new", heading: "New cohort", current: "Cohorts", retired: true },
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
-  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", legacy: null },
-  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
+  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
+  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings", retired: true },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
-  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
+  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", retired: true },
   { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", retired: true },
 ];
 
@@ -333,6 +333,156 @@ test.describe("every admin page", () => {
     await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
   });
 
+  test("a recording: one primary, its details saved without JavaScript, and a confirm step before transcribing again", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Saving writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    const path = "/admin/recordings/ttv-local-persona-recording-05";
+    await page.goto(path);
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Save details"]);
+    await expect(main.getByText("Ready", { exact: true }).first()).toBeVisible();
+
+    // Saved as the page showed it: the seed is unchanged, and the page says so once.
+    const save = main.getByRole("button", { name: "Save details" });
+    await save.focus();
+    await save.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(main.getByText("Details saved")).toBeVisible();
+    await page.reload();
+    await expect(main.getByText("Details saved")).toHaveCount(0);
+
+    const again = main.getByRole("link", { name: "Transcribe again" });
+    await again.focus();
+    await again.press("Enter");
+    await expect(page).toHaveURL(/\?confirm=reprocess$/);
+    const step = page.getByRole("region", { name: "Transcribe Week 4: SQL joins and indexes again?" });
+    await expect(step).toContainText("including any edits saved below");
+    const cancel = main.getByRole("link", { name: "Cancel" });
+    await cancel.focus();
+    await cancel.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await context.close();
+  });
+
+  test("data migration: an export reviewed, then imported, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Importing writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/data-migration");
+    const main = page.locator("main");
+    test.skip(await main.getByTestId("legacy-import-disabled").isVisible(), "The importer works only in staging and agent-* environments (DEPLOYMENT_ENVIRONMENT).");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Review export"]);
+
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from("{ not json") });
+    await press(main.getByRole("button", { name: "Review export" }));
+    await expect(main.getByRole("alert").filter({ hasText: "That file isn't JSON." })).toBeVisible();
+
+    const id = `e2e-legacy-${Date.now().toString(36)}`;
+    const legacyExport = { version: 1, exportedAt: "2026-08-01T12:00:00.000Z", users: [{ id, name: "Legacy Learner", email: `${id}@example.test` }] };
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacyExport)) });
+    await press(main.getByRole("button", { name: "Review export" }));
+    const table = main.getByRole("table", { name: "Records in this export" });
+    await expect(table.getByRole("row").filter({ hasText: "Users" })).toContainText("1");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Import 1 record"]);
+    await press(main.getByRole("button", { name: "Import 1 record" }));
+    await expect(page).toHaveURL(/\/admin\/data-migration$/);
+    await expect(main.getByText("Import complete")).toBeVisible();
+    await expect(main.getByText("1 rows changed", { exact: false })).toBeVisible();
+    await context.close();
+  });
+
+  test("uploading a recording: one primary, and a file that isn't a video refused in words, with what was written kept", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/upload");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload and process"]);
+    await main.getByRole("textbox", { name: "Title" }).fill("Week 5: e2e upload");
+    await main.getByRole("combobox", { name: /^Cohort/ }).selectOption({ label: "Cohort 05" });
+    await main.getByLabel(/^Video/).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a video") });
+    const upload = main.getByRole("button", { name: "Upload and process" });
+    await upload.focus();
+    await upload.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The recording wasn't uploaded" })).toBeVisible();
+    await expect(main.getByText("notes.txt isn't a video. Choose a video file, such as an MP4.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue("Week 5: e2e upload");
+    await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue("ttv-local-persona-cohort-05");
+    await context.close();
+  });
+
+  test("a new cohort: a refused form keeps what was written and says what to fix, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/programs/new");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Create cohort"]);
+    await main.getByRole("textbox", { name: "Name" }).fill("Cohort e2e");
+    await main.getByRole("textbox", { name: "Description" }).fill("Kept description.");
+    await main.getByRole("combobox", { name: "Curriculum" }).selectOption({ index: 1 });
+    await main.getByLabel(/^Starts on/).fill("2027-04-02");
+    await main.getByLabel(/^Ends on/).fill("2027-01-11");
+    await main.getByRole("checkbox", { name: "Applications open" }).check();
+    const create = main.getByRole("button", { name: "Create cohort" });
+    await create.focus();
+    await create.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The cohort wasn't created" })).toBeVisible();
+    await expect(main.getByText("End date must be on or after start date.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Description" })).toHaveValue("Kept description.");
+    await expect(main.getByRole("checkbox", { name: "Applications open" })).toBeChecked();
+    await context.close();
+  });
+
+  test("recording imports: a source refused in words with what was written kept, then saved paused, turned on and removed after a confirm step, without JavaScript", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Adding a source writes to the seed; one project is enough.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/import");
+    const main = page.locator("main");
+    const press = async (control: ReturnType<Page["locator"]>) => {
+      await control.focus();
+      await control.press("Enter");
+    };
+    const name = `e2e source ${Date.now().toString(36)}`;
+    const form = main.locator("form[data-create]");
+    await form.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await form.getByRole("combobox", { name: "Cohort" }).selectOption({ label: "Cohort 05" });
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("not a folder");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(form.getByRole("alert").filter({ hasText: "The source wasn't saved" })).toBeVisible();
+    await expect(form.getByText("That isn't a Drive folder's address or ID.", { exact: false })).toBeVisible();
+    await expect(form.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
+
+    await form.getByRole("textbox", { name: "Drive folder" }).fill("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpE2e");
+    await press(form.getByRole("button", { name: "Save import source" }));
+    await expect(page).toHaveURL(/\/admin\/recordings\/import$/);
+    await expect(main.getByText("Import source saved, paused")).toBeVisible();
+    const row = main.locator("li[data-source]").filter({ has: page.getByRole("heading", { name, exact: true }) });
+    await expect(row).toContainText("Paused");
+
+    await press(row.getByRole("button", { name: `Turn on ${name}` }));
+    await expect(main.getByText(`Automatic scans on for ${name}`)).toBeVisible();
+    await expect(row).toContainText("Automatic");
+
+    await press(row.getByRole("link", { name: `Remove ${name}` }));
+    await expect(page.getByRole("region", { name: `Remove ${name}?` })).toBeVisible();
+    await press(row.getByRole("button", { name: "Remove source" }));
+    await expect(main.getByText(`${name} removed`)).toBeVisible();
+    await expect(row).toHaveCount(0);
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -446,7 +596,9 @@ test.describe("every admin page", () => {
   test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
-    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"]]) {
+    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"],
+      ["/admin/recordings/upload", "recordings-upload"], ["/admin/recordings/import", "recordings-import"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);
