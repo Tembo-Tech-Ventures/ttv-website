@@ -16,6 +16,7 @@ export { default as CountBadge } from "./CountBadge";
 export { default as DataList, DataListItem } from "./DataList";
 export { default as DataTable, DataCell, DataRow, DataSelectCell, RowAction, type DataColumn } from "./DataTable";
 export { default as DescriptionList, DescriptionItem } from "./DescriptionList";
+export { default as Disclosure } from "./Disclosure";
 export { default as EmptyState } from "./EmptyState";
 export {
   Checkbox,

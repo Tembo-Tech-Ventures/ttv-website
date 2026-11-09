@@ -19,6 +19,7 @@ import {
   DataTable,
   DescriptionItem,
   DescriptionList,
+  Disclosure,
   EmptyState,
   FileField,
   IconButton,
@@ -598,6 +599,23 @@ const { label, tone } = statusTone("recording", recording.processingStatus);`,
   <DescriptionItem term="Status"><StatusChip domain="application" status={status} /></DescriptionItem>
   <DescriptionItem term="Applied">3 Nov</DescriptionItem>
 </DescriptionList>`,
+  },
+  {
+    id: "disclosure",
+    name: "Disclosure",
+    exports: ["Disclosure"],
+    summary: "Help or detail most readers can skip, folded behind one row they can open: where a credential comes from, what a scale means.",
+    specimen: () => (
+      <Disclosure summary="Where to get this credential" className="max-w-xl">
+        In Google Cloud Console, create a service account, add a JSON key, and share the recordings folder with its email.
+      </Disclosure>
+    ),
+    use: ["Instructions that matter once, such as setting something up.", "open when nothing has been set up yet, so the help is there the first time."],
+    avoid: ["The page's main task, or anything a reader must see: put that on the page.", "A disclosure inside a disclosure."],
+    access: ["A native details and summary: it opens without JavaScript, and its state is announced.", "The summary row is 44px on a touch screen and carries the kit's focus ring."],
+    code: `<Disclosure summary="Where to get this credential" open={!credential}>
+  <ol>…</ol>
+</Disclosure>`,
   },
   {
     id: "notice",

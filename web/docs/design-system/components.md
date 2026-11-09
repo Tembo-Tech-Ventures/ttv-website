@@ -231,6 +231,14 @@ term` children for a detail that holds a link or a chip (both work from
 `.astro`). The name stacks above the fact on a phone and stands in a 12rem
 column beside it from 40rem; long values wrap.
 
+### Disclosure `#disclosure`
+
+Help or detail most readers can skip, behind one row: a native `<details>`
+with a `summary`, so it opens without JavaScript and its state is announced.
+The row is 44px on a touch screen, with the kit's focus ring, and a caret that
+turns when it opens. `open` shows it on arrival (instructions before anything
+is set up). Not for the page's main task, and never one inside another.
+
 ### Sheet and TabFile `#tab-file`
 
 - `Sheet space={tone}`: a page in a space's tone, rounded at the head. Set

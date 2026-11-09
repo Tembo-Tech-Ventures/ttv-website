@@ -64,7 +64,9 @@ for (const section of SECTIONS) {
     test("lists its sections, each of which exists", async ({ page }, testInfo) => {
       await open(page, section.path);
       const wide = !testInfo.project.name.includes("mobile") && (page.viewportSize()?.width ?? 0) >= 1024;
-      const contents = wide ? page.getByRole("navigation", { name: "On this page" }) : page.locator("main details");
+      const contents = wide
+        ? page.getByRole("navigation", { name: "On this page" })
+        : page.locator("main details").filter({ has: page.locator("summary", { hasText: "On this page" }) });
       if (!wide) await contents.locator("summary").click();
       const hrefs = await contents.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
       expect(hrefs.length).toBeGreaterThan(2);
@@ -210,6 +212,8 @@ test("makes the link that names a row a 44px target on a touch screen, without m
     link.style.margin = "";
     return { link: Math.round(pressable.link), text: Math.round(without.link), row: Math.round(pressable.row), bareRow: Math.round(without.row) };
   });
-  expect(measured.link).toBe(touch ? Math.max(44, measured.text) : measured.text);
+  // On touch the padding is sized for the smallest names (a 17-18px box), so a larger one gets a little more than 44.
+  if (touch) expect(measured.link).toBeGreaterThanOrEqual(Math.max(44, measured.text));
+  else expect(measured.link).toBe(measured.text);
   expect(measured.row).toBe(measured.bareRow);
 });

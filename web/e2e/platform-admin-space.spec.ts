@@ -148,7 +148,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
   { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings", retired: true },
-  { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
+  { path: "/admin/recordings/import", heading: "Import session recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
   { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
@@ -240,6 +240,10 @@ test.describe("every admin page", () => {
     await page.setViewportSize({ width: 320, height: 800 });
     expect(await page.locator(".spaces-shell__main").evaluate((main) => main.scrollWidth - main.clientWidth)).toBeLessThanOrEqual(0);
     await page.setViewportSize(size);
+    // On a touch screen the name that opens the row is a 44px target.
+    if (test.info().project.name === "mobile-chromium") {
+      expect((await david.getByRole("link", { name: "David Kamau" }).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
     await david.getByRole("link", { name: "David Kamau" }).click();
     await expect(page).toHaveURL(/\/admin\/users\/ttv-local-persona-mentor$/);
 
