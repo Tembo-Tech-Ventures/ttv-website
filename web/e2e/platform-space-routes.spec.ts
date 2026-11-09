@@ -56,6 +56,11 @@ test.describe("space routes without JavaScript", () => {
       expect(response.headers().location).toBe(`/dashboard/${canonical}?route-check=1`);
       expect(response.headers()["cache-control"]).toBe("no-store");
       const rendered = await page.goto(`/dashboard/${canonical}`);
+      // Confirm work takes a person's own browser session: an agent's delegated one gets the page under a 403 that says so.
+      if (canonical === "mentoring/confirm" && rendered?.status() === 403) {
+        await expect(page.getByText("Reviewing shared work needs your own browser session")).toBeVisible();
+        continue;
+      }
       expect(rendered?.status()).toBe(200);
     }
   });

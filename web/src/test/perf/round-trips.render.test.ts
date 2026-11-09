@@ -227,7 +227,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
   // Its channel list, requests and availability start beside onboarding (depth 5 before).
   "mentoring home": { d1: 16, depth: 3 },
-  "mentoring confirm": { d1: 11, depth: 2 },
+  // The shared work is now read on the server, beside the space context (the island fetched it after
+  // hydration, a second request these numbers never saw); its confirmations are read beside its rows.
+  "mentoring confirm": { d1: 13, depth: 3 },
   "mentoring availability": { d1: 12, depth: 3 },
   // One directory read, filtered in memory: two (the same statement twice) before the style-guide rollout.
   "mentors, filtered": { d1: 20, depth: 3 },

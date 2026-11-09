@@ -234,12 +234,16 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     },
     async listMentorship() {
       const scope = fixtureScope("j.userId");
-      const results = await mentorshipRows<Omit<CommunityJourney, "confirmations"> & { memberName: string }>(
-        "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt");
       const mentorScope = fixtureScope("c.mentorId");
-      const {results: confirmations} = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
-        FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-        WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>();
+      // The confirmations don't depend on the rows, so they are read beside them (one round trip, not two).
+      // They are returned only with the rows, so a caller the rows' mentor check refuses learns nothing.
+      const [results, {results: confirmations}] = await Promise.all([
+        mentorshipRows<Omit<CommunityJourney, "confirmations"> & { memberName: string }>(
+          "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt"),
+        db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
+          FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
+          WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>(),
+      ]);
       return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
     },
     /**

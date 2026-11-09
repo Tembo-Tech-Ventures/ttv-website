@@ -229,13 +229,16 @@ export async function searchProfiles(criteria: ScoutCriteria, fetcher: typeof fe
   );
   return result.profiles.map((profile) => mapProfile(profile));
 }
-export async function loadMentorship(): Promise<MentorReviewRequest[]> {
+export async function loadMentorship(fetcher: typeof fetch = fetch): Promise<MentorReviewRequest[]> {
   const result = await communityRequest(
     "mentorship",
     z.object({
       // Retained QA personas read through a separate handler that predates set-aside.
       entries: z.array(entrySchema.extend({ memberName: z.string(), reviewedByCurrentMentor: z.boolean(), setAsideByCurrentMentor: z.boolean().default(false) })),
     }),
+    "GET",
+    undefined,
+    fetcher,
   );
   return result.entries.map((entry) => ({
     id: entry.id,
@@ -251,25 +254,29 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
   }));
 }
 /** "I can't confirm this": private to the mentor, for the revision they saw. */
-export async function setAsideContribution(id: string, expectedRevision: number): Promise<void> {
+export async function setAsideContribution(id: string, expectedRevision: number, fetcher: typeof fetch = fetch): Promise<void> {
   const result = await communityRequest(
     `journey/${encodeURIComponent(id)}/set-aside`,
     z.object({ setAside: z.object({ journeyId: z.string(), journeyVersion: z.number().int(), setAside: z.literal(true) }) }),
     "POST",
     { expectedRevision },
+    fetcher,
   );
   if (result.setAside.journeyId !== id || result.setAside.journeyVersion !== expectedRevision) throw new UiApiError(502);
 }
-export async function undoSetAside(id: string): Promise<void> {
+export async function undoSetAside(id: string, fetcher: typeof fetch = fetch): Promise<void> {
   await communityRequest(
     `journey/${encodeURIComponent(id)}/set-aside`,
     z.object({ setAside: z.object({ journeyId: z.literal(id), setAside: z.literal(false) }) }),
     "DELETE",
+    undefined,
+    fetcher,
   );
 }
 export async function confirmContribution(
   id: string,
   review: MentorReviewDecision,
+  fetcher: typeof fetch = fetch,
 ): Promise<void> {
   if (review.decision !== "confirmed") throw new UiApiError(400);
   const result = await communityRequest(
@@ -286,6 +293,7 @@ export async function confirmContribution(
       method: review.method,
       expectedRevision: review.expectedRevision,
     },
+    fetcher,
   );
   if (result.confirmation.journeyVersion !== review.expectedRevision)
     throw new UiApiError(502);

@@ -1,6 +1,4 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import MentoringOverview from "@/components/platform/spaces/MentoringOverview.astro";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
@@ -12,8 +10,13 @@ import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-rou
 import { env } from "cloudflare:workers";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { loadMentoringOverview } from "@/components/platform/mentors/overview";
-// oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
-import "@/styles/discovery.css";
+import ConfirmWork from "@/components/platform/mentors/ConfirmWork.astro";
+import { loadMentorship, readConfirmPost, runConfirmPost, type ConfirmOutcome } from "@/components/platform/mentors/confirm-state";
+import { PageHeader, Notice } from "@/components/platform/ui";
+import { communityFetch } from "@/lib/community/in-process";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { UiApiError } from "@/components/discovery/ui-errors";
 
 // B-1.2 serves this page at /dashboard/mentoring (the space's landing) and at
 // /dashboard/mentoring/confirm (the review). Admins who are not mentors keep
@@ -27,8 +30,43 @@ const landing = atLanding
     mentorRequestsOpen(me) ? loadMentoringOverview(Astro, env, me) : null,
   ]))
   : null;
-const spaces = landing?.[0] ?? (await resolveSpacePage(Astro.locals, "confirm"));
 const [shortcuts, requests] = landing?.[1] ?? [null, null];
+
+// Confirm work (/dashboard/mentoring/confirm), on the kit with no island (style-guide rollout M17, D5): the
+// mentor's list is read through the community API's own handler, in process, beside the space context; each
+// action is a POST here, answered with a 303 and a flash, or a refusal that keeps what the mentor wrote.
+// The landing renders only for someone with a Mentoring space; anyone else here (an admin who isn't a mentor,
+// at /dashboard/mentoring or /dashboard/mentoring/confirm) gets the review, in their own space.
+const fetcher = landing ? null : communityFetch(Astro.request, Astro.locals, env);
+let outcome: ConfirmOutcome | null = null;
+if (fetcher && Astro.request.method === "POST") {
+  const post = readConfirmPost(await Astro.request.formData().catch(() => new FormData()));
+  outcome = post
+    ? await runConfirmPost(post, fetcher)
+    : { ok: false, status: 400, title: "That form didn't arrive whole", detail: "Try again from the contribution.", kept: null };
+  if (outcome.ok) return redirectWithFlash(Astro, SPACE_PAGE_PATHS.confirm, outcome.flash);
+  Astro.response.status = outcome.status;
+}
+const confirmReads = fetcher
+  ? await Promise.all([
+    resolveSpacePage(Astro.locals, "confirm"),
+    loadMentorship(fetcher).then((list) => ({ list, failed: null as number | null }), (failure: unknown) => ({
+      list: [],
+      failed: failure instanceof UiApiError ? failure.status : 503,
+    })),
+  ])
+  : null;
+const spaces = landing?.[0] ?? confirmReads?.[0] ?? null;
+const contributions = confirmReads?.[1] ?? null;
+// The space already allowed this page; if its list can't be read, the page still renders and says why, under
+// a 403 for a session the review refuses (an agent's delegated one) or a 503 for the service.
+const failed = contributions?.failed ?? null;
+const readRefused = failed === 401 || failed === 403;
+if (failed && !outcome) Astro.response.status = readRefused ? 403 : 503;
+const refused = outcome && !outcome.ok ? outcome : null;
+// A POST never carries a flash, and a refused one says what went wrong instead.
+const flash = fetcher && Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const confirmTitle = spaces?.space === "admin" ? "Mentor review" : "Confirm work";
 ---
 {
   spaces?.page === "mentoring" ? (
@@ -41,13 +79,24 @@ const [shortcuts, requests] = landing?.[1] ?? [null, null];
         <OnboardingPrompt slot="after-primary" view={spaces.onboarding} space={spaces.space} class="mt-6" />
       </MentoringOverview>
     </SpacePage>
-  ) : spaces ? (
-    <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>
-      <CommunityApp client:load view="mentor" embedded />
-    </SpacePage>
   ) : (
-    <BaseLayout title="Review community contributions | TTV" noIndex>
-      <CommunityApp client:load view="mentor" />
-    </BaseLayout>
+    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused || (failed && !readRefused) ? "Error: " : ""}>
+      <div class="flex max-w-4xl flex-col gap-8">
+        <PageHeader title={confirmTitle} />
+        {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+        {refused && (
+          <Notice tone="danger" focusOnLoad id="confirm-failure" title={refused.title}>{refused.detail}</Notice>
+        )}
+        {readRefused ? (
+          <Notice tone="info" title="Reviewing shared work needs your own browser session">
+            Mentors and administrators review shared work signed in themselves; a token or a delegated session can't.
+          </Notice>
+        ) : failed ? (
+          <Notice tone="danger" title="Shared work didn't load">Please try again in a moment.</Notice>
+        ) : (
+          <ConfirmWork requests={contributions?.list ?? []} kept={refused?.kept ?? null} />
+        )}
+      </div>
+    </SpacePage>
   )
 }

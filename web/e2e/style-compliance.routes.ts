@@ -50,14 +50,12 @@ export interface StyleRoute {
   /** The h1 the route may carry instead of a display one (decision D3: conversation pages). */
   namedH1?: true;
   pending?: { checks?: readonly StyleCheck[]; preview?: readonly StyleCheck[]; todo: string };
-  /** A page that refuses an agent's delegated session, which is the preview's staff persona. */
+  /** A page that refuses an agent's delegated session, as the preview's personas are. */
   browserOnly?: true;
 }
 
 /** A detail page under `base`: one more segment, never one of the static pages beside it. */
 const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes)$)[^/?#]+$`);
-
-const LANE_M = (page: string) => `TODO(lane M, ${page}): the page goes onto the kit in its own PR`;
 
 export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Cohort
@@ -79,7 +77,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/mentoring", persona: "mentor" },
   { path: "/dashboard/mentoring/requests", persona: "mentor" },
   { path: "/dashboard/mentoring/availability", persona: "mentor" },
-  { path: "/dashboard/mentoring/confirm", persona: "mentor", pending: { checks: ["h1", "kit-controls"], todo: LANE_M("Confirm work, M17") } },
+  { path: "/dashboard/mentoring/confirm", persona: "mentor", browserOnly: true },
 
   // Discover
   { path: "/dashboard/discover", persona: "institution" },

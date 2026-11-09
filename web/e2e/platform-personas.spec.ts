@@ -315,7 +315,7 @@ test.describe("a mentor", () => {
     await expect(page).toHaveURL(/\/dashboard\/mentoring\/confirm$/);
     // A count badge follows the label when shared work waits (F-2).
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText(/^Confirm work/);
-    await expect(page.getByRole("heading", { name: "Confirm what you have personally checked" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Confirm work" })).toBeVisible();
     // The old mentor link still works and lands on the review.
     await open(page, "/dashboard/mentorship");
     expect(new URL(page.url()).pathname).toBe("/dashboard/mentoring/confirm");
@@ -361,7 +361,14 @@ test.describe("staff", () => {
     test.skip(capabilities.isMentor, "This staff persona is also a mentor.");
     expect(spaces).not.toContain("mentoring");
 
-    await open(page, "/dashboard/mentoring");
+    // The review takes a person's own browser session; the preview's staff persona, an agent's delegated
+    // session, gets the page in its space under a 403 that says so.
+    const response = await page.goto("/dashboard/mentoring");
+    if (response?.status() === 403) {
+      await expect(page.getByText("Reviewing shared work needs your own browser session")).toBeVisible();
+    } else {
+      expect(response?.status(), "/dashboard/mentoring").toBe(200);
+    }
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Mentor review");
     await expect(page.locator("#space-sidebar a", { hasText: "Admin home" })).toHaveAttribute("href", "/admin");
