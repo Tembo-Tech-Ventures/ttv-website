@@ -217,9 +217,10 @@
   transition: transform 150ms ease-out;
 }
 
+/* On, it reads as a ticked kit Checkbox (choice.css), not as a second peach action on the page. */
 .onboarding-switch[aria-checked="true"] .onboarding-switch__track {
-  border-color: var(--color-primary);
-  background-color: var(--color-primary);
+  border-color: var(--color-peach-ink);
+  background-color: var(--color-peach-ink);
 }
 
 .onboarding-switch[aria-checked="true"] .onboarding-switch__knob {
