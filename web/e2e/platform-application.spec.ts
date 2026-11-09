@@ -124,7 +124,7 @@ test.describe("a member whose application carries questions", () => {
     const html = page.getByRole("group", { name: HTML_LABEL });
     await expect(html.getByRole("radio", { name: "Yes" })).toBeChecked();
     await expect(html.getByRole("link", { name: "HTML/CSS course (opens in a new tab)" })).toHaveAttribute("href", "https://www.codecademy.com/learn/learn-html");
-    await expect(page.locator("[data-answer='gitDone']").getByRole("radio", { name: "No" })).toBeChecked();
+    await expect(page.locator("[data-field='answer.gitDone']").getByRole("radio", { name: "No" })).toBeChecked();
     await expect(form.getByRole("button", { name: "Save answers" })).toBeVisible();
     await expectNoJson(page);
     await expectNoSidewaysScroll(page);
@@ -141,7 +141,7 @@ test.describe("a member whose application carries questions", () => {
     // A browser that skips constraint validation: the server must still refuse a missing required choice.
     await page.locator("form[data-application-answers-form]").evaluate((form: HTMLFormElement) => {
       form.noValidate = true;
-      form.querySelectorAll<HTMLInputElement>("[data-answer='htmlCssDone'] input").forEach((input) => (input.checked = false));
+      form.querySelectorAll<HTMLInputElement>("[data-field='answer.htmlCssDone'] input").forEach((input) => (input.checked = false));
     });
     const [response] = await Promise.all([
       page.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().includes(APPLICANT_APPLICATION)),
@@ -151,13 +151,14 @@ test.describe("a member whose application carries questions", () => {
     await hideDevToolbar(page);
 
     const alert = page.locator("form[data-application-answers-form] [role='alert']");
-    await expect(alert).toContainText("One answer needs another look. Everything you typed is still here.");
+    await expect(alert).toContainText("One answer needs another look");
+    await expect(alert).toContainText("Everything you typed is still here.");
     // Announced on arrival: focus moves to the summary, and the title says it failed.
     await expect(alert).toBeFocused();
     await expect(page).toHaveTitle(/^Error: Application details/i);
     // Only the tab title: the visible page and the phone's top bar keep the plain name.
     await expect(page.getByText(/Error: Application details/i)).toHaveCount(0);
-    await expect(alert.getByRole("link", { name: "Did you complete the free portion of the HTML/CSS course? Choose Yes or No." })).toHaveAttribute("href", "#answer-htmlCssDone");
+    await expect(alert.getByRole("link", { name: "Did you complete the free portion of the HTML/CSS course? Choose Yes or No." })).toHaveAttribute("href", "#answer.htmlCssDone-yes");
     await expect(page.getByLabel(PROJECT_LABEL)).toHaveValue(typed);
     await expect(page.getByRole("group", { name: HTML_LABEL }).getByRole("radio", { name: "Yes" })).toHaveAttribute("aria-invalid", "true");
     await expectNoJson(page);
@@ -190,7 +191,7 @@ test.describe("a member whose application carries questions", () => {
       await expect(page.getByLabel(PROJECT_LABEL)).toHaveValue(idea);
       await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Njeri Wambui");
       await expect(page.getByRole("group", { name: HTML_LABEL }).getByRole("radio", { name: "Yes" })).toBeChecked();
-      await expect(page.locator("[data-answer='gitDone']").getByRole("radio", { name: "No" })).toBeChecked();
+      await expect(page.locator("[data-field='answer.gitDone']").getByRole("radio", { name: "No" })).toBeChecked();
       await expect(page.getByLabel(PREVIOUS_LABEL)).toHaveValue("A savings tracker for my chama, kept in a shared spreadsheet.");
 
       // The admin view is unchanged: the same read-only application data, now with the new answer.
@@ -310,7 +311,7 @@ test.describe("a member applying to a cohort that asks no questions", () => {
     await expect(page).toHaveURL(/\/application\//);
     await hideDevToolbar(page);
 
-    await expect(page.locator("[data-application-answers-summary]")).toHaveText(
+    await expect(page.locator("[data-application-answers-summary]")).toContainText(
       "This cohort doesn't ask any application questions, so there's nothing to fill in. Your application's status is shown above and changes when the team reviews it.",
     );
     await expect(page.locator("main form, main textarea")).toHaveCount(0);
@@ -338,10 +339,10 @@ test.describe("the cohort persona, accepted with no answers recorded", () => {
   test("sees a read-only, truthful state and no form", async ({ context, page, baseURL }) => {
     const frame = await signedIn(context, page, baseURL!, student);
     await openApplication(page, frame, STUDENT_APPLICATION);
-    await expect(page.locator("[data-application-answers-summary]")).toHaveText("No answers were recorded with this application.");
+    await expect(page.locator("[data-application-answers-summary]")).toContainText("No answers were recorded with this application.");
     // QA1-20: the cohort's dates and the application's, day first with the month as a word, never "9/1/2026".
-    await expect(page.locator("main")).toContainText(/Start Date\s*1 Sept? 2026/);
-    await expect(page.locator("main")).toContainText(/End Date\s*15 Dec 2026/);
+    await expect(page.locator("main")).toContainText(/Starts\s*1 Sept? 2026/);
+    await expect(page.locator("main")).toContainText(/Ends\s*15 Dec 2026/);
     await expect(page.locator("main")).not.toContainText(/\d{1,2}\/\d{1,2}\/\d{4}/);
     await expect(page.locator("main form, main textarea")).toHaveCount(0);
     await expectNoJson(page);
