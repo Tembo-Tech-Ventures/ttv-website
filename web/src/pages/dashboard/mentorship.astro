@@ -35,7 +35,9 @@ const [shortcuts, requests] = landing?.[1] ?? [null, null];
 // Confirm work (/dashboard/mentoring/confirm), on the kit with no island (style-guide rollout M17, D5): the
 // mentor's list is read through the community API's own handler, in process, beside the space context; each
 // action is a POST here, answered with a 303 and a flash, or a refusal that keeps what the mentor wrote.
-const fetcher = atLanding ? null : communityFetch(Astro.request, Astro.locals, env);
+// The landing renders only for someone with a Mentoring space; anyone else here (an admin who isn't a mentor,
+// at /dashboard/mentoring or /dashboard/mentoring/confirm) gets the review, in their own space.
+const fetcher = landing ? null : communityFetch(Astro.request, Astro.locals, env);
 let outcome: ConfirmOutcome | null = null;
 if (fetcher && Astro.request.method === "POST") {
   const post = readConfirmPost(await Astro.request.formData().catch(() => new FormData()));
@@ -56,7 +58,8 @@ const confirmReads = fetcher
   : null;
 const spaces = landing?.[0] ?? confirmReads?.[0] ?? null;
 const contributions = confirmReads?.[1] ?? null;
-if (contributions?.failed && !outcome) Astro.response.status = contributions.failed === 403 ? 403 : 503;
+// The space already allowed this page; if its list can't be read (a session the review refuses, or the
+// service down), the page still renders and says so, as the island did, rather than failing whole.
 const refused = outcome && !outcome.ok ? outcome : null;
 // A POST never carries a flash, and a refused one says what went wrong instead.
 const flash = fetcher && Astro.request.method === "GET" ? takeFlash(Astro) : null;
@@ -74,16 +77,16 @@ const confirmTitle = spaces?.space === "admin" ? "Mentor review" : "Confirm work
       </MentoringOverview>
     </SpacePage>
   ) : (
-    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused || contributions?.failed ? "Error: " : ""}>
+    <SpacePage context={spaces} title={confirmTitle} titlePrefix={refused ? "Error: " : ""}>
       <div class="flex max-w-4xl flex-col gap-8">
         <PageHeader title={confirmTitle} />
         {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
         {refused && (
           <Notice tone="danger" focusOnLoad id="confirm-failure" title={refused.title}>{refused.detail}</Notice>
         )}
-        {contributions?.failed === 403 ? (
-          <Notice tone="info" title="Mentor access needs approval">
-            An administrator approves mentor access. Ask for it from your Account page.
+        {contributions?.failed === 403 || contributions?.failed === 401 ? (
+          <Notice tone="info" title="Reviewing shared work needs your own browser session">
+            Mentors and administrators review shared work signed in themselves; a token or a delegated session can't.
           </Notice>
         ) : contributions?.failed ? (
           <Notice tone="danger" title="Shared work didn't load">Please try again in a moment.</Notice>

@@ -28,6 +28,7 @@ const { default: Page } = await import("../../mentorship.astro");
 
 const MEMBER = "synthetic-david";
 const BUILDER = "synthetic-achieng";
+const ADMIN = "synthetic-amina";
 const ORIGIN = "https://ttv.invalid";
 const PATH = "/dashboard/mentoring/confirm";
 const databases: DatabaseSync[] = [];
@@ -44,6 +45,9 @@ function seeded() {
   database.exec(`INSERT INTO user(id,name,email) VALUES ('${MEMBER}','David Kamau','david@example.test'),('${BUILDER}','Achieng Otieno','achieng@example.test');
     INSERT OR IGNORE INTO Roles(id,name) VALUES ('MENTOR','MENTOR');
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MEMBER}',id FROM Roles WHERE name='MENTOR';
+    INSERT INTO user(id,name,email) VALUES ('${ADMIN}','Amina Hassan','amina@example.test');
+    INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
+    INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','${ADMIN}',id FROM Roles WHERE name='ADMIN';
     INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,evidenceUrl) VALUES
       ('ledger','${BUILDER}','Chama savings ledger','Built a fictional ledger, with tests.','2026-10-21','institution','https://github.com/example/ledger');
     UPDATE feature_flag SET audience='ALL';`);
@@ -55,12 +59,12 @@ beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
 });
 
-async function visit({ body, cookie }: { body?: URLSearchParams | FormData; cookie?: string } = {}) {
-  const url = new URL(PATH, ORIGIN);
-  const name = sqlite.prepare("SELECT name FROM user WHERE id = ?").get(MEMBER) as { name: string };
+async function visit({ body, cookie, path = PATH, as = MEMBER, userAgent = "Mozilla/5.0" }: { body?: URLSearchParams | FormData; cookie?: string; path?: string; as?: string; userAgent?: string } = {}) {
+  const url = new URL(path, ORIGIN);
+  const name = sqlite.prepare("SELECT name FROM user WHERE id = ?").get(as) as { name: string };
   mocks.getSession.mockResolvedValue({
-    user: { id: MEMBER, name: name.name, email: "david@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) },
-    session: { id: `${MEMBER}-session`, userId: MEMBER, userAgent: "Mozilla/5.0" },
+    user: { id: as, name: name.name, email: "david@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) },
+    session: { id: `${as}-session`, userId: as, userAgent },
   });
   const headers: Record<string, string> = body ? { origin: ORIGIN } : {};
   if (body instanceof URLSearchParams) headers["content-type"] = "application/x-www-form-urlencoded";
@@ -155,5 +159,25 @@ describe("Confirm work", () => {
 
     expect((await visit({ body: new URLSearchParams({ intent: "undo", ...fields }) })).status).toBe(303);
     expect(card((await visit()).body)).not.toBeNull();
+  });
+
+  it("gives an admin who isn't a mentor the review in their Admin space, at either address", async () => {
+    seeded();
+    for (const path of ["/dashboard/mentoring", PATH]) {
+      const { status, body } = await visit({ path, as: ADMIN });
+      expect(status, path).toBe(200);
+      expect(body, path).toMatch(/class="spaces-shell[^"]*"[^>]*data-space="admin"|data-space="admin"[^>]*class="spaces-shell/);
+      expect(main(body).querySelector("h1")?.textContent, path).toBe("Mentor review");
+      expect(card(body), path).not.toBeNull();
+    }
+  });
+
+  it("still renders, and says why, when the review refuses the session", async () => {
+    seeded();
+    // An agent's delegated session reaches the page through its space, but the review takes a person's own browser session.
+    const { status, body } = await visit({ userAgent: "ttv-agent:synthetic/1.0" });
+    expect(status).toBe(200);
+    expect(main(body).querySelector("[data-notice]")?.textContent).toMatch(/own browser session|didn't load/);
+    expect(card(body)).toBeNull();
   });
 });
