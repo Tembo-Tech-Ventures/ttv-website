@@ -195,7 +195,7 @@ export default function RepoPicker({
   }
 
   if (fetchState.status === "idle" || fetchState.status === "loading") {
-    return <p className="m-0 text-ink-secondary" role="status">Fetching your repositories…</p>;
+    return <p className="m-0 text-ink-secondary">Fetching your repositories…</p>;
   }
 
   if (fetchState.status === "no_token") {
