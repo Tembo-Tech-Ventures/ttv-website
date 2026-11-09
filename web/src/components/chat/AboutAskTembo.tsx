@@ -1,3 +1,4 @@
+import { FOCUS_RING, cx } from "@/components/platform/ui";
 import { PRIVATE_ASK_SEES, type PrivateAskScope } from "@/lib/tembo/private-ask";
 
 /**
@@ -17,7 +18,8 @@ import { PRIVATE_ASK_SEES, type PrivateAskScope } from "@/lib/tembo/private-ask"
 export default function AboutAskTembo({ scope }: { scope?: PrivateAskScope }) {
   return (
     <details className="group mx-auto w-full max-w-3xl shrink-0 px-4 pt-2 text-xs text-ink-muted sm:px-6" data-about-ask>
-      <summary className="cursor-pointer rounded-md py-1 marker:text-ink-muted hover:text-ink-secondary focus-visible:outline-2 focus-visible:outline-primary">
+      {/* A control like any other: the kit's ring, and a 44px target on a touch screen. */}
+      <summary className={cx("cursor-pointer rounded-md py-1 marker:text-ink-muted hover:text-ink-secondary pointer-coarse:min-h-11 pointer-coarse:py-3", FOCUS_RING)}>
         <span className="font-semibold text-ink-secondary">Private</span> · Other members can't see this conversation
         <span className="text-ink-muted"> · What Tembo sees and what's kept</span>
       </summary>

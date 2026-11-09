@@ -16,20 +16,24 @@ import { hasDiscoveryAccess } from "@/lib/dashboard-presentation";
 import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
-import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { privateAskScope } from "@/lib/tembo/private-ask";
 
 const user = Astro.locals.user!;
-const spaces = await resolveSpacePage(Astro.locals, "ask");
 const db = drizzle(env.DB, { schema });
-const journey = await getStudentJourney(db, user.id);
+// Read together, beside the space context: the journey and the request's capabilities (which the
+// space context shares), rather than one after another once the context is known.
+const pageReads = Promise.all([getStudentJourney(db, user.id), requestCapabilities(db, Astro.locals)]);
+const resolved = await resolveSpacePageWith(Astro.locals, "ask", () => pageReads);
+const spaces = resolved?.[0] ?? null;
+const [journey, capabilities] = resolved?.[1] ?? await pageReads;
 // The scope /api/chat gives Tembo, said on the page (QA3-03).
-const scope = privateAskScope(await capabilitiesFor(db, { id: user.id }));
+const scope = privateAskScope(capabilities);
 const canDiscover = spaces ? false : hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 ---
 

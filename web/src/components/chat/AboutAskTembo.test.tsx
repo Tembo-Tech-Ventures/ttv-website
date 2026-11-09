@@ -33,6 +33,13 @@ describe("what the private Ask Tembo page says about itself (QA3-03, QA3-04)", (
     expect(about).toContain("Never channels, other people's messages or their private work.");
   });
 
+  it("opens with the kit's focus ring and a 44px target on a touch screen", () => {
+    const summary = /<summary([^>]*)>/.exec(renderToStaticMarkup(<AboutAskTembo scope="COHORTS" />))?.[1] ?? "";
+    expect(summary).toContain("focus-visible:outline-peach-ink");
+    expect(summary).toContain("pointer-coarse:min-h-11");
+    expect(summary).not.toContain("outline-primary");
+  });
+
   it("is on the page in both frames, above the box, and labels every answer as AI", () => {
     for (const variant of ["immersive", "space"] as const) {
       const markup = renderToStaticMarkup(
@@ -40,7 +47,8 @@ describe("what the private Ask Tembo page says about itself (QA3-03, QA3-04)", (
       );
       expect(markup.indexOf("data-about-ask")).toBeLessThan(markup.indexOf('id="chat-composer"'));
       expect(text(markup)).toContain(PRIVATE_ASK_SEES.COHORTS);
-      expect(markup).toMatch(/data-chat-author="true">Tembo<span[^>]*>AI<\/span><\/p>/);
+      // Tembo's own mark and the kit's AI badge, as in channels.
+      expect(markup).toMatch(/data-chat-author="true"><span[^>]*data-tembo-mark[^>]*>.*?<\/span><\/span>Tembo<span[^>]*data-role-badge="AI"[^>]*>AI<\/span><\/p>/);
     }
   });
 });
