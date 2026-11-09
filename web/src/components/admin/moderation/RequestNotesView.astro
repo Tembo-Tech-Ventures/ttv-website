@@ -1,8 +1,7 @@
 ---
 import { PiInfo } from "react-icons/pi";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import {
-  Avatar, Button, Card, Chip, EmptyState, FOCUS_RING, Notice, PillNav, TextAreaField, type PillNavItem,
+  Avatar, Button, Card, Chip, EmptyState, FOCUS_RING, Notice, PageTitle, PillNav, TextAreaField, type PillNavItem,
 } from "@/components/platform/ui";
 import { FORMAT_LABELS } from "@/components/platform/mentors/mentor-display";
 import { firstName, formatModerationTime } from "./case-model";
@@ -29,7 +28,7 @@ const LISTS = [["OPEN", "Waiting for a decision"], ["DECIDED", "Decided requests
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-request-notes data-state={state}>
   <header class="space-y-4">
-    <PageTitle spaces>Moderation</PageTitle>
+    <PageTitle>Moderation</PageTitle>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Requests for a mentor's time whose note Tembo's check held, or that a mentor reported. Keeping one sends it
       to its mentor as it was written, and takes one of their spots this month; removing it closes it, and the

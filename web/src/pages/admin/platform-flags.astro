@@ -2,9 +2,8 @@
 import { env } from "cloudflare:workers";
 import { PiInfo } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { BUTTON_VARIANTS, Button, ButtonLink, FOCUS_RING, Notice, cx } from "@/components/platform/ui";
+import { BUTTON_VARIANTS, Button, ButtonLink, FOCUS_RING, Notice, PageTitle, cx } from "@/components/platform/ui";
 import {
   AUDIENCE_LABELS, AUDIENCE_MEANINGS, CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, PLATFORM_FLAGS_PATH,
   changeNotice, changedByNames, dependencyWarnings, flagsOverridden, isFreshChange, lastChanged, parseFlagForm,
@@ -90,7 +89,7 @@ const OTHER = cx(SEGMENT, BUTTON_VARIANTS.ghost, FOCUS_RING, "transition-colors 
 <AdminLayout title="Feature flags" spaces={spaces}>
   <div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6">
     <header class="space-y-4">
-      <PageTitle spaces>Feature flags</PageTitle>
+      <PageTitle>Feature flags</PageTitle>
       <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
         Who sees each part of the new platform. Try a feature as Staff before you give it to Everyone.
         Changes apply from the next page anyone opens.

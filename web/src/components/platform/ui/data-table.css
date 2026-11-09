@@ -25,12 +25,18 @@
     border-bottom: 1px solid var(--color-hairline);
   }
 
+  /*
+   * A value that is one long word, such as an email address, breaks anywhere
+   * rather than pushing the row wider than a 320px screen: a flex item never
+   * shrinks below its longest word otherwise.
+   */
   .kit-table__cell {
     display: flex;
     gap: 0.75rem;
     padding: 0.25rem 0;
     border-bottom: 0;
     text-align: start;
+    overflow-wrap: anywhere;
   }
 
   .kit-table__cell::before {

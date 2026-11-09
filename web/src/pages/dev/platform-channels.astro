@@ -29,7 +29,7 @@ import { canRenderSpace } from "@/components/platform/shell/access";
 import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
 import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
 import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { PageTitle } from "@/components/platform/ui";
 import { spaceSidebar, type SidebarModel, type SpacePageKey } from "@/components/platform/spaces/sidebar";
 import ChannelFrame from "@/components/channels/ChannelFrame.astro";
 import ChannelHeader from "@/components/channels/ChannelHeader.astro";
@@ -135,7 +135,7 @@ const title = viewing ? `#${viewing.name}` : conductView ? CONDUCT_TITLE : SPACE
       <ConductArticle record={record} canAgree={!agent} action={self} />
     ) : (
       <article class="max-w-3xl" data-harness-page={space}>
-        <PageTitle spaces legacyClass="">{SPACE_LABEL[space]}</PageTitle>
+        <PageTitle>{SPACE_LABEL[space]}</PageTitle>
         <p class="mt-4 max-w-2xl text-base leading-relaxed text-ink-secondary">
           {me.user.name}’s {SPACE_LABEL[space]} space. The page itself is the existing one; this harness shows its sidebar.
         </p>

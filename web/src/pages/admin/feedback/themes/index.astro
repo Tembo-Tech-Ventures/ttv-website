@@ -1,9 +1,8 @@
 ---
 import { PiArrowLeft } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { Card, Chip, EmptyState, FOCUS_RING, PillNav } from "@/components/platform/ui";
+import { Card, Chip, EmptyState, FOCUS_RING, PageTitle, PillNav } from "@/components/platform/ui";
 import { THEME_STATUS_TONES } from "@/components/feedback/status-tones";
 import { env } from "cloudflare:workers";
 import { FEEDBACK_KIND_LABELS, FeedbackValidationError } from "@/lib/feedback/model";
@@ -50,7 +49,7 @@ const students = (count: number) => `${count} ${count === 1 ? "student" : "stude
       Back to Feedback
     </a>
     <header class="space-y-2">
-      <PageTitle spaces>Themes</PageTitle>
+      <PageTitle>Themes</PageTitle>
       <p class="max-w-2xl text-sm leading-relaxed text-ink-secondary">
         One problem or wish that several students raised. Ideas and confusing spots are put forward
         once {THEME_AGREEMENT_STUDENTS} students raise them within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug

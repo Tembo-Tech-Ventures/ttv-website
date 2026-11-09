@@ -5,9 +5,8 @@
  * "did anyone read that?" comes up.
  */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { Button, Card, EmptyState, FOCUS_RING, StatusChip, linkClass } from "@/components/platform/ui";
+import { Button, Card, EmptyState, FOCUS_RING, PageTitle, StatusChip, linkClass } from "@/components/platform/ui";
 import { env } from "cloudflare:workers";
 import { listFeedbackForUser } from "@/lib/feedback/store";
 import { feedbackAttachmentPath } from "@/lib/feedback/api";
@@ -41,7 +40,7 @@ const othersOnTheme = (students: number) =>
   <div class={spaces ? "max-w-3xl space-y-6" : "mx-auto max-w-3xl space-y-6"}>
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div class="min-w-0 basis-80 grow">
-        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Your feedback</PageTitle>
+        <PageTitle>Your feedback</PageTitle>
         <p class="mt-3 text-base leading-relaxed text-ink-secondary">
           Everything you've sent, where it stands, and any reply from the team.
         </p>
