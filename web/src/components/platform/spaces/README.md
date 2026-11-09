@@ -12,25 +12,28 @@ access. This module only changes the frame around each page.
 ---
 const spaces = await resolveSpacePage(Astro.locals, "apply");
 ---
-<SpacePage context={spaces} title="Apply to a Cohort" legacyTitle="Apply">
-  <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Apply to a Cohort</PageTitle>
-  …the existing page…
+<SpacePage context={spaces} title="Apply to a cohort">
+  <PageHeader title="Apply to a cohort">…</PageHeader>
+  …the page…
 </SpacePage>
 ```
 
-- `resolveSpacePage` returns `{ me, space, page }`, or `null` when the page
-  keeps the existing dashboard: the flag is off for the person, the caller is a
-  personal access token (`Me` is browser-only), or the space context could not
-  load. It never grants anything; the page and its APIs still authorise.
+- `resolveSpacePage` returns `{ me, space, page }`, or `null` when there is no
+  spaces context: the flag is off for the person, the caller is a personal
+  access token (`Me` is browser-only), or the space context could not load.
+  Canonical routes fail closed in the middleware first, so `null` reaches only
+  legacy addresses. It never grants anything; the page and its APIs still authorise.
 - `PAGE_SPACES` (sidebar.ts) says which space each page opens in. Applying and
   Ask Tembo open in Cohort, or in Community for someone without a cohort; the
   admin mentor review opens in Admin for staff who are not mentors.
-- `SpacePage` renders `SpacesLayout` with the space's sidebar, or the
-  unchanged `DashboardLayout`. With the flag off the HTML is the same as before.
-- `PageTitle` (this folder's) is the kit's `PageTitle` in the shell and the
-  existing h2 (or h1) everywhere else, while a page still has its flag-off
-  path. A page moved onto the style guide imports `PageHeader` or `PageTitle`
-  from `@/components/platform/ui` instead.
+- `SpacePage` renders `SpacesLayout` with the space's sidebar, or `PlainFrame`
+  without a context: the page on a sheet with the TEMBO mark home and, for a
+  browser session, a way to sign out, and no `Me` (decision D2). `AdminLayout`
+  does the same, with the admin navigation as `PlainFrame`'s sidebar
+  (`adminSidebar`). The old `DashboardLayout`, `DashboardShell` and `AdminShell`
+  are gone (X1).
+- Every page takes its title from the kit: `PageTitle` or `PageHeader` from
+  `@/components/platform/ui`.
 - Full-height views (Ask Tembo) pass `fill`, so they size to the sheet.
 - Search and attention overlays (U-1.3) mount in `SpacePage`, the one place, so every space page has Ctrl K and the bell.
 

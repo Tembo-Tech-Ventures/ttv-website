@@ -124,11 +124,12 @@ describe("Your feedback", () => {
     expect(empty?.textContent).toContain("Feedback in your account menu");
   });
 
-  it("renders the same kit content in the existing dashboard while spaces is off", async () => {
+  it("renders the same kit content in the plain frame while spaces is off", async () => {
     seeded({ extra: NOTES, spaces: false });
     const { status, body } = await visit();
     expect(status).toBe(200);
-    expect(body.querySelector("#spaces-main")).toBeNull();
+    expect(body.querySelector("[data-plain-frame] #spaces-main")).not.toBeNull();
+    expect(body.querySelector(".spaces-shell")).toBeNull();
     expect(body.querySelectorAll("[data-testid='feedback-history'] [data-status]")).toHaveLength(2);
     expect(body.querySelector("[data-open-feedback][data-variant='primary']")).not.toBeNull();
   });

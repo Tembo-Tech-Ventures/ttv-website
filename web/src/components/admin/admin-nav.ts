@@ -1,7 +1,6 @@
 /*
- * The admin navigation, as data: the same destinations in the existing admin shell (AdminShell)
- * and in the Admin space's sidebar (spaces shell, components/platform/spaces/sidebar.ts). Pure, so
- * each shell only chooses its icons and frame. Nothing here grants anything: the middleware
+ * The admin navigation, as data: the Admin space's sidebar (components/platform/spaces/sidebar.ts),
+ * in the spaces shell and in PlainFrame alike. Pure, so the sidebar only chooses its icons. Nothing here grants anything: the middleware
  * requires ADMIN for /admin/*, and each page checks its own flags.
  */
 
@@ -31,6 +30,13 @@ export const ADMIN_PAGE_HREFS = {
 
 /** The admin navigation's entries that are admin pages, which the spaces shell can draw (T02, T14). */
 export type AdminPageNavKey = keyof typeof ADMIN_PAGE_HREFS;
+
+/** The admin section a path sits under: the longest admin page path that is it or a parent of it. */
+export function adminSectionFor(path: string): AdminPageNavKey | null {
+  const keys = Object.keys(ADMIN_PAGE_HREFS) as AdminPageNavKey[];
+  const under = keys.filter((key) => path === ADMIN_PAGE_HREFS[key] || path.startsWith(`${ADMIN_PAGE_HREFS[key]}/`));
+  return under.toSorted((a, b) => ADMIN_PAGE_HREFS[b].length - ADMIN_PAGE_HREFS[a].length)[0] ?? null;
+}
 
 export type AdminNavKey =
   | "back" | "home" | "accessRequests" | "moderation" | "users" | "applications" | "profiles" | "feedback" | "projects"

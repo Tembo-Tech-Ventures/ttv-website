@@ -56,7 +56,7 @@ async function ask(question: string) {
 
 describe("a question that fails", () => {
   beforeEach(async () => {
-    await act(async () => root.render(<ChatApp variant="space" />));
+    await act(async () => root.render(<ChatApp />));
     chatReplies.push({ status: 500, body: { error: "The chat request could not be completed." } });
     await ask("Where did we cover joins?");
   });
@@ -106,7 +106,7 @@ describe("a question that fails", () => {
 
 describe("a question asked after the session ended", () => {
   beforeEach(async () => {
-    await act(async () => root.render(<ChatApp variant="space" />));
+    await act(async () => root.render(<ChatApp />));
     chatReplies.push({ status: 401, body: { error: "Unauthorized" } });
     await ask("What did week 3 cover?");
   });
@@ -131,7 +131,7 @@ describe("a question asked after the session ended", () => {
 describe("opening the page after the session ended", () => {
   it("says you've been signed out instead of a loading error", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => json(url === "/api/chat/sessions" ? { status: 401, body: { error: "Unauthorized" } } : { status: 200, body: { suggestions: [] } })));
-    await act(async () => root.render(<ChatApp variant="space" />));
+    await act(async () => root.render(<ChatApp />));
     expect(container.querySelector("[data-chat-signed-out]")).not.toBeNull();
     expect(alertText()).toBeNull();
   });

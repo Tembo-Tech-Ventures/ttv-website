@@ -61,7 +61,7 @@ const unreadCount = contacts.filter((contact) => contact.status === "NEW").lengt
 
 // A POST never carries a flash, and a rejected one says what went wrong instead.
 const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
-const title = spaces ? "Visitor messages" : "Leads";
+const title = "Visitor messages";
 ---
 
 <SpacePage context={spaces} title={failure ? `Error: ${title}` : title}>
@@ -82,7 +82,7 @@ const title = spaces ? "Visitor messages" : "Leads";
     {!profile && (
       <EmptyState title="Set up your public profile first" headingLevel={2}>
         Once you have a public profile, people who find it can write to you here.
-        <ButtonLink slot="action" href={spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio"} variant="primary">Create your profile</ButtonLink>
+        <ButtonLink slot="action" href={SPACE_PAGE_PATHS.portfolio} variant="primary">Create your profile</ButtonLink>
       </EmptyState>
     )}
 

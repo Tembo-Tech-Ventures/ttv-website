@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import ChatApp, { getAppNav } from "./ChatApp";
+import ChatApp from "./ChatApp";
 import {
   conversationTitle,
   formatSessionDate,
@@ -78,18 +78,8 @@ describe("ChatApp", () => {
     expect(html).not.toContain("Source ");
   });
 
-  it("keeps its own way back and site navigation in the immersive frame", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode />);
-    expect(html).toContain("Back to dashboard");
-    expect(html).toContain('aria-label="Site"');
-    // The assistant is Tembo everywhere (owner decision, 31 Oct 2026), not only in the spaces shell,
-    // and this page is named apart from a channel's "Ask Tembo here" (QA3-03).
-    expect(html).toContain(">Ask Tembo privately</h2>");
-    expect(html).not.toContain("Ask AI");
-  });
-
   it("leaves navigation to the spaces shell and introduces itself as Ask Tembo there", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode variant="space" />);
+    const html = renderToStaticMarkup(<ChatApp mockMode />);
     expect(html).not.toContain("Back to dashboard");
     expect(html).not.toContain('aria-label="Site"');
     expect(html).not.toContain('href="/dashboard"');
@@ -111,8 +101,8 @@ describe("ChatApp", () => {
   });
 
   it("has one h1, the kit's Mattone page title, visually hidden so the chat keeps the screen", () => {
-    for (const variant of ["immersive", "space"] as const) {
-      const html = renderToStaticMarkup(<ChatApp mockMode variant={variant} initialSessions={[SESSION]} />);
+    {
+      const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
       const h1s = [...html.matchAll(/<h1([^>]*)>(.*?)<\/h1>/gs)];
       expect(h1s).toHaveLength(1);
       expect(h1s[0]![2]).toBe("Ask Tembo");
@@ -153,8 +143,8 @@ describe("ChatApp", () => {
   });
 
   it("keeps peach for Send alone: New chat is quiet and every icon control is the kit's", () => {
-    for (const variant of ["immersive", "space"] as const) {
-      const html = renderToStaticMarkup(<ChatApp mockMode variant={variant} initialSessions={[SESSION]} />);
+    {
+      const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
       const primaries = [...html.matchAll(/<button[^>]*data-variant="primary"[^>]*>/g)].map((match) => match[0]);
       expect(primaries).toHaveLength(1);
       expect(primaries[0]).toContain('aria-label="Send message"');
@@ -183,11 +173,10 @@ describe("ChatApp", () => {
   });
 
   it("writes no uppercase eyebrows and no colours outside the platform tokens", () => {
-    for (const variant of ["immersive", "space"] as const) {
+    {
       const html = renderToStaticMarkup(
         <ChatApp
           mockMode
-          variant={variant}
           initialSessions={[SESSION]}
           initialMessages={[
             { role: "user", content: "Where?" },
@@ -228,31 +217,6 @@ describe("ChatApp", () => {
     const author = /<p[^>]*data-chat-author="true"[^>]*>(.*?)<\/p>/s.exec(html)?.[1] ?? "";
     expect(author).toContain("data-tembo-mark");
     expect(author).toMatch(/data-role-badge="AI"[^>]*>AI<\/span>$/);
-  });
-
-  it("keeps every dashboard destination reachable, logout included", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode />);
-
-    // This route drops DashboardLayout, so anything the shell offered has to be
-    // offered here or it becomes unreachable while the user is in the chat.
-    expect(html).toContain('href="/auth/logout"');
-    expect(html).toContain('href="/dashboard/sessions"');
-    expect(html).toContain('href="/dashboard/apply"');
-    // The current page is not a destination.
-    expect(html).not.toContain('href="/dashboard/ask"');
-  });
-
-  it("uses the same state-filtered links as the dashboard shell", () => {
-    const links = getAppNav(["home", "apply", "ask", "account", "logout"]);
-
-    expect(links.map((link) => link.label)).toEqual([
-      "Home",
-      "Community",
-      "Apply",
-      "Account",
-      "Logout",
-    ]);
-    expect(links.map((link) => link.label)).not.toContain("Sessions");
   });
 
   it("marks exactly one region as the transcript scroller", () => {

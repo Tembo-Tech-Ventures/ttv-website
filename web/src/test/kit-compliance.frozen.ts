@@ -7,11 +7,7 @@
 export const FROZEN: Record<string, Record<string, number>> = {
   "raw white or black": {
     "components/auth/GitHubSignInButton.tsx": 1,
-    "components/common/Sidebar.tsx": 6,
     "components/platform/shell/harness/StubOverlays.tsx": 1,
-    "components/shells/AdminShell.tsx": 2,
-    "components/shells/DashboardShell.tsx": 2,
-    "pages/dev/shell-preview.astro": 1,
   },
   "Tailwind palette colours": {
     "components/auth/GitHubSignInButton.tsx": 1,
@@ -63,8 +59,5 @@ export const FROZEN: Record<string, Record<string, number>> = {
   "eyebrows (uppercase tracked labels)": {
     "components/blog/editor/theme.ts": 2,
     "components/community/CommunityIntro.tsx": 1,
-  },
-  "the older surface tokens": {
-    "pages/dev/shell-preview.astro": 1,
   },
 };

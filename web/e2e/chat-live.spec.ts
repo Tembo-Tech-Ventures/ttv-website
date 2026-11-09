@@ -71,7 +71,7 @@ test.describe("authenticated Ask Tembo page", () => {
     });
   });
 
-  test("keeps a signed-in user's way back into the dashboard", async ({ page }, testInfo) => {
+  test("keeps a signed-in user's way back into the dashboard", async ({ page }) => {
     await gotoAsk(page);
     if (await inSpaces(page)) {
       // The spaces shell is the way around: Ask Tembo is current in its space's
@@ -82,15 +82,8 @@ test.describe("authenticated Ask Tembo page", () => {
       return;
     }
 
-    // Mobile puts this in the header; desktop puts it at the top of the rail.
-    await expect(page.getByRole("link", { name: /Back to dashboard/ })).toBeVisible();
-
-    // Dropping DashboardLayout must not strand anyone without a sign-out. On a
-    // phone that lives in the conversation sheet, so open it to check.
-    if (testInfo.project.name.includes("mobile")) {
-      await page.locator("[data-chat-title] button").click();
-      await expect(page.getByRole("dialog")).toBeVisible();
-    }
-    await expect(page.getByRole("link", { name: "Logout" })).toBeVisible();
+    // Without a spaces context the page is in PlainFrame: the TEMBO mark leads home, and a browser session signs out there.
+    await expect(page.getByRole("link", { name: "TEMBO Tech Ventures home" })).toBeVisible();
+    await expect(page.locator("[data-sign-out-form]").getByRole("button", { name: "Sign out" })).toBeVisible();
   });
 });

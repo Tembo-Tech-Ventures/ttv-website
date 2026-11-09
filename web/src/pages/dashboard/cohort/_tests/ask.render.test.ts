@@ -98,15 +98,17 @@ describe("Ask Tembo privately", () => {
     expect(page.innerHTML).not.toContain("uppercase");
   });
 
-  it("keeps its own frame with spaces off, the same h1 and its way back into the dashboard", async () => {
+  it("fills the plain frame with spaces off: the same h1, the mark home and a way to sign out", async () => {
     seeded("OFF");
     const { status, body } = await visit("/dashboard/ask");
     expect(status).toBe(200);
     const page = dom(body);
     expect(page.querySelector(".spaces-shell")).toBeNull();
+    expect(page.querySelector("[data-plain-frame] main#spaces-main")?.className).toContain("flex min-h-0 flex-col");
     expect([...page.querySelectorAll("h1")].map((h1) => h1.textContent)).toEqual(["Ask Tembo"]);
-    expect(page.querySelector('a[aria-label="Back to dashboard"]')).not.toBeNull();
-    expect(page.querySelector('nav[aria-label="Site"] a[href="/auth/logout"]')).not.toBeNull();
+    expect(page.querySelector('[data-plain-frame] header a[href="/"]')).not.toBeNull();
+    expect(page.querySelector('form[action="/auth/logout"][method="POST"] button[type="submit"]')?.textContent).toBe("Sign out");
+    expect(page.querySelector('a[aria-label="Back to dashboard"]')).toBeNull();
     expect(page.querySelector("astro-island")?.innerHTML ?? "").not.toMatch(LEGACY);
   });
 });

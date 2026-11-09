@@ -327,14 +327,6 @@ test("switching conversation from the sheet closes it", async ({ page }, testInf
   await expect(page.getByRole("button", { name: /Architecture tradeoffs/ })).toBeVisible();
 });
 
-test("the desktop rail keeps a route back into the dashboard", async ({ page }, testInfo) => {
-  test.skip(isMobile(testInfo), "The rail is desktop-only; mobile uses the header back arrow");
-
-  await gotoChat(page);
-  await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Site" })).toBeVisible();
-});
-
 test("a conversation still loading does not replace a new chat", async ({ page }, testInfo) => {
   // The default load time is honest about production and too short to act in,
   // so widen it for this test rather than slowing the page for everyone.

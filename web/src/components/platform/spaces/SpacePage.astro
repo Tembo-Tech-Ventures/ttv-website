@@ -4,9 +4,9 @@
  *
  * With a spaces context (the `spaces` flag is on for this person and the page
  * opens in one of their spaces) the page renders in SpacesLayout, with its
- * space's sidebar. Without one it renders in DashboardLayout exactly as it did
- * before, so flag-off production, personal access tokens and a failed context
- * load keep the existing dashboard.
+ * space's sidebar. Without one (a personal access token on a legacy address,
+ * the flag off, or a context that failed to load) it renders in PlainFrame,
+ * which needs no per-user context (decision D2).
  *
  *   const spaces = await resolveSpacePage(Astro.locals, "apply");
  *   <SpacePage context={spaces} title="Apply">…the existing page…</SpacePage>
@@ -21,7 +21,6 @@
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import PlatformOverlays from "@/components/platform/overlays/PlatformOverlays";
 import type { ShellOverlay } from "@/components/platform/shell/overlays";
@@ -30,6 +29,7 @@ import { recordError } from "@/lib/observability/errors";
 import { getStudentJourney, type StudentJourney } from "@/lib/student/journey";
 import { channelsServer } from "@/components/channels/server";
 import { loadSidebarChannels } from "@/components/channels/sidebar-channels";
+import PlainFrame from "./PlainFrame.astro";
 import SpaceSidebar from "./SpaceSidebar.astro";
 import { SPACE_PAGE_PATHS, spaceSidebar } from "./sidebar";
 import { linkAllowed, loadCertificates, loadCohortHeading, restrictionsFor, type SpacePageContext } from "./space-page";
@@ -41,12 +41,9 @@ interface Props {
   context: SpacePageContext | null;
   /** The page's name: the browser tab, and the phone's top bar in the spaces shell. */
   title: string;
-  /** The existing dashboard's tab title, when it differs. */
-  legacyTitle?: string;
   /** Prepended to the tab title only, never the visible bar: "Error: " after a rejected form. */
   titlePrefix?: string;
   journey?: StudentJourney;
-  canDiscover?: boolean;
   /** A full-height view (a chat, a workspace) that sizes itself to the sheet instead of scrolling in it. */
   fill?: boolean;
   /** The channels this person can read, when the page has already read them (a channel page). */
@@ -58,7 +55,7 @@ interface Props {
 }
 
 const {
-  context, title, legacyTitle = title, titlePrefix = "", journey: suppliedJourney, canDiscover, fill = false, channels: suppliedChannels, channelId,
+  context, title, titlePrefix = "", journey: suppliedJourney, fill = false, channels: suppliedChannels, channelId,
   admin: suppliedAdmin,
 } = Astro.props;
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
@@ -116,8 +113,8 @@ if (context) {
       <PlatformOverlays slot="overlays" client:idle me={context.me} cohortLabel={cohortLabel} />
     </SpacesLayout>
   ) : (
-    <DashboardLayout title={titlePrefix + legacyTitle} journey={suppliedJourney} canDiscover={canDiscover}>
+    <PlainFrame title={title} titlePrefix={titlePrefix} fill={fill}>
       <slot />
-    </DashboardLayout>
+    </PlainFrame>
   )
 }

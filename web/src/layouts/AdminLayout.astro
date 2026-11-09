@@ -5,21 +5,22 @@
  * A page that has moved into the spaces shell resolves its context and hands it in
  * (`spaces`): while the `spaces` flag is on for this admin, it renders inside the Admin space,
  * with the space tabs, search and the bell, and the admin navigation as the space's sidebar
- * (T02). Without a context (the flag is off for them, a personal access token, a failed context
- * load, or a page that has not moved yet) it renders in the existing admin shell exactly as
- * before. The middleware's ADMIN guard runs first either way, and is unchanged.
+ * (T02). Without a context (the flag is off for them, a personal access token, or a failed context
+ * load) it renders in PlainFrame with the same admin navigation as its sidebar, built without any
+ * per-user context (decision D2). The middleware's ADMIN guard runs first either way, and is unchanged.
  *
  *   const spaces = await resolveSpacePage(Astro.locals, "moderation");
  *   <AdminLayout title="Moderation" spaces={spaces}>…</AdminLayout>
  *
  * After a rejected submit, `titlePrefix="Error: "` puts the failure in the tab title too.
  *
- * The page draws its own title: an h1 in the spaces shell (its one display heading), the h2 it
- * always had in the existing shell.
+ * The page draws its own title, the screen's one h1, in either frame.
  */
-import BaseLayout from "./BaseLayout.astro";
-import AdminShell from "@/components/shells/AdminShell";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PlainFrame from "@/components/platform/spaces/PlainFrame.astro";
+import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
+import { ADMIN_SPACE_PAGES, adminSidebar } from "@/components/platform/spaces/sidebar";
+import { adminSectionFor } from "@/components/admin/admin-nav";
 import type { SpacePageContext } from "@/components/platform/spaces/space-page";
 import { loadAdminNavFacts } from "@/components/admin/admin-nav-server";
 
@@ -33,7 +34,7 @@ interface Props {
   pendingModeration?: number;
   /** Open checks on request notes, when the page already counted them (moderation, Admin Home). */
   pendingRequestNotes?: number;
-  /** The Admin space, for a page drawn in the spaces shell; null or absent keeps the existing admin shell. */
+  /** The Admin space, for a page drawn in the spaces shell; null or absent draws the plain frame. */
   spaces?: SpacePageContext | null;
 }
 
@@ -50,6 +51,8 @@ const nav = await loadAdminNavFacts(Astro.locals, Astro.url, {
   pendingRequestNotes: Astro.props.pendingRequestNotes,
 });
 const inSpaces = spaces?.space === "admin";
+const section = adminSectionFor(Astro.url.pathname);
+const sidebar = inSpaces ? null : adminSidebar(section ? ADMIN_SPACE_PAGES[section] : undefined, nav);
 ---
 
 {
@@ -60,27 +63,19 @@ const inSpaces = spaces?.space === "admin";
       </div>
     </SpacePage>
   ) : (
-    <BaseLayout title={`${titlePrefix}${title} | TTV Admin`}>
-      <AdminShell
-        client:load
-        currentPath={Astro.url.pathname}
-        agentAuthEnabled={nav.agentAuthEnabled}
-        stagingDemoEnabled={nav.stagingDemoEnabled}
-        dataMigrationEnabled={nav.dataMigrationEnabled}
-        pendingAccessRequests={nav.pendingAccessRequests}
-        pendingModeration={nav.pendingCases}
-        pendingRequestNotes={nav.pendingRequestNotes}
-      >
+    <PlainFrame title={title} titlePrefix={titlePrefix} space="admin">
+      {sidebar && <SpaceSidebar slot="sidebar" model={sidebar} />}
+      <div class="pb-16" data-admin-space data-request-notes={nav.pendingRequestNotes}>
         <slot />
-      </AdminShell>
-    </BaseLayout>
+      </div>
+    </PlainFrame>
   )
 }
 
 <script>
   import { followModerationBadge } from "@/components/admin/moderation/sidebar-badge";
 
-  // Only in the spaces shell: the existing admin shell follows the count in its own state.
+  // The sidebar's Moderation count follows the queue, in the spaces shell and in the plain frame alike.
   const space = document.querySelector<HTMLElement>("[data-admin-space]");
   if (space) followModerationBadge(document, Number(space.dataset.requestNotes) || 0);
 </script>

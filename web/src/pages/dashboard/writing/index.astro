@@ -35,8 +35,8 @@ const [profile, posts, spaces] = await Promise.all([
 ]);
 
 const hasPublishedProfile = profile?.status === "PUBLISHED";
-const base = spaces ? SPACE_PAGE_PATHS.writing : "/dashboard/writing";
-const profilePath = spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio";
+const base = SPACE_PAGE_PATHS.writing;
+const profilePath = SPACE_PAGE_PATHS.portfolio;
 const listed = hasPublishedProfile ? posts : [];
 const sections = [
   { key: "drafts", title: "Drafts", posts: listed.filter((post) => post.status === "DRAFT") },

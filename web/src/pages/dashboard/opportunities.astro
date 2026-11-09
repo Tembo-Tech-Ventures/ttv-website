@@ -114,11 +114,11 @@ const projects = gateState === "published" ? approved.map((project) => ({ ...pro
 
 // A POST never carries a flash, and a rejected one says what went wrong instead.
 const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
-const profilePath = spaces ? SPACE_PAGE_PATHS.portfolio : "/dashboard/portfolio";
+const profilePath = SPACE_PAGE_PATHS.portfolio;
 ---
 
 <SpacePage context={spaces} title={failure ? "Error: Opportunities" : "Opportunities"}>
-  <div class={spaces ? "max-w-4xl space-y-6" : "mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8"}>
+  <div class="max-w-4xl space-y-6">
     <header>
       <PageTitle>Opportunities</PageTitle>
       <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary">

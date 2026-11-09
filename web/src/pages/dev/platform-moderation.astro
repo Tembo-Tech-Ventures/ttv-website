@@ -14,8 +14,10 @@
  * Nothing here is reachable outside `astro dev`. `e2e/platform-moderation.spec.ts` holds the
  * browser contract; the page itself is /admin/moderation.
  */
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import AdminShell from "@/components/shells/AdminShell";
+import PlainFrame from "@/components/platform/spaces/PlainFrame.astro";
+import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
+import { adminSidebar } from "@/components/platform/spaces/sidebar";
+import { NO_ADMIN_FACTS } from "@/components/admin/admin-nav";
 import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
 import { decideHarnessCase, harnessQueue, listHarnessCases } from "@/components/admin/moderation/harness";
 import { moderationQueueRequest, queuePaths, type QueuePaths } from "@/components/admin/moderation/page-flow";
@@ -50,8 +52,16 @@ if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
 Astro.response.status = outcome.status;
 ---
 
-<BaseLayout title="Moderation harness">
-  <AdminShell client:load currentPath="/admin/moderation" pendingModeration={outcome.props.pendingCount}>
+<PlainFrame title="Moderation harness" space="admin">
+  <SpaceSidebar slot="sidebar" model={adminSidebar("moderation", { ...NO_ADMIN_FACTS, pendingModeration: outcome.props.pendingCount })} />
+  <div data-admin-space data-request-notes="0">
     <ModerationQueueView {...outcome.props} />
-  </AdminShell>
-</BaseLayout>
+  </div>
+</PlainFrame>
+
+<script>
+  import { followModerationBadge } from "@/components/admin/moderation/sidebar-badge";
+
+  // As AdminLayout does: the sidebar's count follows the queue the page swaps in.
+  followModerationBadge(document, 0);
+</script>
