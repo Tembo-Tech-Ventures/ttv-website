@@ -88,7 +88,7 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/me", persona: "alumna" },
   { path: "/dashboard/me/portfolio", persona: "alumna" },
   { path: "/dashboard/me/writing", persona: "alumna" },
-  { path: "/dashboard/me/writing/new", persona: "alumna", pending: { checks: ["h1", "kit-controls", "targets", "overflow", "axe-320"], todo: LANE_M("Post editor, M14") } },
+  { path: "/dashboard/me/writing/new", persona: "alumna", namedH1: true },
   { path: "/dashboard/me/opportunities", persona: "alumna" },
   { path: "/dashboard/me/leads", persona: "alumna" },
   { path: "/dashboard/account", persona: "alumna" },
