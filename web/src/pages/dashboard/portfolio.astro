@@ -21,7 +21,8 @@ import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { preserveFormTextValues } from "@/lib/form-values";
-import { DISCOVERY_EXCLUDED_ROLES_SQL, memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
+import { memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
+import { isUnlistedStaff } from "@/components/platform/profile-editor/staff";
 import { memberProfileHref } from "@/lib/members/links";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
@@ -37,7 +38,7 @@ import { profileModeration } from "@/components/platform/profile-editor/moderati
 import PublicSite from "@/components/platform/profile-editor/PublicSite.astro";
 import WorkEntry from "@/components/platform/profile-editor/WorkEntry.astro";
 import WorkForm from "@/components/platform/profile-editor/WorkForm.astro";
-import { EVERYONE_SEES, HANDLE, NOT_SAVED, PAUSED_SEES, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
+import { EVERYONE_SEES, HANDLE, NOT_SAVED, PAUSED_SEES, PROFILE_HELD, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
 import {
   addWorkHref, changeHandleHref, deleteAction, EDITOR_PATH, EMPTY_WORK, HANDLE_ACTION, handleWorkPost, isContribution, PROFILE_FORM_ID,
   profileFormHref, readEditorPost, UNLIST_ACTION, WORK_ACTIONS, workEditorFromUrl, workValuesOf, type WorkAction, type WorkPostResult,
@@ -164,9 +165,7 @@ const [landing, eligible, profile, repos, claims, github] = await Promise.all([
 ]);
 const spaces = landing?.[0] ?? null;
 // Mentors and staff are not listed in the directory or on the public website (by decision), so they are told so.
-const staff = spaces
-  ? spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin
-  : Boolean(await env.DB.prepare(`SELECT 1 FROM UserRoles r JOIN Roles n ON n.id = r.roleId WHERE r.userId = ? AND n.name IN (${DISCOVERY_EXCLUDED_ROLES_SQL})`).bind(user.id).first());
+const staff = await isUnlistedStaff(spaces, env.DB, user.id);
 // A paused profile is shown nowhere and can't be changed: nothing is offered to post.
 const paused = profile?.status === "SUSPENDED";
 const editable = !profile || profile.status !== "SUSPENDED";
@@ -211,9 +210,10 @@ const contributions = (claims ?? []).filter(isContribution);
 const rendered = work?.kind === "render" ? work : null;
 const renderedClaim = rendered?.claimId ? contributions.find((item) => item.id === rendered.claimId) ?? null : null;
 // After a refusal, the work form that was sent stays open with what was typed; otherwise the address says which is open.
-const editor = rendered
-  ? (renderedClaim ? { kind: "edit" as const, claim: renderedClaim } : { kind: "add" as const })
-  : paused ? null : workEditorFromUrl(Astro.url, contributions);
+// A paused profile opens no work form: a refused write is said once, at the top.
+const editor = paused ? null
+  : rendered ? (renderedClaim ? { kind: "edit" as const, claim: renderedClaim } : { kind: "add" as const })
+  : workEditorFromUrl(Astro.url, contributions);
 const confirming = confirmingAction(Astro.url, [...contributions.map(deleteAction), UNLIST_ACTION, HANDLE_ACTION]);
 // The handle is the member page's address: after the first save it changes only as a deliberate step, and
 // never once the profile has been on the public website, where it is part of every post link.
@@ -237,16 +237,17 @@ Astro.response.headers.set("Cache-Control", "no-store");
     {unavailable && <Notice tone="danger" focusOnLoad id="profile-failure" title={NOT_SAVED.profile}>{NOT_SAVED.unavailable}</Notice>}
     {refused && (
       <Notice tone="danger" focusOnLoad id="profile-failure" title={refusedTitle}>
-        <p class="m-0">{fieldErrors ? NOT_SAVED.fixBelow : heldChanges ? NOT_SAVED.heldChangesDetail : profileResult?.error}</p>
+        <p class="m-0">{fieldErrors ? NOT_SAVED.fixBelow : heldChanges ? (profile?.onPublicSite ? NOT_SAVED.heldChangesDetail : NOT_SAVED.heldChangesDetailHidden) : profileResult?.error}</p>
         {moderationMessages.length > 0 && (
           <ul class="m-0 mt-2 list-disc space-y-1 pl-5">{moderationMessages.map((message) => <li>{message}</li>)}</ul>
         )}
       </Notice>
     )}
     {work?.kind === "failed" && <Notice tone="danger" focusOnLoad title={work.failure.title}>{work.failure.detail}</Notice>}
+    {paused && rendered?.failure && <Notice tone="danger" focusOnLoad title={rendered.failure.title}>{rendered.failure.detail}</Notice>}
     {held && (
       <Notice tone="warning" title="Your profile is waiting for a check">
-        It's saved. A person at TTV checks it before anyone else can see it; until then only you and the team can.
+        {PROFILE_HELD}
       </Notice>
     )}
 
@@ -264,6 +265,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
               />
               {/* The server renames only a form that says so: a stale tab's hidden handle never does. */}
               {profile && <input type="hidden" name="changeHandle" value="1" />}
+              {profile && <input type="hidden" name="handleWas" value={profile.handle} />}
               {profile && (
                 <Notice tone="warning" title="Changing your handle" id="handle-warning">
                   {HANDLE.changeWarning}
@@ -344,7 +346,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
                   <WorkForm claim={claim} values={rendered?.values ?? workValuesOf(claim)} errors={rendered?.errors} failure={rendered?.failure} staff={staff} />
                 </li>
               )
-              : <WorkEntry claim={claim} confirming={confirming === deleteAction(claim)} />)}
+              : <WorkEntry claim={claim} confirming={confirming === deleteAction(claim)} paused={paused} />)}
             <Fragment slot="empty">
               {editor?.kind !== "add" && (
                 <EmptyState title="Nothing posted yet">

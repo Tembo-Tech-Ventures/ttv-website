@@ -306,11 +306,20 @@ describe("a paused profile", () => {
     expect(page.querySelector("#profile-visibility")?.textContent).toContain("Your profile is paused, so nobody else sees it");
     expect(page.querySelector("[data-work-editor]")).toBeNull();
     expect([...page.querySelectorAll("a")].some((link) => link.textContent === "Post work")).toBe(false);
+    // Its work can only be deleted.
+    const item = page.querySelector("[data-work] [data-data-list-item]")!;
+    expect([...item.querySelectorAll("[data-row-action], button")].map((control) => control.textContent?.trim())).toEqual(["Delete Chama savings ledger"]);
     const { status, body } = await post({ _action: "unpublish" });
     expect(status).toBe(409);
     const notice = main(body).querySelector("[data-notice='danger']")!;
     expect(notice.textContent).toContain(NOT_SAVED.paused);
     expect(notice.textContent).not.toContain(NOT_SAVED.unlisted);
+    // A forged post of new work is refused by the API, said once, and writes nothing.
+    const forged = await post(ADD);
+    expect(forged.status).toBe(403);
+    expect(main(forged.body).querySelector("[data-notice='danger']")?.textContent).toContain("Your profile is paused, so nothing new can be posted to it.");
+    expect(main(forged.body).querySelector("[data-work-editor]")).toBeNull();
+    expect(work()).toEqual([expect.objectContaining({ id: "ledger" })]);
   });
 });
 
@@ -330,16 +339,22 @@ describe("the handle", () => {
   it("renames only a form that opened the handle, and a stale tab's save never undoes a rename", async () => {
     seeded(PROFILE("DRAFT"));
     // The Change handle step posts changeHandle=1 with the new value.
-    expect((await post({ _action: "save", changeHandle: "1", handle: "akinyi-renamed", headline: "Builder in Kisumu" })).status).toBe(303);
+    expect((await post({ _action: "save", changeHandle: "1", handleWas: "akinyi-builds", handle: "akinyi-renamed", headline: "Builder in Kisumu" })).status).toBe(303);
     expect(sqlite.prepare("SELECT handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-renamed" });
     // A tab opened before the rename posts the old handle as its fixed value: the rename stands.
     expect((await post({ _action: "save", handle: "akinyi-builds", headline: "Saved from an old tab" })).status).toBe(303);
     expect(sqlite.prepare("SELECT handle, headline FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-renamed", headline: "Saved from an old tab" });
+    // A Change-handle tab opened before that rename carries the handle it opened with: it can't rename back.
+    const stale = await post({ _action: "save", changeHandle: "1", handleWas: "akinyi-builds", handle: "akinyi-builds", headline: "Saved from an old tab" });
+    expect(stale.status).toBe(400);
+    expect(main(stale.body).querySelector("input[name='handle']:not([type='hidden'])")?.getAttribute("aria-invalid")).toBe("true");
+    expect(stale.body).toContain("Your handle changed in another tab, to akinyi-renamed.");
+    expect(sqlite.prepare("SELECT handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-renamed" });
   });
 
   it("refuses a forged rename of a listed profile, with the reason by the handle", async () => {
     seeded(COMPLETED + PROFILE("PUBLISHED") + "UPDATE studentProfile SET publishedAt = 1781000000;");
-    const { status, body } = await post({ _action: "save", changeHandle: "1", handle: "someone-else", headline: "Builder in Kisumu" });
+    const { status, body } = await post({ _action: "save", changeHandle: "1", handleWas: "akinyi-builds", handle: "someone-else", headline: "Builder in Kisumu" });
     expect(status).toBe(400);
     expect(main(body).querySelector("[data-handle-error]")?.textContent).toContain("Your handle is locked once your profile is published");
     expect(sqlite.prepare("SELECT handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-builds" });

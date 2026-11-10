@@ -62,7 +62,7 @@ beforeEach(() => {
   store.leads.mockReset().mockResolvedValue([{ value: 2 }]);
   store.cohorts.mockReset().mockResolvedValue([{ application: { completedAt: new Date(Date.UTC(2026, 5, 30)) }, program: { name: "Cohort 04" } }]);
   store.post.mockReset().mockResolvedValue({ success: true });
-  store.profile.mockReset().mockResolvedValue(true);
+  store.profile.mockReset().mockResolvedValue("done");
 });
 
 const setCookies = (response: Response): string[] => {
@@ -142,9 +142,9 @@ describe("a profile on the style guide", () => {
     const done = await visit({ _action: "moderate-profile", profileAction: "unpublish", contentVersion: "3" });
     expect(done.status).toBe(303);
     expect(done.location).toBe(PATH);
-    expect(decodeURIComponent(setCookies(done.response)[0])).toContain('"title":"Profile unpublished"');
+    expect(decodeURIComponent(setCookies(done.response)[0])).toContain('"title":"Profile paused"');
 
-    store.profile.mockResolvedValue(false);
+    store.profile.mockResolvedValue("changed");
     const stale = await visit({ _action: "moderate-profile", profileAction: "unpublish", contentVersion: "2" });
     expect(stale.status).toBe(409);
     expect(stale.body).toContain("The builder changed this profile while you were looking at it.");

@@ -34,12 +34,13 @@ import {
   profileActionsFor,
   profileReviewReasons,
   readProfilesPage,
+  REPUBLISH_INELIGIBLE,
   type ProfileStatus,
 } from "@/lib/admin/profiles";
 import * as schema from "@/lib/db/schema";
 import { formatMomentDate } from "@/lib/display-date";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
-import { parseAdminProfileAction, parseAdminProfileVersion, restoredStatus } from "@/lib/talent/profile-moderation";
+import { parseAdminProfileAction, parseAdminProfileVersion } from "@/lib/talent/profile-moderation";
 
 /*
  * Profiles: first the ones the content check left for a person, each
@@ -75,7 +76,10 @@ if (Astro.request.method === "POST") {
     const result = await moderateProfile(db, { profileId, action, expectedVersion }).catch(() => "unavailable" as const);
     if (result === "done") return redirectWithFlash(Astro, here, { tone: "success", title: PROFILE_DONE[action] });
     if (result === "missing") return redirectWithFlash(Astro, here, { tone: "info", title: "That profile no longer exists" });
-    if (result === "unavailable") {
+    if (result === "ineligible") {
+      actionError = REPUBLISH_INELIGIBLE;
+      Astro.response.status = 409;
+    } else if (result === "unavailable") {
       actionError = "The database didn't answer, so nothing changed. Try again in a moment.";
       Astro.response.status = 503;
     } else {
@@ -191,7 +195,7 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
                         <input type="hidden" name="_action" value={action} />
                         <input type="hidden" name="contentVersion" value={profile.contentVersion} />
                         <Button type="submit" size="sm" variant="quiet">
-                          {profileActionLabel(action, restoredStatus(profile))}
+                          {profileActionLabel(action, profile)}
                           <span class="sr-only"> {profile.user?.name ?? profile.handle}</span>
                         </Button>
                       </form>

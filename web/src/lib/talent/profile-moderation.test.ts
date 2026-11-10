@@ -172,7 +172,7 @@ describe("admin profile moderation actions", () => {
         "publish",
         4,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe("changed");
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -189,7 +189,7 @@ describe("admin profile moderation actions", () => {
         "unpublish",
         9,
       ),
-    ).resolves.toBe(true);
+    ).resolves.toBe("done");
 
     expect(set).toHaveBeenCalledWith({
       status: "SUSPENDED",
@@ -222,7 +222,7 @@ describe("admin profile moderation actions", () => {
         "publish",
         4,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe("changed");
   });
 
   it("rejects an action rendered for an older profile version", async () => {
@@ -237,7 +237,25 @@ describe("admin profile moderation actions", () => {
         "publish",
         5,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe("changed");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("says a Republish needs a completed cohort, and changes nothing", async () => {
+    const update = vi.fn();
+    const db = {
+      query: { studentProfile: { findFirst: vi.fn(async () => ({ userId: "user-1" })) }, programApplication: { findFirst: vi.fn(async () => undefined) } },
+      update,
+    };
+    await expect(
+      applyAdminProfileAction(
+        db as never,
+        "profile-1",
+        { status: "SUSPENDED", suspendedFrom: "PUBLISHED", publishedAt: new Date(), contentVersion: 2 },
+        "publish",
+        2,
+      ),
+    ).resolves.toBe("ineligible");
     expect(update).not.toHaveBeenCalled();
   });
 });

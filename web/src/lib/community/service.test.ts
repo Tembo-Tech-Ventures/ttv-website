@@ -382,6 +382,17 @@ it('counts waiting confirmations over exactly the rows the Confirm page lists',a
  await expect(f.institution.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
 });
 
+ it("posts nothing new to a profile the team paused, even through a forged request, and still lets its owner delete", async () => {
+  const f=fixture(); await f.member.updateOwnProfile(profile);
+  const item=await f.member.createJourney(entry);
+  f.sql.prepare("UPDATE studentProfile SET status='SUSPENDED' WHERE userId='member'").run();
+  await expect(f.member.createJourney({...entry,title:"Posted while paused"})).rejects.toMatchObject({status:403,message:"Your profile is paused, so nothing new can be posted to it."});
+  await expect(f.member.updateJourney(item.id,{...entry,title:"Changed while paused"})).rejects.toMatchObject({status:403});
+  await expect(f.member.setJourneyStatus(item.id,{status:"draft"})).rejects.toMatchObject({status:403});
+  expect(f.sql.prepare("SELECT title FROM communityJourney WHERE userId='member'").all()).toEqual([{title:entry.title}]);
+  expect(await f.member.deleteJourney(item.id)).toEqual({deleted:true});
+ });
+
  it("says when a held piece of work is still held after an edit or a status change", async () => {
   const f=fixture(); await f.member.updateOwnProfile(profile);
   const item=await f.member.createJourney(entry);

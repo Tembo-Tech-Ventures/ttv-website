@@ -331,7 +331,7 @@ describe("saveProfile", () => {
       });
 
       // Even a form that opened the handle on purpose can't rename a profile that has been listed.
-      const fd = makeFormData({ handle: "new-handle", headline: "Dev", changeHandle: "1" });
+      const fd = makeFormData({ handle: "new-handle", headline: "Dev", changeHandle: "1", handleWas: "old-handle" });
       const result = await saveProfile(db as never, "user-1", fd, "profile-1");
 
       expect(result.success).toBe(false);

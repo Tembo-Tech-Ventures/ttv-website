@@ -27,7 +27,7 @@ import {
   parseAdminProfileVersion,
   restoredStatus,
 } from "@/lib/talent/profile-moderation";
-import { profileReviewReasons } from "@/lib/admin/profiles";
+import { PROFILE_DONE, profileActionLabel, profileReviewReasons, REPUBLISH_INELIGIBLE } from "@/lib/admin/profiles";
 import {
   moderatePost,
   normalizeAdminNote,
@@ -43,7 +43,7 @@ const { id } = Astro.params;
 
 if (!id) return Astro.redirect(LIST_PATH);
 
-const PROFILE_DONE = { publish: "Profile restored", unpublish: "Profile unpublished", clear_flag: "Flag cleared" } as const;
+
 let actionError: string | undefined;
 // A rejected post action keeps the note typed for that post.
 let postedNote: { postId: string; note: string } | undefined;
@@ -106,10 +106,11 @@ if (Astro.request.method === "POST") {
         expectedVersion,
       );
 
-      if (!updated) {
-        actionError = action === "publish" && current.status !== "SUSPENDED"
-          ? "Only a profile an admin paused can be restored here. Listing on the public website is the member's own choice."
-          : "The builder changed this profile while you were looking at it. Check it below before acting again.";
+      if (updated !== "done") {
+        actionError = updated === "ineligible" ? REPUBLISH_INELIGIBLE
+          : action === "publish" && current.status !== "SUSPENDED"
+            ? "Only a profile an admin paused can be restored here. Listing on the public website is the member's own choice."
+            : "The builder changed this profile while you were looking at it. Check it below before acting again.";
         Astro.response.status = 409;
       } else {
         return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: PROFILE_DONE[action] });
@@ -374,7 +375,7 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
               <input type="hidden" name="_action" value="moderate-profile" />
               <input type="hidden" name="profileAction" value="publish" />
               <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-              <Button type="submit" variant="primary">{restoredStatus(profile) === "PUBLISHED" ? "Republish" : "Restore"}</Button>
+              <Button type="submit" variant="primary">{profileActionLabel("publish", profile)}</Button>
             </form>
           )}
           {profile.status !== "SUSPENDED" && (
@@ -382,7 +383,7 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
               <input type="hidden" name="_action" value="moderate-profile" />
               <input type="hidden" name="profileAction" value="unpublish" />
               <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-              <Button type="submit" variant="quiet">Unpublish</Button>
+              <Button type="submit" variant="quiet">{profileActionLabel("unpublish", profile)}</Button>
             </form>
           )}
           {profile.moderationReviewRequired && (

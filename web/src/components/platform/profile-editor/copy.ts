@@ -26,6 +26,13 @@ export const POSTED_SEEN_BY_STAFF = "Mentors and TTV staff aren't listed, so it 
 export const TAKEN_DOWN = "A moderator took this down, so only you and the team can see it, and it can't be changed.";
 export const TAKEN_DOWN_DELETE = "You can delete it.";
 
+/** A piece of work, as its author sees it in a list: held by the check, or a draft. */
+export const HELD_ENTRY = "Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.";
+export const DRAFT_ENTRY = "A draft: only you can see it.";
+
+/** The profile, held by the check, wherever its owner sees it. */
+export const PROFILE_HELD = "It's saved. A person at TTV checks it before anyone else can see it; until then only you and the team can.";
+
 /** A draft is the one thing nobody else sees. */
 export const DRAFT_ONLY_YOU = "A draft is only for you. Nobody else sees it until you post it.";
 
@@ -93,6 +100,8 @@ export const NOT_SAVED = {
   /** A listed profile's edit held by the check: nothing written, the live version unchanged. */
   heldChanges: "Your changes weren't saved",
   heldChangesDetail: "They need a check before they go live. Your public page stays as it was, and everything you wrote is still here.",
+  /** The same, for a listing the public website doesn't show (held, or no completed cohort): there's no public page to keep. */
+  heldChangesDetailHidden: "They need a check before they go live. Your profile stays as it was, and everything you wrote is still here.",
   /** Unlisting a paused profile: it isn't anywhere to come off. */
   paused: "Your profile is paused",
 } as const;

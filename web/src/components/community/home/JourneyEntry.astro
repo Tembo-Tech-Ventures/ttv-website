@@ -12,7 +12,7 @@ import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
 import { Chip, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
 import { formatCalendarDate } from "@/lib/display-date";
 import { confirmDeleteHref, editWorkHref, isContribution, reposHref } from "@/components/platform/profile-editor/work-forms";
-import { TAKEN_DOWN, TAKEN_DOWN_DELETE } from "@/components/platform/profile-editor/copy";
+import { DRAFT_ENTRY, HELD_ENTRY, TAKEN_DOWN, TAKEN_DOWN_DELETE } from "@/components/platform/profile-editor/copy";
 
 interface Props {
   claim: JourneyClaim;
@@ -35,8 +35,8 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
     {claim.moderatorHidden
       ? <p>{TAKEN_DOWN}{isContribution(claim) ? ` ${TAKEN_DOWN_DELETE}` : ""}</p>
       : claim.moderationHold
-        ? <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
-        : claim.status === "draft" && <p>A draft: only you can see it.</p>}
+        ? <p>{HELD_ENTRY}</p>
+        : claim.status === "draft" && <p>{DRAFT_ENTRY}</p>}
     <p class="whitespace-pre-line break-words">{claim.description}</p>
     {claim.evidence.length > 0 && (
       <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`Sources for ${claim.title}`}>

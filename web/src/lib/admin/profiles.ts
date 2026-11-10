@@ -6,6 +6,7 @@ import { ADMIN_PAGE_SIZE } from "@/lib/admin/paging";
 import {
   applyAdminProfileAction,
   parseModerationFlags,
+  restoredStatus,
   splitModerationReviewLists,
   type AdminProfileAction,
 } from "@/lib/talent/profile-moderation";
@@ -43,16 +44,27 @@ export function profileActionsFor(profile: ActionableProfile): AdminProfileActio
   return actions;
 }
 
-/** What an action's button says: a paused profile is republished, or restored to members only. */
-export function profileActionLabel(action: AdminProfileAction, restoresTo: "DRAFT" | "PUBLISHED" = "PUBLISHED"): string {
-  if (action === "publish") return restoresTo === "PUBLISHED" ? "Republish" : "Restore";
-  return action === "unpublish" ? "Unpublish" : "Clear flag";
+/**
+ * What an action's button says: a paused profile is republished, or restored to members only; a
+ * listed one is unpublished, and anything else paused (it isn't on the public website to come off).
+ */
+export function profileActionLabel(
+  action: AdminProfileAction,
+  profile: { status: string; suspendedFrom?: "DRAFT" | "PUBLISHED" | null; publishedAt: Date | null },
+): string {
+  if (action === "publish") return restoredStatus(profile) === "PUBLISHED" ? "Republish" : "Restore";
+  if (action === "unpublish") return profile.status === "PUBLISHED" ? "Unpublish" : "Pause";
+  return "Clear flag";
 }
+
+/** Why an admin's Republish was refused: the public website is for people who completed a cohort. */
+export const REPUBLISH_INELIGIBLE =
+  "This member no longer has a completed cohort, so their profile can't go back on the public website. Restore isn't available until they do.";
 
 /** What an action says once it is done, as the page's flash. */
 export const PROFILE_DONE: Record<AdminProfileAction, string> = {
   publish: "Profile restored",
-  unpublish: "Profile unpublished",
+  unpublish: "Profile paused",
   clear_flag: "Flag cleared",
 };
 
@@ -121,7 +133,7 @@ export async function readProfilesPage(db: Database, { status, page }: { status:
   return { rows, total, review: splitModerationReviewLists(review) };
 }
 
-export type ProfileModerationResult = "done" | "missing" | "changed";
+export type ProfileModerationResult = "done" | "missing" | "changed" | "ineligible";
 
 /**
  * Publish, unpublish or clear the flag on one profile, only if it is still the
@@ -137,5 +149,5 @@ export async function moderateProfile(
     with: { user: { columns: { name: true, image: true } } },
   });
   if (!current) return "missing";
-  return (await applyAdminProfileAction(db, profileId, current, action, expectedVersion)) ? "done" : "changed";
+  return applyAdminProfileAction(db, profileId, current, action, expectedVersion);
 }

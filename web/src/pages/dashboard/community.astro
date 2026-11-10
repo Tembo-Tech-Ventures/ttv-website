@@ -24,7 +24,8 @@ import { ButtonLink, DataList, EmptyState, Notice, PageHeader, linkClass } from 
 import ProfileCard from "@/components/community/home/ProfileCard.astro";
 import JourneyEntry from "@/components/community/home/JourneyEntry.astro";
 import { loadCommunityHome } from "@/components/community/home/home-data";
-import { EVERYONE_SEES, STAFF_SEES } from "@/components/platform/profile-editor/copy";
+import { EVERYONE_SEES, PROFILE_HELD, STAFF_SEES } from "@/components/platform/profile-editor/copy";
+import { isUnlistedStaff } from "@/components/platform/profile-editor/staff";
 import { addWorkHref, EDITOR_PATH, editWorkHref, profileFormHref } from "@/components/platform/profile-editor/work-forms";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 
@@ -54,6 +55,7 @@ const [landing, journey, home] = await Promise.all([
   loadCommunityHome(Astro.request, Astro.locals, env),
 ]);
 const spaces = landing?.[0] ?? null;
+const staff = await isUnlistedStaff(spaces, env.DB, Astro.locals.user!.id);
 const { channels, shortcuts } = landing?.[1] ?? { channels: undefined, shortcuts: null };
 // Everything the caller has posted or drafted, repositories included: each one leads to where it is changed.
 const work = home?.claims ?? [];
@@ -90,7 +92,7 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
       <>
         {home.moderationHold && (
           <Notice tone="warning" title="Your profile is waiting for a check">
-            It's saved. A person at TTV checks it before anyone else can see it; until then only you and the team can.
+            {PROFILE_HELD}
           </Notice>
         )}
         <ProfileCard profile={home} />
@@ -104,7 +106,7 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
             </p>
           </div>
           <Notice tone="info" title="Who sees this">
-            {spaces && (spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin) ? STAFF_SEES : EVERYONE_SEES} Drafts are only for you.
+            {staff ? STAFF_SEES : EVERYONE_SEES} Drafts are only for you.
             <Fragment slot="actions"><ButtonLink href={`${SPACE_PATHS.community}/members`}>See the members directory</ButtonLink></Fragment>
           </Notice>
 

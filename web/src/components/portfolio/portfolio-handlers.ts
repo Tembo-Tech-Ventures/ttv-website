@@ -355,6 +355,14 @@ export async function saveProfile(
     // (`changeHandle=1`): a stale tab or another form posting the old value never renames,
     // and never undoes a rename made elsewhere.
     if (current && formData.get("changeHandle") !== "1") data.handle = current.handle;
+    // A Change-handle form opened before another rename must not rename back: it carries the
+    // handle it opened with (`handleWas`), and renames only if that is still the current one.
+    else if (current && formData.get("handleWas") !== current.handle) {
+      return {
+        success: false,
+        handleError: `Your handle changed in another tab, to ${current.handle}. Change it again from here if you still want to.`,
+      };
+    }
     // `findFirst` yields undefined when there is no row; a Date is always
     // truthy, so this covers "no profile" and "not yet published" together.
     if (

@@ -165,16 +165,17 @@ export async function applyAdminProfileAction(
   current: AdminProfileState,
   action: AdminProfileAction,
   expectedVersion: number,
-): Promise<boolean> {
-  if (current.contentVersion !== expectedVersion) return false;
+): Promise<"done" | "changed" | "ineligible"> {
+  if (current.contentVersion !== expectedVersion) return "changed";
   // Listing is the person's own choice: an admin only restores a profile they paused.
-  if (action === "publish" && current.status !== "SUSPENDED") return false;
+  if (action === "publish" && current.status !== "SUSPENDED") return "changed";
   if (action === "publish" && restoredStatus(current) === "PUBLISHED") {
     const profile = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.id, profileId),
       columns: { userId: true },
     });
-    if (!profile || !(await hasCompletedCohort(db, profile.userId))) return false;
+    // The public website is for people who completed a cohort: without one, it can't be republished.
+    if (!profile || !(await hasCompletedCohort(db, profile.userId))) return "ineligible";
   }
   const result = await db
     .update(schema.studentProfile)
@@ -185,5 +186,5 @@ export async function applyAdminProfileAction(
         eq(schema.studentProfile.contentVersion, expectedVersion),
       ),
     );
-  return result.meta.changes > 0;
+  return result.meta.changes > 0 ? "done" : "changed";
 }

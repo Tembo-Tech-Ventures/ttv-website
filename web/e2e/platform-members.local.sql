@@ -69,3 +69,11 @@ INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,bio,loca
 INSERT OR REPLACE INTO blogPost (id,profileId,slug,title,contentMarkdown,status,publishedAt) VALUES
  ('ttv-local-persona-post-graduate','ttv-local-persona-profile-graduate','offline-first-fares','Offline-first fares',
   'Riders lose signal between stages, so the app keeps every fare on the phone until it can send it.','PUBLISHED',1781100000);
+-- e2e/platform-profile-editor.spec.ts: a member of her own for changing her handle, so no other spec
+-- (the admin-access one gives Brian a role) changes who she is under it. Re-seeding puts her handle back.
+INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-renamer','Neema Atieno','neema@invalid.ttv',1,NULL,1793400000,1793400000);
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-renamer-session',1893456000,'ttv-local-persona-renamer-token',NULL,'local','ttv-local-persona-renamer',1793400000,1793400000);
+INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,skills,publicName) VALUES
+ ('ttv-local-persona-profile-renamer','ttv-local-persona-renamer','neema-atieno','DRAFT','Data journalist','["Python","SQL"]','Neema Atieno');

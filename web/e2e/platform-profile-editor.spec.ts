@@ -128,24 +128,19 @@ test.describe("without JavaScript", () => {
   test("a member changes their handle only on purpose, and their member page moves with it", async ({ page, baseURL }) => {
     test.skip(PREVIEW, "Writes run against the local seed only.");
     test.skip(test.info().project.name !== "chromium", "Runs once, in the chromium project.");
-    const newcomer = localPersonaSession("newcomer");
-    test.skip(typeof newcomer === "string", typeof newcomer === "string" ? newcomer : "");
-    if (typeof newcomer === "string") return;
+    // A member of her own (e2e/platform-members.local.sql): no other spec changes her roles or handle.
+    const renamer = localPersonaSession("renamer");
+    test.skip(typeof renamer === "string", typeof renamer === "string" ? renamer : "");
+    if (typeof renamer === "string") return;
     await page.setViewportSize({ width: 390, height: 844 });
-    await signIn(page.context(), baseURL!, newcomer);
+    await signIn(page.context(), baseURL!, renamer);
     await open(page, PATH, { script: false });
     const form = main(page).locator("[data-profile-form]");
-    // Brian may not have a profile yet on a fresh seed: make one, with a handle of his own.
-    if (await form.getByRole("button", { name: "Make my profile" }).isVisible()) {
-      await form.getByLabel(/^Handle/).fill(`brian-kiprono-${Date.now() % 100000}`);
-      await form.getByRole("button", { name: "Make my profile" }).click();
-      await expect(main(page).locator("[data-notice='success']")).toContainText("Profile saved");
-    }
     const before = (await form.locator("input[name='handle']").getAttribute("value"))!;
     await expect(form.getByLabel(/^Handle/)).toHaveCount(0);
     await form.getByRole("link", { name: "Change handle" }).click();
     await expect(form.locator("#handle-warning")).toContainText("links to the old one stop working");
-    const after = `brian-k-${Date.now() % 100000}`;
+    const after = `neema-a-${Date.now() % 100000}`;
     await form.getByLabel(/^Handle/).fill(after);
     await form.getByRole("button", { name: "Save profile" }).click();
     await expect(main(page).locator("[data-notice='success']")).toContainText("Profile saved");
