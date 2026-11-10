@@ -37,7 +37,7 @@ if (method !== "GET" && method !== "HEAD") return bare(405, { Allow: "GET, HEAD"
 const { filters, cursor, seen } = parseMemberUrl(Astro.url.searchParams);
 const filtered = isFiltered(filters);
 const resolved = await resolveSpacePageWith(Astro.locals, "members", (me) => {
-  const caller = { id: me.user.id, isAdmin: me.capabilities.isAdmin };
+  const caller = { id: me.user.id };
   return Promise.all([listMembers(env.DB, caller, readFilters(filters, cursor)), readOwnMemberCard(env.DB, caller)])
     .then(([page, own]) => ({ page, own }), (error: unknown) => ({ error }));
 });

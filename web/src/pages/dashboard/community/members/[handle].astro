@@ -27,7 +27,7 @@ if (method !== "GET" && method !== "HEAD") return bare(405, { Allow: "GET, HEAD"
 
 const handle = Astro.params.handle ?? "";
 const resolved = await resolveSpacePageWith(Astro.locals, "members", (me) =>
-  readMember(env.DB, { id: me.user.id, isAdmin: me.capabilities.isAdmin }, handle)
+  readMember(env.DB, { id: me.user.id }, handle)
     .then((member) => ({ member }), (error: unknown) => ({ error })));
 if (!resolved) return bare(404);
 const [context, read] = resolved;

@@ -110,8 +110,8 @@ describe("the Members directory", () => {
     expect(body).toMatch(/<a[^>]*href="\/dashboard\/community\/members"[^>]*aria-current="page"/);
     // The reads are asked as the caller, with no filters.
     expect(mocks.listMembers).toHaveBeenCalledOnce();
-    expect(mocks.listMembers.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT, isAdmin: false }, {}]);
-    expect(mocks.readOwnMemberCard.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT, isAdmin: false }]);
+    expect(mocks.listMembers.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT }, {}]);
+    expect(mocks.readOwnMemberCard.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT }]);
   });
 
   it("asks the way to be listed when the caller is not, as the page's one peach action", async () => {
@@ -177,7 +177,7 @@ describe("the Members directory", () => {
     expect(count(institution, /data-member-card=/g)).toBe(2);
     expect(institution).toMatch(/data-member-discover[\s\S]*href="\/dashboard\/discover"/);
     expect(page((await visit(PATH)).body)).not.toContain("data-member-discover");
-    expect(mocks.listMembers.mock.calls.map((call) => call[1])).toEqual([{ id: INSTITUTION, isAdmin: false }, { id: STUDENT, isAdmin: false }]);
+    expect(mocks.listMembers.mock.calls.map((call) => call[1])).toEqual([{ id: INSTITUTION }, { id: STUDENT }]);
   });
 
   it("answers only GET and HEAD, and is not there without the spaces flag", async () => {
@@ -196,7 +196,7 @@ describe("a member's page", () => {
     seeded();
     const { status, body } = await visit(`${PATH}/achieng-otieno`);
     expect(status).toBe(200);
-    expect(mocks.readMember.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT, isAdmin: false }, "achieng-otieno"]);
+    expect(mocks.readMember.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT }, "achieng-otieno"]);
     expect(count(body, /<h1[\s>]/g)).toBe(1);
     expect(body).toMatch(/<h1 id="member-name"[^>]*>Achieng Otieno<\/h1>/);
     expect(body).toMatch(/<title>Achieng Otieno/);
