@@ -24,11 +24,9 @@ test.describe("authenticated portfolio editor", () => {
       page.getByRole("heading", { level: 1, name: /^(portfolio|your profile)$/i }),
     ).toBeVisible();
 
-    await expect(
-      page.locator(
-        'form input[name="handle"], form [data-testid="portfolio-editor"]',
-      ),
-    ).toBeVisible();
+    // The profile form; once a profile is saved its handle is a fixed value, not a field to type in.
+    await expect(page.locator("[data-profile-form] form")).toBeVisible();
+    await expect(page.locator('[data-profile-form] form input[name="handle"]')).toHaveCount(1);
 
     await page.screenshot({
       path: `test-results/evidence/${testInfo.project.name}-portfolio-editor.png`,

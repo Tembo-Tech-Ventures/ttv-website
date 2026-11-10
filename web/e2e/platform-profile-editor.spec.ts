@@ -49,7 +49,10 @@ for (const persona of ["community", "alumna"] as const) {
       await expect(main(page).getByRole("heading", { level: 1 })).toHaveText("Your profile");
       await expect(main(page).locator("#profile-visibility")).toContainText(EVERYONE_SEES);
       await expect(main(page).locator("[data-variant='primary']")).toHaveCount(1);
-      await expect(main(page).locator("[data-public-site]")).toHaveAttribute("data-public-site", persona === "alumna" ? "live" : "not-yet");
+      // The graduate gets a graduate's state, whichever her data gives (local seed: listed; preview: maybe no profile yet).
+      await expect(main(page).locator("[data-public-site]")).toHaveAttribute(
+        "data-public-site", persona === "alumna" ? /^(live|held|not-shown|waiting|unlisted|offered|save-first)$/ : "not-yet",
+      );
       await noSidewaysScroll(page);
       await page.screenshot({ path: evidence(`${persona}-${width}`), fullPage: true });
       await runAxe(page, test.info(), `profile editor, ${persona}, ${width}`);

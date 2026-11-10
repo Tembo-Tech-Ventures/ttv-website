@@ -65,7 +65,8 @@ test.describe("authenticated talent foundation", () => {
   test("dashboard/portfolio stub renders", async ({ page }) => {
     await page.goto("/dashboard/portfolio");
     await expect(
-      page.getByRole("heading", { name: /^(portfolio|public profile)$/i }),
+      // The one profile editor's title.
+      page.getByRole("heading", { name: /^(portfolio|public profile|your profile)$/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-portfolio"),
