@@ -129,7 +129,7 @@ describe("space sidebars", () => {
 
   it("put the way into a cohort in Community for a member without one", () => {
     const lucy = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { visibleLinkIds: NEW_SIGN_IN }));
-    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Public directory", "Cohorts"]);
+    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "On the website", "Cohorts"]);
     expect(lucy.groups.at(-1)!.items).toEqual([
       expect.objectContaining({ label: "Apply to a cohort", href: "/dashboard/cohort/apply", current: false }),
     ]);
@@ -139,14 +139,18 @@ describe("space sidebars", () => {
 
     // With a cohort, applying and Ask Tembo live in the Cohort space instead.
     const wanjiku = spaceSidebar("community", facts(dark(meByPersona.wanjiku), "journey"));
-    expect(labels(wanjiku)).toEqual(["Your journey", "Members", "For mentors"]);
+    expect(labels(wanjiku)).toEqual(["Your journey", "For members", "For mentors"]);
   });
 
-  it("say the directories are the public website's pages, before anyone follows them", () => {
+  it("name the website's pages about taking part for who they are written for, and say they leave the app", () => {
     for (const me of [dark(meByPersona.lucy), dark(meByPersona.wanjiku)]) {
-      const directory = spaceSidebar("community", facts(me, "journey")).groups.find((group) => group.label === "Public directory")!;
-      expect(directory.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
-        { label: "Members", href: "/community/members", publicPage: true },
+      const model = spaceSidebar("community", facts(me, "journey"));
+      // Neither page lists people, so nothing calls them a directory or a list of members.
+      expect(model.groups.map((group) => group.label)).not.toContain("Public directory");
+      expect(labels(model)).not.toContain("Members");
+      const website = model.groups.find((group) => group.label === "On the website")!;
+      expect(website.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
+        { label: "For members", href: "/community/members", publicPage: true },
         { label: "For mentors", href: "/community/mentors", publicPage: true },
       ]);
     }
@@ -343,7 +347,7 @@ describe("space sidebars", () => {
 
     it("list community channels in Community, in the backend's order, then the way back to the habits", () => {
       const model = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { channels: readable }));
-      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Public directory", "Cohorts"]);
+      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "On the website", "Cohorts"]);
       expect(group(model)!.items.map(({ label, href, icon }) => ({ label, href, icon }))).toEqual([
         { label: "introductions", href: "/dashboard/community/c/introductions", icon: "channel" },
         { label: "show-your-work", href: "/dashboard/community/c/show-your-work", icon: "channel" },
@@ -429,21 +433,21 @@ describe("space sidebars", () => {
     const readable = { items: channelList.items };
     const conversation = { ...channels.davidConversation, unreadCount: 2 };
 
-    it("put Mentors in the app, after the journey, and keep both public pages under Public directory", () => {
+    it("put Mentors in the app, after the journey, and keep both public pages under On the website", () => {
       const model = spaceSidebar("community", facts(meByPersona.wanjiku, "mentors"));
       expect(model.groups[0]!.items.map(({ label, href, current: isCurrent }) => ({ label, href, current: isCurrent }))).toEqual([
         { label: "Your journey", href: "/dashboard/community", current: false },
         { label: "Mentors", href: "/dashboard/community/mentors", current: true },
       ]);
-      expect(model.groups.find((entry) => entry.label === "Public directory")!.items.map(({ label, href }) => ({ label, href }))).toEqual([
-        { label: "Members", href: "/community/members" },
+      expect(model.groups.find((entry) => entry.label === "On the website")!.items.map(({ label, href }) => ({ label, href }))).toEqual([
+        { label: "For members", href: "/community/members" },
         { label: "For mentors", href: "/community/mentors" },
       ]);
     });
 
     it("list private conversations under Conversations, named for the other person, bold while unread", () => {
       const model = spaceSidebar("community", facts(meByPersona.wanjiku, "journey", { channels: { items: [...readable.items.filter((c) => c.kind !== "DIRECT"), conversation] } }));
-      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Conversations", "Public directory"]);
+      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Conversations", "On the website"]);
       expect(model.groups.find((entry) => entry.label === "Conversations")!.items).toEqual([expect.objectContaining({
         label: "David Kamau", href: `/dashboard/community/dm/${conversation.id}`, icon: "conversation",
         emphasis: "unread", count: 2, countLabel: "unread messages", current: false,

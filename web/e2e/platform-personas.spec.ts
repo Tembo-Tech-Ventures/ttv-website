@@ -430,14 +430,15 @@ test.describe("QA-1 polish (F-3)", () => {
     await expect(page.locator(".spaces-shell__landing")).toHaveCount(0);
   });
 
-  test("Community says its directories are public pages before anyone follows them", async ({ context, page, baseURL }) => {
+  test("Community names the website's pages about taking part, and says they are public before anyone follows them", async ({ context, page, baseURL }) => {
     await as("community", { context, page, baseURL });
     await open(page, "/dashboard/community");
     if (!wide(page)) await page.getByRole("link", { name: /^Open .+ menu$/ }).click();
-    const directory = page.locator("#space-sidebar ul[aria-labelledby]", { has: page.locator('a[href="/community/members"]') });
-    await expect(page.locator("#space-sidebar")).toContainText("Public directory");
-    await expect(directory.getByRole("link", { name: "Members (public website)" })).toHaveAttribute("href", "/community/members");
-    await expect(directory.getByRole("link", { name: "Mentors (public website)" })).toHaveAttribute("href", "/community/mentors");
+    const website = page.locator("#space-sidebar ul[aria-labelledby]", { has: page.locator('a[href="/community/members"]') });
+    await expect(page.locator("#space-sidebar")).toContainText("On the website");
+    await expect(page.locator("#space-sidebar")).not.toContainText("Public directory");
+    await expect(website.getByRole("link", { name: "For members (public website)", exact: true })).toHaveAttribute("href", "/community/members");
+    await expect(website.getByRole("link", { name: "For mentors (public website)", exact: true })).toHaveAttribute("href", "/community/mentors");
   });
 
   // M15: the journey is the page's own HTML, with no island to hydrate and no API call after it.
