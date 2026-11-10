@@ -46,7 +46,7 @@ export interface OverviewFacts {
     country: string | null;
     skills: readonly string[];
     onPublicSite?: number;
-  publicName: string | null;
+    publicName: string | null;
     publicAvatarUrl: string | null;
   } | null;
   /** The person's own contributions with their confirmations, newest first; null when they could not be read. */
@@ -166,7 +166,7 @@ function distinct(values: readonly string[]): string[] {
  * contribution is an unpublished draft that only its author sees.
  */
 export function projectState(entry: CommunityJourney): ProjectState {
-  if (entry.moderationHold) return {kind:"held",text:"Saved, waiting for a human review"};
+  if (entry.moderationHold) return { kind: "held", text: "Saved, waiting for a human review" };
   if (entry.status === "draft") return { kind: "draft", text: "Draft, only you can see it" };
   const current = distinct(entry.confirmations.filter((c) => c.journeyVersion === entry.version).map((c) => c.mentorName));
   if (current.length > 0) return { kind: "confirmed", text: `Confirmed by ${joinNames(current)}`, mentors: current };
@@ -192,7 +192,7 @@ function card(facts: OverviewFacts): OverviewCard | null {
     bio: profile.bio?.trim() || null,
     skills: profile.skills,
     status: STATUS[profile.status],
-    publicHref: memberProfileHref({handle:profile.handle,onPublicSite:profile.status === "PUBLISHED" && Boolean(profile.onPublicSite)}),
+    publicHref: memberProfileHref({ handle: profile.handle, onPublicSite: profile.status === "PUBLISHED" && Boolean(profile.onPublicSite) }),
   };
 }
 

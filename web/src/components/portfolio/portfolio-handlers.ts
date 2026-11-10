@@ -381,8 +381,7 @@ export async function saveProfile(
     };
   }
 
-  const values = editorValues(handleResult.normalized,
-    parsed.data);
+  const values = editorValues(handleResult.normalized, parsed.data);
 
   if (existingProfileId) {
     if (!current) {
@@ -448,7 +447,7 @@ async function moderateSavedProfile(
     with: { user: true },
   });
   if (!p) return { success: false, error: "Profile not found" };
-  const state= profileModerationState(p);
+  const state = profileModerationState(p);
   const result = await runContentCheck(checkContent, state, p.user.image);
   await db
     .update(schema.studentProfile)
@@ -573,6 +572,9 @@ export async function publishProfile(
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "DRAFT"),
         eq(schema.studentProfile.contentVersion, profile.contentVersion),
+        canPublish && moderation.outcome === "error"
+          ? sql`coalesce(${schema.studentProfile.moderationOutcome}, '') <> 'hold'`
+          : undefined,
       ),
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
@@ -597,21 +599,24 @@ export async function publishProfile(
 
 /** A whole-profile pass covers only the exact unchecked posted work that was screened. */
 async function passCheckedWork(db: Database, work: CurrentProfile["work"] = []) {
-  const updates = work.map(item =>
-    db.update(schema.communityJourney)
+  const updates = work.map((item) =>
+    db
+      .update(schema.communityJourney)
       .set({
         moderationOutcome: "pass",
         moderationCheckedAt: new Date(),
         moderationReviewRequired: false,
       })
-      .where(and(
-        eq(schema.communityJourney.id, item.id),
-        eq(schema.communityJourney.version, item.version),
-        eq(schema.communityJourney.state, "POSTED"),
-        eq(schema.communityJourney.moderatorHidden, false),
-        isNull(schema.communityJourney.moderationOutcome),
-        isNull(schema.communityJourney.moderationCheckedAt),
-      )),
+      .where(
+        and(
+          eq(schema.communityJourney.id, item.id),
+          eq(schema.communityJourney.version, item.version),
+          eq(schema.communityJourney.state, "POSTED"),
+          eq(schema.communityJourney.moderatorHidden, false),
+          isNull(schema.communityJourney.moderationOutcome),
+          isNull(schema.communityJourney.moderationCheckedAt),
+        ),
+      ),
   );
   if (updates.length > 0) await db.batch([updates[0], ...updates.slice(1)]);
 }

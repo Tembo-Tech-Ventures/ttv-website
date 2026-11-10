@@ -48,7 +48,7 @@ import { parseAdminProfileAction, parseAdminProfileVersion } from "@/lib/talent/
  */
 const db = drizzle(env.DB, { schema });
 // Forms post back to this address, filter and page included, never with a #fragment.
-const here = `${Astro.url.pathname}${Astro.url.search}`;
+let here = `${Astro.url.pathname}${Astro.url.search}`;
 let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
@@ -59,6 +59,8 @@ if (Astro.request.method === "POST") {
     const revision = Number(formData.get("revision"));
     if (typeof id === "string" && (decision === "keep" || decision === "hide")) {
       const saved = await reviewWork(env.DB, Astro.locals.user!.id, id, revision, decision);
+      const profileId = formData.get("returnProfileId");
+      if (typeof profileId === "string" && profileId) here = `/admin/profiles/${encodeURIComponent(profileId)}`;
       return redirectWithFlash(Astro, here, { tone: saved ? "success" : "info", title: saved ? "Work review saved" : "This work changed; review the current revision" });
     }
     return new Response("Invalid work review", { status: 400 });
@@ -156,10 +158,10 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
       {section.items.length === 0 && <p>No work in this list.</p>}
     </Card>)}
 
-    <nav aria-label="Hidden work pages" class="flex gap-4">
+    {(hiddenPage > 1 || hiddenWork.length === 50) && <nav aria-label="Hidden work pages" class="flex gap-4">
       {hiddenPage > 1 && <a href={`?hiddenPage=${hiddenPage - 1}`} class={linkClass()}>Newer hidden work</a>}
       {hiddenWork.length === 50 && <a href={`?hiddenPage=${hiddenPage + 1}`} class={linkClass()}>Older hidden work</a>}
-    </nav>
+    </nav>}
 
     {
       reviewSections.map((section) => (

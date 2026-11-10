@@ -100,6 +100,7 @@ describe("a builder profile on the style guide", () => {
     expect(body).toContain("Kisumu, KE");
     expect(body).toContain("Open to freelance work");
     expect(body).toMatch(/<a href="https:\/\/example.test\/achieng" class="[^"]*underline[^"]*min-h-11[^"]*" target="_blank" rel="noopener noreferrer">Portfolio<span class="sr-only"> \(opens in a new tab\)<\/span><\/a>/);
+    expect(body).toContain('name="returnProfileId" value="profile-1"');
     // Highlights and posts are hairline lists, not cards inside a card.
     expect(body).toMatch(/<ul class="divide-y divide-hairline" data-highlights>[\s\S]*?achieng\/ledger[\s\S]*?3 stars · TypeScript/);
     expect(body).not.toMatch(/<ul class="divide-y divide-hairline" data-(highlights|posts)>(?:(?!<\/ul>)[\s\S])*data-card/);

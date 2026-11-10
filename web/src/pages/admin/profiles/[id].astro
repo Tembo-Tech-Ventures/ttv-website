@@ -285,6 +285,7 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
                 <form method="POST" action="/admin/profiles" class="flex flex-wrap gap-2">
                   <input type="hidden" name="form" value="work" />
                   <input type="hidden" name="workId" value={h.id} />
+                  <input type="hidden" name="returnProfileId" value={profile.id} />
                   <input type="hidden" name="revision" value={String(h.version)} />
                   <Button type="submit" name="decision" value={h.moderatorHidden ? "keep" : "hide"} variant="quiet">
                     {h.moderatorHidden ? "Restore posted work" : "Take down"}

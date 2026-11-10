@@ -54,6 +54,22 @@ async function visit(path = "/admin/profiles", form?: Record<string, string>) {
 }
 
 describe("the profiles list on the style guide", () => {
+  it("returns a work decision to its profile without accepting an external redirect", async () => {
+    const result = await visit("/admin/profiles", {
+      form: "work", workId: "work-1", revision: "3", decision: "hide", returnProfileId: "profile-1",
+    });
+    expect(result).toMatchObject({ status: 303, location: "/admin/profiles/profile-1" });
+    const hostile = await visit("/admin/profiles", {
+      form: "work", workId: "work-1", revision: "3", decision: "keep", returnProfileId: "//other.test",
+    });
+    expect(hostile.location).toBe("/admin/profiles/%2F%2Fother.test");
+  });
+
+  it("renders hidden-work navigation only when a paging link exists", async () => {
+    expect((await visit()).body).not.toContain('aria-label="Hidden work pages"');
+    expect((await visit("/admin/profiles?hiddenPage=2")).body).toContain("Newer hidden work");
+  });
+
   it("shows held work for human review and posts the revision that was seen", async () => {
     store.work.mockResolvedValue({results:[{id:"work-1",title:"Chama ledger",description:"Saved work",version:3,moderationOutcome:"hold"}]});
     const {body}=await visit();

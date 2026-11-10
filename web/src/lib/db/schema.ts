@@ -1242,7 +1242,8 @@ export const communityJourney = sqliteTable(
     index("communityJourney_userId_state_idx").on(table.userId, table.state),
     index("communityJourney_review_idx")
       .on(table.moderationOutcome, table.updatedAt, table.id)
-      .where(sql`${table.moderationReviewRequired}=1 AND ${table.state}='POSTED' AND ${table.moderatorHidden}=0`,
+      .where(
+        sql`${table.moderationReviewRequired}=1 AND ${table.state}='POSTED' AND ${table.moderatorHidden}=0`,
       ),
     check(
       "communityJourney_visibility_check",
@@ -1262,26 +1263,16 @@ export const communityJourneyRelations = relations(
   }),
 );
 
-export const communityConfirmation = sqliteTable(
-  "communityConfirmation",
-  {
-    id: cuid("id"),
-    journeyId: text("journeyId")
-      .notNull()
-      .references(() => communityJourney.id, { onDelete: "cascade" }),
-    mentorId: text("mentorId")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    statement: text("statement").notNull(),
-    method: text("method").notNull(),
-    journeyVersion: integer("journeyVersion").notNull(),
-    mentorRole: text("mentorRole", { enum: ["MENTOR", "ADMIN", "UNKNOWN"] })
-      .notNull()
-      .default("UNKNOWN"),
-    ...timestamps,
-  },
-  (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)],
-);
+export const communityConfirmation = sqliteTable("communityConfirmation", {
+  id: cuid("id"),
+  journeyId: text("journeyId").notNull().references(() => communityJourney.id, { onDelete: "cascade" }),
+  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  statement: text("statement").notNull(),
+  method: text("method").notNull(),
+  journeyVersion: integer("journeyVersion").notNull(),
+  mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
+  ...timestamps,
+}, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);
 
 export const communityConfirmationRelations = relations(
   communityConfirmation,

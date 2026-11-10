@@ -520,6 +520,19 @@ it("an unavailable check cannot publish an already-held draft", async () => {
   expect(database.prepare("SELECT status,moderationOutcome FROM studentProfile").get()).toEqual({ status: "DRAFT", moderationOutcome: "hold" });
 });
 
+it("an unavailable publish check cannot overwrite a concurrent hold", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  const result = await publishProfile(drizzle(db, { schema }), "member", "profile", async () => {
+    database.exec("UPDATE studentProfile SET moderationOutcome='hold', moderationReviewRequired=1");
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  expect(result).toMatchObject({ success: false });
+  expect(database.prepare("SELECT status,moderationOutcome,contentVersion FROM studentProfile").get()).toEqual({
+    status: "DRAFT", moderationOutcome: "hold", contentVersion: 0,
+  });
+});
+
 it("a whole-profile pass releases only the exact unchecked posted work it screened", async () => {
   const { db, database } = fixture();
   graduate(database);
