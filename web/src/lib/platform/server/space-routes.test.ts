@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import {
   canonicalSpacePath, channelPagePath, channelRoute, CONDUCT_PATH, conversationRoute, isAvailableSpacePath, isChannelPagePath,
-  isMentorPagePath, isNewSpacePath, legacySpacePath, MENTOR_PAGE_PATHS, spaceForPath, SPACE_REDIRECTS,
+  isMemberPagePath, isMentorPagePath, isNewSpacePath, legacySpacePath, memberRoute, MEMBERS_PATH, MENTOR_PAGE_PATHS, spaceForPath,
+  SPACE_REDIRECTS,
 } from "./space-routes";
 
 const redirects = [
@@ -133,5 +134,46 @@ describe("conversation and mentor pages (B-4.1)", () => {
       expect(isMentorPagePath(`${path}/x`)).toBe(false);
       expect(isAvailableSpacePath(`${path}-x`)).toBe(false);
     }
+  });
+});
+
+describe("member directory pages", () => {
+  it("serves the directory in Community, with no legacy alias", () => {
+    for (const path of [MEMBERS_PATH, `${MEMBERS_PATH}/`]) {
+      expect(isMemberPagePath(path)).toBe(true);
+      expect(isAvailableSpacePath(path)).toBe(true);
+      expect(isNewSpacePath(path)).toBe(true);
+      expect(memberRoute(path)).toBeNull();
+      expect(canonicalSpacePath(path)).toBeNull();
+      expect(legacySpacePath(path)).toBe(MEMBERS_PATH);
+      expect(spaceForPath(path)).toBe("community");
+    }
+    expect(existsSync("src/pages/dashboard/community/members/index.astro")).toBe(true);
+    expect(existsSync("src/pages/dashboard/community/members/[handle].astro")).toBe(true);
+  });
+
+  it.each([
+    ["/dashboard/community/members/wanjiku-mwangi", "wanjiku-mwangi"],
+    ["/dashboard/community/members/achieng/", "achieng"],
+    ["/dashboard/community/members/a", "a"],
+    ["/dashboard/community/members/" + "a".repeat(64), "a".repeat(64)],
+  ])("serves %s as a member's page", (path, handle) => {
+    expect(memberRoute(path)).toEqual({ handle });
+    expect(isMemberPagePath(path)).toBe(true);
+    expect(isAvailableSpacePath(path)).toBe(true);
+    expect(isChannelPagePath(path)).toBe(false);
+    expect(isMentorPagePath(path)).toBe(false);
+    expect(spaceForPath(path)).toBe("community");
+  });
+
+  it.each([
+    "/dashboard/community/members/Wanjiku", "/dashboard/community/members/-wanjiku", "/dashboard/community/members/wanjiku-",
+    "/dashboard/community/members/wan_jiku", "/dashboard/community/members/wanjiku/work", "/dashboard/community/members/%77anjiku",
+    "/dashboard/community/members/a%2f..", "/dashboard/community/members/" + "a".repeat(65), "/dashboard/community/member",
+    "/dashboard/community/members-x", "/dashboard/cohort/members", "/dashboard/cohort/members/wanjiku", "/dashboard/members/wanjiku",
+  ])("does not serve %s", (path) => {
+    expect(memberRoute(path)).toBeNull();
+    expect(isMemberPagePath(path)).toBe(false);
+    expect(isAvailableSpacePath(path)).toBe(false);
   });
 });

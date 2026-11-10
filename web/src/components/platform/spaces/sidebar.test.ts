@@ -127,6 +127,18 @@ describe("space sidebars", () => {
     expect(spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort")).title).toBe("Cohort");
   });
 
+  it("list the Members directory in Community for everyone who has it, institutions included, current on its pages", () => {
+    for (const me of Object.values(meByPersona).map(dark).filter((person) => person.spaces.includes("community"))) {
+      const model = spaceSidebar("community", facts(me, "journey"));
+      const entries = model.groups[0]!.items.map(({ key }) => key);
+      // In the app, right after the person's own journey.
+      expect(entries.slice(0, 2), me.user.name).toEqual(["journey", "members"]);
+      expect(current(spaceSidebar("community", facts(me, "members")))).toEqual(["Members"]);
+    }
+    expect(PAGE_SPACES.members).toEqual(["community"]);
+    expect(SPACE_PAGE_PATHS.members).toBe("/dashboard/community/members");
+  });
+
   it("put the way into a cohort in Community for a member without one", () => {
     const lucy = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { visibleLinkIds: NEW_SIGN_IN }));
     expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "On the website", "Cohorts"]);
@@ -139,15 +151,17 @@ describe("space sidebars", () => {
 
     // With a cohort, applying and Ask Tembo live in the Cohort space instead.
     const wanjiku = spaceSidebar("community", facts(dark(meByPersona.wanjiku), "journey"));
-    expect(labels(wanjiku)).toEqual(["Your journey", "For members", "For mentors"]);
+    expect(labels(wanjiku)).toEqual(["Your journey", "Members", "For members", "For mentors"]);
   });
 
   it("name the website's pages about taking part for who they are written for, and say they leave the app", () => {
     for (const me of [dark(meByPersona.lucy), dark(meByPersona.wanjiku)]) {
       const model = spaceSidebar("community", facts(me, "journey"));
-      // Neither page lists people, so nothing calls them a directory or a list of members.
+      // Neither page lists people, so nothing calls them a directory; Members is the app's own.
       expect(model.groups.map((group) => group.label)).not.toContain("Public directory");
-      expect(labels(model)).not.toContain("Members");
+      expect(model.groups.flatMap((group) => group.items).filter((entry) => entry.label === "Members"))
+        .toEqual([expect.objectContaining({ href: "/dashboard/community/members" })]);
+      expect(model.groups.flatMap((group) => group.items).find((entry) => entry.label === "Members")!.publicPage).toBeUndefined();
       const website = model.groups.find((group) => group.label === "On the website")!;
       expect(website.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
         { label: "For members", href: "/community/members", publicPage: true },
@@ -437,6 +451,7 @@ describe("space sidebars", () => {
       const model = spaceSidebar("community", facts(meByPersona.wanjiku, "mentors"));
       expect(model.groups[0]!.items.map(({ label, href, current: isCurrent }) => ({ label, href, current: isCurrent }))).toEqual([
         { label: "Your journey", href: "/dashboard/community", current: false },
+        { label: "Members", href: "/dashboard/community/members", current: false },
         { label: "Mentors", href: "/dashboard/community/mentors", current: true },
       ]);
       expect(model.groups.find((entry) => entry.label === "On the website")!.items.map(({ label, href }) => ({ label, href }))).toEqual([

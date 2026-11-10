@@ -1,0 +1,122 @@
+---
+/**
+ * Community → Members: everyone with a saved profile, and what they have posted,
+ * for everyone signed in (spec: semi-public member directory). Institutions see
+ * exactly these pages; their extra is Discover's tools, linked quietly here.
+ *
+ * Server-rendered with no island. The filters are a GET form, so they are the
+ * address and work without JavaScript; pages follow a cursor. The order is the
+ * day's fair rotation, never "best first": nothing here ranks anyone. The page
+ * exists only with the `spaces` flag (the router answers 404 without it).
+ *
+ * The list and the caller's own card are one round trip, started beside the
+ * space context (resolveSpacePageWith), and the read's own rules decide who is
+ * listed (src/lib/members/directory.ts). A failed read is said as one, with a 503.
+ */
+import { env } from "cloudflare:workers";
+import { listMembers, readOwnMemberCard } from "@/lib/members/directory";
+import { recordError } from "@/lib/observability/errors";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { ButtonLink, EmptyState, Notice, PageHeader, cx, FOCUS_RING, linkClass } from "@/components/platform/ui";
+import MemberCard from "@/components/platform/members/MemberCard";
+import MemberFilters from "@/components/platform/members/MemberFilters";
+import MemberPager from "@/components/platform/members/MemberPager";
+import YouCard, { youStanding } from "@/components/platform/members/YouCard";
+import {
+  directoryHref, isFiltered, MEMBER_RESULTS_ID, MEMBERS_PATH, pageSummary, parseMemberUrl, readFilters, resultsHeading,
+} from "@/components/platform/members/member-display";
+// oxlint-disable-next-line import/no-unassigned-import -- The directory's grid, cards and search.
+import "@/components/platform/members/members.css";
+
+const { method } = Astro.request;
+const bare = (status: number, headers: Record<string, string> = {}) =>
+  new Response(status === 404 ? "Not found." : "Not allowed.", { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
+if (method !== "GET" && method !== "HEAD") return bare(405, { Allow: "GET, HEAD" });
+
+const { filters, cursor, seen } = parseMemberUrl(Astro.url.searchParams);
+const filtered = isFiltered(filters);
+const resolved = await resolveSpacePageWith(Astro.locals, "members", (me) => {
+  const caller = { id: me.user.id, isAdmin: me.capabilities.isAdmin };
+  return Promise.all([listMembers(env.DB, caller, readFilters(filters, cursor)), readOwnMemberCard(env.DB, caller)])
+    .then(([page, own]) => ({ page, own }), (error: unknown) => ({ error }));
+});
+// Without a spaces context there is no Community to show this in: the router already answered 404 for the flag.
+if (!resolved) return bare(404);
+const [context, read] = resolved;
+if ("error" in read) {
+  await recordError(env.DB, { source: "request", route: MEMBERS_PATH, error: read.error });
+  Astro.response.status = 503;
+}
+const loaded = "error" in read ? null : read;
+const members = loaded?.page.members ?? [];
+const total = loaded?.page.total ?? 0;
+const nextCursor = loaded?.page.nextCursor ?? null;
+const nextHref = nextCursor ? `${directoryHref(filters, { cursor: nextCursor, seen: seen + members.length })}#${MEMBER_RESULTS_ID}` : null;
+const firstHref = cursor ? `${directoryHref(filters)}#${MEMBER_RESULTS_ID}` : null;
+// Discover's assessment and criteria tools are an institution's (and staff's) only extra; the profiles are these.
+const discover = context.me.spaces.includes("discover");
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title="Members" titlePrefix={loaded ? "" : "Error: "}>
+  <div class="member-directory flex flex-col gap-8" data-member-directory>
+    <PageHeader title="Members">
+      Everyone with a saved profile on TTV, and the work they've posted. Only people signed in to TTV can see this page.
+    </PageHeader>
+
+    {loaded ? (
+      <>
+        {!cursor && !filtered && <YouCard standing={youStanding(loaded.own, context.me.capabilities)} />}
+
+        <MemberFilters filters={filters} />
+
+        <section aria-labelledby={MEMBER_RESULTS_ID} class="flex flex-col gap-5">
+          <div class="flex flex-col gap-1">
+            {/* Searches and pages land here (`#member-results`), so the next Tab reaches the first card. */}
+            <h2 id={MEMBER_RESULTS_ID} tabindex="-1" class={cx("w-fit scroll-mt-40 rounded-sm text-xl text-ink-primary", FOCUS_RING)} data-member-results>
+              {resultsHeading(total, filtered)}
+            </h2>
+            {members.length > 0 && (
+              <p class="max-w-prose text-sm text-ink-secondary">The order changes every day, so no one is always first.</p>
+            )}
+          </div>
+
+          {members.length > 0 ? (
+            <ul class="member-grid" data-member-grid>
+              {members.map((member) => <MemberCard member={member} />)}
+            </ul>
+          ) : filtered ? (
+            <EmptyState title="No members match this search">
+              Try fewer skills, a shorter search, or open to anyone.
+              <Fragment slot="action"><ButtonLink href={`${MEMBERS_PATH}#${MEMBER_RESULTS_ID}`}>Show everyone</ButtonLink></Fragment>
+            </EmptyState>
+          ) : cursor ? (
+            <EmptyState title="That's everyone">
+              No one else is listed after this point.
+              <Fragment slot="action"><ButtonLink href={MEMBERS_PATH}>Back to the first page</ButtonLink></Fragment>
+            </EmptyState>
+          ) : (
+            <EmptyState title="No one else is listed yet">
+              People appear here once they've saved a profile.
+            </EmptyState>
+          )}
+
+          <MemberPager firstHref={firstHref} nextHref={nextHref} summary={pageSummary(seen, members.length, total)} />
+        </section>
+
+        {discover && (
+          <p class="max-w-prose text-sm leading-relaxed text-ink-secondary" data-member-discover>
+            Looking for people whose documented work fits specific criteria? <a href="/dashboard/discover" class={linkClass()}>Discover</a> can
+            search and assess these same profiles for you.
+          </p>
+        )}
+      </>
+    ) : (
+      <Notice tone="danger" title="We couldn't load the members">
+        Nothing is lost. Try again in a moment.
+        <Fragment slot="actions"><ButtonLink href={Astro.url.pathname + Astro.url.search}>Try again</ButtonLink></Fragment>
+      </Notice>
+    )}
+  </div>
+</SpacePage>
