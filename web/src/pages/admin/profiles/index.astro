@@ -1,4 +1,5 @@
 ---
+import { reviewWork } from "@/lib/members/moderation";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import AdminLayout from "@/layouts/AdminLayout.astro";
@@ -51,6 +52,16 @@ let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
+  if (formData.get("form") === "work") {
+    const decision = formData.get("decision");
+    const id = formData.get("workId");
+    const revision = Number(formData.get("revision"));
+    if (typeof id === "string" && (decision === "keep" || decision === "hide")) {
+      const saved = await reviewWork(env.DB,Astro.locals.user!.id,id,revision,decision);
+      return redirectWithFlash(Astro,here,{tone:saved ? "success" : "info",title:saved ? "Work review saved" : "This work changed; review the current revision"});
+    }
+    return new Response("Invalid work review",{status:400});
+  }
   const profileId = formData.get("profileId");
   const action = parseAdminProfileAction(formData.get("_action"));
   const expectedVersion = parseAdminProfileVersion(formData.get("contentVersion"));
@@ -74,7 +85,9 @@ if (Astro.request.method === "POST") {
 const statusFilter = parseProfileStatus(Astro.url.searchParams.get("status"));
 const page = parsePage(Astro.url.searchParams.get("page"));
 const flash = takeFlash(Astro);
-const [{ rows, total, review }, spaces] = await Promise.all([
+const [{results:workReview}, { rows, total, review }, spaces] = await Promise.all([
+  env.DB.prepare(`SELECT id,title,description,version,moderationOutcome FROM communityJourney
+  WHERE moderationReviewRequired=1 ORDER BY moderationCheckedAt,id LIMIT 50`).all<{id:string;title:string;description:string;version:number;moderationOutcome:string}>(),
   readProfilesPage(db, { status: statusFilter, page }),
   resolveSpacePage(Astro.locals, "adminProfiles"),
 ]);
@@ -94,7 +107,7 @@ const reviewSections = [
   {
     id: "held",
     title: "Held by the content check",
-    description: "Not public, unless an earlier version was already live. Publish it, hide it, or clear the flag to leave it as it is.",
+    description: "Hidden from other readers. Clear the flag to release it for signed-in members, or hide it. Public listing still requires a completed cohort.",
     empty: "Nothing is held by the content check.",
     profiles: review.held,
   },
@@ -116,6 +129,23 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
 
     {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
+
+    <Card as="section" aria-labelledby="work-review-heading" className="flex flex-col gap-4">
+      <h2 id="work-review-heading" class="text-lg">Work awaiting a human review</h2>
+      {workReview.map(work => <article>
+        <h3 class="text-base">{work.title}</h3>
+        <p>{work.description}</p>
+        <p>{work.moderationOutcome === "hold" ? "Hidden from other readers until reviewed." : "Posted while the content check was unavailable."}</p>
+        <form method="POST" action={here} class="flex flex-wrap gap-2">
+          <input type="hidden" name="form" value="work" />
+          <input type="hidden" name="workId" value={work.id} />
+          <input type="hidden" name="revision" value={String(work.version)} />
+          <Button type="submit" name="decision" value="keep">Keep posted</Button>
+          <Button type="submit" name="decision" value="hide" variant="quiet">Make a private draft</Button>
+        </form>
+      </article>)}
+      {workReview.length === 0 && <p>No work is waiting for review.</p>}
+    </Card>
 
     {
       reviewSections.map((section) => (

@@ -168,7 +168,7 @@ describe("channel API route files through the middleware", () => {
   });
 
   it("give a channel page its attach tools: the caller's projects where they can post, none where they cannot", async () => {
-    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    s.database.exec(`INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
       ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution')`);
     const shareablesAt = async (path: string) => {
       let shareables: Awaited<ReturnType<typeof getRouteChannelShareables>> = null;

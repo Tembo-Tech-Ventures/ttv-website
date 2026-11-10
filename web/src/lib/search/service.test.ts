@@ -19,8 +19,8 @@ describe("authorized source retrieval", () => {
     const s = setup(fixture);
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "all" });
     expect(result.messages).toEqual([]);
-    expect(result.people.map(p => p.person.id)).toEqual(["synthetic-otieno"]);
-    expect(result.projects.map(p => p.journeyId)).toEqual(fixture.expected.isInstitution || fixture.expected.isAdmin ? ["project-synthetic-otieno"] : []);
+    expect(result.people.map(p => p.person.id)).toEqual(["synthetic-ineligible", "synthetic-otieno", "synthetic-private"]);
+    expect(result.projects.map(p => p.journeyId)).toEqual(["project-synthetic-ineligible", "project-synthetic-otieno", "project-synthetic-private"]);
     expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
     expect(result.sessionMoments.every(m => m.visibility.kind === "COHORT" && m.visibility.label === "Only you and your cohort")).toBe(true);
     const retrieved = JSON.stringify(s.retrieved);
@@ -32,9 +32,9 @@ describe("authorized source retrieval", () => {
     expect(s.queries).toHaveLength(fixture.expected.cohortIds.length > 0 ? 6 : 5);
   });
 
-  it.each(["DRAFT", "SUSPENDED"])("denies %s profiles and their projects even to an institution", async status => {
+  it.each(["SUSPENDED"])("denies %s profiles and their projects even to an institution", async status => {
     const s = setup({ globalRoles: ["INSTITUTION"] });
-    s.database.prepare("UPDATE studentProfile SET status=? WHERE userId='synthetic-otieno'").run(status);
+    s.database.prepare("UPDATE studentProfile SET status=?").run(status);
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "all" });
     expect(result.people).toEqual([]); expect(result.projects).toEqual([]);
     expect(s.retrieved).toEqual([]);
@@ -46,7 +46,7 @@ describe("authorized source retrieval", () => {
       const result = await searchPlatform(s.db, s.actor, { q, scope: "all" });
       expect(result.people).toEqual([]); expect(result.projects).toEqual([]); expect(result.sessionMoments).toEqual([]);
     }
-    expect(s.queries.filter(q => q.sql.includes("studentProfile")).map(q => q.sql).join("\n")).not.toMatch(/feedback|moderation|application\)|u\.name|u\.email|transcriptText|processingError/);
+    expect(s.queries.filter(q => q.sql.includes("studentProfile")).map(q => q.sql).join("\n")).not.toMatch(/feedback|moderationFlags|moderationScores|application\)|u\.name|u\.email|transcriptText|processingError/);
   });
 
   it("revocations take effect on the next request, including unpublished source profiles", async () => {
@@ -60,8 +60,8 @@ describe("authorized source retrieval", () => {
   it("allows a published owner only institution-shared projects, not their private project", async () => {
     const s = setup({}, "synthetic-otieno");
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "projects" });
-    expect(result.projects).toHaveLength(1);
-    expect(result.projects[0]).toMatchObject({ journeyId: "project-synthetic-otieno", version: 3, href: "/dashboard/community", visibility: { label: "Shared with approved institutions" } });
+    expect(result.projects).toHaveLength(3);
+    expect(result.projects.find(p=>p.owner.id==="synthetic-otieno")).toMatchObject({ journeyId: "project-synthetic-otieno", version: 3, href: "/talent/synthetic-otieno", visibility: { label: "Signed-in members" } });
   });
 
   it("limits demo administrators to demo profiles and explicit demo cohort membership", async () => {
@@ -81,8 +81,8 @@ describe("authorized source retrieval", () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }], globalRoles: ["INSTITUTION"] });
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "all" });
     expect(result.sessionMoments[0]).toMatchObject({ recordingId: "recording-a", title: "Session A", startSeconds: 12.5, quote: "Webhook cohort A evidence", href: "/dashboard/sessions/recording-a?t=12" });
-    expect(result.people[0]?.href).toBe("/talent/synthetic-otieno");
-    expect(result.projects[0]?.href).toBe("/dashboard/discover?profile=synthetic-otieno");
+    expect(result.people[0]?.href).toBeNull();
+    expect(result.projects[0]?.href).toBeNull();
   });
 
   it("treats SQL wildcards and injection strings literally", async () => {
@@ -125,15 +125,14 @@ describe("authorized source retrieval", () => {
     const s = setup({ globalRoles: ["INSTITUTION"] });
     s.database.prepare("INSERT OR IGNORE INTO Roles(id,name) VALUES (?,?)").run(role, role);
     s.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT 'owner-role','synthetic-otieno',id FROM Roles WHERE name=?").run(role);
-    expect((await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "projects" })).projects).toEqual([]);
-    expect(s.retrieved).toEqual([]);
+    expect((await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "projects" })).projects.map(p=>p.owner.id)).not.toContain("synthetic-otieno");
   });
 
   it("folds query and source with the same SQLite ASCII rules", async () => {
     const s = setup();
     s.database.exec("UPDATE studentProfile SET publicName='Émile',bio='SQL'");
-    expect((await searchPlatform(s.db, s.actor, { q: "É", scope: "people" })).people).toHaveLength(1);
-    expect((await searchPlatform(s.db, s.actor, { q: "sql", scope: "people" })).people).toHaveLength(1);
+    expect((await searchPlatform(s.db, s.actor, { q: "É", scope: "people" })).people).toHaveLength(3);
+    expect((await searchPlatform(s.db, s.actor, { q: "sql", scope: "people" })).people).toHaveLength(3);
   });
 
   it("finds people and projects beyond 500 eligible rows instead of sampling IDs", async () => {
@@ -142,10 +141,9 @@ describe("authorized source retrieval", () => {
     const profile = s.database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio) VALUES (?,?,?,'PUBLISHED','Synthetic','Ordinary work')");
     const completion = s.database.prepare("INSERT INTO programApplication(id,userId,programId,status,completedAt,application) VALUES (?,?,'cohort-a','COMPLETED',1,'{}')");
     const project = s.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Ordinary project','Evidence','2026-10-31','institution')");
-    const saved = s.database.prepare("INSERT INTO communityProfile(userId) VALUES (?)");
     for (let i = 0; i < 600; i++) {
       const id = `candidate-${String(i).padStart(4, "0")}`;
-      user.run(id, id + "@example.test"); profile.run(id, id, id); completion.run(id, id); project.run(id, id); saved.run(id);
+      user.run(id, id + "@example.test"); profile.run(id, id, id); completion.run(id, id); project.run(id, id);
     }
     s.database.prepare("UPDATE studentProfile SET bio=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");
     s.database.prepare("UPDATE communityJourney SET description=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");

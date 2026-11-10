@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 import { resolveStagingFixtureIdentity, retainedProbeMarker, verifyRetainedProbeTarget, type StagingFixturePersona } from "../staging-fixtures";
@@ -50,8 +51,10 @@ describe("retained read probe boundary",()=>{
   const id=DEMO_USER_IDS[0];
   f.database.prepare('INSERT INTO user(id,name,email) VALUES(?,?,?)').run(id,'Fictional Builder',`${id}@invalid.ttv`);
   f.database.prepare('INSERT INTO user(id,name,email) VALUES(?,?,?)').run('real','A Real Builder','real@example.com');
-  for(const who of [id,'real']) f.database.prepare('INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals) VALUES(?,?,?,?,?)').run(who,'Builder','Kotlin','["Kotlin"]','Work');
+  addMemberSchema(f.database);
+  for(const who of [id,'real']) f.database.prepare('INSERT INTO studentProfile(id,handle,userId,headline,bio,skills,opportunityGoals) VALUES(?,?,?,?,?,?,?)').run(who,who,who,'Builder','Kotlin','["Kotlin"]','Work');
   f.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES('published',?,'Public','Kotlin','2026-10-25','institution'),('private',?,'Hidden','Hidden','2026-10-25','private')").run(id,id);
+  f.database.exec("UPDATE communityJourney SET state='DRAFT' WHERE id='private'");
   f.database.prepare("INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES('real-confirm','published','real','PRIVATE REAL MENTOR','review',1,'MENTOR')").run();
   const service=createCommunityService(f.db,f.id,actor,'staging');
   expect((await service.searchProfiles({query:'Kotlin'})).map(p=>p.userId)).toEqual([id]);

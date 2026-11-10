@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
 import { createCapabilityDatabase } from "./capabilities.test-support";
@@ -35,6 +36,7 @@ beforeEach(() => {
   for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql"]) {
     fixture.database.exec(readMigration(migration));
   }
+  addMemberSchema(fixture.database);
   Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production" });
   mocks.getSession.mockResolvedValue(auth);
   mocks.authenticatePersonalAccessToken.mockResolvedValue(null);

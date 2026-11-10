@@ -36,7 +36,7 @@ const entry = {
   occurredAt: "2026-10-24",
   evidenceUrl: "https://example.com/library",
   version: 3,
-  visibility: "institution" as const,
+  status: "posted" as const,
   confirmations: [
     {
       id: "confirmation",
@@ -209,7 +209,7 @@ describe("community API boundary", () => {
       description: "Built the library flow",
       occurredAt: "2026-10-24",
       evidenceUrl: "https://example.com/library",
-      visibility: "institution",
+      status: "posted",
     });
   });
   it("binds mentor confirmation to the reviewed revision", async () => {
@@ -396,9 +396,9 @@ describe("chat request deadline", () => {
 });
 
 it('updates the loaded own revision without republishing private work or dropping historical confirmations',async()=>{
- const current={...entry,visibility:'private' as const};const fetcher=vi.fn().mockResolvedValueOnce(Response.json({id:entry.id,updated:true})).mockResolvedValueOnce(Response.json({entries:[{...current,version:4,title:'Updated title'}]}));vi.stubGlobal('fetch',fetcher);
+ const current={...entry,status:'draft' as const};const fetcher=vi.fn().mockResolvedValueOnce(Response.json({id:entry.id,updated:true})).mockResolvedValueOnce(Response.json({entries:[{...current,version:4,title:'Updated title'}]}));vi.stubGlobal('fetch',fetcher);
  const saved=await updateContribution(mapJourney(current),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''});
- expect(fetcher.mock.calls[0][0]).toBe('/api/community/journey/'+encodeURIComponent(entry.id));expect(fetcher.mock.calls[0][1].method).toBe('PUT');expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({visibility:'private',expectedRevision:3});expect(saved.version).toBe(4);expect(saved.confirmations[0].journeyVersion).toBe(2);
+ expect(fetcher.mock.calls[0][0]).toBe('/api/community/journey/'+encodeURIComponent(entry.id));expect(fetcher.mock.calls[0][1].method).toBe('PUT');expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({status:'draft',expectedRevision:3});expect(saved.version).toBe(4);expect(saved.confirmations[0].journeyVersion).toBe(2);
 });
 it('surfaces a stale-edit conflict before any refresh read',async()=>{
  const fetcher=respond({},409);await expect(updateContribution(mapJourney(entry),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''})).rejects.toMatchObject({status:409});expect(fetcher).toHaveBeenCalledOnce();

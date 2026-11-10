@@ -18,6 +18,7 @@ const profileSchema = z.object({
   bio: z.string(),
   skills: z.array(z.string()),
   opportunityGoals: z.string(),
+  moderationHold:z.boolean().optional(),
   version: z.number().int(),
   updatedAt: z.number().nullable(),
 });
@@ -37,7 +38,8 @@ const entrySchema = z.object({
   description: z.string(),
   evidenceUrl: z.string().nullable().optional(),
   occurredAt: z.string(),
-  visibility: z.enum(["institution", "private"]),
+  status: z.enum(["posted", "draft"]),
+  moderationHold:z.boolean().optional(),
   version: z.number().int().positive(),
   confirmations: z.array(confirmationSchema).default([]),
 });
@@ -61,7 +63,8 @@ export function mapJourney(entry: EntryDto): JourneyClaim {
     description: entry.description,
     date: entry.occurredAt,
     version: entry.version,
-    visibility: entry.visibility,
+    status: entry.status,
+    moderationHold:entry.moderationHold,
     skills: [],
     evidence: entry.evidenceUrl
       ? [
@@ -89,6 +92,7 @@ export function mapProfile(
   entries?: EntryDto[],
 ): CommunityProfile {
   return {
+    moderationHold:profile.moderationHold,
     id: profile.userId,
     version: profile.version,
     name: profile.name,
@@ -192,7 +196,7 @@ export async function saveContribution(draft: ClaimDraft) {
       description: draft.description,
       evidenceUrl: draft.sourceUrl.trim() || null,
       occurredAt: draft.date,
-      visibility: "institution",
+      status: "posted",
     },
   );
   return mapJourney(result.entry);
@@ -200,7 +204,7 @@ export async function saveContribution(draft: ClaimDraft) {
 export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft): Promise<JourneyClaim> {
   await communityRequest(`journey/${encodeURIComponent(claim.id)}`,z.object({id:z.string(),updated:z.literal(true)}),"PUT",{
     title:draft.title,description:draft.description,evidenceUrl:draft.sourceUrl.trim()||null,occurredAt:draft.date,
-    visibility:claim.visibility??"institution",expectedRevision:claim.version,
+    status:claim.status??"posted",expectedRevision:claim.version,
   });
   const current=await communityRequest("journey",z.object({entries:z.array(entrySchema)}));
   const saved=current.entries.find(entry=>entry.id===claim.id);

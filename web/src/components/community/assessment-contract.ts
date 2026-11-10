@@ -95,7 +95,7 @@ export function assessmentSource(
       : null;
   const claim = profile.claims.find(
     (item) =>
-      item.visibility === "institution" &&
+      item.status === "posted" &&
       (citation.kind === "journey"
         ? item.id === citation.id && item.version === citation.version
         : item.confirmations.some(

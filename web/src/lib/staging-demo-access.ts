@@ -160,7 +160,7 @@ export async function demoDatasetStatus(env: DemoEnvironment, request: Request, 
   };
   const [people,profiles,contributions,confirmations]=await Promise.all([
     count(`SELECT count(*) total FROM user u WHERE ${owned}`,[ids]),
-    count(`SELECT count(*) total FROM communityProfile p JOIN user u ON u.id=p.userId WHERE ${owned}`,[ids]),
+    count(`SELECT count(*) total FROM studentProfile p JOIN user u ON u.id=p.userId WHERE ${owned}`,[ids]),
     count(`SELECT count(*) total FROM communityJourney j JOIN user u ON u.id=j.userId WHERE ${owned} AND j.id LIKE ?`,[ids,DEMO_PREFIX+'%']),
     count(`SELECT count(*) total FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=j.userId WHERE ${owned} AND j.id LIKE ? AND c.id LIKE ?`,[ids,DEMO_PREFIX+'%',DEMO_PREFIX+'%']),
   ]);

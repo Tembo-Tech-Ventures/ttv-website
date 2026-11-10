@@ -634,7 +634,7 @@ export async function seedAgentPreviewFixtures({
       ["programRole", "userId"],
       ["programApplication", "userId"],
       ["studentProfile", "userId"],
-      ["communityProfile", "userId"],
+
       ["communityJourney", "userId"],
       ["communityConfirmation", "mentorId"],
       ["attention_item", "userId"],
@@ -780,30 +780,9 @@ export async function seedAgentPreviewFixtures({
     ],
   );
 
-  // Saved community profile for Amina: institutional discovery lists only
-  // people who saved one, so the preview institution persona has an eligible
-  // synthetic member to find. Converges on every seed.
-  await executeQuery(
-    databaseId,
-    `INSERT INTO "communityProfile"
-      ("userId", "headline", "bio", "skills", "opportunityGoals", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT("userId") DO UPDATE SET
-       "headline" = excluded."headline",
-       "bio" = excluded."bio",
-       "skills" = excluded."skills",
-       "opportunityGoals" = excluded."opportunityGoals",
-       "updatedAt" = excluded."updatedAt"`,
-    [
-      "ttv-fixture-user-amina",
-      "Fictional full-stack builder · Nairobi",
-      "Synthetic preview profile. I build booking and payment tools for community clinics.",
-      '["TypeScript","React","D1"]',
-      "A first full-stack developer role",
-      createdAt,
-      createdAt,
-    ],
-  );
+  await executeQuery(databaseId,
+    `UPDATE studentProfile SET bio=?,opportunityGoals=? WHERE userId=?`,
+    ["Synthetic preview profile. I build booking and payment tools for community clinics.","A first full-stack developer role","ttv-fixture-user-amina"]);
 
   // Public-reader and moderation fixtures. The second published post is kept
   // separate from the reader assertion so the admin mutation journey can
@@ -977,10 +956,10 @@ export async function seedAgentPreviewFixtures({
   // Highlights for Amina
   await executeQuery(
     databaseId,
-    `INSERT INTO "profileHighlight"
-      ("id", "profileId", "repoFullName", "repoUrl", "description", "language",
+    `INSERT INTO "communityJourney"
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "profileId", "repoFullName", "repoUrl", "description", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "profileId" = excluded."profileId",
        "repoFullName" = excluded."repoFullName",
@@ -1009,10 +988,10 @@ export async function seedAgentPreviewFixtures({
 
   await executeQuery(
     databaseId,
-    `INSERT INTO "profileHighlight"
-      ("id", "profileId", "repoFullName", "repoUrl", "description", "language",
+    `INSERT INTO "communityJourney"
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "profileId", "repoFullName", "repoUrl", "description", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "profileId" = excluded."profileId",
        "repoFullName" = excluded."repoFullName",

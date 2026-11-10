@@ -1,4 +1,6 @@
 ---
+import { publicProfileEligibility } from "@/lib/community/eligibility";
+import { sql as eligibilitySql } from "drizzle-orm";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import TalentCard from "@/components/talent/TalentCard.astro";
 import {
@@ -19,7 +21,7 @@ import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 const db = drizzle(env.DB, { schema });
 
 const rawProfiles = await db.query.studentProfile.findMany({
-  where: eq(schema.studentProfile.status, "PUBLISHED"),
+  where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
   with: {
     user: {
       columns: { id: true },

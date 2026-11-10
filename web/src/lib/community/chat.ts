@@ -77,7 +77,7 @@ async function executeTool(service: CommunityService, institutional: boolean, na
       const own = name === "get_own_profile";
       if (own) parseInput(z.object({}).strict(), args);
       const p = own ? await service.getOwnProfile() : await service.getProfile(parseInput(targetInput, args).userId);
-      const journey = (await service.listJourney(p.userId)).filter(j=>j.visibility === "institution");
+      const journey = (await service.listJourney(p.userId)).filter(j=>j.status === "posted" && !j.moderationHold);
       output = { profile: p, journey };
       citeEvidence({ profile: p, journey }, citations);
     } else output = { error: "Tool unavailable for this role." };
@@ -143,12 +143,13 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
   requireGateway(env);
   const access = await service.access();
   const institutional = access.isInstitution || access.isAdmin;
+  if (profileId && !institutional && profileId !== (await service.getOwnProfile()).userId) throw new CommunityError("Approved institutional access is required.",403);
   if (orderByEvidence && (!institutional || profileId || rubric)) throw new CommunityError("Evidence ordering requires institutional discovery without a selected profile or rubric.",403);
   const orderCandidates = orderByEvidence ? new Map<string,string>() : undefined;
   const toolNames: string[] = [];
   const readEvidence = new Map<string,SelectedEvidence>();
   // The service checks the authenticated actor; neither selected IDs nor context grant access.
-  const selected = profileId ? { profile: await service.getProfile(profileId), journey: (await service.listJourney(profileId)).filter(j=>j.visibility === "institution") } : undefined;
+  const selected = profileId ? { profile: await service.getProfile(profileId), journey: (await service.listJourney(profileId)).filter(j=>j.status === "posted" && !j.moderationHold) } : undefined;
   const tools = selected ? [tool("get_selected_profile", "Read evidence for the selected person only. No subject switching.", {}, [])] : institutional ? [
     tool("search_profiles", "Search visible community profiles. Maximum 10 results.", { query: { type: "string", maxLength: 200 }, skills:{type:"array",items:{type:"string",maxLength:60},maxItems:10}, limit: { type: "integer", minimum: 1, maximum: 10 } }, ["query"]),
     tool("get_profile", "Read a visible profile and its published evidence.", { userId: { type: "string" } }, ["userId"]),

@@ -1,3 +1,4 @@
+import { postedWorkEligibility } from "@/lib/community/eligibility";
 import { createId } from "@paralleldrive/cuid2";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { confirmationsOf, embedsForReader, resolveOwnProject, screeningText } from "@/lib/channels/embeds";
@@ -67,7 +68,7 @@ export const REQUEST_COLUMNS = `r.id, r.requesterId, r.mentorId, r.status, r.for
   c.state AS caseState, c.decision AS caseDecision, rp.requestId IS NOT NULL AS reported,
   c.closedRequest,
   CASE WHEN r.project IS NOT NULL THEN (SELECT ${confirmationsOf("j.id", "r.journeyVersion")} FROM communityJourney j
-    WHERE j.id = r.journeyId AND j.userId = r.requesterId AND j.visibility = 'institution') END AS projectAccess,
+    WHERE j.id = r.journeyId AND j.userId = r.requesterId AND ${postedWorkEligibility("j")}) END AS projectAccess,
   ${personColumns("ru", "r.requesterId", "requester", { cohorts: true })},
   ${personColumns("mu", "r.mentorId", "mentor")},
   ${personColumns("tu", "r.redirectedToId", "target")}`;

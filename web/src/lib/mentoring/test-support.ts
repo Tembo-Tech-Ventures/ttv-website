@@ -53,13 +53,13 @@ export function mentoringDatabase(fixture: Partial<CapabilityCase> & { conduct?:
   }
   if (fixture.conduct !== false) s.agree();
   // A member account (requests.ts IS_MEMBER): a community profile, unless the test needs none.
-  if (fixture.member !== false) database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(VIEWER);
+  if (fixture.member !== false) database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(VIEWER,VIEWER,VIEWER);
 
   /** A published project of the caller's (or `owner`'s) at `version`. */
   function project(id: string, { owner = VIEWER, version = 1, visibility = "institution", title = "Bus fare splitter" } = {}) {
-    database.prepare(`INSERT INTO communityJourney (id, userId, title, description, evidenceUrl, occurredAt, visibility, version, updatedAt)
-      VALUES (?, ?, ?, 'Splits matatu fares and settles through M-Pesa.', 'https://example.test/fare-split', '2026-10', ?, ?, 1)`)
-      .run(id, owner, title, visibility, version);
+    database.prepare(`INSERT INTO communityJourney (id, userId, title, description, evidenceUrl, occurredAt, visibility, state, version, updatedAt)
+      VALUES (?, ?, ?, 'Splits matatu fares and settles through M-Pesa.', 'https://example.test/fare-split', '2026-10', 'institution', ?, ?, 1)`)
+      .run(id, owner, title, visibility === "private" ? "DRAFT" : "POSTED", version);
     return { type: "project" as const, journeyId: id, version };
   }
 

@@ -4,7 +4,7 @@ import type { CommunityService } from "./service";
 const input={context:"Elephant tracking field projects. Need Python; should have first-aid training.",skills:"python, first-aid",query:""};
 const criteria=[{text:"Python programming",importance:"required"},{text:"first-aid training",importance:"requested"}];
 function setup() {
-  const evidence:Awaited<ReturnType<CommunityService["discoveryEvidence"]>>=Array.from({length:30},(_,i)=>({profile:{userId:`p${i}`,name:i===29?"Fictional Grace Wanjiku":`Python ${i}`,image:null,headline:"Python tools",bio:"Python programming",skills:["Python"],opportunityGoals:"",version:1,updatedAt:1},entries:i===29?[{id:"first-aid",userId:"p29",title:"First Aid Course",description:"I completed a First Aid at Work course.",occurredAt:"2026-10-08",visibility:"institution",version:1,createdAt:1,updatedAt:1,confirmations:[]}]:[]}));
+  const evidence:Awaited<ReturnType<CommunityService["discoveryEvidence"]>>=Array.from({length:30},(_,i)=>({profile:{userId:`p${i}`,name:i===29?"Fictional Grace Wanjiku":`Python ${i}`,image:null,headline:"Python tools",bio:"Python programming",skills:["Python"],opportunityGoals:"",version:1,updatedAt:1},entries:i===29?[{id:"first-aid",userId:"p29",title:"First Aid Course",description:"I completed a First Aid at Work course.",occurredAt:"2026-10-08",status:"posted",version:1,createdAt:1,updatedAt:1,confirmations:[]}]:[]}));
   const cache=new Map<string,unknown>();
   const run=vi.fn(async(model:string,request:Record<string,unknown>)=>{
     if(model.includes("gemma"))return {choices:[{message:{content:JSON.stringify({criteria})}}]};

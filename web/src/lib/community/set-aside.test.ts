@@ -26,7 +26,7 @@ const ON = { DEPLOYMENT_ENVIRONMENT: "agent-pr-1", PLATFORM_FLAGS_OVERRIDE: "all
 const OFF = { DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: "all" } as Env;
 const contribution = {
   title: "Chama savings ledger", description: "Built and tested a fictional ledger for a savings group.",
-  evidenceUrl: "https://github.com/example/chama-ledger", occurredAt: "2026-10-20", visibility: "institution",
+  evidenceUrl: "https://github.com/example/chama-ledger", occurredAt: "2026-10-20", status: "posted",
 } as const;
 const profile = { headline: "Builder", bio: "Builds tools for savings groups", skills: ["TypeScript"], opportunityGoals: "First developer role" };
 
@@ -95,9 +95,9 @@ describe("mentor private set-aside", () => {
     expect(await f.mentor.countAwaitingConfirmation()).toBe(0);
 
     // Unpublishing and sharing again is a new revision as well.
-    await f.member.setJourneyVisibility(a.id, { visibility: "private" });
+    await f.member.setJourneyStatus(a.id, { status: "draft" });
     expect(await f.mentor.listMentorship()).toEqual([]);
-    await f.member.setJourneyVisibility(a.id, { visibility: "institution" });
+    await f.member.setJourneyStatus(a.id, { status: "posted" });
     expect((await f.mentor.listMentorship())[0]).toMatchObject({ id: a.id, version: 4, setAsideByCurrentMentor: false });
     expect(await f.mentor.countAwaitingConfirmation()).toBe(1);
     // Undo clears this mentor's set-asides for the contribution, at every revision.
@@ -108,12 +108,12 @@ describe("mentor private set-aside", () => {
   it("only sets aside shared work by someone else that waits for this mentor, and only undoes their own", async () => {
     const f = setup();
     const shared = await f.member.createJourney(contribution);
-    const draft = await f.member.createJourney({ ...contribution, visibility: "private" });
+    const draft = await f.member.createJourney({ ...contribution, status: "draft" });
     const own = await f.mentor.createJourney(contribution);
     const revision = { expectedRevision: 1 };
 
     for (const service of [f.member, f.institution, f.as("member2")]) await expect(service.setAsideJourney(shared.id, revision)).rejects.toMatchObject({ status: 403 });
-    await expect(f.mentor.setAsideJourney(own.id, revision)).rejects.toMatchObject({ status: 403 });
+    await expect(f.mentor.setAsideJourney(own.id, revision)).rejects.toMatchObject({ status: 404 });
     await expect(f.mentor.setAsideJourney(draft.id, revision)).rejects.toMatchObject({ status: 404 });
     await expect(f.mentor.setAsideJourney("missing", revision)).rejects.toMatchObject({ status: 404 });
     await expect(f.mentor.setAsideJourney(shared.id, { expectedRevision: 2 })).rejects.toMatchObject({ status: 409 });
@@ -156,7 +156,7 @@ describe("mentor private set-aside", () => {
     const f = setup();
     await f.member.updateOwnProfile(profile);
     const a = await f.member.createJourney(contribution);
-    await f.member.createJourney({ ...contribution, title: "Draft", visibility: "private" });
+    await f.member.createJourney({ ...contribution, title: "Draft", status: "draft" });
     await f.mentor2.confirmJourney(a.id, { expectedRevision: 1, statement: "I read the ledger code and its tests", method: "Repository review" });
     const complete = vi.fn().mockResolvedValue(JSON.stringify({ criteria: [{ criterionId: "tool", status: "insufficient", rating: null, explanation: "Not enough documented evidence.", citations: [] }] }));
     vi.spyOn(assessmentProvider, "createAssessmentProvider").mockReturnValue({ model: "test-model", complete });

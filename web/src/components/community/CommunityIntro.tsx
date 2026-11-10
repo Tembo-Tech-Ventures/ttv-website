@@ -8,7 +8,7 @@ const TOUCH = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse
 const steps = [
   ["01", "Show the work", "Build a profile around your contributions. Add projects, source links, and the opportunities you want to explore."],
   ["02", "Add context", "Mentors can confirm the specific work they have checked. Their notes stay attached to that contribution, not a blanket endorsement of a person."],
-  ["03", "Start a conversation", "Approved institutions can discover saved community profiles and the contributions members share. Evidence gives people a place to start asking better questions."],
+  ["03", "Start a conversation", "Everyone signed in to TTV can see saved profiles and posted work. Evidence gives people a place to start asking better questions."],
 ];
 
 export default function CommunityIntro({ isAuthenticated = false, full = false }: { isAuthenticated?: boolean; full?: boolean }) {
@@ -51,7 +51,7 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
           <div className="mt-12 grid gap-8 border-t border-[color:var(--color-rule)] pt-10 md:grid-cols-2">
             <section aria-labelledby="community-visibility-heading">
               <h2 id="community-visibility-heading" className="font-display text-2xl text-ink-primary">Know who can see your work.</h2>
-              <p className="mt-4 leading-relaxed text-ink-secondary">Approved institutions can discover your saved community profile and the contributions you share. Mentors can review those shared contributions. Cohort recordings and internal records are not part of institutional discovery.</p>
+              <p className="mt-4 leading-relaxed text-ink-secondary">Everyone signed in to TTV can see your profile and everything you post. Mentors can review those shared contributions. Cohort recordings and internal records are not part of institutional discovery.</p>
               <p className="mt-4 leading-relaxed text-ink-muted">A contribution or mentor confirmation does not guarantee a job, placement, or introduction.</p>
             </section>
             <section id="institutions" aria-labelledby="community-institution-heading">

@@ -19,7 +19,7 @@ const ALUMNA: OverviewFacts = {
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
-    status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
+    onPublicSite:1, status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
     location: "Kisumu", country: "KE", skills: ["TypeScript", "SQL"], publicName: null, publicAvatarUrl: null,
   },
   journey: [],

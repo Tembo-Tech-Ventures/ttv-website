@@ -170,7 +170,7 @@ export async function saveProfileIdentity(
     linkedinUrl: profile.linkedinUrl,
     highlights: profile.highlights.map(
       ({ repoFullName, description, blurb, language, topics }) => ({
-        repoFullName,
+        repoFullName: repoFullName ?? "Work",
         description,
         blurb,
         language,

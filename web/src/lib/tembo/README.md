@@ -1,5 +1,31 @@
 # Tembo in channels
 
+## Member visibility (2026-11-09)
+
+`studentProfile` is the single saved profile for every signed-in person. `communityProfile`
+has been migrated and dropped. A saved profile is discoverable while it is neither
+SUSPENDED nor held by moderation; MENTOR and ADMIN owners are excluded. All signed-in
+readers, including institutions, see the same directory. Institutions add AI discovery
+and assessment tools, not access to more people or evidence.
+
+`communityJourney` stores both contributions and repository work. `profileHighlight`
+has been migrated and dropped; repository snapshots and chosen order live on work rows.
+POSTED work follows the profile's visibility. DRAFT work is author-only; old private
+rows became drafts. The retired NOT NULL `visibility` column always receives the legacy
+constant `institution` and is never used for authorization. REST work requests and responses use `status: "posted" | "draft"`. PATCH
+`/api/community/journey/:id` changes that status. The old `visibility` input
+is deprecated and normalized once at validation; responses never emit it.
+
+Clef checks saved profile text and posted work, fails open on errors, and can hold an
+item for a human. Shared reads never include held items. Author/editor and admin reads
+can inspect them. The shared predicates live in `src/lib/community/eligibility.ts`.
+Public surfaces additionally require PUBLISHED and a valid cohort completion;
+PUBLISHED means opting into the public website, not becoming visible to members.
+
+`src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
+one D1 batch each. The directory always shows the shared view, even to the author.
+
+
 Tembo answers questions inside channels (B-3.1). Shipped dark behind the
 `tembo_channels` flag; every route also needs `channels`. Plan: SAM idea
 01M68GQAP1DCSVMRJMZS771ZRB, §3 "Tembo in channels". Wire contracts:
@@ -103,7 +129,7 @@ reaches no more than its members.
 | Channel | Tools | Sources |
 |---|---|---|
 | COHORT | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages |
-| COMMUNITY | `search_projects`, `search_channel` | Public builder profiles (the /talent rule: published, after a completed cohort) and their highlights; projects their owners shared in this channel, as shared there and while still shared; this channel's messages. Never recordings |
+| COMMUNITY | `search_projects`, `search_channel` | Eligible saved member profiles and their posted, unheld work; projects their owners shared in this channel, as shared there and while still shared; this channel's messages. Never recordings |
 | DIRECT | `search_channel` | This conversation only, and only when someone in it asks |
 
 Messages are read as a reader without privileges reads them: a person's (never
@@ -112,7 +138,7 @@ and with contact details masked wherever a flag masks them
 (`bodyForReader(…, false)`, `src/lib/channels/moderation/mask.ts`), so Tembo
 never sees a masked span. A search hit that matched only inside a masked span is
 dropped. Nothing reads staff notes, feedback, applications, moderation events
-or evidence, private chats, other channels, or institution-shared projects
+or evidence, private chats, other channels, or posted projects
 nobody shared here. With the question come the thread so far (its root and
 latest replies) or, for a root message, the channel's latest messages.
 
@@ -169,7 +195,7 @@ it can see there. Kept tags become `[1]`, `[2]`, … in order of first use, righ
 after the sentence they support, and the matching `Citation`s are stored with
 the message (the card links each `[n]` to `citations[n - 1]` and numbers its
 chips to match, QA3-02): `message`, `sessionClip`,
-`project` or `profile` (a public `/talent/<handle>` page). Answers stop at
+`project` or `profile` (an eligible public `/talent/<handle>` page, or a text citation for a member without a public page, via `memberProfileHref`). Answers stop at
 2,000 characters, at a whole sentence.
 
 ### Posting

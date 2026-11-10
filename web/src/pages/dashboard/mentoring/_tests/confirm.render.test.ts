@@ -48,7 +48,7 @@ function seeded() {
     INSERT INTO user(id,name,email) VALUES ('${ADMIN}','Amina Hassan','amina@example.test');
     INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','${ADMIN}',id FROM Roles WHERE name='ADMIN';
-    INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,evidenceUrl) VALUES
+    INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,evidenceUrl) VALUES
       ('ledger','${BUILDER}','Chama savings ledger','Built a fictional ledger, with tests.','2026-10-21','institution','https://github.com/example/ledger');
     UPDATE feature_flag SET audience='ALL';`);
   Object.assign(mocks.env, { DB: withRaw(database, db), DEPLOYMENT_ENVIRONMENT: "production" });

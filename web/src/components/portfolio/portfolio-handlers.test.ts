@@ -16,6 +16,10 @@ function makeFormData(entries: Record<string, string>): FormData {
 }
 
 describe("extractProfileFormData", () => {
+  it("accepts opportunity goals without clearing them from older forms",()=>{
+    expect(extractProfileFormData(makeFormData({opportunityGoals:"Collaborate"})).opportunityGoals).toBe("Collaborate");
+    expect(extractProfileFormData(makeFormData({})).opportunityGoals).toBeUndefined();
+  });
   it("extracts text fields correctly", () => {
     const fd = makeFormData({
       handle: " MyHandle ",
@@ -102,7 +106,9 @@ function mockDb(
           async (opts?: {
             where?: unknown;
             columns?: Record<string, unknown>;
+            with?: unknown;
           }) => {
+            if (opts?.with && !opts.columns) return {id:"profile-1",contentVersion:1,handle:"test-user",skills:"[]",user:{name:"Test User",image:null}};
             // Dispatch on requested columns: `saveProfile` issues two distinct
             // lookups (handle lock, then handle uniqueness) against this mock.
             if (opts?.columns && "publishedAt" in opts.columns) {
@@ -357,7 +363,7 @@ describe("saveProfile", () => {
       const result = await saveProfile(db as never, "user-1", fd, "profile-1");
 
       expect(result.success).toBe(true);
-      expect(updateFn).toHaveBeenCalledTimes(1);
+      expect(updateFn).toHaveBeenCalledTimes(2);
     });
 
     it("treats a differently-cased submission of the same handle as unchanged", async () => {
@@ -379,7 +385,7 @@ describe("saveProfile", () => {
 
       expect(result.success).toBe(true);
       expect(result.handleError).toBeUndefined();
-      expect(updateFn).toHaveBeenCalledTimes(1);
+      expect(updateFn).toHaveBeenCalledTimes(2);
     });
 
     it("allows a handle change while the profile is still unpublished", async () => {
@@ -398,7 +404,7 @@ describe("saveProfile", () => {
       const result = await saveProfile(db as never, "user-1", fd, "profile-1");
 
       expect(result.success).toBe(true);
-      expect(updateFn).toHaveBeenCalledTimes(1);
+      expect(updateFn).toHaveBeenCalledTimes(2);
     });
 
     it("does not mutate a draft suspended while the save is in flight", async () => {
@@ -476,6 +482,7 @@ function moderationDb(
   return {
     db: {
       query: {
+        programApplication: {findFirst: vi.fn(async () => ({status:"COMPLETED",completedAt:new Date()}))},
         studentProfile: {
           findFirst: vi.fn(async () => profile),
         },
@@ -506,6 +513,12 @@ function expectVersionedStatusWriteGuard(
 }
 
 describe("publishProfile", () => {
+  it("refuses public listing without a valid completion", async () => {
+    const {db,setProfile}=moderationDb(draftProfile);
+    db.query.programApplication.findFirst.mockResolvedValue({status:"APPROVED",completedAt:new Date()});
+    expect(await publishProfile(db as never,"user-1","profile-1")).toMatchObject({success:false,error:expect.stringContaining("Complete a cohort")});
+    expect(setProfile).not.toHaveBeenCalled();
+  });
   it("publishes a passing draft immediately", async () => {
     const { db, setProfile, where } = moderationDb(draftProfile);
     const checkedAt = new Date("2026-10-10T12:00:00Z");
@@ -648,7 +661,7 @@ describe("published profile edits", () => {
     user: { name: "Mutable Account Name", image: null },
   };
 
-  it("keeps the previous public fields live when an edit is held", async () => {
+  it("saves the submitted fields before holding the profile for human review", async () => {
     const setProfile = vi.fn();
     const updateProfile = vi.fn();
     const db = mockDb({
@@ -688,7 +701,8 @@ describe("published profile edits", () => {
         moderationReviewRequired: true,
       }),
     );
-    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
+    expect(setProfile.mock.calls[0]?.[0]).toHaveProperty("bio", "email me@example.com");
+    expect(setProfile.mock.invocationCallOrder[0]).toBeLessThan(checkContent.mock.invocationCallOrder[0]);
     expect(checkContent).toHaveBeenCalledWith(
       expect.objectContaining({
         displayName: "Checked Public Name",

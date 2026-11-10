@@ -68,3 +68,8 @@ describe("a Tembo answer's markers (QA3-02)", () => {
     expect(markup).not.toContain(MASKED_CONTACT);
   });
 });
+
+it("renders a non-graduate profile citation without inventing a route",()=>{
+ const markup=renderToStaticMarkup(<MessageBody body="Wanjiku built this [1]." names={[]} citations={[{type:"profile",userId:"w",title:"Wanjiku",href:null}]} />);
+ expect(markup).toContain("Source 1: Wanjiku · on TTV");expect(markup).not.toContain("href=");
+});

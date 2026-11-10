@@ -8,8 +8,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  * list with its status filter, and the publishing actions, with the reads and
  * the write mocked. The SQL itself runs in round-trips.render.test.ts.
  */
-const store = vi.hoisted(() => ({ read: vi.fn(), moderate: vi.fn() }));
-vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
+const store = vi.hoisted(() => ({ read: vi.fn(), moderate: vi.fn(), work:vi.fn(),reviewWork:vi.fn() }));
+vi.mock("cloudflare:workers", () => ({ env: { DB: {prepare:()=>({all:store.work})} } }));
+vi.mock("@/lib/members/moderation",()=>({reviewWork:store.reviewWork}));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: () => ({}) }));
 vi.mock("@/layouts/AdminLayout.astro", () => import("@/test/StubLayout.astro"));
 vi.mock("@/components/platform/spaces/space-page", () => ({ resolveSpacePage: async () => null }));
@@ -37,6 +38,8 @@ beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
 });
 beforeEach(() => {
+  store.work.mockReset().mockResolvedValue({results:[]});
+  store.reviewWork.mockReset().mockResolvedValue(true);
   store.read.mockReset().mockResolvedValue({ rows: [row()], total: 1, review: { held: [held()], unavailable: [] } });
   store.moderate.mockReset().mockResolvedValue("done");
 });
@@ -51,6 +54,14 @@ async function visit(path = "/admin/profiles", form?: Record<string, string>) {
 }
 
 describe("the profiles list on the style guide", () => {
+  it("shows held work for human review and posts the revision that was seen", async () => {
+    store.work.mockResolvedValue({results:[{id:"work-1",title:"Chama ledger",description:"Saved work",version:3,moderationOutcome:"hold"}]});
+    const {body}=await visit();
+    expect(body).toContain("Chama ledger");
+    expect(body).toContain('name="revision" value="3"');
+    expect((await visit("/admin/profiles",{form:"work",workId:"work-1",revision:"3",decision:"keep"})).status).toBe(303);
+    expect(store.reviewWork).toHaveBeenCalledWith(expect.anything(),"synthetic-admin","work-1",3,"keep");
+  });
   it("is one title, the content check's queue, then every profile in a kit table with words for statuses", async () => {
     const { status, body } = await visit();
     expect(status).toBe(200);

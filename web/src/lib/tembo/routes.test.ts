@@ -589,7 +589,7 @@ describe("what an answer can cite (QA-3)", () => {
 
   it("says who built a shared project: its owner, by the name the channel shows on their share (QA3-06)", async () => {
     const s = setup();
-    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    s.database.exec(`INSERT INTO studentProfile(id,userId,handle) VALUES ('p-otieno','synthetic-otieno','otieno'); INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
       ('journey-ledger', 'synthetic-otieno', 'Chama ledger', 'Now', '2026-10-01', 'institution')`);
     const share = (author: "synthetic-otieno" | "synthetic-achieng", title: string) => {
       const id = s.message("help", { body: "My project", author });

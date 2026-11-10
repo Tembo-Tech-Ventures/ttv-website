@@ -50,7 +50,7 @@ describe("synthetic assessment durable claim", () => {
  it("uses the deployed route with one provider binding call, then rejects replay", async () => {
    const f=fixture(), institution=f.add("institution",runId,true), member=f.add("member"), empty=f.add("otherMember");
    // A saved profile with no evidence in it: discoverable, but nothing to assess.
-   await member.service.updateOwnProfile(saved);f.database.prepare("INSERT INTO communityProfile(userId) VALUES (?)").run(empty.identity.userId);
+   await member.service.updateOwnProfile(saved);f.database.prepare("INSERT INTO studentProfile(id,handle,userId) VALUES (?,?,?)").run(empty.identity.userId,empty.identity.userId,empty.identity.userId);
    const journey=await member.service.createJourney(entry);
    const inference=vi.fn().mockResolvedValue(Response.json({choices:[{finish_reason:"stop",message:{content:JSON.stringify({criteria:[{criterionId:"test",status:"assessed",rating:2,explanation:"Synthetic self-report with limitations",citations:[{kind:"journey",id:journey.id,version:journey.version}]}]})}}]}));
    vi.stubGlobal("fetch",inference);

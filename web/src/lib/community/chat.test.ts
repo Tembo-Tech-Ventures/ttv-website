@@ -8,7 +8,7 @@ const nativeRun = vi.fn(async (model, body, options) => {
  return Response.json({ choices: [{ message: { role: "assistant", content: value.content, ...(value.toolCalls?.length ? { tool_calls: value.toolCalls } : {}) }, finish_reason: value.toolCalls?.length ? "tool_calls" : "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
 });
 const env = { AI_GATEWAY_MODEL: "configured", AI_GATEWAY_NAME: "gateway", AI: { run: nativeRun } } as unknown as Env;
-function service(institution = false) { return { access: vi.fn().mockResolvedValue({ isInstitution: institution }), getOwnProfile: vi.fn().mockResolvedValue({ userId: "self", version: 2 }), getProfile: vi.fn().mockRejectedValue(new Error("private database details")), searchProfiles: vi.fn(), listJourney: vi.fn().mockResolvedValue([{ id: "j", userId: "self", version: 3, visibility: "institution" }]) } as unknown as CommunityService; }
+function service(institution = false) { return { access: vi.fn().mockResolvedValue({ isInstitution: institution }), getOwnProfile: vi.fn().mockResolvedValue({ userId: "self", version: 2 }), getProfile: vi.fn().mockRejectedValue(new Error("private database details")), searchProfiles: vi.fn(), listJourney: vi.fn().mockResolvedValue([{ id: "j", userId: "self", version: 3, status: "posted" }]) } as unknown as CommunityService; }
 function call(name: string, args: unknown) { return { id: "c", type: "function" as const, function: { name, arguments: JSON.stringify(args) } }; }
 const done = { content: "Summary", toolCalls: [], finishReason: "stop" };
 beforeEach(() => { complete.mockReset(); nativeRun.mockClear(); });
@@ -70,7 +70,7 @@ it("authorizes selected subject before any inference and preserves safe access e
 });
 it("prefetches selected evidence and confines tools to that subject", async () => {
  const s = service(true); vi.mocked(s.getProfile).mockResolvedValue({ userId: "chosen", version: 7 } as never);
- vi.mocked(s.listJourney).mockResolvedValue([{ id: "chosen-evidence", userId: "chosen", version: 4, visibility: "institution" }] as never);
+ vi.mocked(s.listJourney).mockResolvedValue([{ id: "chosen-evidence", userId: "chosen", version: 4, status: "posted" }] as never);
  complete.mockResolvedValueOnce({ content: null, toolCalls: [call("get_profile", { userId: "other" }), call("search_profiles", { query: "" }), call("get_selected_profile", { userId: "other" }), call("get_own_profile", {})], finishReason: null }).mockResolvedValueOnce(done);
  const r = await runCommunityChat(env, s, { message: "investigate", profileId: "chosen" });
  expect(s.getProfile).toHaveBeenCalledExactlyOnceWith("chosen"); expect(s.listJourney).toHaveBeenCalledExactlyOnceWith("chosen"); expect(s.searchProfiles).not.toHaveBeenCalled(); expect(s.getOwnProfile).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ it("lets a member investigate an authorized own profile without scouting privile
 it("returns actual bounded quotes, dates and matching-version confirmation provenance", async () => {
  const s = service(true); vi.mocked(s.getProfile).mockResolvedValue({ userId: "chosen", version: 2, bio: "Profile text", updatedAt: 10 } as never);
  const confirmation = { id: "c", mentorId: "mentor", mentorRole: "ADMIN", statement: "Observed contribution", journeyVersion: 3, createdAt: 30 };
- vi.mocked(s.listJourney).mockResolvedValue([{ id: "j", userId: "chosen", version: 3, visibility: "institution", description: "x".repeat(450), createdAt: 15, updatedAt: 20, confirmations: [confirmation, { ...confirmation, id: "stale", journeyVersion: 1 }] }] as never);
+ vi.mocked(s.listJourney).mockResolvedValue([{ id: "j", userId: "chosen", version: 3, status: "posted", description: "x".repeat(450), createdAt: 15, updatedAt: 20, confirmations: [confirmation, { ...confirmation, id: "stale", journeyVersion: 1 }] }] as never);
  complete.mockResolvedValueOnce(done);
  const r = await runCommunityChat(env, s, { message: "investigate", profileId: "chosen" });
  expect(r.retrievedSources).toMatchObject([{ quote: "Profile text", observedAt: 10 }, { quote: "x".repeat(400), observedAt: 20, version: 3 }, { id: "c", quote: "Observed contribution", observedAt: 30, actorId: "mentor", roleSnapshot: "ADMIN", version: 3 }]);
@@ -117,7 +117,7 @@ it("returns actual bounded quotes, dates and matching-version confirmation prove
 });
 
 it("omits unpublished drafts from model inputs even for the owner", async () => {
- const s = service(); vi.mocked(s.listJourney).mockResolvedValue([{id:"draft",userId:"self",version:1,visibility:"private",description:"secret unpublished draft"}] as never);
+ const s = service(); vi.mocked(s.listJourney).mockResolvedValue([{id:"draft",userId:"self",version:1,status:"draft",description:"secret unpublished draft"}] as never);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})],finishReason:null}).mockResolvedValueOnce(done);
  const r = await runCommunityChat(env,s,{message:"My published evidence"});
  expect(JSON.stringify(complete.mock.calls)).not.toContain("secret unpublished draft"); expect(r.citations.some(c=>c.id==="draft")).toBe(false);
@@ -148,7 +148,7 @@ it.each([false,true])("never registers oversized dropped evidence, selected=%s",
  expect(r.grounded).toBe(false); expect(r.citations).toEqual([]); expect(r.retrievedSources).toEqual([]); expect(JSON.stringify(complete.mock.calls)).toContain("exceeds context limit");
 });
 it("rejects citations to private drafts even when the model guesses their IDs", async () => {
- const s = service(); vi.mocked(s.listJourney).mockResolvedValue([{id:"draft",userId:"self",version:1,visibility:"private",description:"secret draft"}] as never);
+ const s = service(); vi.mocked(s.listJourney).mockResolvedValue([{id:"draft",userId:"self",version:1,status:"draft",description:"secret draft"}] as never);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})],finishReason:null}).mockResolvedValueOnce(groundedContent([{kind:"journey",id:"draft",version:1}]));
  const r = await runCommunityChat(env,s,{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]); expect(r.retrievedSources.some(c=>c.id==="draft")).toBe(false); expect(JSON.stringify(complete.mock.calls)).not.toContain("secret draft");
 });
@@ -230,7 +230,7 @@ it("still fails a run whose provider errors after a tool step", async () => {
 it("orders only searched candidates with published journey citations and exposes actual tool names",async()=>{
  const s=service(true);vi.mocked(s.searchProfiles).mockResolvedValue([{userId:'b',name:'Fictional B',version:1},{userId:'a',name:'Fictional A',version:1}] as never);
  vi.mocked(s.getProfile).mockImplementation(async(id)=>({userId:id,name:`Fictional ${id}`,version:1}) as never);
- vi.mocked(s.listJourney).mockImplementation(async(id)=>[{id:`j-${id}`,userId:id,version:1,visibility:'institution',title:id==='a'?'Testing work':'Other work',confirmations:[]}] as never);
+ vi.mocked(s.listJourney).mockImplementation(async(id)=>[{id:`j-${id}`,userId:id,version:1,status:'posted',title:id==='a'?'Testing work':'Other work',confirmations:[]}] as never);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'Kotlin'})]}).mockResolvedValueOnce({content:null,toolCalls:[{...call('get_profile',{userId:'a'}),id:'a'},{...call('get_profile',{userId:'b'}),id:'b'}]}).mockResolvedValueOnce({content:JSON.stringify({answer:'A has more documented testing; experience remains unknown.',citations:[{kind:'journey',id:'j-a',version:1},{kind:'journey',id:'j-b',version:1}],orderedProfiles:[{userId:'a',reason:'Documented testing first',missingEvidence:['Production experience unknown']},{userId:'b',reason:'Less documented testing',missingEvidence:['Testing details unknown']}]})});
  const result=await runCommunityChat(env,s,{message:'Compare Kotlin evidence',orderByEvidence:true});expect(result.grounded).toBe(true);expect(result.orderedProfiles.map(p=>p.userId)).toEqual(['a','b']);expect(result.evaluatedCandidates).toBe(2);expect(result.execution.toolNames).toEqual(['search_profiles','get_profile','get_profile']);
 });
@@ -263,7 +263,7 @@ function orderFixture({completeSources=true,extra=0,tied=false,stale=false,forei
  const s=service(true);const ids=['b','a'];
  vi.mocked(s.searchProfiles).mockResolvedValue(ids.map(userId=>({userId,name:userId,version:1})) as never);
  vi.mocked(s.getProfile).mockImplementation(async userId=>({userId,name:userId,version:1,bio:'Same bio',skills:['React']}) as never);
- const entries=(userId:string)=>Array.from({length:3+extra},(_,i)=>({id:`${userId}-j${i}`,userId,version:1,visibility:'institution',title:tied?'Same change':userId,description:'Documented change',occurredAt:'2026-10-19',confirmations:i===0?[{id:`${userId}-c`,journeyVersion:1,mentorId:'mentor',mentorRole:'MENTOR',statement:'Described review',method:'walkthrough'}]:[]}));
+ const entries=(userId:string)=>Array.from({length:3+extra},(_,i)=>({id:`${userId}-j${i}`,userId,version:1,status:'posted',title:tied?'Same change':userId,description:'Documented change',occurredAt:'2026-10-19',confirmations:i===0?[{id:`${userId}-c`,journeyVersion:1,mentorId:'mentor',mentorRole:'MENTOR',statement:'Described review',method:'walkthrough'}]:[]}));
  vi.mocked(s.listJourney).mockImplementation(async id=>entries(id??"self") as never);
  const refs=ids.flatMap(userId=>[...(completeSources?entries(userId):[entries(userId)[1]]).map(j=>({kind:'journey',id:j.id,version:1})),...(completeSources?[{kind:'confirmation',id:`${foreign?'other':userId}-c`,version:stale?0:1}]:[])]);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'React'})]}).mockResolvedValueOnce({content:null,toolCalls:ids.map(id=>({...call('get_profile',{userId:id}),id}))}).mockResolvedValueOnce({content:JSON.stringify({answer:'A is most complete, with three iterations and mentor statements.',orderedProfiles:[{userId:'a',reason:'Most complete',missingEvidence:[]},{userId:'b',reason:'Less complete',missingEvidence:[]}],citations:refs})});

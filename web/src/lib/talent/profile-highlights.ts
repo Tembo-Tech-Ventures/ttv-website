@@ -6,10 +6,6 @@ import type {
   ProfileModerationResult,
   ProfileModerationState,
 } from "@/lib/moderation/clef";
-import {
-  moderationColumns,
-  publishesAfterModeration,
-} from "@/lib/talent/profile-moderation";
 import { parseTopicsJson } from "@/lib/talent/profile";
 
 export interface ProfileHighlightValues {
@@ -49,14 +45,6 @@ export type ProfileHighlightWriteResult =
   | { outcome: "hold" }
   | { outcome: "conflict" }
   | { outcome: "suspended" };
-
-const clearedModeration = {
-  moderationOutcome: null,
-  moderationFlags: null,
-  moderationScores: null,
-  moderationCheckedAt: null,
-  moderationReviewRequired: false,
-} as const;
 
 export function profileStateWithHighlights(
   profile: HighlightProfileState,
@@ -111,64 +99,28 @@ export async function replaceProfileHighlights(
     select 1 from ${schema.studentProfile}
     where ${expectedProfile}
   )`;
-  const profileValues = moderation
-    ? moderationColumns(moderation)
-    : clearedModeration;
-
-  if (moderation && !publishesAfterModeration(moderation)) {
-    const result = await db
-      .update(schema.studentProfile)
-      .set({
-        ...profileValues,
-        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-      })
-      .where(expectedProfile);
-    return result.meta.changes > 0
-      ? { outcome: "hold" }
-      : { outcome: "conflict" };
-  }
-
-  const deleteHighlights = db
-    .delete(schema.profileHighlight)
-    .where(
-      and(eq(schema.profileHighlight.profileId, profile.id), profileIsCurrent),
-    );
-  const insertHighlights = highlights.map((highlight) =>
-    db.insert(schema.profileHighlight).select(sql`
-      select
-        ${createId()},
-        ${profile.id},
-        ${highlight.repoFullName},
-        ${highlight.repoUrl},
-        ${highlight.description},
-        ${highlight.language},
-        ${highlight.topics},
-        ${highlight.stars},
-        ${epochSeconds(highlight.pushedAt)},
-        ${highlight.blurb},
-        ${highlight.sortOrder},
-        ${epochSeconds(highlight.snapshotAt)},
-        unixepoch(),
-        unixepoch()
-      where ${profileIsCurrent}
-    `),
-  );
-  const updateProfile = db
-    .update(schema.studentProfile)
-    .set({
-      ...profileValues,
-      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-    })
-    .where(expectedProfile);
-  const queries = [deleteHighlights, ...insertHighlights, updateProfile] as [
-    typeof deleteHighlights,
-    ...typeof insertHighlights,
-    typeof updateProfile,
-  ];
-  const results = await db.batch(queries);
-  const profileResult = results.at(-1);
-
-  return profileResult?.meta.changes
-    ? { outcome: "saved" }
-    : { outcome: "conflict" };
+  const result = moderation ?? { outcome: "error" as const, flags: [], scores: {} };
+  const selected = JSON.stringify(highlights.map(h => h.repoFullName));
+  const retire = db.update(schema.communityJourney).set({ state: "DRAFT" }).where(and(
+    eq(schema.communityJourney.userId,profile.userId),eq(schema.communityJourney.kind,"repo"),profileIsCurrent,
+    sql`${schema.communityJourney.repoFullName} NOT IN (SELECT value FROM json_each(${selected}))`,
+  ));
+  const upserts = highlights.map(h => db.insert(schema.communityJourney).select(sql`
+    SELECT ${createId()},${profile.userId},${h.repoFullName},${h.blurb ?? h.description ?? ""},${h.repoUrl},
+      ${new Date(h.pushedAt ?? h.snapshotAt).toISOString().slice(0,10)},'institution','POSTED','repo',${profile.id},
+      ${h.repoFullName},${h.repoUrl},${h.description},${h.language},${h.topics},${h.stars},${epochSeconds(h.pushedAt)},
+      ${h.blurb},${h.sortOrder},${epochSeconds(h.snapshotAt)},${result.outcome},${JSON.stringify(result.flags)},
+      ${JSON.stringify(result.scores)},unixepoch(),${Number(result.outcome!=="pass")},1,unixepoch(),unixepoch()
+    WHERE ${profileIsCurrent}
+    ON CONFLICT(userId,repoFullName) DO UPDATE SET title=excluded.title,description=excluded.description,
+      evidenceUrl=excluded.evidenceUrl,occurredAt=excluded.occurredAt,state='POSTED',repoUrl=excluded.repoUrl,
+      repoDescription=excluded.repoDescription,language=excluded.language,topics=excluded.topics,stars=excluded.stars,
+      pushedAt=excluded.pushedAt,blurb=excluded.blurb,sortOrder=excluded.sortOrder,snapshotAt=excluded.snapshotAt,
+      moderationOutcome=excluded.moderationOutcome,moderationFlags=excluded.moderationFlags,
+      moderationScores=excluded.moderationScores,moderationCheckedAt=excluded.moderationCheckedAt,
+      moderationReviewRequired=excluded.moderationReviewRequired,version=communityJourney.version+1,updatedAt=unixepoch()
+  `));
+  const update = db.update(schema.studentProfile).set({ contentVersion: sql`${schema.studentProfile.contentVersion}+1` }).where(expectedProfile);
+  const results = await db.batch([retire,...upserts,update]);
+  return results.at(-1)?.meta.changes ? { outcome: result.outcome === "hold" ? "hold" : "saved" } : { outcome:"conflict" };
 }

@@ -1,5 +1,31 @@
 # Mentoring
 
+## Member visibility (2026-11-09)
+
+`studentProfile` is the single saved profile for every signed-in person. `communityProfile`
+has been migrated and dropped. A saved profile is discoverable while it is neither
+SUSPENDED nor held by moderation; MENTOR and ADMIN owners are excluded. All signed-in
+readers, including institutions, see the same directory. Institutions add AI discovery
+and assessment tools, not access to more people or evidence.
+
+`communityJourney` stores both contributions and repository work. `profileHighlight`
+has been migrated and dropped; repository snapshots and chosen order live on work rows.
+POSTED work follows the profile's visibility. DRAFT work is author-only; old private
+rows became drafts. The retired NOT NULL `visibility` column always receives the legacy
+constant `institution` and is never used for authorization. REST work requests and responses use `status: "posted" | "draft"`. PATCH
+`/api/community/journey/:id` changes that status. The old `visibility` input
+is deprecated and normalized once at validation; responses never emit it.
+
+Clef checks saved profile text and posted work, fails open on errors, and can hold an
+item for a human. Shared reads never include held items. Author/editor and admin reads
+can inspect them. The shared predicates live in `src/lib/community/eligibility.ts`.
+Public surfaces additionally require PUBLISHED and a valid cohort completion;
+PUBLISHED means opting into the public website, not becoming visible to members.
+
+`src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
+one D1 batch each. The directory always shows the shared view, even to the author.
+
+
 ## Shared work waiting for confirmation (F-2, QA1-06)
 
 `awaitingConfirmation({ db, env, locals })` returns how many contributions on
@@ -12,7 +38,7 @@ sidebar badge and the attention panel read that one number.
 `GET /api/community/mentorship` lists, through the same code:
 `createCommunityService(...).countAwaitingConfirmation()` and `listMentorship()`
 share one query (`mentorshipRows`): MENTOR or ADMIN roles from the database,
-contributions shared beyond their author (`visibility='institution'`), never
+contributions shared beyond their author (`state='POSTED'`, unheld and with an eligible saved profile), never
 the mentor's own, the 50 newest, and the demo and staging-fixture scopes. The
 caller is built by the route's own `communityActor(locals)` and passes the
 route's `requireBrowser` gate, so personal access tokens and delegated agent
@@ -74,7 +100,7 @@ so there is nothing for a set-aside to clear there.
 from real existing events with a real recipient, and forbids inventing a
 matching domain. Nothing in the data records "shared with this mentor":
 
-- sharing is a visibility flag on `communityJourney`, addressed to every mentor
+- posting is the POSTED state on `communityJourney`, visible to every signed-in member
   and institution at once, with no recipient and no event row;
 - `communityConfirmation` records what a mentor did, not what was asked of
   them;

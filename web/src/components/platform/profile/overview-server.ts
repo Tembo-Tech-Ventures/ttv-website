@@ -1,3 +1,5 @@
+import { publicProfileEligibility } from "@/lib/community/eligibility";
+import { sql } from "drizzle-orm";
 import { and, desc, eq, exists, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
@@ -47,6 +49,7 @@ async function profileFacts(db: Database, userId: string) {
   const [profile, leads, drafts, opportunities] = await Promise.all([
     db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, userId),
+      extras: { onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite") },
       columns: {
         id: true, status: true, handle: true, headline: true, bio: true, location: true, country: true, skills: true,
         publicName: true, publicAvatarUrl: true,
@@ -130,6 +133,7 @@ export function profileOverviewFacts(
     // The journey shows the profile editor to whoever has completed a cohort (hasCompletedCohort).
     eligible: journey.visibleLinkIds.includes("profile"),
     profile: profile && {
+      onPublicSite:profile.onPublicSite,
       status: profile.status,
       handle: profile.handle,
       headline: profile.headline,

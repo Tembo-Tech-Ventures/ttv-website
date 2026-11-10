@@ -2,8 +2,9 @@
 import CertificateLayout from "@/layouts/CertificateLayout.astro";
 import CertificateCard from "@/components/certificate/CertificateCard.astro";
 import { drizzle } from "drizzle-orm/d1";
+import { publicProfileEligibility } from "@/lib/community/eligibility";
 import * as schema from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { isValidCompletion } from "@/lib/talent/eligibility";
 import { buildCertificateView } from "@/lib/certificate/view-model";
@@ -42,7 +43,7 @@ const publishedProfile =
     ? await db.query.studentProfile.findFirst({
         where: and(
           eq(schema.studentProfile.userId, application.user.id),
-          eq(schema.studentProfile.status, "PUBLISHED")
+          sql.raw(publicProfileEligibility("studentProfile"))
         ),
         columns: { handle: true },
       })

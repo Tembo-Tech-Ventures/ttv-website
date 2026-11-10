@@ -1,8 +1,9 @@
+import { memberProfileHref } from "@/lib/members/links";
+import { publicProfileEligibility, postedWorkEligibility, memberEligibility } from "@/lib/community/eligibility";
 import type { ToolDefinition } from "@/lib/ai/gateway";
 import { bodyForReader } from "@/lib/channels/moderation/mask";
 import { NonEmptyText, type ChannelKind, type Citation, type TemboScope } from "@/lib/platform/contracts";
 import { channelPagePath } from "@/lib/platform/server/space-routes";
-import { PUBLIC_PROFILE } from "@/lib/search/service";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 import { TEMBO_CONFIG } from "./config";
@@ -240,7 +241,7 @@ const searchSessions: Search = async ({ db, book, channel }, terms) => {
   });
 };
 
-interface ProfileRow { userId: string; handle: string; publicName: string | null; publicAvatarUrl: string | null; doc: string }
+interface ProfileRow { onPublicSite:number; userId: string; handle: string; publicName: string | null; publicAvatarUrl: string | null; doc: string }
 interface SharedRow {
   journeyId: string; version: number; title: string; summary: string; messageId: string; parentId: string | null;
   /** The owner who shared it, by the name this channel shows on their message. */
@@ -257,12 +258,12 @@ interface SharedRow {
 const searchProjects: Search = async ({ db, book, channel }, terms) => {
   if (channel.kind !== "COMMUNITY") return [];
   const json = JSON.stringify(terms);
-  const { results: profiles } = await db.prepare(`WITH profiles AS (SELECT p.userId, p.handle, p.publicName, p.publicAvatarUrl,
+  const { results: profiles } = await db.prepare(`WITH profiles AS (SELECT p.userId, p.handle, p.publicName, p.publicAvatarUrl, ${publicProfileEligibility("p")} AS onPublicSite,
       coalesce(p.headline, '') || ' ' || coalesce(p.bio, '') || ' ' || coalesce(p.skills, '') || ' ' || coalesce((
         SELECT group_concat(h.repoFullName || ' ' || coalesce(h.blurb, h.description, '') || ' ' || coalesce(h.language, ''), '; ')
-        FROM profileHighlight h WHERE h.profileId = p.id), '') AS doc
-      FROM studentProfile p WHERE ${PUBLIC_PROFILE})
-    SELECT userId, handle, publicName, publicAvatarUrl, substr(doc, 1, ?2) AS doc FROM profiles
+        FROM communityJourney h WHERE h.userId = p.userId AND ${postedWorkEligibility("h")}), '') AS doc
+      FROM studentProfile p WHERE ${memberEligibility("p.userId")})
+    SELECT userId, handle, publicName, publicAvatarUrl, onPublicSite, substr(doc, 1, ?2) AS doc FROM profiles
     WHERE ${score("doc", "?1")} > 0 ORDER BY ${score("doc", "?1")} DESC, userId LIMIT ?3`)
     .bind(json, TEMBO_CONFIG.sourceChars * 2, TEMBO_CONFIG.resultsPerTool).all<ProfileRow>();
   const { results: shared } = await db.prepare(`SELECT json_extract(e.value, '$.journeyId') AS journeyId,
@@ -273,14 +274,14 @@ const searchProjects: Search = async ({ db, book, channel }, terms) => {
     CROSS JOIN json_each(CASE WHEN json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e
     WHERE json_extract(e.value, '$.type') = 'project'
       AND EXISTS (SELECT 1 FROM communityJourney j WHERE j.id = json_extract(e.value, '$.journeyId')
-        AND j.userId = m.authorId AND j.visibility = 'institution')
+        AND j.userId = m.authorId AND ${postedWorkEligibility("j")})
       AND ${score("coalesce(json_extract(e.value, '$.title'), '') || ' ' || coalesce(json_extract(e.value, '$.summary'), '')", "?2")} > 0
     LIMIT ?4`).bind(channel.id, json, TEMBO_CONFIG.sharedProjectMessages, TEMBO_CONFIG.resultsPerTool).all<SharedRow>();
   const found: ToolResult[] = [];
   for (const row of profiles) {
     const name = title(resolvePublicProfileIdentity(row).name, "TTV builder");
     const text = `${name}: ${clip(row.doc)}`;
-    const key = book.add({ type: "profile", userId: row.userId, title: `${name} · builder profile`, href: `/talent/${encodeURIComponent(row.handle)}` }, text);
+    const key = book.add({ type: "profile", userId: row.userId, title: `${name} · builder profile`, href: memberProfileHref(row) }, text);
     if (key) found.push({ source: key, kind: "profile", title: `${name} · builder profile`, text });
   }
   for (const row of shared) {

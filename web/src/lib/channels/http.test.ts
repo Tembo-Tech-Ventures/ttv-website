@@ -361,7 +361,7 @@ describe("channel APIs: query budget", () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     s.agree();
     s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    s.database.exec(`INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
         ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution'),
         ('kiosk', '${VIEWER}', 'Kiosk', 'A kiosk', '2026-10-01', 'institution');
       INSERT INTO recording (id, programId, title, processingStatus) VALUES ('s9', 'cohort-a', 'Session 9', 'complete');

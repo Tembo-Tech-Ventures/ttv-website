@@ -203,7 +203,7 @@ describe("preview mentor and institution personas", () => {
     await seed(executeQuery);
     const snapshot = () => [mentor.userId, institution.userId].map((id) => personaRows(database, id));
     const tableCounts = () => ["user", "UserRoles", "session", "programRole", "programApplication",
-      "communityProfile", "communityConfirmation", "attention_item", "chat_session", "chat_message"]
+      "studentProfile", "communityConfirmation", "attention_item", "chat_session", "chat_message"]
       .map((table) => database.prepare(`SELECT count(*) AS n FROM "${table}"`).get().n);
     const first = snapshot();
     const counts = tableCounts();
@@ -212,7 +212,7 @@ describe("preview mentor and institution personas", () => {
       INSERT INTO "UserRoles" ("id", "userId", "roleId") SELECT 'journey-granted-admin', '${institution.userId}', "id" FROM "Roles" WHERE "name" = 'ADMIN';
       INSERT INTO "programRole" ("id", "programId", "userId", "name") VALUES ('journey-invite', 'ttv-fixture-program-cohort-04', '${mentor.userId}', 'MENTOR');
       INSERT INTO "programApplication" ("id", "programId", "userId", "status", "application") VALUES ('journey-apply', 'ttv-fixture-program-cohort-04', '${institution.userId}', 'APPROVED', '{}');
-      INSERT INTO "communityProfile" ("userId", "headline") VALUES ('${institution.userId}', 'Written by a journey');
+      INSERT INTO "studentProfile" ("id", "handle", "userId", "headline") VALUES ('${institution.userId}', '${institution.userId}', '${institution.userId}', 'Written by a journey');
       INSERT INTO "communityJourney" ("id", "userId", "title", "description", "occurredAt", "visibility") VALUES
         ('journey-own', '${institution.userId}', 'Own entry', 'Written by a journey', '2026-10', 'private'),
         ('journey-other', 'ttv-fixture-user-amina', 'Shared work', 'Another member', '2026-10', 'institution');
@@ -228,7 +228,7 @@ describe("preview mentor and institution personas", () => {
     expect(snapshot()).toEqual(first);
     expect(tableCounts()).toEqual(counts);
     // Their writes go; another member's journey stays.
-    expect(database.prepare('SELECT "id" FROM "communityJourney"').all().map((row) => row.id)).toEqual(["journey-other"]);
+    expect(database.prepare('SELECT "id" FROM "communityJourney"').all().map((row) => row.id)).toEqual(["journey-other","ttv-fixture-highlight-amina-1","ttv-fixture-highlight-amina-2"]);
   });
 
   it.each([

@@ -1,3 +1,4 @@
+import { memberProfileHref } from "@/lib/members/links";
 import type { CommunityJourney } from "@/lib/community/model";
 import type { OpportunityGateState } from "@/components/hire/validation";
 import type { StudentDashboardLinkId, StudentJourneyState } from "@/lib/student/journey";
@@ -44,7 +45,8 @@ export interface OverviewFacts {
     location: string | null;
     country: string | null;
     skills: readonly string[];
-    publicName: string | null;
+    onPublicSite?: number;
+  publicName: string | null;
     publicAvatarUrl: string | null;
   } | null;
   /** The person's own contributions with their confirmations, newest first; null when they could not be read. */
@@ -86,7 +88,7 @@ export type ProjectState =
   | { kind: "confirmed"; text: string; mentors: readonly string[] }
   | { kind: "newer"; text: string; mentors: readonly string[] }
   | { kind: "waiting"; text: string }
-  | { kind: "draft"; text: string };
+  | { kind: "draft" | "held"; text: string };
 
 export interface OverviewProject {
   id: string;
@@ -164,7 +166,8 @@ function distinct(values: readonly string[]): string[] {
  * contribution is an unpublished draft that only its author sees.
  */
 export function projectState(entry: CommunityJourney): ProjectState {
-  if (entry.visibility === "private") return { kind: "draft", text: "Draft, only you can see it" };
+  if (entry.moderationHold) return {kind:"held",text:"Saved, waiting for a human review"};
+  if (entry.status === "draft") return { kind: "draft", text: "Draft, only you can see it" };
   const current = distinct(entry.confirmations.filter((c) => c.journeyVersion === entry.version).map((c) => c.mentorName));
   if (current.length > 0) return { kind: "confirmed", text: `Confirmed by ${joinNames(current)}`, mentors: current };
   const earlier = entry.confirmations.filter((c) => c.journeyVersion < entry.version);
@@ -189,7 +192,7 @@ function card(facts: OverviewFacts): OverviewCard | null {
     bio: profile.bio?.trim() || null,
     skills: profile.skills,
     status: STATUS[profile.status],
-    publicHref: profile.status === "PUBLISHED" ? `/talent/${encodeURIComponent(profile.handle)}` : null,
+    publicHref: memberProfileHref({handle:profile.handle,onPublicSite:profile.status === "PUBLISHED" && Boolean(profile.onPublicSite)}),
   };
 }
 

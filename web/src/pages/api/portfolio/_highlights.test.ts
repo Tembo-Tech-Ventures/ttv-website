@@ -54,7 +54,7 @@ vi.mock("drizzle-orm/d1", () => ({
         },
       },
       account: { findFirst: mockFindAccount },
-      profileHighlight: { findMany: mockFindHighlights },
+      communityJourney: { findMany: mockFindHighlights },
     },
     delete: () => ({ where: mockDeleteWhere }),
     insert: () => ({ select: mockInsertSelect }),
@@ -206,7 +206,7 @@ describe("POST /api/portfolio/highlights", () => {
 
     const res = await POST(makeRequest("POST", []));
     expect(res.status).toBe(200);
-    expect(mockDeleteWhere).toHaveBeenCalled();
+    expect(mockBatch).toHaveBeenCalled();
   });
 
   it("rejects unknown repos", async () => {
@@ -314,13 +314,8 @@ describe("POST /api/portfolio/highlights", () => {
     );
 
     expect(res.status).toBe(422);
-    expect(await json(res)).toEqual({
-      error: "Your changes need attention before they can go live.",
-      moderationMessages: [
-        "Remove phone numbers, email addresses, or ID numbers from your public profile.",
-      ],
-    });
-    expect(mockBatch).not.toHaveBeenCalled();
+    expect(await json(res)).toEqual({error:"Your work is saved and waiting for a human review."});
+    expect(mockBatch).toHaveBeenCalledOnce();
     expect(mockDeleteWhere).not.toHaveBeenCalled();
   });
 
@@ -484,6 +479,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
+        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/repo-a",
         blurb: "My project",
         sortOrder: 0,
@@ -496,7 +492,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     expect(res.status).toBe(200);
     const data = await json(res);
     expect(data.refreshed).toBe(1);
-    expect(mockBatch).toHaveBeenCalledTimes(1);
+    expect(mockBatch).toHaveBeenCalledTimes(2);
   });
 
   it("preserves unmatched highlights with stale snapshot and blurb", async () => {
@@ -508,12 +504,14 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-old",
+        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/old-renamed-repo",
         blurb: "Carefully written blurb",
         sortOrder: 0,
       },
       {
         id: "hl-match",
+        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/repo-a",
         blurb: "Another project",
         sortOrder: 1,
@@ -526,8 +524,8 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     expect(res.status).toBe(200);
     const data = await json(res);
     expect(data.refreshed).toBe(1);
-    expect(mockBatch).toHaveBeenCalledTimes(1);
-    expect(mockDeleteWhere).toHaveBeenCalledOnce();
+    expect(mockBatch).toHaveBeenCalledTimes(2);
+    expect(mockDeleteWhere).not.toHaveBeenCalled();
     expect(mockInsertSelect).toHaveBeenCalledTimes(2);
   });
 
@@ -540,6 +538,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
+        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/deleted-repo",
         blurb: "Keep this blurb",
         sortOrder: 0,

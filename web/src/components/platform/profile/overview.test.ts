@@ -10,7 +10,7 @@ function confirmation(journeyVersion: number, mentorName: string, id = `${mentor
 function work(id: string, overrides: Partial<CommunityJourney> = {}): CommunityJourney {
   return {
     id, userId: "achieng", title: `Project ${id}`, description: "Fictional work.", evidenceUrl: null, occurredAt: "2026-10-01",
-    visibility: "institution", version: 1, createdAt: 1, updatedAt: 1, confirmations: [], ...overrides,
+    status: "posted", version: 1, createdAt: 1, updatedAt: 1, confirmations: [], ...overrides,
   };
 }
 
@@ -20,7 +20,7 @@ const ALUMNA: OverviewFacts = {
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
-    status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
+    onPublicSite:1, status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
     location: "Kisumu", country: "KE", skills: ["TypeScript", "SQL"], publicName: null, publicAvatarUrl: null,
   },
   journey: [],
@@ -72,9 +72,12 @@ describe("projectState", () => {
       .toEqual({ kind: "newer", text: "David confirmed revision 2", mentors: ["David"] });
   });
 
+  it("explains held work without claiming it is shared",()=>{
+    expect(projectState(work("held",{moderationHold:true}))).toEqual({kind:"held",text:"Saved, waiting for a human review"});
+  });
   it("says shared work is not confirmed yet, and a private one is a draft only its author sees", () => {
     expect(projectState(work("a"))).toEqual({ kind: "waiting", text: "Not confirmed yet" });
-    expect(projectState(work("a", { visibility: "private", confirmations: [confirmation(1, "David")] })))
+    expect(projectState(work("a", { status: "draft", confirmations: [confirmation(1, "David")] })))
       .toEqual({ kind: "draft", text: "Draft, only you can see it" });
   });
 });
@@ -121,7 +124,7 @@ describe("profileOverview for an alumna", () => {
       ...ALUMNA,
       journey: [
         work("ledger", { title: "Chama ledger", version: 3, confirmations: [confirmation(2, "David")] }),
-        work("notes", { title: "Callback notes", visibility: "private" }),
+        work("notes", { title: "Callback notes", status: "draft" }),
         work("stock", { confirmations: [confirmation(1, "Mercy")] }),
       ],
       leads: { items: [{ id: "l1", fromName: "Njeri", organization: "Mzigo Logistics" }, { id: "l2", fromName: "Otieno", organization: null }], total: 2 },
@@ -141,7 +144,7 @@ describe("profileOverview for an alumna", () => {
   it("caps journey rows in Needs you, and counts the rest on Your journey", () => {
     const extra = 2;
     const newer = Array.from({ length: OVERVIEW_LIMITS.journeyNeeds + extra }, (_, index) => work(`n${index}`, { version: 2, confirmations: [confirmation(1, "David")] }));
-    const drafts = Array.from({ length: OVERVIEW_LIMITS.journeyNeeds + 1 }, (_, index) => work(`d${index}`, { visibility: "private" }));
+    const drafts = Array.from({ length: OVERVIEW_LIMITS.journeyNeeds + 1 }, (_, index) => work(`d${index}`, { status: "draft" }));
     const model = profileOverview({ ...ALUMNA, journey: [...newer, ...drafts] });
     const icons = model.needs.map((need) => need.icon);
     expect(icons.filter((icon) => icon === "revision")).toHaveLength(OVERVIEW_LIMITS.journeyNeeds + 1);

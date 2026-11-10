@@ -106,8 +106,8 @@ export function samPersonaStatements(db: D1Database, persona: SamPersona, userId
       status === "COMPLETED" ? now + COHORTS[cohort].end * DAY : null, now, now));
   }
   if (persona === "alumna") {
-    statements.push(db.prepare(`INSERT INTO communityProfile (userId,headline,bio,skills,opportunityGoals,version,createdAt,updatedAt) VALUES (?,?,?,?,?,1,?,?) ON CONFLICT(userId) DO NOTHING`)
-      .bind(userId, "Backend builder", "Fictional SAM persona. I build payment and ledger tools for small groups.", JSON.stringify(["TypeScript", "SQL"]), "A backend developer role", now, now));
+    statements.push(db.prepare(`INSERT INTO studentProfile (id,userId,handle,headline,bio,skills,opportunityGoals,contentVersion,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,1,?,?) ON CONFLICT(userId) DO NOTHING`)
+      .bind(`${userId}-profile`, userId, `sam-${userId.slice(-24)}`, "Backend builder", "Fictional SAM persona. I build payment and ledger tools for small groups.", JSON.stringify(["TypeScript", "SQL"]), "A backend developer role", now, now));
   }
   if (persona === "mentor") {
     statements.push(db.prepare(`INSERT INTO mentor_profile (userId,headline,bio,areas,formats,monthlyCapacity,paused,createdAt,updatedAt) VALUES (?,?,?,?,?,3,0,?,?) ON CONFLICT(userId) DO NOTHING`)

@@ -65,7 +65,7 @@ describe("Worth another look (B-4.2)", () => {
     for (const change of [
       (t: ReturnType<typeof setup>) => t.confirm("ledger", PEOPLE.david, 3),
       (t: ReturnType<typeof setup>) => t.s.database.exec(`INSERT INTO communitySetAside(mentorId, journeyId, journeyVersion) VALUES ('${PEOPLE.david}', 'ledger', 3)`),
-      (t: ReturnType<typeof setup>) => t.s.database.exec("UPDATE communityJourney SET visibility = 'private' WHERE id = 'ledger'"),
+      (t: ReturnType<typeof setup>) => t.s.database.exec("UPDATE communityJourney SET state = 'DRAFT' WHERE id = 'ledger'"),
       (t: ReturnType<typeof setup>) => t.s.database.exec("DELETE FROM communityJourney WHERE id = 'ledger'"),
     ]) {
       const t = setup();

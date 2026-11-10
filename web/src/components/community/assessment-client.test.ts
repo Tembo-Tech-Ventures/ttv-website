@@ -23,7 +23,7 @@ const profile: CommunityProfile = {
       description: "Keyboard navigation",
       date: "2026-10-24",
       skills: [],
-      visibility: "institution",
+      status: "posted",
       evidence: [
         {
           id: "source",
@@ -141,7 +141,7 @@ describe("evidence assessment boundary", () => {
       if (kind === "source") value.criteria[0].citations[0].version++;
       if (kind === "label") value.criteria[0].label = "Different criterion";
       if (kind === "duplicate") value.criteria.push(value.criteria[0]);
-      if (kind === "private") person.claims[0].visibility = "private";
+      if (kind === "private") person.claims[0].status = "draft";
       respond(value);
       await expect(assessProfile(person, rubric)).rejects.toMatchObject({
         status: 502,

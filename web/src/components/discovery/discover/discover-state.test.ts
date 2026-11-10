@@ -11,7 +11,7 @@ const post = (form: Record<string, string>, origin: string | null = ORIGIN) =>
   });
 
 const PROFILE = { userId: "achieng", name: "Achieng Otieno", image: null, headline: "Frontend builder", bio: "Builds tools.", skills: ["React"], opportunityGoals: "A first role", version: 2, updatedAt: 1 };
-const ENTRY = { id: "ledger", userId: "achieng", title: "Chama savings ledger", description: "Built the ledger.", evidenceUrl: "https://github.com/example/ledger", occurredAt: "2026-10-24", visibility: "institution", version: 1, confirmations: [] };
+const ENTRY = { id: "ledger", userId: "achieng", title: "Chama savings ledger", description: "Built the ledger.", evidenceUrl: "https://github.com/example/ledger", occurredAt: "2026-10-24", status: "posted", version: 1, confirmations: [] };
 const SCOUT: Carried = { context: "A confidential fintech role", skills: "React, SQL", query: "", lookup: false };
 
 /** A stand-in for the community API, answering by method and path; it records what was asked. */

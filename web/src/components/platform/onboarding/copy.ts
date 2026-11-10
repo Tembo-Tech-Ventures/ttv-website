@@ -73,12 +73,12 @@ export const REQUEST = {
   institutionLink: "Organisation website",
   optional: "(optional)",
   noteLength: "Between 20 and 600 characters.",
-  scope: "I understand approval lets me explore saved community profiles and shared contributions only, and doesn’t arrange introductions.",
+  scope: "I understand approval adds AI tools for the same profiles and posted work every signed-in member can see, and doesn’t arrange introductions.",
   scopeTitle: "What approval opens",
   /** The approved partner-page wording, consistent with F-4: saved profiles and shared work only. */
   opens: [
-    "Discover: search saved community profiles.",
-    "The contributions members share with institutions, with their sources and any mentor confirmations.",
+    "Discover: AI tools to explore saved profiles and posted work.",
+    "The same profiles and posted work every signed-in member sees, with sources and mentor confirmations.",
   ],
   excludes: [
     "Not private cohort recordings, transcripts or internal records.",

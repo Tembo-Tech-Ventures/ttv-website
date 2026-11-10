@@ -1,3 +1,4 @@
+import { addMemberSchema } from "../../src/test/member-schema.ts";
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve, relative } from 'node:path';
@@ -20,6 +21,7 @@ function fixture(){
  CREATE TABLE program(id TEXT PRIMARY KEY,name TEXT,description TEXT,curriculumId TEXT,applicationsOpen INTEGER,createdAt INTEGER,updatedAt INTEGER);
  CREATE TABLE programApplication(id TEXT PRIMARY KEY,userId TEXT,programId TEXT,status TEXT,application TEXT,createdAt INTEGER,updatedAt INTEGER);`);
  for(const name of ['0017_community_discovery','0018_confirmation_role_snapshot','0020_retained_persona_qa'])sql.exec(readFileSync(new URL(`../../src/lib/db/migrations/${name}.sql`,import.meta.url),'utf8').replaceAll('--> statement-breakpoint',''));
+ addMemberSchema(sql);
  for(const[table,records]of Object.entries(buildDemoDataset()))for(const row of records){const keys=Object.keys(row);sql.prepare(`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).run(...keys.map(k=>row[k]));}
  for(const[persona,role]of [['mentor','MENTOR'],['institution','INSTITUTION']])sql.prepare('INSERT INTO UserRoles VALUES(?,?,(SELECT id FROM Roles WHERE name=?))').run('seed-role-'+persona,DEMO_PERSONAS[persona],role);
  sql.prepare('INSERT INTO session VALUES(?,?,?,?,?,?,?)').run('human-parent','human-user','fictional-unit-human-token','human',now,now,now+3600);

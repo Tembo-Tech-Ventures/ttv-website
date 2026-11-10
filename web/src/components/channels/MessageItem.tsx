@@ -68,13 +68,13 @@ function TemboContent({ message, names }: { message: Message; names: readonly st
         // Numbered as the answer's markers are, so each sentence's [n] names its chip (QA3-02).
         <ol className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
           {message.citations.map((citation, index) => (
-            <li key={citation.href}>
-              <a href={citation.href} className={buttonClass({ variant: "quiet", size: "sm", className: "channel-cite" })} data-cite={index + 1}>
+            <li key={citation.href ?? (citation.type === "profile" ? citation.userId : citation.title)}>
+              {citation.href ? <a href={citation.href} className={buttonClass({ variant: "quiet", size: "sm", className: "channel-cite" })} data-cite={index + 1}>
                 <span className="channel-cite__n" aria-hidden="true">{index + 1}</span>
                 <span className="sr-only">Source {index + 1}: </span>
                 {citationIcon(citation)}
                 {citation.title}
-              </a>
+              </a> : <span className="channel-cite" data-cite={index+1}>{index+1}. {citation.title} · on TTV</span>}
             </li>
           ))}
         </ol>

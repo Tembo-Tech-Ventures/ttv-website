@@ -1,3 +1,4 @@
+import { saveMemberText, checkPostedWork, type MemberModerationEnv } from "@/lib/members/writes";
 import { WORTH_ANOTHER_LOOK_LIMIT } from "@/lib/platform/contracts";
 import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
@@ -9,29 +10,30 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { requestScopeActive } from "@/lib/platform/server/request-scope";
-import { discoverableMember } from "./eligibility";
+import { discoverableMember, postedWorkEligibility } from "./eligibility";
 import {
-  CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, setAsideInput, searchInput, parseInput,
+  CommunityError, profileInput, journeyInput, journeyUpdateInput, journeyStatusInput, confirmationInput, setAsideInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
 } from "./model";
 
 interface ProfileRow {
   userId: string; name: string; image: string | null; headline: string | null;
   bio: string | null; skills: string | null; opportunityGoals: string | null;
+  moderationHold?:number;
   version: number | null; updatedAt: number | null;
 }
 function profile(row: ProfileRow): CommunityProfile {
   let skills: string[] = [];
   try { const value: unknown = JSON.parse(row.skills ?? "[]"); if (Array.isArray(value)) skills = value.filter((s): s is string => typeof s === "string"); } catch { /* Older malformed rows have no skills. */ }
-  return { userId: row.userId, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
+  return { moderationHold:Boolean(row.moderationHold), userId: row.userId, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
     opportunityGoals: row.opportunityGoals ?? "", version: row.version ?? 0, updatedAt: row.updatedAt };
 }
 /** How many shared contributions the Confirm page lists, newest first. */
 const MENTORSHIP_WINDOW = 50;
-const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
-  FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
+const PROFILE_SELECT = `SELECT u.id AS userId,coalesce(p.publicName,u.name) AS name,p.publicAvatarUrl AS image,p.headline,p.bio,p.skills,p.opportunityGoals,p.contentVersion AS version,p.updatedAt,coalesce(p.moderationOutcome='hold',0) AS moderationHold
+  FROM user u LEFT JOIN studentProfile p ON p.userId=u.id`;
 
-export function createCommunityService(db: D1Database, actorId: string, fixture?: StagingFixtureIdentity | null, environment?: string, flagsOverride?: string) {
+export function createCommunityService(db: D1Database, actorId: string, fixture?: StagingFixtureIdentity | null, environment?: string, flagsOverride?: string, moderationEnv?: MemberModerationEnv) {
   if (!actorId) throw new CommunityError("Sign in to continue.", 401);
   if (!fixture && actorId.startsWith("ttv-staging-fixture-")) throw new CommunityError("Verified staging fixture context required.",403);
   if (fixture && fixture.userId !== actorId) throw new CommunityError("Synthetic staging identity mismatch.",403);
@@ -82,7 +84,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     // keep their reach, so for an admin its answer is unused.
     const eligible = discoverableMember("u.id", { id: actorId, isAdmin: false });
     const [caller, row] = await Promise.all([
-      requireInstitution(),
+      access(),
       db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first(),
     ]);
     // Staff keep their reach: an admin may open any account, as before.
@@ -104,13 +106,13 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     const mentorScope = fixtureScope("c.mentorId");
     // The confirmations are read beside the entries rather than after them: one round trip, not two.
     const [{ results }, { results: confirmations }] = await Promise.all([
-      db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt FROM communityJourney
-        WHERE userId=? AND (?=userId OR visibility='institution') ORDER BY occurredAt DESC,id DESC LIMIT 100`).bind(target, actorId).all<Omit<CommunityJourney, "confirmations">>(),
+      db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt FROM communityJourney j
+        WHERE userId=? AND (?=userId OR ${postedWorkEligibility("j")}) ORDER BY occurredAt DESC,id DESC LIMIT 100`).bind(target, actorId).all<Omit<CommunityJourney, "confirmations">>(),
       db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-        WHERE j.userId=? AND (?=j.userId OR j.visibility='institution')${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId,...mentorScope.values).all<CommunityConfirmation>(),
+        WHERE j.userId=? AND (?=j.userId OR ${postedWorkEligibility("j")})${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId,...mentorScope.values).all<CommunityConfirmation>(),
     ]);
-    return results.map((entry) => ({ ...entry, confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
+    return results.map((entry) => ({ ...entry, moderationHold:Boolean(entry.moderationHold), confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
   }
   async function getProfile(target: string): Promise<CommunityProfile> {
     const [, row] = await Promise.all([requireProfileAccess(target), readProfileRow(target)]);
@@ -151,7 +153,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   function confirmWindow() {
     const scope = fixtureScope("w.userId");
     return {
-      sql: `SELECT w.id FROM communityJourney w WHERE w.visibility='institution' AND w.userId<>?${scope.clause}
+      sql: `SELECT w.id FROM communityJourney w WHERE ${postedWorkEligibility("w")} AND w.userId<>?${scope.clause}
         ORDER BY w.createdAt DESC,w.id DESC LIMIT ${MENTORSHIP_WINDOW}`,
       values: [actorId, ...scope.values],
     };
@@ -168,14 +170,11 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(profileInput, input);
-      await db.prepare(`INSERT INTO communityProfile (userId,headline,bio,skills,opportunityGoals) VALUES (?,?,?,?,?)
-        ON CONFLICT(userId) DO UPDATE SET headline=excluded.headline,bio=excluded.bio,skills=excluded.skills,
-        opportunityGoals=excluded.opportunityGoals,version=communityProfile.version+1,updatedAt=unixepoch()`)
-        .bind(actorId,p.headline,p.bio,JSON.stringify([...new Set(p.skills)]),p.opportunityGoals).run();
+      await saveMemberText(db, actorId, p, moderationEnv);
       return getProfile(actorId);
     },
     async searchProfiles(input: unknown) {
-      const caller = await requireInstitution();
+      const caller = { id: actorId, ...(await access()) };
       const p = parseInput(searchInput, input);
       // instr treats wildcard characters literally; all values are bound.
       const query = (p.query ?? "").toLowerCase();
@@ -200,12 +199,12 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         ORDER BY u.id LIMIT 501`).bind(...eligible.values,...scope.values).all<ProfileRow>();
       if (results.length > 500) throw new CommunityError("Discovery capacity reached. Please try again later.",503);
       const ids = JSON.stringify(results.map(row => row.userId));
-      const { results: entries } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt
-        FROM communityJourney WHERE visibility='institution' AND userId IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 2001`).bind(ids).all<Omit<CommunityJourney,"confirmations">>();
+      const { results: entries } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt
+        FROM communityJourney j WHERE ${postedWorkEligibility("j")} AND userId IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 2001`).bind(ids).all<Omit<CommunityJourney,"confirmations">>();
       const mentor = fixtureScope("c.mentorId");
       const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-        WHERE j.visibility='institution' AND c.journeyVersion=j.version AND j.userId IN (SELECT value FROM json_each(?))${mentor.clause} ORDER BY c.id LIMIT 4001`).bind(ids,...mentor.values).all<CommunityConfirmation>();
+        WHERE ${postedWorkEligibility("j")} AND c.journeyVersion=j.version AND j.userId IN (SELECT value FROM json_each(?))${mentor.clause} ORDER BY c.id LIMIT 4001`).bind(ids,...mentor.values).all<CommunityConfirmation>();
       if (entries.length > 2000 || confirmations.length > 4000) throw new CommunityError("Discovery evidence capacity reached.",503);
       return results.map(row => ({profile:profile(row),entries:entries.filter(e=>e.userId===row.userId).map(e=>({...e,confirmations:confirmations.filter(c=>c.journeyId===e.id)}))}));
     },
@@ -239,10 +238,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       // They are returned only with the rows, so a caller the rows' mentor check refuses learns nothing.
       const [results, {results: confirmations}] = await Promise.all([
         mentorshipRows<Omit<CommunityJourney, "confirmations"> & { memberName: string }>(
-          "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt"),
+          "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,lower(j.state) AS status,j.version,j.createdAt,j.updatedAt"),
         db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
           FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-          WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>(),
+          WHERE ${postedWorkEligibility("j")} AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>(),
       ]);
       return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
     },
@@ -285,31 +284,34 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyInput, input);
+      const saved = await db.prepare("SELECT id FROM studentProfile WHERE userId=?").bind(actorId).first();
+      if (!saved) await saveMemberText(db,actorId,{headline:"",bio:"",skills:[],opportunityGoals:""},moderationEnv);
       const id = createId();
-      await db.prepare(`INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility) VALUES (?,?,?,?,?,?,?)`)
-        .bind(id,actorId,p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.visibility).run();
-      const stored = await db.prepare(`SELECT createdAt FROM communityJourney WHERE id=?`).bind(id).first<{createdAt:number}>();
-      return { id, ...p, userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
+      await db.prepare(`INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility,state) VALUES (?,?,?,?,?,?,'institution',?)`)
+        .bind(id,actorId,p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.status === "draft" ? "DRAFT" : "POSTED").run();
+      await checkPostedWork(db,id,moderationEnv);
+      const stored = await db.prepare(`SELECT createdAt,moderationOutcome FROM communityJourney WHERE id=?`).bind(id).first<{createdAt:number;moderationOutcome:string|null}>();
+      return { id, ...p, moderationHold:stored?.moderationOutcome==="hold", userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
     },
     async updateJourney(id: string,input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyUpdateInput,input);
-      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND (? IS NULL OR version=?)`)
-        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.visibility,id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
+      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility='institution',state=?,moderationOutcome=NULL,moderationReviewRequired=0,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND (? IS NULL OR version=?)`)
+        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.status === "draft" ? "DRAFT" : "POSTED",id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
       if (!result.meta.changes) throw new CommunityError(p.expectedRevision ? "Contribution changed or is no longer available. Reload before editing." : "Contribution not found.",p.expectedRevision?409:404);
+      await checkPostedWork(db,id,moderationEnv);
       return {id,updated:true};
     },
-    async setJourneyVisibility(id: string, input: unknown) {
+    async setJourneyStatus(id: string, input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
-      if (!input || typeof input !== "object" || Array.isArray(input)) throw new CommunityError("Send a visibility change.");
-      const p = input as Record<string, unknown>;
-      if (Object.keys(p).length !== 1 || !["institution", "private"].includes(String(p.visibility))) throw new CommunityError("Choose institution or private visibility.");
-      const result = await db.prepare(`UPDATE communityJourney SET visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
-        .bind(p.visibility,id,actorId).run();
+      const p = parseInput(journeyStatusInput,input);
+      const result = await db.prepare(`UPDATE communityJourney SET visibility='institution',state=?,moderationOutcome=NULL,moderationReviewRequired=0,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
+        .bind(p.status === "draft" ? "DRAFT" : "POSTED",id,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
-      return {id,visibility:p.visibility};
+      await checkPostedWork(db,id,moderationEnv);
+      return {id,status:p.status};
     },
     async deleteJourney(id: string) {
       requireWritable();
@@ -323,7 +325,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const a = await requireMentorReview();
       const p = parseInput(confirmationInput, input);
       const scope = fixtureScope("j.userId");
-      const entry = await db.prepare(`SELECT j.userId,j.version FROM communityJourney j WHERE j.id=? AND j.visibility='institution'${scope.clause}`).bind(id,...scope.values).first<{ userId: string; version: number }>();
+      const entry = await db.prepare(`SELECT j.userId,j.version FROM communityJourney j WHERE j.id=? AND ${postedWorkEligibility("j")}${scope.clause}`).bind(id,...scope.values).first<{ userId: string; version: number }>();
       if (!entry) throw new CommunityError("Contribution not found.", 404);
       await requireFixtureTarget(entry.userId);
       if (entry.version !== p.expectedRevision) throw new CommunityError("Contribution changed. Review the current revision before confirming.",409);
@@ -332,7 +334,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
       const writeScope = fixtureScope("userId");
       const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole)
-        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause} AND NOT EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=communityJourney.id AND c.mentorId=? AND c.journeyVersion=communityJourney.version)`)
+        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND ${postedWorkEligibility("communityJourney")} AND userId<>? AND version=?${writeScope.clause} AND NOT EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=communityJourney.id AND c.mentorId=? AND c.journeyVersion=communityJourney.version)`)
         .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       await workConfirmedAttention({ db, env: { DEPLOYMENT_ENVIRONMENT: environment, PLATFORM_FLAGS_OVERRIDE: flagsOverride } }, confirmationId);
@@ -350,7 +352,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const p = parseInput(setAsideInput, input);
       const scope = fixtureScope("j.userId");
       const entry = await db.prepare(`SELECT j.userId,j.version,EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=j.id AND c.mentorId=? AND c.journeyVersion=j.version) AS confirmed
-        FROM communityJourney j WHERE j.id=? AND j.visibility='institution'${scope.clause}`).bind(actorId,id,...scope.values).first<{ userId: string; version: number; confirmed: number }>();
+        FROM communityJourney j WHERE j.id=? AND ${postedWorkEligibility("j")}${scope.clause}`).bind(actorId,id,...scope.values).first<{ userId: string; version: number; confirmed: number }>();
       if (!entry) throw new CommunityError("Contribution not found.", 404);
       await requireFixtureTarget(entry.userId);
       if (entry.userId === actorId) throw new CommunityError("Your own contributions never wait for your confirmation.", 403);
@@ -359,7 +361,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       // Repeat the predicates in the write so a concurrent edit or retraction cannot be set aside.
       const writeScope = fixtureScope("userId");
       await db.prepare(`INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion)
-        SELECT ?,id,version FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause}
+        SELECT ?,id,version FROM communityJourney WHERE id=? AND ${postedWorkEligibility("communityJourney")} AND userId<>? AND version=?${writeScope.clause}
         ON CONFLICT DO NOTHING`).bind(actorId,id,actorId,entry.version,...writeScope.values).run();
       const stored = await db.prepare(`SELECT 1 AS found FROM communitySetAside WHERE mentorId=? AND journeyId=? AND journeyVersion=?`).bind(actorId,id,entry.version).first();
       if (!stored) throw new CommunityError("Contribution no longer available.", 409);

@@ -42,7 +42,7 @@ function seeded(extra = "") {
   }
   database.exec(`INSERT INTO user(id,name,email) VALUES ('${SCOUT}','Joseph Mutua','joseph@example.test'), ('${MEMBER}','Achieng Otieno','achieng@example.test');
     INSERT INTO UserRoles(id,userId,roleId) SELECT 'institution-role','${SCOUT}',id FROM Roles WHERE name='INSTITUTION';
-    INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals) VALUES ('${MEMBER}','Frontend builder','Builds savings tools.','["React"]','A first developer role');
+    INSERT INTO studentProfile(id,handle,userId,headline,bio,skills,opportunityGoals) VALUES ('${MEMBER}','${MEMBER}','${MEMBER}','Frontend builder','Builds savings tools.','["React"]','A first developer role');
     INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility) VALUES ('ledger','${MEMBER}','Chama savings ledger','Built and tested a fictional savings ledger.','https://github.com/example/ledger','2026-10-24','institution');
     UPDATE feature_flag SET audience='ALL';
     ${extra}`);

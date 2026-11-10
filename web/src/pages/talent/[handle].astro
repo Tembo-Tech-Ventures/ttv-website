@@ -1,4 +1,6 @@
 ---
+import { publicProfileEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
+import { sql as eligibilitySql } from "drizzle-orm";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -44,11 +46,11 @@ const profileRead = handle
         const candidateProfile = await db.query.studentProfile.findFirst({
           where: and(
             eq(schema.studentProfile.handle, handle),
-            eq(schema.studentProfile.status, "PUBLISHED"),
+            eligibilitySql.raw(publicProfileEligibility("studentProfile")),
           ),
           with: {
             user: { columns: { id: true } },
-            highlights: { orderBy: [asc(schema.profileHighlight.sortOrder)] },
+            highlights: { where: eligibilitySql.raw(postedWorkEligibility("studentProfile_highlights")), orderBy: [asc(schema.communityJourney.sortOrder)] },
           },
         });
         const candidateCohorts = candidateProfile
@@ -350,12 +352,12 @@ const personJsonLd =
                 <div class="rounded-lg border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] p-5">
                   <div class="flex flex-wrap items-start justify-between gap-2">
                     <a
-                      href={h.repoUrl}
+                      href={h.evidenceUrl ?? undefined}
                       target="_blank"
                       rel="noopener noreferrer nofollow"
                       class="font-body text-base font-semibold text-ink-primary transition-colors hover:text-primary"
                     >
-                      {h.repoFullName}
+                      {h.title}
                     </a>
                     <div class="flex items-center gap-3 font-body text-xs text-ink-muted">
                       {h.language && <span>{h.language}</span>}

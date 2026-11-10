@@ -706,6 +706,9 @@ export const studentProfile = sqliteTable("studentProfile", {
     .unique()
     .references(() => user.id, { onDelete: "cascade" }),
   handle: text("handle").notNull().unique(),
+  opportunityGoals: text("opportunityGoals").notNull().default(""),
+  // Saved profiles are visible to signed-in people unless suspended or held.
+  // PUBLISHED opts valid cohort graduates into the public website only.
   status: text("status", {
     enum: ["DRAFT", "PUBLISHED", "SUSPENDED"],
   })
@@ -741,7 +744,7 @@ export const studentProfile = sqliteTable("studentProfile", {
     .notNull()
     .default(false),
   ...timestamps,
-});
+}, table => [index("studentProfile_directory_idx").on(table.status,table.handle,table.userId)]);
 
 export const studentProfileRelations = relations(
   studentProfile,
@@ -750,49 +753,10 @@ export const studentProfileRelations = relations(
       fields: [studentProfile.userId],
       references: [user.id],
     }),
-    highlights: many(profileHighlight),
+    highlights: many(communityJourney),
     contacts: many(profileContact),
     projectInterests: many(projectInterest),
     posts: many(blogPost),
-  }),
-);
-
-// ─── ProfileHighlight ─────────────────────────────────────
-
-export const profileHighlight = sqliteTable(
-  "profileHighlight",
-  {
-    id: cuid("id"),
-    profileId: text("profileId")
-      .notNull()
-      .references(() => studentProfile.id, { onDelete: "cascade" }),
-    repoFullName: text("repoFullName").notNull(),
-    repoUrl: text("repoUrl").notNull(),
-    description: text("description"),
-    language: text("language"),
-    topics: text("topics"),
-    stars: integer("stars").notNull().default(0),
-    pushedAt: integer("pushedAt", { mode: "timestamp" }),
-    blurb: text("blurb"),
-    sortOrder: integer("sortOrder").notNull().default(0),
-    snapshotAt: integer("snapshotAt", { mode: "timestamp" }).notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex("profileHighlight_profileId_repoFullName_unique").on(
-      table.profileId,
-      table.repoFullName,
-    ),
-  ],
-);
-
-export const profileHighlightRelations = relations(
-  profileHighlight,
-  ({ one }) => ({
-    profile: one(studentProfile, {
-      fields: [profileHighlight.profileId],
-      references: [studentProfile.id],
-    }),
   }),
 );
 
@@ -1211,16 +1175,6 @@ export const feedbackAttachmentRelations = relations(
 );
 
 // Community contributions are independent of graduation-gated public talent pages.
-export const communityProfile = sqliteTable("communityProfile", {
-  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-  headline: text("headline").notNull().default(""),
-  bio: text("bio").notNull().default(""),
-  skills: text("skills", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
-  opportunityGoals: text("opportunityGoals").notNull().default(""),
-  version: integer("version").notNull().default(1),
-  ...timestamps,
-});
-
 export const communityJourney = sqliteTable("communityJourney", {
   id: cuid("id"),
   userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
@@ -1228,13 +1182,38 @@ export const communityJourney = sqliteTable("communityJourney", {
   description: text("description").notNull(),
   evidenceUrl: text("evidenceUrl"),
   occurredAt: text("occurredAt").notNull(),
+  // Retired NOT NULL column: always write institution; never use for authorization.
   visibility: text("visibility", { enum: ["institution", "private"] }).notNull(),
+  state: text("state", { enum: ["POSTED", "DRAFT"] }).notNull().default("POSTED"),
+  kind: text("kind", { enum: ["contribution", "repo"] }).notNull().default("contribution"),
+  profileId: text("profileId").references(() => studentProfile.id, { onDelete: "set null" }),
+  repoFullName: text("repoFullName"),
+  repoUrl: text("repoUrl"),
+  repoDescription: text("repoDescription"),
+  language: text("language"),
+  topics: text("topics"),
+  stars: integer("stars").notNull().default(0),
+  pushedAt: integer("pushedAt", { mode: "timestamp" }),
+  blurb: text("blurb"),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  snapshotAt: integer("snapshotAt", { mode: "timestamp" }),
+  moderationOutcome: text("moderationOutcome", { enum: ["pass", "hold", "error"] }),
+  moderationFlags: text("moderationFlags"),
+  moderationScores: text("moderationScores"),
+  moderationCheckedAt: integer("moderationCheckedAt", { mode: "timestamp" }),
+  moderationReviewRequired: integer("moderationReviewRequired", { mode: "boolean" }).notNull().default(false),
   version: integer("version").notNull().default(1),
   ...timestamps,
 }, (table) => [
+  uniqueIndex("communityJourney_userId_repoFullName_unique").on(table.userId, table.repoFullName),
+  index("communityJourney_userId_state_idx").on(table.userId, table.state),
   index("communityJourney_userId_visibility_idx").on(table.userId, table.visibility),
   check("communityJourney_visibility_check", sql`${table.visibility} IN ('institution', 'private')`),
 ]);
+
+export const communityJourneyRelations = relations(communityJourney, ({ one }) => ({
+  profile: one(studentProfile, { fields: [communityJourney.userId], references: [studentProfile.userId] }),
+}));
 
 export const communityConfirmation = sqliteTable("communityConfirmation", {
   id: cuid("id"),

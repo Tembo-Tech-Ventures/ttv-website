@@ -1,5 +1,31 @@
 # Channels
 
+## Member visibility (2026-11-09)
+
+`studentProfile` is the single saved profile for every signed-in person. `communityProfile`
+has been migrated and dropped. A saved profile is discoverable while it is neither
+SUSPENDED nor held by moderation; MENTOR and ADMIN owners are excluded. All signed-in
+readers, including institutions, see the same directory. Institutions add AI discovery
+and assessment tools, not access to more people or evidence.
+
+`communityJourney` stores both contributions and repository work. `profileHighlight`
+has been migrated and dropped; repository snapshots and chosen order live on work rows.
+POSTED work follows the profile's visibility. DRAFT work is author-only; old private
+rows became drafts. The retired NOT NULL `visibility` column always receives the legacy
+constant `institution` and is never used for authorization. REST work requests and responses use `status: "posted" | "draft"`. PATCH
+`/api/community/journey/:id` changes that status. The old `visibility` input
+is deprecated and normalized once at validation; responses never emit it.
+
+Clef checks saved profile text and posted work, fails open on errors, and can hold an
+item for a human. Shared reads never include held items. Author/editor and admin reads
+can inspect them. The shared predicates live in `src/lib/community/eligibility.ts`.
+Public surfaces additionally require PUBLISHED and a valid cohort completion;
+PUBLISHED means opting into the public website, not becoming visible to members.
+
+`src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
+one D1 batch each. The directory always shows the shared view, even to the author.
+
+
 Human chat channels for cohorts and the community. Shipped dark behind the
 `channels` flag, which stays OFF until the coordinator switches it. Plan: SAM
 idea 01M68GQAP1DCSVMRJMZS771ZRB, §3; wire contracts in
@@ -577,12 +603,11 @@ v1.
 
 | Work | Shared when | Refused |
 |---|---|---|
-| Project (`journeyId` + `version`) | It is the poster's own published project (`communityJourney.visibility = 'institution'`) at its current revision | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one |
+| Project (`journeyId` + `version`) | It is the poster's own published project (`communityJourney.state = 'POSTED', unheld and with an eligible saved profile`) at its current revision | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one |
 | Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording is that program's, complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
 
 - **Whose consent.** A project's owner sharing it is the consent for that
-  channel's readers, so nobody shares another person's work (`institution`
-  visibility alone is not community-public; see `src/lib/search/README.md`).
+  channel's readers, so nobody shares another person's work (posted work follows the shared eligibility predicate; see `src/lib/search/README.md`).
   A clip goes only where every reader can see the recording: every reader of
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
   admins) has that cohort's recordings.
@@ -591,11 +616,11 @@ v1.
   evidence link (`link: null` without one, or for anything else: no TTV page
   is open to every reader, coordinator seq 382). It is a snapshot of the
   shared revision: an owner who edits the project to remove something must
-  make it private, or delete the message, to take the old text out of the
+  return it to draft, or delete the message, to take the old text out of the
   channel. A clip keeps the recording's title and a quotation of the
   transcript segments overlapping its window (280 characters).
-- **Screened.** Projects are not moderated where they are written, and every
-  reader sees them, so the moderation screen gets the body followed by each
+- **Screened.** Work receives Clef publish-then-check when saved. The channel also screens
+  each shared snapshot: the moderation screen gets the body followed by each
   shared project's title, summary and link (`screeningText`). Contact details
   and invite links in attached work are flagged like those in the body. Clip
   quotations are the session's own words and are not screened. Edits change
@@ -608,7 +633,7 @@ v1.
   quotation. A project's confirmations are read live: each mentor's latest
   confirmation at or before the shared revision, with the revision it
   confirmed. An edited project keeps showing the revision that was shared;
-  publishing a private project again brings its card back.
+  posting a draft again brings its card back.
 - **Not pushed.** A change to the work alone does not move the message, so a
   `since` poll does not carry it: an open page shows the change when it next
   reads that message (a fresh latest page, or any change to the message).

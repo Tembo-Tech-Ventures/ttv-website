@@ -32,11 +32,11 @@ export interface CommunityMcpActor {
 }
 const tools = [
   { name: "assess_profile", description: "AI assessment of documented evidence support1–5 per criterion; missing evidence is separate from low support, never ability or a hiring recommendation", inputSchema: { type: "object", properties: { userId: { type: "string" }, rubric: { type: "object", properties: { id: { type: "string" }, version: { type: "integer", minimum: 1 }, criteria: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, terms: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 }, contraryTerms: { type: "array", items: { type: "string" }, maxItems: 10 } }, required: ["id", "label", "terms"], additionalProperties: false } } }, required: ["id", "version", "criteria"], additionalProperties: false } }, required: ["userId", "rubric"], additionalProperties: false } },
-  { name: "list_journey", description: "Read documented journey evidence", inputSchema: { type: "object", properties: { userId: { type: "string" } }, additionalProperties: false } },
+  { name: "list_journey", description: "Read posted work; your own results also include drafts. Work status is posted or draft.", inputSchema: { type: "object", properties: { userId: { type: "string" } }, additionalProperties: false } },
   { name: "get_own_profile", description: "Read your own community profile", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "update_own_profile", description: "Update your own community profile", inputSchema: { type: "object", additionalProperties: true } },
-  { name: "search_profiles", description: "Search discoverable community profiles as an approved institution", inputSchema: { type: "object", properties: { query: { type: "string" }, skills:{type:"array",maxItems:10,items:{type:"string",maxLength:60}}, limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false } },
-  { name: "get_profile", description: "Read a discoverable community profile as an approved institution", inputSchema: { type: "object", properties: { userId: { type: "string" } }, required: ["userId"], additionalProperties: false } },
+  { name: "search_profiles", description: "Search saved, unheld member profiles visible to every signed-in person", inputSchema: { type: "object", properties: { query: { type: "string" }, skills:{type:"array",maxItems:10,items:{type:"string",maxLength:60}}, limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false } },
+  { name: "get_profile", description: "Read a saved, unheld member profile visible to every signed-in person", inputSchema: { type: "object", properties: { userId: { type: "string" } }, required: ["userId"], additionalProperties: false } },
 ];
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Vary": "Cookie, Authorization, Origin" } });
@@ -50,8 +50,7 @@ const assessmentSchema = z.object({ userId: z.string().min(1), rubric: rubricInp
 const journeySchema = z.object({ userId: z.string().min(1).optional() }).strict();
 function can(actor: CommunityMcpActor, scope: string): boolean { return actor.scopes === null || actor.scopes.includes(scope); }
 function requiresInstitution(name: string, args: Record<string, unknown>, actor: CommunityMcpActor): boolean {
-  if (name === "search_profiles") return true;
-  if (!["get_profile", "list_journey", "assess_profile"].includes(name)) return false;
+  if (name !== "assess_profile") return false;
   return typeof args.userId === "string" && args.userId !== actor.userId;
 }
 async function executeTool(name: string, args: Record<string, unknown>, service: CommunityMcpService, env?: Env): Promise<unknown> {
@@ -119,7 +118,7 @@ async function callTool(params: unknown, actor: CommunityMcpActor, service: Comm
   let scope = "community:read";
   if (institutional) scope = "institution:read";
   if (name === "update_own_profile") scope = "community:write";
-  if (!can(actor, scope)) return fail(-32003, "Insufficient token scope");
+  if (!can(actor, scope) && !(scope === "community:read" && can(actor, "institution:read"))) return fail(-32003, "Insufficient token scope");
   try {
     if (institutional && !(await service.access()).isInstitution) return fail(-32003, "Approved institutional access required");
     const result = await executeTool(name, args, service, env);
@@ -143,7 +142,7 @@ async function dispatchRpc(rpc: z.infer<typeof rpcSchema>, actor: CommunityMcpAc
         if (t.name === "update_own_profile") return can(actor, "community:write");
         if (t.name === "assess_profile") return can(actor, "community:read") || institutional;
         if (["get_own_profile", "list_journey"].includes(t.name)) return can(actor, "community:read");
-        return institutional;
+        return can(actor, "community:read") || can(actor, "institution:read");
       });
       const provided = (await Promise.all(providers.map((provider) => provider.list()))).flat();
       return ok({ tools: [...available, ...provided] });

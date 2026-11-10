@@ -43,7 +43,7 @@ function seeded(extra = "") {
     database.exec(readMigration(file));
   }
   database.exec(`INSERT INTO user(id,name,email) VALUES ('${MEMBER}','Achieng Otieno','achieng@example.test'), ('synthetic-mentor','Baraka Mwangi','baraka@example.test');
-    INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals) VALUES ('${MEMBER}','Frontend builder','Builds savings tools.','["TypeScript"]','A first developer role in Nairobi');
+    INSERT INTO studentProfile(id,handle,userId,headline,bio,skills,opportunityGoals) VALUES ('${MEMBER}','${MEMBER}','${MEMBER}','Frontend builder','Builds savings tools.','["TypeScript"]','A first developer role in Nairobi');
     INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility) VALUES ('ledger','${MEMBER}','Chama savings ledger','Built and tested a fictional savings ledger.','https://github.com/example/ledger','2026-10-24','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmed','ledger','synthetic-mentor','Walked through the tests together.','REVIEWED_WORK',1);
     UPDATE feature_flag SET audience='ALL';
@@ -96,6 +96,16 @@ const journeyTitles = () => sqlite.prepare("SELECT title FROM communityJourney W
 const CONTRIBUTION = { form: "contribution", title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", date: "2026-10-30", sourceUrl: "" };
 
 describe("Community's home", () => {
+  it("explains a saved profile hold to its author", async () => {
+    seeded("UPDATE studentProfile SET moderationOutcome='hold';");
+    expect(main((await visit()).body).textContent).toContain("Your profile is saved. Only you and admins can see it until a human has reviewed it.");
+  });
+  it("explains held work to its author without calling it an unpublished draft", async () => {
+    seeded("UPDATE communityJourney SET moderationOutcome='hold' WHERE id='ledger';");
+    const page=main((await visit()).body);
+    expect(page.textContent).toContain("Your work is saved and waiting for a human review. Only you and admins can see it.");
+    expect(page.textContent).not.toContain("Unpublished draft.");
+  });
   it("leads with the kit title and one sentence, with no display hero", async () => {
     seeded();
     const { status, body } = await visit();
@@ -273,13 +283,13 @@ describe("Community's forms, posted without a script", () => {
     seeded();
     const { status } = await visit({ method: "POST", form: { form: "profile", headline: "Full-stack builder", bio: "Builds savings tools.", skills: "TypeScript, SQL, TypeScript", opportunityGoals: "An internship" } });
     expect(status).toBe(303);
-    expect(sqlite.prepare(`SELECT headline, skills, opportunityGoals FROM communityProfile WHERE userId = '${MEMBER}'`).get())
+    expect(sqlite.prepare(`SELECT headline, skills, opportunityGoals FROM studentProfile WHERE userId = '${MEMBER}'`).get())
       .toEqual({ headline: "Full-stack builder", skills: '["TypeScript","SQL"]', opportunityGoals: "An internship" });
   });
 
   it("answers a database failure with a 503 and keeps the profile as typed", async () => {
-    seeded(`CREATE TRIGGER profile_down_insert BEFORE INSERT ON communityProfile BEGIN SELECT RAISE(ABORT, 'down'); END;
-      CREATE TRIGGER profile_down_update BEFORE UPDATE ON communityProfile BEGIN SELECT RAISE(ABORT, 'down'); END;`);
+    seeded(`CREATE TRIGGER profile_down_insert BEFORE INSERT ON studentProfile BEGIN SELECT RAISE(ABORT, 'down'); END;
+      CREATE TRIGGER profile_down_update BEFORE UPDATE ON studentProfile BEGIN SELECT RAISE(ABORT, 'down'); END;`);
     const { status, body } = await visit({ method: "POST", form: { form: "profile", headline: "Kept headline", bio: "", skills: "", opportunityGoals: "" } });
     expect(status).toBe(503);
     const editor = main(body).querySelector("[data-profile-editor]")!;

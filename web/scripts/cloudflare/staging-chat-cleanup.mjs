@@ -34,7 +34,7 @@ export async function cleanupIncident(target, audit = () => {}) {
     try { await execute(`DELETE FROM "${table}" WHERE "${column}" IN (${placeholders})`, INCIDENT_USERS); } catch { failed = true; }
   }
   // User deletion cascades to owned community data; independently verify those rows too.
-  for (const [table, column] of [["session", "userId"], ["personal_access_token", "userId"], ["stagingFixtureIdentity", "userId"], ["UserRoles", "userId"], ["user", "id"], ["communityProfile", "userId"], ["communityJourney", "userId"], ["communityConfirmation", "mentorId"]]) {
+  for (const [table, column] of [["session", "userId"], ["personal_access_token", "userId"], ["stagingFixtureIdentity", "userId"], ["UserRoles", "userId"], ["user", "id"], ["studentProfile", "userId"], ["communityJourney", "userId"], ["communityConfirmation", "mentorId"]]) {
     try { if (!await count(table, column)) failed = true; } catch { failed = true; }
   }
   audit({ event: "incident-cleanup", runId: INCIDENT_RUN, cleanup: !failed && revoked ? "passed" : "failed" });

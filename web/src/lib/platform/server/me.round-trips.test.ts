@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
 import { withRoundTrips } from "@/test/d1-round-trips";
@@ -17,6 +18,7 @@ function setup(globalRoles: string[]) {
   for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql"]) {
     fixture.database.exec(readMigration(migration));
   }
+  addMemberSchema(fixture.database);
   fixture.database.exec("UPDATE feature_flag SET audience='ALL'");
   const db = withRoundTrips(fixture.db.$client);
   const user = { id: "synthetic-wanjiku", name: "Wanjiku Njeri", image: null, email: "w@example.test", emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };

@@ -1,3 +1,4 @@
+import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import type {
   ProfileModerationFlag,
   ProfileModerationResult,
@@ -82,7 +83,7 @@ export function splitModerationReviewLists<T extends ModerationListRow>(
     held: flagged.filter((profile) => profile.moderationOutcome === "hold"),
     unavailable: flagged.filter(
       (profile) =>
-        profile.moderationOutcome === "error" && profile.status === "PUBLISHED",
+        profile.moderationOutcome === "error",
     ),
   };
 }
@@ -120,6 +121,7 @@ export function resolveAdminProfileUpdate(
 ): Record<string, unknown> {
   if (action === "clear_flag") {
     return {
+      moderationOutcome: "pass",
       moderationReviewRequired: false,
       contentVersion: current.contentVersion + 1,
     };
@@ -134,6 +136,7 @@ export function resolveAdminProfileUpdate(
     status: "PUBLISHED",
     contentVersion: current.contentVersion + 1,
     moderationReviewRequired: false,
+    moderationOutcome: "pass",
     publicName: current.publicName ?? current.user?.name ?? "TTV Builder",
     publicAvatarUrl:
       current.publicAvatarUrl ??
@@ -150,6 +153,10 @@ export async function applyAdminProfileAction(
   expectedVersion: number,
 ): Promise<boolean> {
   if (current.contentVersion !== expectedVersion) return false;
+  if (action === "publish") {
+    const profile = await db.query.studentProfile.findFirst({ where: eq(schema.studentProfile.id,profileId), columns:{userId:true} });
+    if (!profile || !await hasCompletedCohort(db,profile.userId)) return false;
+  }
   const result = await db
     .update(schema.studentProfile)
     .set(resolveAdminProfileUpdate(current, action))

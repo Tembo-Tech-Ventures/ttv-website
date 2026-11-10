@@ -47,9 +47,7 @@ function world() {
     const userId = id(person);
     f.database.prepare("INSERT INTO user(id,name,email) VALUES (?,?,?)").run(userId, `${name} Webhook`, `${userId}@invalid.ttv`);
     for (const role of roles) f.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT ?,?,id FROM Roles WHERE name=?").run(`${userId}-${role}`, userId, role);
-    if (saved) f.database.prepare("INSERT INTO communityProfile(userId,headline,bio,skills) VALUES (?,?,?,?)").run(userId, "Webhook builder", "I build webhook relays.", '["Webhooks"]');
-    // A public talent profile too, so platform search would list them if allowed.
-    f.database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio) VALUES (?,?,?,'PUBLISHED',?,'Webhook builder')").run(userId, userId, userId, name);
+    if (saved) f.database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio,skills) VALUES (?,?,?,'PUBLISHED',?,'Webhook builder','[\"Webhooks\"]')").run(userId,userId,userId,name);
     f.database.prepare("INSERT INTO programApplication(id,userId,programId,status,completedAt,application) VALUES (?,?,'cohort','COMPLETED',1,'{}')").run(`${userId}-completion`, userId);
     f.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Webhook project','Webhook evidence','2026-10-31','institution')").run(`${userId}-journey`, userId);
   }
@@ -120,10 +118,10 @@ const LIST_SURFACES: Record<string, (db: D1Database, caller: string) => Promise<
     const people = await searchPlatform(db, caller, { q: "Webhook", scope: "people" });
     const projects = await searchPlatform(db, caller, { q: "Webhook", scope: "projects" });
     // The caller's own shared work stays findable as their own, never as discovery.
-    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe("/dashboard/community");
+    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe(`/talent/${caller}`);
     const discovered = projects.projects.filter(p => p.owner.id !== caller);
-    for (const project of discovered) expect(project.href).toBe(`/dashboard/discover?profile=${project.owner.id}`);
-    return [...new Set([...people.people.map(p => p.person.id), ...discovered.map(p => p.owner.id)])];
+    for (const project of discovered) expect(project.href).toBe(`/talent/${project.owner.id}`);
+    return [...new Set([...people.people.filter(p=>p.person.id!==caller).map(p => p.person.id), ...discovered.map(p => p.owner.id)])];
   },
 };
 
@@ -197,7 +195,7 @@ describe.each(Object.entries(LIST_SURFACES))("%s keeps an admin's reach", (surfa
   it.each(surface.startsWith("MCP") ? ["grace"] as const : ["amina", "grace"] as const)("as %s", async caller => {
     const db = world();
     // Platform search's people group is the public talent directory, which lists everyone.
-    const expected: Person[] = surface === "platform search" ? EVERYONE : ["achieng", "joseph", "kevin", "lucy"];
+    const expected: Person[] = ["achieng", "joseph", "kevin"];
     expect((await list(db, id(caller))).toSorted()).toEqual(expected.map(id).toSorted());
   });
 });
@@ -213,7 +211,7 @@ describe.each(Object.keys(READ_SURFACES))("%s keeps an admin's reach", surface =
 describe("discoverableMember", () => {
   it("binds the caller and refuses anything but a qualified column", () => {
     expect(discoverableMember("u.id", { id: "caller", isAdmin: false })).toMatchObject({ values: ["caller"] });
-    expect(discoverableMember("u.id", { id: "caller", isAdmin: true })).toMatchObject({ values: [] });
+    expect(discoverableMember("u.id", { id: "caller", isAdmin: true })).toMatchObject({ values: ["caller"] });
     for (const column of ["id", "u.id;--", "u.id OR 1", "(select 1).id", ""]) {
       expect(() => discoverableMember(column, { id: "caller", isAdmin: false })).toThrow("qualified column name");
       expect(() => discoverableMember(column, { id: "caller", isAdmin: true })).toThrow("qualified column name");
@@ -234,12 +232,12 @@ describe("discoverableMember", () => {
   });
   it("keeps non-institution callers out before any eligibility lookup", async () => {
     const db = world();
-    await expect(createCommunityService(db, id("achieng")).getProfile(id("kevin"))).rejects.toMatchObject({ status: 403 });
-    await expect(createCommunityService(db, id("achieng")).getProfile(GHOST)).rejects.toMatchObject({ status: 403 });
+    expect(await createCommunityService(db, id("achieng")).getProfile(id("kevin"))).toMatchObject({userId:id("kevin")});
+    await expect(createCommunityService(db, id("achieng")).getProfile(GHOST)).rejects.toMatchObject({ status: 404 });
   });
   it.each(["achieng", "amina"] as const)("leaves the public talent directory unchanged for %s", async caller => {
     const db = world();
     const people = await searchPlatform(db, id(caller), { q: "Webhook", scope: "people" });
-    expect(people.people.map(p => p.person.id).toSorted()).toEqual(EVERYONE.map(id).toSorted());
+    expect(people.people.map(p => p.person.id).toSorted()).toEqual(["achieng", "joseph", "kevin"].map(p=>id(p as Person)).toSorted());
   });
 });

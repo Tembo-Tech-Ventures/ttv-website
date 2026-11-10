@@ -1,3 +1,4 @@
+import { postedWorkEligibility } from "@/lib/community/eligibility";
 import {
   ExternalLink, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
@@ -208,7 +209,7 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
   }
   const ref = (path: string) => `json_extract(e.value, '$.${path}')`;
   const { results } = await ctx.db.prepare(`SELECT e.key AS position,
-      j.userId AS ownerId, j.visibility, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
+      j.userId AS ownerId, CASE WHEN ${postedWorkEligibility("j")} THEN 'institution' ELSE 'private' END AS visibility, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
       r.programId, r.processingStatus, r.title AS recordingTitle, r.durationSeconds AS recordingSeconds,
       CASE WHEN r.id IS NULL THEN NULL ELSE ${segmentsIn("r.id", ref("startSeconds"), `${ref("startSeconds")} + ${ref("durationSeconds")}`)} END AS segments
     FROM json_each(?1) e
@@ -228,8 +229,8 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
  * rule: still the owner's, still published).
  */
 export async function resolveOwnProject(db: D1Database, ownerId: string, ref: ProjectEmbedRef): Promise<ProjectEmbed> {
-  const row = await db.prepare(`SELECT userId AS ownerId, visibility, version AS currentVersion, title AS journeyTitle, description, evidenceUrl
-    FROM communityJourney WHERE id = ?1`).bind(ref.journeyId).first<ProjectRow>();
+  const row = await db.prepare(`SELECT userId AS ownerId, CASE WHEN ${postedWorkEligibility("j")} THEN 'institution' ELSE 'private' END AS visibility, version AS currentVersion, title AS journeyTitle, description, evidenceUrl
+    FROM communityJourney j WHERE id = ?1`).bind(ref.journeyId).first<ProjectRow>();
   return resolveProject(ownerId, ref, row ?? { ownerId: null, visibility: null, currentVersion: null, journeyTitle: null, description: null, evidenceUrl: null });
 }
 
@@ -243,7 +244,7 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  */
 export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
     WHEN 'project' THEN (SELECT ${confirmationsOf("j.id", "json_extract(e.value, '$.version')")} FROM communityJourney j
-      WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND j.visibility = 'institution')
+      WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j")})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ${program} AND r.processingStatus = 'complete')
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
@@ -289,7 +290,7 @@ function shareableProjects(ctx: ReadContext): Promise<ProjectEmbed[]> {
 export async function listOwnProjects(db: D1Database, userId: string): Promise<ProjectEmbed[]> {
   const { results } = await db.prepare(`SELECT j.id, j.version, j.title, j.description, j.evidenceUrl,
       ${confirmationsOf("j.id", "j.version")} AS confirmations
-    FROM communityJourney j WHERE j.userId = ?1 AND j.visibility = 'institution'
+    FROM communityJourney j WHERE j.userId = ?1 AND ${postedWorkEligibility("j")}
     ORDER BY j.updatedAt DESC, j.id LIMIT ?2`).bind(userId, SHAREABLE_LIMITS.projects).all<JourneyRow>();
   return results.map(projectEmbed);
 }

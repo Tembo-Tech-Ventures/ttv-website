@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { communityActor } from "@/lib/community/actor";
 import { handleCommunityRequest } from "@/lib/community/http";
@@ -30,17 +31,19 @@ function setup() {
   database.exec(readMigration("0017_community_discovery.sql"));
   database.exec(readMigration("0018_confirmation_role_snapshot.sql"));
   database.exec(readMigration("0027_mentor_set_aside.sql"));
+  addMemberSchema(database);
   const users = ["member", "member2", "mentor", "mentor2", "admin", demoMentor, demoMember];
   for (const id of users) database.prepare(`INSERT INTO user (id,name,email) VALUES (?,?,?)`).run(id, id, `${id}@example.test`);
   database.exec(`INSERT INTO Roles (id,name) VALUES ('admin-role','ADMIN')`);
   for (const [userId, role] of [["mentor", "MENTOR"], ["mentor2", "MENTOR"], ["admin", "ADMIN"], [demoMentor, "MENTOR"]]) {
     database.prepare(`INSERT INTO UserRoles (id,userId,roleId) VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(`${userId}-${role}`, userId, role);
   }
-  const journey = database.prepare(`INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility,createdAt) VALUES (?,?,?,?,?,?,?)`);
+  for (const id of users) database.prepare('INSERT INTO studentProfile(id,userId,handle) VALUES (?,?,?)').run(id,id,id);
+  const journey = database.prepare(`INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility,state,createdAt) VALUES (?,?,?,?,?,?,?,?)`);
   for (const [id, userId, visibility, createdAt] of [
     ["A", "member", "institution", 1], ["B", "member", "institution", 2], ["C", "member", "private", 3],
     ["D", "mentor", "institution", 4], ["E", "member2", "institution", 5], ["F", demoMember, "institution", 6],
-  ] as const) journey.run(id, userId, `Work ${id}`, `Fictional work ${id}`, "2026-10-01", visibility, createdAt);
+  ] as const) journey.run(id, userId, `Work ${id}`, `Fictional work ${id}`, "2026-10-01", "institution", visibility === "private" ? "DRAFT" : "POSTED", createdAt);
   const confirm = database.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES (?,?,?,?,?,1,'MENTOR')`);
   confirm.run("mine", "B", "mentor", "I checked the code", "Review");
   confirm.run("theirs", "A", "mentor2", "I checked the code", "Review");
@@ -69,8 +72,8 @@ async function confirmPageWaiting(db: D1Database, env: AwaitingConfirmationConte
 describe("awaitingConfirmation", () => {
   const cases: [string, Locals, AwaitingConfirmationContext["env"], number | null][] = [
     ["a mentor: shared work by others they have not confirmed (A, E, F), never their own or private work", locals("mentor"), {}, 3],
-    ["another mentor: their own confirmations only, so A no longer waits for them but B and D do", locals("mentor2"), {}, 4],
-    ["an admin, whom the Confirm page also serves (A, B, D, E, F)", locals("admin"), {}, 5],
+    ["another mentor: their own confirmations only, so A no longer waits for them but B does, never mentor-owned D", locals("mentor2"), {}, 3],
+    ["an admin, whom the Confirm page also serves (A, B, E, F)", locals("admin"), {}, 4],
     ["a member without mentor access", locals("member"), {}, null],
     ["a personal access token, which the Confirm page refuses", locals("mentor", { personalAccessToken: token }), {}, null],
     ["a delegated agent session for a real mentor", locals("mentor", { session: agentSession }), {}, null],
@@ -98,7 +101,7 @@ describe("awaitingConfirmation", () => {
     database.exec(`UPDATE communityJourney SET version=2 WHERE id='B'`);
     expect(await count()).toBe(4);
     database.exec(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES ('again','B','mentor','I checked it again','Review',2,'MENTOR')`);
-    database.exec(`UPDATE communityJourney SET visibility='private' WHERE id='E'`);
+    database.exec(`UPDATE communityJourney SET state='DRAFT' WHERE id='E'`);
     expect(await count()).toBe(2);
   });
 
@@ -108,7 +111,7 @@ describe("awaitingConfirmation", () => {
     database.exec(`INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion) VALUES ('mentor','A',1),('mentor','E',1)`);
     expect(await count("mentor")).toBe(1);
     expect(await confirmPageWaiting(db, {}, locals("mentor"))).toBe(1);
-    expect(await count("mentor2")).toBe(4);
+    expect(await count("mentor2")).toBe(3);
     // A new revision waits again; undo restores the rest.
     database.exec(`UPDATE communityJourney SET version=2 WHERE id='A'`);
     expect(await count("mentor")).toBe(2);

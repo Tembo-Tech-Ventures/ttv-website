@@ -33,6 +33,7 @@ function authorizeRequest(request: Request, path: string, actor: Actor) {
   if (write && (actor.scopes === null || request.headers.has("Origin")) && !hasMatchingRequestOrigin(request)) throw new CommunityError("A same-origin request is required.", 403);
   const parts = path.split("/");
   const institution = parts[0] === "profiles" && (parts.length === 1 || parts[1] !== actor.id);
+  if (!write && institution && actor.scopes?.includes("community:read")) return;
   const changesData = write && path !== "chat" && !path.endsWith("/assessment");
   const scope = institution ? "institution:read" : changesData ? "community:write" : "community:read";
   if (actor.scopes !== null && !actor.scopes.includes(scope)) throw new CommunityError("Insufficient token scope.", 403);
@@ -68,7 +69,7 @@ const routes: Record<string, Handler> = {
 };
 async function journeyMutation(ctx: RouteContext,id: string) {
   if (ctx.request.method === "PUT") return communityJson(await ctx.service.updateJourney(id,ctx.body));
-  if (ctx.request.method === "PATCH") return communityJson(await ctx.service.setJourneyVisibility(id,ctx.body));
+  if (ctx.request.method === "PATCH") return communityJson(await ctx.service.setJourneyStatus(id,ctx.body));
   if (ctx.request.method === "DELETE") return communityJson(await ctx.service.deleteJourney(id));
   return communityJson({error:"Route not found."},404);
 }
@@ -85,6 +86,10 @@ async function setAsideRoute(ctx: RouteContext,id: string) {
     ? communityJson({setAside: await ctx.service.setAsideJourney(id,ctx.body)},201)
     : communityJson({setAside: await ctx.service.undoSetAside(id)});
 }
+async function requireAssessmentAccess(ctx: RouteContext, target: string) {
+  const access = await ctx.service.access();
+  if (target !== ctx.actor.id && !access.isInstitution && !access.isAdmin) throw new CommunityError("Approved institutional access is required.",403);
+}
 async function dynamicRoute(ctx: RouteContext) {
   const parts = ctx.path.split("/");
   if (parts[0] === "journey" && parts.length === 2) return journeyMutation(ctx,parts[1]);
@@ -96,6 +101,7 @@ async function dynamicRoute(ctx: RouteContext) {
   if (parts[0] !== "profiles" || parts.length < 2) return communityJson({error:"Route not found."},404);
   if (parts.length === 2 && ctx.request.method === "GET") return communityJson(await ctx.service.getProfileWithJourney(parts[1]));
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {
+    await requireAssessmentAccess(ctx,parts[1]);
     const probe = stagingAssessmentProbe(ctx.db, ctx.env?.DEPLOYMENT_ENVIRONMENT, ctx.actor);
     const measurement: { claimed: boolean; payloadBytes: number; payloadCharacters: number; outputReason?: AssessmentOutputReason } = { claimed: false, payloadBytes: 0, payloadCharacters: 0 };
     const provider = createAssessmentProvider(ctx.env, probe ? { syntheticProbe: {
@@ -117,7 +123,7 @@ export async function handleCommunityRequest(request: Request, path: string, act
     authorizeRequest(request,path,actor);
     const body = await readBody(request);
     if (actor.fixture?.retainedReadProbe) authorizeRetainedProbe(request.method,path,actor.scopes,body);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT,env?.PLATFORM_FLAGS_OVERRIDE),body,db,env};
+    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT,env?.PLATFORM_FLAGS_OVERRIDE,env),body,db,env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -17,7 +17,6 @@ import { loadProfilePhotoForModeration } from "@/lib/avatar";
 import {
   checkProfileContent,
   previewProfileModerationResult,
-  profileModerationMessages,
   PROFILE_MODERATION_PREVIEW_HEADER,
 } from "@/lib/moderation/clef";
 import {
@@ -126,15 +125,11 @@ async function persistHighlights(
   sessionUserAgent: string | null | undefined,
   highlights: readonly ProfileHighlightValues[],
 ): Promise<Response | null> {
-  const moderation =
-    profile.status === "PUBLISHED"
-      ? await moderateHighlights(request, sessionUserAgent, profile, highlights)
-      : undefined;
   const result = await replaceProfileHighlights(
     db,
     profile,
     highlights,
-    moderation,
+    {outcome:"error",flags:[],scores:{}},
   );
 
   if (result.outcome === "suspended") {
@@ -149,15 +144,17 @@ async function persistHighlights(
       409,
     );
   }
-  if (result.outcome === "hold" && moderation) {
-    return jsonResponse(
-      {
-        error: "Your changes need attention before they can go live.",
-        moderationMessages: profileModerationMessages(moderation.flags),
-      },
-      422,
-    );
-  }
+  if (highlights.length === 0) return null;
+  const revisions = await db.query.communityJourney.findMany({where:and(
+    eq(schema.communityJourney.userId,profile.userId),eq(schema.communityJourney.kind,"repo"),
+    inArray(schema.communityJourney.repoFullName,highlights.map(h=>h.repoFullName))),columns:{id:true,version:true}});
+  const moderation = await moderateHighlights(request,sessionUserAgent,profile,highlights);
+  const updates = revisions.map(row=>db.update(schema.communityJourney).set({
+    moderationOutcome:moderation.outcome,moderationFlags:JSON.stringify(moderation.flags),moderationScores:JSON.stringify(moderation.scores),
+    moderationCheckedAt:new Date(),moderationReviewRequired:moderation.outcome!=="pass",
+  }).where(and(eq(schema.communityJourney.id,row.id),eq(schema.communityJourney.version,row.version),eq(schema.communityJourney.moderationReviewRequired,true))));
+  if (updates.length > 0) await db.batch([updates[0],...updates.slice(1)]);
+  if (moderation.outcome === "hold") return jsonResponse({error:"Your work is saved and waiting for a human review."},422);
   return null;
 }
 
@@ -260,12 +257,12 @@ export const PUT: APIRoute = async ({ request }) => {
 
   const repoMap = new Map(repos.map((repo) => [repo.full_name, repo]));
   let refreshed = 0;
-  const rows: ProfileHighlightValues[] = profile.highlights.map((highlight) => {
-    const repo = repoMap.get(highlight.repoFullName);
+  const rows: ProfileHighlightValues[] = profile.highlights.filter(h => h.kind === "repo" && h.repoFullName && h.repoUrl && h.snapshotAt).map((highlight) => {
+    const repo = repoMap.get(highlight.repoFullName!);
     if (!repo) {
       return {
-        repoFullName: highlight.repoFullName,
-        repoUrl: highlight.repoUrl,
+        repoFullName: highlight.repoFullName!,
+        repoUrl: highlight.repoUrl!,
         description: highlight.description,
         language: highlight.language,
         topics: highlight.topics ?? "[]",
@@ -273,7 +270,7 @@ export const PUT: APIRoute = async ({ request }) => {
         pushedAt: highlight.pushedAt,
         blurb: highlight.blurb,
         sortOrder: highlight.sortOrder,
-        snapshotAt: highlight.snapshotAt,
+        snapshotAt: highlight.snapshotAt!,
       };
     }
     refreshed += 1;

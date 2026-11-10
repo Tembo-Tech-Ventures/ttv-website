@@ -1,5 +1,31 @@
 # Platform search v1
 
+## Member visibility (2026-11-09)
+
+`studentProfile` is the single saved profile for every signed-in person. `communityProfile`
+has been migrated and dropped. A saved profile is discoverable while it is neither
+SUSPENDED nor held by moderation; MENTOR and ADMIN owners are excluded. All signed-in
+readers, including institutions, see the same directory. Institutions add AI discovery
+and assessment tools, not access to more people or evidence.
+
+`communityJourney` stores both contributions and repository work. `profileHighlight`
+has been migrated and dropped; repository snapshots and chosen order live on work rows.
+POSTED work follows the profile's visibility. DRAFT work is author-only; old private
+rows became drafts. The retired NOT NULL `visibility` column always receives the legacy
+constant `institution` and is never used for authorization. REST work requests and responses use `status: "posted" | "draft"`. PATCH
+`/api/community/journey/:id` changes that status. The old `visibility` input
+is deprecated and normalized once at validation; responses never emit it.
+
+Clef checks saved profile text and posted work, fails open on errors, and can hold an
+item for a human. Shared reads never include held items. Author/editor and admin reads
+can inspect them. The shared predicates live in `src/lib/community/eligibility.ts`.
+Public surfaces additionally require PUBLISHED and a valid cohort completion;
+PUBLISHED means opting into the public website, not becoming visible to members.
+
+`src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
+one D1 batch each. The directory always shows the shared view, even to the author.
+
+
 `GET /api/search` implements the existing `ROUTES.search`, `SearchQuery` and
 `SearchResults` contracts. The client search store can consume it unchanged.
 Every response is `no-store`. `spaces` OFF returns 404 before parsing or source
@@ -35,33 +61,11 @@ members and assigned instructors/TAs/mentors receive only their explicit
 cohorts. Demo identities are additionally limited to demo public profiles and
 their canonical demo cohort. Revocation is effective on the next request.
 
-People require a published `studentProfile` and a completed application with
-`completedAt`, matching the existing public talent page. Only public identity
-snapshots are searched or emitted; private authentication names, emails and
-moderation fields are excluded. Project results use current `communityJourney`
-revisions with `institution` visibility, and additionally require a publicly
-eligible owner profile. Mentor/admin owners are excluded. Only the owner or
-canonical institution/admin can read them.
-
-Institutional discovery's shared rule, `discoverableMember` in
-`src/lib/community/eligibility.ts` (owner decision 2026-11-01), requires a
-saved community profile, no MENTOR or ADMIN role, and not the caller. The
-INSTITUTION role never excludes an otherwise eligible member. Institution
-callers see only such people and such owners' shared projects. Admins keep
-their reach: the public talent directory, and shared projects of every owner
-who is not a mentor or admin. A caller holding both ADMIN and INSTITUTION is
-an admin here. Everyone else sees the public talent directory unchanged.
-
-`institution` does not mean community-public. Private projects never
-appear, even for their owner. The `PRIVATE` visibility kind carries the explicit
-label “Shared with approved institutions”; no institution enum is added.
-
-Links use existing supported destinations: public talent profiles, an owner's
-community workspace, the institutional profile view, and recording timestamps.
-Project links open the containing profile/workspace; no unsupported revision or
-project anchor is invented. Session quotes come from `transcript_segment` joined
-to complete recordings in the authorized cohort, labeled “Only you and your
-cohort”. Neither Vectorize metadata nor any model output supplies a citation.
+People and projects use the shared member and posted-work predicates above. Only
+moderated identity snapshots are searched or emitted. Search results link to the
+eligible public profile where one exists; other member hits have no link until PR C ships the member route. `memberProfileHref` owns that transition. Results are labelled “Signed-in members”. Private drafts, held work and
+moderation details never become search sources, including for their owner.
+Session quotes still come only from complete recordings in an authorized cohort.
 
 The wire contract has no paging fields. V1 therefore returns at most 10 matches
 per group in deterministic order, with at most 500 characters in each excerpt.

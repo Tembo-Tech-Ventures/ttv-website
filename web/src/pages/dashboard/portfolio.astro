@@ -224,9 +224,9 @@ const fieldErrors = Object.keys(errors).length > 0;
 const moderationMessages = result?.moderationMessages ?? [];
 const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
 
-const existingHighlights = (profile?.highlights ?? [])
+const existingHighlights = (profile?.highlights ?? []).filter(h=>h.kind === "repo" && h.state === "POSTED" && h.repoFullName)
   .toSorted((a, b) => a.sortOrder - b.sortOrder)
-  .map((h) => ({ repoFullName: h.repoFullName, blurb: h.blurb ?? "", sortOrder: h.sortOrder }));
+  .map((h) => ({ repoFullName: h.repoFullName!, blurb: h.blurb ?? "", sortOrder: h.sortOrder }));
 const draft = profile?.status === "DRAFT";
 ---
 
