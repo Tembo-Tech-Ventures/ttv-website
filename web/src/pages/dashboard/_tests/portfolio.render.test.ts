@@ -294,6 +294,13 @@ describe("posting work", () => {
     expect(work()).toEqual([]);
   });
 
+  it("says plainly when the team took a piece down", async () => {
+    seeded(PROFILE("DRAFT") + WORK + "UPDATE communityJourney SET moderatorHidden = 1 WHERE id = 'ledger';");
+    const entry = main((await visit()).body).querySelector("[data-work-entry='ledger']")!;
+    expect(entry.getAttribute("data-work-status")).toBe("hidden");
+    expect(entry.textContent).toContain("The team took this down, so only you and the team can see it.");
+  });
+
   it("moves a piece to drafts and back", async () => {
     seeded(PROFILE("DRAFT") + WORK);
     expect((await post({ _action: "work-status", id: "ledger", status: "draft" })).status).toBe(303);
