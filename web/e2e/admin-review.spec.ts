@@ -36,7 +36,8 @@ test.describe("admin review surfaces", () => {
     const held = page.getByRole("region", { name: "Held by the content check" });
     await expect(held.getByRole("link", { name: "Kwame Fixture" })).toBeVisible();
     await expect(held.getByRole("button", { name: "Publish Kwame Fixture", exact: true })).toHaveCount(0);
-    for (const action of ["Unpublish", "Clear flag"]) {
+    // A draft isn't on the public website to come off, so it is paused.
+    for (const action of ["Pause", "Clear flag"]) {
       await expect(
         held.getByRole("button", { name: `${action} Kwame Fixture`, exact: true }),
       ).toBeVisible();
@@ -108,7 +109,7 @@ test.describe("admin review surfaces", () => {
     ).toHaveCount(0);
     await expect(page.getByText("Only the member can list it there.")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Unpublish", exact: true }),
+      page.getByRole("button", { name: "Pause", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Clear flag" }),
