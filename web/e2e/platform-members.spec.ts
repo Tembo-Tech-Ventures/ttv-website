@@ -44,6 +44,14 @@ async function noSidewaysScroll(page: Page) {
 }
 
 const cards = (page: Page) => main(page).locator("[data-member-card]");
+
+/** Some listed member's page: the first card's, so it holds wherever the data comes from (local seed or preview fixtures). */
+async function someMember(page: Page): Promise<string> {
+  await open(page, PATH);
+  const first = cards(page).first().locator(".member-card__link");
+  test.skip(await first.count() === 0, "Nobody else is listed here.");
+  return (await first.getAttribute("href"))!;
+}
 const card = (page: Page, handle: string) => main(page).locator(`[data-member-card="${handle}"]`);
 
 for (const width of [1440, 768, 390, 320]) {
@@ -52,7 +60,8 @@ for (const width of [1440, 768, 390, 320]) {
     await signedIn(page, baseURL);
     await open(page, PATH);
     await expect(main(page).getByRole("heading", { level: 1 })).toHaveText("Members");
-    await expect(page.locator("h1")).toHaveCount(1);
+    // The page's own DOM: locators pierce the dev toolbar's shadow root, which has headings of its own.
+    expect(await page.evaluate(() => document.querySelectorAll("h1").length)).toBe(1);
     await expect(main(page).getByRole("search", { name: "Find members" })).toBeVisible();
     await expect(main(page).locator("#member-results")).toHaveText(/^\d+ members?$/);
     await expect(cards(page).first()).toBeVisible();
@@ -87,8 +96,9 @@ test("the whole card opens the member's page, which shows their work and their p
 test("a member's page reads on a phone, axe clean at 320", async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await signedIn(page, baseURL);
-  await open(page, ACHIENG);
-  await expect(page.locator("h1")).toHaveCount(1);
+  await open(page, await someMember(page));
+  // The page's own DOM: locators pierce the dev toolbar's shadow root, which has headings of its own.
+  expect(await page.evaluate(() => document.querySelectorAll("h1").length)).toBe(1);
   await noSidewaysScroll(page);
   await runAxe(page, test.info(), "member profile 320");
 });
@@ -134,12 +144,13 @@ test.describe("on a touch screen", () => {
     await expect(search.getByLabel("Skills")).toBeHidden();
     await search.locator("summary").click();
     await expect(search.getByLabel("Skills")).toBeVisible();
-    await tallEnough(main(page).locator(".member-search > summary, [data-member-filters] :is(input, select, button, a), [data-pager] a, [data-member-you] a"));
+    // A card's name link is not measured: its press area is the whole card (members.css).
+    await tallEnough(main(page).locator(".member-search > summary, [data-member-filters] :is(input, select, button, a), [data-pager] a, [data-member-you] a:not(.member-card__link)"));
   });
 
   test("every link on a member's page is at least 44px tall", async ({ page, baseURL }) => {
     await signedIn(page, baseURL);
-    await open(page, ACHIENG);
+    await open(page, await someMember(page));
     await tallEnough(main(page).locator("[data-member-profile] a"));
   });
 });
