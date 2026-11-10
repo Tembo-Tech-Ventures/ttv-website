@@ -2,7 +2,7 @@ import React from "react";
 
 export const demoRoles = [
   { key: "member-cohort", label: "Cohort member", description: "Record your work and seek feedback as a member of a fictional cohort." },
-  { key: "member-noncohort", label: "Community member", description: "Build your community profile outside a cohort." },
+  { key: "member-noncohort", label: "Community member", description: "Build your profile outside a cohort." },
   { key: "mentor", label: "Mentor", description: "Review a specific contribution and add context to the work." },
   { key: "institution", label: "Institution", description: "Find people, explore their evidence, and decide what to ask next." },
 ] as const;
@@ -47,7 +47,7 @@ export default function DemoRoleChooser({ activePersona, canSwitch, pendingPerso
           </button>
         ))}
       </div>
-      <p className="mt-6 text-sm text-ink-muted">Both member roles can build a community profile. Cohort membership is separate from community access.</p>
+      <p className="mt-6 text-sm text-ink-muted">Both member roles can build a profile. Cohort membership is separate from community access.</p>
     </section>
   );
 }

@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
-import { takeFlash } from "@/lib/platform/server/flash";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
 import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astro";
@@ -25,13 +25,25 @@ import ProfileCard from "@/components/community/home/ProfileCard.astro";
 import JourneyEntry from "@/components/community/home/JourneyEntry.astro";
 import { loadCommunityHome } from "@/components/community/home/home-data";
 import { EVERYONE_SEES } from "@/components/platform/profile-editor/copy";
-import { addWorkHref } from "@/components/platform/profile-editor/work-forms";
+import { addWorkHref, EDITOR_PATH, editWorkHref, profileFormHref } from "@/components/platform/profile-editor/work-forms";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 
 const { method } = Astro.request;
-if (method !== "GET" && method !== "HEAD") {
-  return new Response("Not allowed.", { status: 405, headers: { Allow: "GET, HEAD", "Cache-Control": "no-store", Vary: "Cookie" } });
+// This page used to post work and save the profile itself. A form from a tab opened before that moved
+// lands in the editor, told plainly that nothing was saved, instead of on a bare 405.
+if (method === "POST") {
+  return redirectWithFlash(Astro, EDITOR_PATH, {
+    tone: "warning", title: "Your profile and work are edited here now", message: "Nothing was saved from the old page. Please make the change again below.",
+  });
 }
+if (method !== "GET" && method !== "HEAD") {
+  return new Response("Not allowed.", { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store", Vary: "Cookie" } });
+}
+// The old page's own links (posting, editing a piece, editing the profile) open the same in the editor.
+const legacy = Astro.url.searchParams;
+const editing = legacy.get("edit");
+const moved = legacy.has("add") ? addWorkHref() : editing ? editWorkHref({ id: editing }) : legacy.get("profile") === "edit" ? profileFormHref() : null;
+if (moved) return Astro.redirect(moved, 301);
 
 // The page's own reads start together, beside the space context and onboarding (PERF-2): the profile
 // and work through the community API, the student journey the frame and the invitation share, and

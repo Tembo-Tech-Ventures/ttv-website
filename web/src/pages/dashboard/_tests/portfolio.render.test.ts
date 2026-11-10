@@ -9,6 +9,7 @@ import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { withRaw } from "@/lib/attention/test-support";
 import { FLASH_COOKIE } from "@/lib/platform/server/flash";
 import { NOT_SAVED, SAVED } from "@/components/platform/profile-editor/copy";
+import * as clef from "@/lib/moderation/clef";
 
 /*
  * /dashboard/me/portfolio, the one profile editor (PR D): for everyone signed in, the profile, the
@@ -140,6 +141,28 @@ describe("the profile editor, for everyone", () => {
     expect(page.querySelector("[data-notice='success']")?.textContent).toContain(SAVED.profile);
   });
 
+  it("answers a save the check holds as a save: one 303, said once as a warning, never a failure", async () => {
+    seeded(PROFILE("DRAFT"));
+    const check = vi.spyOn(clef, "checkProfileContent").mockResolvedValue({ outcome: "hold", flags: [], scores: {} });
+    const { status, headers, setCookies } = await post({ _action: "save", handle: "akinyi-builds", headline: "Something the check holds" });
+    check.mockRestore();
+    expect(status).toBe(303);
+    expect(headers.get("location")).toBe(PATH);
+    const flash = decodeURIComponent(setCookies.find((line) => line.startsWith(`${FLASH_COOKIE}=`)) ?? "");
+    expect(flash).toContain('"tone":"warning"');
+    expect(flash).toContain(SAVED.profileHeld);
+    expect(sqlite.prepare("SELECT headline, moderationOutcome FROM studentProfile WHERE id = 'profile'").get())
+      .toEqual({ headline: "Something the check holds", moderationOutcome: "hold" });
+  });
+
+  it("shows one form at a time before the first save: the work form, when it's open, without Make my profile", async () => {
+    seeded();
+    const page = main((await visitAt(new URL(`${PATH}?add=1`, ORIGIN))).body);
+    expect(page.querySelector("[data-work-editor='add']")).not.toBeNull();
+    expect(page.querySelector("[data-profile-form]")).toBeNull();
+    expect(primaries(page)).toEqual(["Save"]);
+  });
+
   it("refuses a bad handle with a 400 that keeps every value, the error under the field and a focused notice", async () => {
     seeded();
     const { status, body } = await post({ _action: "save", handle: "No Spaces!", headline: "Kept headline", bio: "Kept bio", opportunityGoals: "Kept goals", openToFreelance: "on" });
@@ -196,25 +219,81 @@ describe("the public website, for graduates", () => {
 
   it("says where a listed profile lives, and takes it off after a confirm step that says what comes off", async () => {
     seeded(COMPLETED + PROFILE("PUBLISHED"));
-    let site = main((await visit()).body).querySelector("[data-public-site='listed']")!;
+    let site = main((await visit()).body).querySelector("[data-public-site='live']")!;
     expect(site.querySelector("a[href='/talent/akinyi-builds']")).not.toBeNull();
     const off = [...site.querySelectorAll("a")].find((link) => link.textContent === "Take me off the public website")!;
     expect(off.getAttribute("href")).toBe(`${PATH}?confirm=unpublish`);
     // The confirm step: a warning that takes focus and names what comes off, then the danger button.
-    site = main((await visitAt(new URL(`${PATH}?confirm=unpublish`, ORIGIN))).body).querySelector("[data-public-site='listed']")!;
+    site = main((await visitAt(new URL(`${PATH}?confirm=unpublish`, ORIGIN))).body).querySelector("[data-public-site='live']")!;
     const step = site.querySelector("[data-confirm-step]") ?? site;
     expect(step.textContent).toContain("Take your profile off the public website?");
-    expect(step.textContent).toContain("Your page at /talent/akinyi-builds and the pages of your posts come off the public website.");
+    // Everything that changes: the page, the posts, Writing and Opportunities, and how long search takes.
+    expect(step.textContent).toContain("Your page at /talent/akinyi-builds and your blog posts come off the public website, and Writing and Opportunities close until you list yourself again.");
+    expect(step.textContent).toContain("Nothing is deleted.");
+    expect(step.textContent).toContain("Our sitemap and feed catch up within an hour");
     expect(step.textContent).toContain("Your handle stays yours");
     expect(step.querySelector("input[name='_action']")?.getAttribute("value")).toBe("unpublish");
     const { status, headers } = await post({ _action: "unpublish" });
     expect(status).toBe(303);
     expect(headers.get("location")).toBe(PATH);
     expect(sqlite.prepare("SELECT status, handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ status: "DRAFT", handle: "akinyi-builds" });
-    // Coming off twice says so, and changes nothing.
+    // Coming off twice (a second tab, a double press) answers the same: they're off, and nothing else changes.
     const again = await post({ _action: "unpublish" });
-    expect(again.status).toBe(409);
-    expect(main(again.body).querySelector("[data-notice='danger']")?.textContent).toContain(NOT_SAVED.unlisted);
+    expect(again.status).toBe(303);
+    expect(again.headers.get("location")).toBe(PATH);
+    expect(sqlite.prepare("SELECT status FROM studentProfile WHERE id = 'profile'").get()).toEqual({ status: "DRAFT" });
+  });
+
+  it("tells a graduate who took themselves off that they can list themselves again, with nothing nagging", async () => {
+    seeded(COMPLETED + PROFILE("DRAFT") + "UPDATE studentProfile SET publishedAt = 1781000000;");
+    const site = main((await visit()).body).querySelector("[data-public-site='unlisted']")!;
+    expect(site.textContent).toContain("You took yourself off the public website. You can list yourself again whenever you like, at /talent/akinyi-builds");
+    expect(site.querySelector("button")?.textContent).toBe("List me on the public website");
+  });
+
+  it("offers no listing while a check holds a graduate's draft, and says what it waits for", async () => {
+    seeded(COMPLETED + PROFILE("DRAFT") + "UPDATE studentProfile SET moderationOutcome = 'hold';");
+    const site = main((await visit()).body).querySelector("[data-public-site='waiting']")!;
+    expect(site.textContent).toContain("Your profile is waiting for a check. Once a person at TTV has looked at it, you can list it on the public website.");
+    expect(site.querySelector("form, button")).toBeNull();
+  });
+});
+
+describe("mentors and staff", () => {
+  it("are told the truth: not in the directory or on the public website, so only they and the team see it", async () => {
+    seeded(COMPLETED + PROFILE("PUBLISHED") + `INSERT INTO Roles(id,name) VALUES ('role-mentor','MENTOR') ON CONFLICT(name) DO NOTHING;
+      INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MEMBER}',id FROM Roles WHERE name='MENTOR';`);
+    const page = main((await visit()).body);
+    expect(page.querySelector("#profile-visibility")?.textContent).toContain("Mentors and TTV staff aren't listed in the members directory or on the public website");
+    expect(page.querySelector("#profile-visibility")?.textContent).not.toContain("Everyone signed in");
+    const site = page.querySelector("[data-public-site='staff']")!;
+    expect(site.textContent).toContain("Mentors and TTV staff aren't listed on the public website.");
+    expect(site.textContent).not.toContain("You're on the public website");
+    expect(site.querySelector("form, a, button")).toBeNull();
+    // Not in the directory, so no member page to see.
+    expect(page.querySelector("[data-page-header] a")).toBeNull();
+  });
+});
+
+describe("the handle", () => {
+  it("stays put after the first save, and changes only as a deliberate step that says links to the old address stop working", async () => {
+    seeded(PROFILE("DRAFT"));
+    let form = main((await visit()).body).querySelector("[data-profile-form]")!;
+    expect(form.querySelector("input[name='handle']")?.getAttribute("type")).toBe("hidden");
+    expect(form.querySelector("[data-handle-locked='saved']")?.textContent).toContain("members/akinyi-builds");
+    const change = [...form.querySelectorAll("a")].find((link) => link.textContent === "Change handle")!;
+    expect(change.getAttribute("href")).toBe(`${PATH}?confirm=handle#profile-form`);
+    form = main((await visitAt(new URL(`${PATH}?confirm=handle`, ORIGIN))).body).querySelector("[data-profile-form]")!;
+    expect(form.querySelector("input[name='handle']")?.getAttribute("type")).not.toBe("hidden");
+    expect(form.querySelector("#handle-warning")?.textContent).toContain("links to the old one stop working");
+  });
+
+  it("never changes once the profile has been on the public website, where it's part of every post link", async () => {
+    seeded(COMPLETED + PROFILE("DRAFT") + "UPDATE studentProfile SET publishedAt = 1781000000;");
+    const form = main((await visitAt(new URL(`${PATH}?confirm=handle`, ORIGIN))).body).querySelector("[data-profile-form]")!;
+    expect(form.querySelector("input[name='handle']")?.getAttribute("type")).toBe("hidden");
+    expect(form.querySelector("[data-handle-locked='listed']")?.textContent).toContain("because it's part of your post links");
+    expect([...form.querySelectorAll("a")].some((link) => link.textContent === "Change handle")).toBe(false);
   });
 });
 
@@ -222,7 +301,7 @@ describe("a listed profile held by the check", () => {
   it("never says it is on the public website while a person hasn't checked it", async () => {
     seeded(COMPLETED + PROFILE("PUBLISHED") + "UPDATE studentProfile SET moderationOutcome = 'hold' WHERE id = 'profile';");
     const page = main((await visit()).body);
-    const site = page.querySelector("[data-public-site='listed']")!;
+    const site = page.querySelector("[data-public-site='held']")!;
     expect(site.querySelector("[data-public-site-held]")?.textContent).toContain("it's waiting for a check, so nothing shows there");
     expect(site.textContent).not.toContain("You're on the public website at");
     expect(page.querySelector("[data-notice='warning']")?.textContent).toContain("Your profile is waiting for a check");
@@ -241,7 +320,7 @@ describe("posting work", () => {
     expect(entry.querySelector("[data-row-action]")?.getAttribute("href")).toBe(`${PATH}?edit=ledger#work-editor`);
   });
 
-  it("opens the work form from its link, says who sees it before the save, and makes its save the one peach action", async () => {
+  it("opens the work form from its link, says who sees it in each choice, and makes its save the one peach action", async () => {
     seeded(PROFILE("DRAFT"));
     const page = main((await visitAt(new URL(`${PATH}?add=1`, ORIGIN))).body);
     // Every id on the page is its own, so each label names its own field.
@@ -249,8 +328,10 @@ describe("posting work", () => {
     expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
     const editor = page.querySelector("[data-work-editor='add']")!;
     expect(editor.querySelector("form")?.getAttribute("action")).toBe(PATH);
-    expect(editor.querySelector("#work-visibility")?.textContent).toContain(EVERYONE_SEES);
-    expect(editor.querySelector("button[type='submit']")?.getAttribute("aria-describedby")).toBe("work-visibility");
+    // Said once in the form, in each choice's hint; the page says the rest at its top.
+    expect(editor.querySelector("#work-visibility")).toBeNull();
+    expect(editor.textContent).toContain("Everyone signed in to TTV can see it, and mentors can confirm it.");
+    expect(editor.textContent).toContain("A draft is only for you.");
     expect([...editor.querySelectorAll("[name='status']")].map((radio) => radio.getAttribute("value"))).toEqual(["posted", "draft"]);
     expect(primaries(page)).toEqual(["Save"]);
   });
@@ -294,11 +375,16 @@ describe("posting work", () => {
     expect(work()).toEqual([]);
   });
 
-  it("says plainly when the team took a piece down", async () => {
+  it("says plainly when a moderator took a piece down, and offers only Delete", async () => {
     seeded(PROFILE("DRAFT") + WORK + "UPDATE communityJourney SET moderatorHidden = 1 WHERE id = 'ledger';");
-    const entry = main((await visit()).body).querySelector("[data-work-entry='ledger']")!;
+    const page = main((await visit()).body);
+    const entry = page.querySelector("[data-work-entry='ledger']")!;
     expect(entry.getAttribute("data-work-status")).toBe("hidden");
-    expect(entry.textContent).toContain("The team took this down, so only you and the team can see it.");
+    expect(entry.textContent).toContain("A moderator took this down, so only you and the team can see it, and it can't be changed. You can delete it.");
+    const item = page.querySelector("[data-work] [data-data-list-item]")!;
+    expect([...item.querySelectorAll("[data-row-action], button")].map((control) => control.textContent?.trim())).toEqual(["Delete Chama savings ledger"]);
+    // Its edit link, typed in, opens nothing.
+    expect(main((await visitAt(new URL(`${PATH}?edit=ledger`, ORIGIN))).body).querySelector("[data-work-editor]")).toBeNull();
   });
 
   it("moves a piece to drafts and back", async () => {
@@ -343,6 +429,7 @@ it("an unavailable publish check leaves a held draft off the public website", as
 it("never labels a held public listing as live", async () => {
   seeded(COMPLETED + PROFILE("PUBLISHED") + "UPDATE studentProfile SET moderationOutcome='hold',moderationReviewRequired=1;");
   const { body } = await visit();
-  expect(body).toContain("Your profile is waiting for a human review");
+  expect(body).toContain("Your profile is waiting for a check");
   expect(body).not.toContain("Your profile is live");
+  expect(body).not.toContain("You're on the public website at");
 });

@@ -24,7 +24,7 @@ export const SAM_PERSONAS = {
   newcomer: { name: "Brian Kiprono", summary: "A brand-new account that has not finished onboarding" },
   applicant: { name: "Njeri Wambui", summary: "Applied to the next cohort; waiting for a decision", application: { cohort: "next", status: "PENDING" }, intent: "MEMBER" },
   student: { name: "Wanjiku Mwangi", summary: "Accepted into the current cohort", application: { cohort: "current", status: "APPROVED" }, intent: "MEMBER" },
-  alumna: { name: "Achieng Otieno", summary: "Completed a past cohort, with a saved community profile", application: { cohort: "past", status: "COMPLETED" }, intent: "MEMBER" },
+  alumna: { name: "Achieng Otieno", summary: "Completed a past cohort, with a saved profile", application: { cohort: "past", status: "COMPLETED" }, intent: "MEMBER" },
   community: { name: "Lucy Chebet", summary: "A community member who is not in a cohort", intent: "MEMBER" },
   mentor: { name: "David Kamau", summary: "An approved, listed mentor", role: "MENTOR", intent: "MENTOR" },
   institution: { name: "Joseph Mutua", summary: "An approved institution account", role: "INSTITUTION", intent: "INSTITUTION" },

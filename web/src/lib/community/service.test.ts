@@ -46,7 +46,7 @@ describe("community service real SQL boundaries", () => {
     expect(await f.member.listJourney()).toHaveLength(1);
     expect(await f.institution.searchProfiles({query:"TypeScript"})).toHaveLength(1);
   });
-  it("searches only saved community profiles and revalidates institutional approval", async () => {
+  it("searches only saved profiles and revalidates institutional approval", async () => {
     const f = fixture();
     expect(await f.institution.searchProfiles({query:"Other"})).toEqual([]);
     await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateOwnProfile(profile);
@@ -382,12 +382,21 @@ it('counts waiting confirmations over exactly the rows the Confirm page lists',a
  await expect(f.institution.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
 });
 
+ it("says when a held piece of work is still held after an edit or a status change", async () => {
+  const f=fixture(); await f.member.updateOwnProfile(profile);
+  const item=await f.member.createJourney(entry);
+  expect(item.moderationHold).toBe(false);
+  f.sql.prepare("UPDATE communityJourney SET moderationOutcome='hold' WHERE id=?").run(item.id);
+  expect(await f.member.updateJourney(item.id,{...entry,occurredAt:"2026-01-02"})).toEqual({id:item.id,updated:true,moderationHold:true});
+  expect(await f.member.setJourneyStatus(item.id,{status:"draft"})).toEqual({id:item.id,status:"draft",moderationHold:true});
+ });
+
  it("normalizes deprecated work inputs but emits only posted/draft status", async () => {
   const f=fixture(); await f.member.updateOwnProfile(profile);
   const fields={title:entry.title,description:entry.description,evidenceUrl:entry.evidenceUrl,occurredAt:entry.occurredAt};
   const draft=await f.member.createJourney({...fields,visibility:"private"});
   expect(draft).toMatchObject({status:"draft"}); expect(draft).not.toHaveProperty("visibility");
-  expect(await f.member.setJourneyStatus(draft.id,{visibility:"institution"})).toEqual({id:draft.id,status:"posted"});
+  expect(await f.member.setJourneyStatus(draft.id,{visibility:"institution"})).toEqual({id:draft.id,status:"posted",moderationHold:false});
   const entries=await f.member.listJourney(); expect(entries[0]).toMatchObject({status:"posted"}); expect(entries[0]).not.toHaveProperty("visibility");
   await expect(f.member.setJourneyStatus(draft.id,{status:"draft",visibility:"institution"})).rejects.toMatchObject({status:400});
  });

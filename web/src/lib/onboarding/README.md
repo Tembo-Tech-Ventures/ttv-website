@@ -37,7 +37,7 @@ return nothing; routes reply with `getOnboardingState`.
   nothing is saved: MENTOR and INSTITUTION from the roles held, MEMBER from an
   application or a student profile. Never from a cohort assignment
   (`programRole` holds only instructors, TAs and cohort mentors, who must not get
-  the student framing) or a community profile or journey, which mentors keep
+  the student framing) or posted work alone, which mentors keep
   too. `requests` holds the latest request per role; a request left pending
   beside a held role is hidden, because role state wins. `unseenApprovals(state)`
   lists held, approved and unseen roles.

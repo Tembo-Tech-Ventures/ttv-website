@@ -15,7 +15,6 @@ const { default: ProfileOverview } = await import("./ProfileOverview.astro");
  */
 const ALUMNA: OverviewFacts = {
   person: { id: "achieng", name: "Achieng Otieno", image: null },
-  journeyState: "published",
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
@@ -71,7 +70,6 @@ describe("ProfileOverview", () => {
   it("asks someone without a profile to make one, as the page's one peach action", async () => {
     const html = await render({
       ...ALUMNA,
-      journeyState: "no_application",
       visibleLinkIds: ["home", "apply", "ask", "account", "logout"],
       eligible: false,
       profile: null,

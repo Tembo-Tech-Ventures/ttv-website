@@ -271,6 +271,12 @@ describe("resolveGateState", () => {
     expect(result.message).toContain("published");
   });
 
+  it("tells someone who took themselves off the public website why projects are closed, and the way back", () => {
+    const result = resolveGateState({ status: "DRAFT", publishedAt: new Date(1781000000000) });
+    expect(result.state).toBe("not_published");
+    expect(result.message).toBe("You took yourself off the public website, so client projects are closed. List yourself again from your profile to see them.");
+  });
+
   it("returns not_published for SUSPENDED", () => {
     const result = resolveGateState({ status: "SUSPENDED" });
     expect(result.state).toBe("not_published");

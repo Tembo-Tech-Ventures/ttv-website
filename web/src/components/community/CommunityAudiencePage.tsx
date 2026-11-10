@@ -24,7 +24,7 @@ function ContributionTrail() {
 
 export default function CommunityAudiencePage({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
   const href = communityEntryHref(isAuthenticated);
-  const cta = isAuthenticated ? "Open my community journey" : "Build your community profile";
+  const cta = isAuthenticated ? "Open my community journey" : "Build your profile";
   return <article className="community-audience hp audience-members" data-community-root>
       <nav className="audience-breadcrumb audience-container" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">For members</span></nav>
       <CommunitySheet className="audience-hero" labelledby="audience-title" tone="base" layer={1}>

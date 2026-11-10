@@ -226,7 +226,7 @@ export default function OrganizerPage() {
                 <p className="hack-tag">Already existed</p>
                 <h3>The platform</h3>
                 <p>
-                  Cohort learning and public builder profiles, supported by the
+                  Cohort learning and public profiles, supported by the
                   existing TTV website.
                 </p>
               </article>
@@ -234,7 +234,7 @@ export default function OrganizerPage() {
                 <p className="hack-tag">Built this weekend</p>
                 <h3>The community layer</h3>
                 <p>
-                  Community profiles and contribution histories, specific mentor
+                  Member profiles and contribution histories, specific mentor
                   confirmations, institutional evidence discovery and dedicated
                   participation pages.
                 </p>

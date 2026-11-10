@@ -16,7 +16,6 @@ function work(id: string, overrides: Partial<CommunityJourney> = {}): CommunityJ
 
 const ALUMNA: OverviewFacts = {
   person: { id: "achieng", name: "Achieng Otieno", image: null },
-  journeyState: "published",
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
@@ -35,7 +34,6 @@ const ALUMNA: OverviewFacts = {
 const MEMBER: OverviewFacts = {
   ...ALUMNA,
   person: { id: "lucy", name: "Lucy Chebet", image: null },
-  journeyState: "no_application",
   visibleLinkIds: ["home", "apply", "ask", "account", "logout"],
   eligible: false,
   profile: null,
@@ -107,7 +105,7 @@ describe("profileOverview for an alumna", () => {
   });
 
   it("offers no public page for an unlisted or suspended profile, and asks only a graduate to list it", () => {
-    const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
+    const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT", onPublicSite: 0 } });
     expect(draft.actions.view).toBeNull();
     expect(draft.card?.status).toEqual({ label: "Members only", tone: "neutral" });
     expect(draft.needs.find((need) => need.key === "profile-draft")).toMatchObject({
@@ -117,6 +115,25 @@ describe("profileOverview for an alumna", () => {
     const member = profileOverview({ ...ALUMNA, eligible: false, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
     expect(member.needs.find((need) => need.key === "profile-draft")).toBeUndefined();
     expect(profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "SUSPENDED" } }).actions.view).toBeNull();
+  });
+
+  it("says where the profile really is, and never asks someone who took themselves off, is held, or is staff to list it", () => {
+    const off = { ...ALUMNA.profile!, status: "DRAFT" as const, onPublicSite: 0 };
+    const need = (facts: OverviewFacts) => profileOverview(facts).needs.find((item) => item.key === "profile-draft");
+    // Listed before and a draft now: they chose to come off, so nothing nags them back.
+    expect(need({ ...ALUMNA, profile: { ...off, everListed: true } })).toBeUndefined();
+    expect(profileOverview({ ...ALUMNA, profile: { ...off, everListed: true } }).card?.status.label).toBe("Members only");
+    // Held by the check: not in the directory and not public, and pressing "List me" would only ask the check again.
+    const held = { ...ALUMNA, profile: { ...off, listed: 0 } };
+    expect(need(held)).toBeUndefined();
+    expect(profileOverview(held).card?.status.label).toBe("Waiting for a check");
+    expect(profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, onPublicSite: 0, listed: 0 } }).card?.status.label).toBe("Waiting for a check");
+    // Mentors and staff are never listed, whatever the status says.
+    const staff = { ...ALUMNA, staff: true, profile: { ...ALUMNA.profile!, onPublicSite: 0, listed: 0 } };
+    expect(profileOverview(staff).card?.status.label).toBe("Not listed: mentors and staff");
+    expect(need({ ...staff, profile: { ...off, listed: 0 } })).toBeUndefined();
+    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).toContain("only you and the team see it");
+    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).not.toContain("Everyone signed in");
   });
 
   it("encodes the handle and the certificate id as one path segment", () => {
@@ -216,8 +233,8 @@ describe("profileOverview without a public profile", () => {
     expect(model.opportunities).toBeNull();
     expect(model.needs).toEqual([]);
     // Whatever their cohort, or none: nobody is sent to apply before they can have a profile.
-    for (const journeyState of ["no_application", "pending", "accepted", "audit", "rejected"] as const) {
-      expect(profileOverview({ ...MEMBER, journeyState }).noProfile?.action.href).toBe("/dashboard/me/portfolio");
+    for (const eligible of [false, true]) {
+      expect(profileOverview({ ...MEMBER, eligible }).noProfile?.action.href).toBe("/dashboard/me/portfolio");
     }
   });
 
@@ -263,7 +280,7 @@ describe("the overview's words", () => {
       profileOverview(ALUMNA),
       profileOverview(MEMBER),
       profileOverview({ ...ALUMNA, profile: null }),
-      profileOverview({ ...MEMBER, journeyState: "accepted" }),
+      profileOverview({ ...MEMBER, staff: true }),
     ];
     const text = JSON.stringify(models);
     for (const word of [/empower/i, /uplift/i, /underserved/i, /give back/i, /rescue/i, /guarantee/i, /verified/i]) {

@@ -14,7 +14,7 @@ const EVIDENCE_DIR = "test-results/evidence/platform-discover";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
 const PATH = "/dashboard/discover";
-// Lookup lists saved community profiles only: locally the seeded alumna, on an agent preview Amina
+// Lookup lists saved profiles only: locally the seeded alumna, on an agent preview Amina
 // Fixture, whose profile agent-preview-auth.mjs saves for the institution persona to find.
 const MEMBER = PREVIEW ? "Amina" : "Achieng";
 

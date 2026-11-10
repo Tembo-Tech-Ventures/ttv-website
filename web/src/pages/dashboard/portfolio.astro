@@ -21,14 +21,14 @@ import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { preserveFormTextValues } from "@/lib/form-values";
-import { memberEligibility } from "@/lib/community/eligibility";
+import { memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
 import { memberProfileHref } from "@/lib/members/links";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import {
   Button, ButtonLink, Card, Checkbox, DataList, EmptyState, HINT, LABEL, Notice, PageHeader, PrefixField, TextAreaField, TextField,
-  confirmingAction,
+  confirmingAction, linkClass,
 } from "@/components/platform/ui";
 import RepoPicker from "@/components/portfolio/RepoPicker";
 import { publishProfile, saveProfile, unpublishProfile, type ProfileFormResult } from "@/components/portfolio/portfolio-handlers";
@@ -37,10 +37,10 @@ import { profileModeration } from "@/components/platform/profile-editor/moderati
 import PublicSite from "@/components/platform/profile-editor/PublicSite.astro";
 import WorkEntry from "@/components/platform/profile-editor/WorkEntry.astro";
 import WorkForm from "@/components/platform/profile-editor/WorkForm.astro";
-import { EVERYONE_SEES, NOT_SAVED, SAVED } from "@/components/platform/profile-editor/copy";
+import { EVERYONE_SEES, HANDLE, NOT_SAVED, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
 import {
-  addWorkHref, deleteAction, EDITOR_PATH, EMPTY_WORK, handleWorkPost, isContribution, PROFILE_FORM_ID, readEditorPost,
-  UNLIST_ACTION, WORK_ACTIONS, workEditorFromUrl, workValuesOf, type WorkAction, type WorkPostResult,
+  addWorkHref, changeHandleHref, deleteAction, EDITOR_PATH, EMPTY_WORK, HANDLE_ACTION, handleWorkPost, isContribution, PROFILE_FORM_ID,
+  profileFormHref, readEditorPost, UNLIST_ACTION, WORK_ACTIONS, workEditorFromUrl, workValuesOf, type WorkAction, type WorkPostResult,
 } from "@/components/platform/profile-editor/work-forms";
 
 const { method } = Astro.request;
@@ -55,7 +55,11 @@ const db = drizzle(env.DB, { schema });
 // which the frame reads anyway.
 const readProfile = () => db.query.studentProfile.findFirst({
   where: eq(schema.studentProfile.userId, user.id),
-  extras: { listed: sql<number>`${sql.raw(memberEligibility("studentProfile.userId"))}`.as("listed") },
+  extras: {
+    // In the Members directory, and on the public website, by the rules those pages read with.
+    listed: sql<number>`${sql.raw(memberEligibility("studentProfile.userId"))}`.as("listed"),
+    onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite"),
+  },
 });
 const readRepos = () => db.query.communityJourney.findMany({
   where: and(eq(schema.communityJourney.userId, user.id), eq(schema.communityJourney.kind, "repo"), eq(schema.communityJourney.state, "POSTED")),
@@ -84,7 +88,11 @@ if (method === "POST") {
   if ((WORK_ACTIONS as readonly string[]).includes(action)) {
     const claims = (await ownWork) ?? [];
     const result = await handleWorkPost(action as WorkAction, form, claims, (write) => sendCommunityWrite(Astro.request, Astro.locals, env, write));
-    if (result.kind === "saved") return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title: SAVED[result.saved] });
+    if (result.kind === "saved") {
+      return redirectWithFlash(Astro, EDITOR_PATH, result.held
+        ? { tone: "warning", title: SAVED.held, message: SAVED.heldDetail }
+        : { tone: "success", title: SAVED[result.saved] });
+    }
     if (result.kind === "refuse") return bare(result.status, "That form could not be read.");
     work = result;
     Astro.response.status = result.status;
@@ -111,6 +119,10 @@ if (method === "POST") {
         if (profileResult.success) {
           const title = existing?.status === "PUBLISHED" ? SAVED.profilePublic : SAVED.profile;
           return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title });
+        }
+        // Saved, and held by the automatic check: that is a save, said once, as a warning.
+        if (profileResult.moderationOutcome === "hold") {
+          return redirectWithFlash(Astro, EDITOR_PATH, { tone: "warning", title: SAVED.profileHeld, message: SAVED.profileHeldDetail });
         }
         refused = "save";
       } else {
@@ -142,6 +154,8 @@ const [landing, eligible, profile, repos, claims, github] = await Promise.all([
   }),
 ]);
 const spaces = landing?.[0] ?? null;
+// Mentors and staff are not listed in the directory or on the public website (by decision), so they are told so.
+const staff = spaces ? spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin : Boolean(Astro.locals.isAdmin);
 const editable = !profile || profile.status !== "SUSPENDED";
 const held = profile?.moderationOutcome === "hold";
 // A POST never carries a flash, and a refused one says what went wrong instead.
@@ -181,7 +195,12 @@ const renderedClaim = rendered?.claimId ? contributions.find((item) => item.id =
 const editor = rendered
   ? (renderedClaim ? { kind: "edit" as const, claim: renderedClaim } : { kind: "add" as const })
   : workEditorFromUrl(Astro.url, contributions);
-const confirming = confirmingAction(Astro.url, [...contributions.map(deleteAction), UNLIST_ACTION]);
+const confirming = confirmingAction(Astro.url, [...contributions.map(deleteAction), UNLIST_ACTION, HANDLE_ACTION]);
+// The handle is the member page's address: after the first save it changes only as a deliberate step, and
+// never once the profile has been on the public website, where it is part of every post link.
+const handleLocked = Boolean(profile?.publishedAt);
+const handleChanged = refused === "save" && (Boolean(errors.handle) || values.handle.trim().toLowerCase() !== profile?.handle);
+const handleEditable = !profile || (!handleLocked && (confirming === HANDLE_ACTION || handleChanged));
 const existingHighlights = repos.flatMap((repo) => repo.repoFullName ? [{ repoFullName: repo.repoFullName, blurb: repo.blurb ?? "", sortOrder: repo.sortOrder }] : []);
 const memberPage = profile?.listed ? memberProfileHref(profile) : null;
 Astro.response.headers.set("Cache-Control", "no-store");
@@ -191,10 +210,10 @@ Astro.response.headers.set("Cache-Control", "no-store");
   <div class="flex max-w-3xl flex-col gap-8">
     <PageHeader title="Your profile">
       Who you are and what you've made, in one place.
-      {memberPage && <Fragment slot="action"><ButtonLink href={memberPage}>See your page</ButtonLink></Fragment>}
+      {memberPage && <Fragment slot="action"><ButtonLink href={memberPage}>See your member page</ButtonLink></Fragment>}
     </PageHeader>
 
-    <Notice tone="info" title="Who sees this" id="profile-visibility">{EVERYONE_SEES}</Notice>
+    <Notice tone="info" title="Who sees this" id="profile-visibility">{staff ? STAFF_SEES : EVERYONE_SEES}</Notice>
 
     {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
     {unavailable && <Notice tone="danger" focusOnLoad id="profile-failure" title={NOT_SAVED.profile}>{NOT_SAVED.unavailable}</Notice>}
@@ -207,22 +226,40 @@ Astro.response.headers.set("Cache-Control", "no-store");
       </Notice>
     )}
     {work?.kind === "failed" && <Notice tone="danger" focusOnLoad title={work.failure.title}>{work.failure.detail}</Notice>}
-    {held && (
+    {held && flash?.tone !== "warning" && (
       <Notice tone="warning" title="Your profile is waiting for a check">
         It's saved. A person at TTV checks it before anyone else can see it; until then only you and the team can.
       </Notice>
     )}
 
-    {editable && (
+    {/* Before the first save, one form at a time: the work form, when it's open, is the page's one peach action. */}
+    {editable && !(editor && !profile) && (
       <Card as="section" aria-labelledby="profile-form-title" className="flex scroll-mt-6 flex-col gap-5" id={PROFILE_FORM_ID} data-profile-form>
         <h2 id="profile-form-title" class="text-xl leading-snug text-ink-primary">{profile ? "About you" : "Make your profile"}</h2>
         <form method="POST" action={EDITOR_PATH} class="flex flex-col gap-5">
           <input type="hidden" name="_action" value="save" />
-          <PrefixField
-            label="Handle" name="handle" prefix="members/" required maxLength={39} autoComplete="off" spellCheck={false}
-            defaultValue={values.handle} error={errors.handle}
-            hint="Your page's address: 3 to 39 lowercase letters, numbers and hyphens. Your GitHub username works well."
-          />
+          {handleEditable ? (
+            <>
+              <PrefixField
+                label="Handle" name="handle" prefix="members/" required maxLength={39} autoComplete="off" spellCheck={false}
+                defaultValue={values.handle} error={errors.handle} hint={HANDLE.hint}
+              />
+              {profile && (
+                <Notice tone="warning" title="Changing your handle" id="handle-warning">
+                  {HANDLE.changeWarning}
+                  <Fragment slot="actions"><ButtonLink href={profileFormHref()} variant="ghost">Keep {profile.handle}</ButtonLink></Fragment>
+                </Notice>
+              )}
+            </>
+          ) : profile && (
+            <div class="flex flex-col gap-1.5" data-handle-locked={handleLocked ? "listed" : "saved"}>
+              <span class={LABEL}>Handle</span>
+              <input type="hidden" name="handle" value={profile.handle} />
+              <p class="m-0 text-[0.9375rem] text-ink-primary">members/<strong>{profile.handle}</strong></p>
+              <p class={`m-0 ${HINT}`}>{handleLocked ? HANDLE.locked : HANDLE.current}</p>
+              {!handleLocked && <a href={changeHandleHref()} class={linkClass("w-fit pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center")}>{HANDLE.change}</a>}
+            </div>
+          )}
           <TextField label="Headline" name="headline" optional maxLength={120} placeholder="Full-stack developer in Kisumu" defaultValue={values.headline} error={errors.headline} />
           <TextAreaField label="About you" name="bio" optional rows={5} maxLength={4000} defaultValue={values.bio} error={errors.bio}
             hint="Who you are, what you've built, and what you're building next." />
@@ -251,7 +288,13 @@ Astro.response.headers.set("Cache-Control", "no-store");
       </Card>
     )}
 
-    <PublicSite eligible={eligible} profile={profile ? { handle: profile.handle, status: profile.status } : null} confirming={confirming === UNLIST_ACTION} held={held} />
+    <PublicSite
+      eligible={eligible}
+      staff={staff}
+      profile={profile ? { handle: profile.handle, status: profile.status, everListed: Boolean(profile.publishedAt), onPublicSite: Boolean(profile.onPublicSite) } : null}
+      confirming={confirming === UNLIST_ACTION}
+      held={held}
+    />
 
     <section id="work" aria-labelledby="your-work-heading" class="flex scroll-mt-6 flex-col gap-6" data-work>
       <div class="flex flex-wrap items-end justify-between gap-4">
@@ -272,12 +315,12 @@ Astro.response.headers.set("Cache-Control", "no-store");
         </Notice>
       ) : (
         <>
-          {editor?.kind === "add" && <WorkForm values={rendered?.values ?? EMPTY_WORK} errors={rendered?.errors} failure={rendered?.failure} />}
+          {editor?.kind === "add" && <WorkForm values={rendered?.values ?? EMPTY_WORK} errors={rendered?.errors} failure={rendered?.failure} staff={staff} />}
           <DataList label="Your work" isEmpty={contributions.length === 0}>
             {contributions.map((claim) => editor?.kind === "edit" && editor.claim.id === claim.id
               ? (
                 <li class="border-b border-hairline py-4 first:pt-0">
-                  <WorkForm claim={claim} values={rendered?.values ?? workValuesOf(claim)} errors={rendered?.errors} failure={rendered?.failure} />
+                  <WorkForm claim={claim} values={rendered?.values ?? workValuesOf(claim)} errors={rendered?.errors} failure={rendered?.failure} staff={staff} />
                 </li>
               )
               : <WorkEntry claim={claim} confirming={confirming === deleteAction(claim)} />)}

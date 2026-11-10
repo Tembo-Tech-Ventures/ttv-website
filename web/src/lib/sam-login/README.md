@@ -41,7 +41,7 @@ traces, which also contain the cookie.
 | `newcomer` | A brand-new account, every time, that hasn't finished onboarding | `/dashboard/welcome` |
 | `applicant` | Applied to the next cohort; waiting for a decision | Cohort |
 | `student` | Accepted into the current cohort | Cohort |
-| `alumna` | Completed a past cohort, with a saved community profile | Cohort |
+| `alumna` | Completed a past cohort, with a saved profile | Cohort |
 | `community` | A community member who isn't in a cohort | Community |
 | `mentor` | An approved, listed mentor | Mentoring |
 | `institution` | An approved institution account | Discover |

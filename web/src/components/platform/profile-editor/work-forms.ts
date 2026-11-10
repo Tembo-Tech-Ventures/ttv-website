@@ -33,9 +33,12 @@ export const confirmDeleteHref = (claim: Pick<JourneyClaim, "id">) => confirmHre
 /** Coming off the public website: its confirm step's action and the link that asks for it. */
 export const UNLIST_ACTION = "unpublish";
 export const unlistHref = () => confirmHref(new URL(EDITOR_PATH, ORIGIN), UNLIST_ACTION);
-/** Back to the work list from a confirm step. */
+/** Changing the handle after the first save: a deliberate step, since links to the old address stop working. */
+export const HANDLE_ACTION = "handle";
+export const changeHandleHref = () => `${confirmHref(new URL(EDITOR_PATH, ORIGIN), HANDLE_ACTION)}#${PROFILE_FORM_ID}`;
 /** Where a repository is changed: the editor's GitHub repositories (RepoPicker). */
 export const reposHref = () => `${EDITOR_PATH}#repos-title`;
+/** Back to the work list from a confirm step. */
 export const workListHref = () => `${withoutConfirm(new URL(EDITOR_PATH, ORIGIN))}#work`;
 
 /** A piece of work the work forms may change: a contribution, never a repository (RepoPicker's). */
@@ -43,13 +46,13 @@ export function isContribution(claim: Pick<JourneyClaim, "kind">): boolean {
   return claim.kind !== "repo";
 }
 
-/** Which work editor is open: from the address on a GET. An edit of work that isn't the caller's opens nothing. */
+/** Which work editor is open: from the address on a GET. An edit of work that isn't the caller's, or was taken down, opens nothing. */
 export type WorkEditor = { kind: "add" } | { kind: "edit"; claim: JourneyClaim };
 
 export function workEditorFromUrl(url: URL, claims: readonly JourneyClaim[]): WorkEditor | null {
   const edit = url.searchParams.get(EDIT_PARAM);
   if (edit !== null) {
-    const claim = claims.find((item) => item.id === edit && isContribution(item));
+    const claim = claims.find((item) => item.id === edit && isContribution(item) && !item.moderatorHidden);
     return claim ? { kind: "edit", claim } : null;
   }
   return url.searchParams.has(ADD_PARAM) ? { kind: "add" } : null;
@@ -121,7 +124,8 @@ export interface WorkFailure {
 export type WorkSaved = keyof Pick<typeof SAVED, "added" | "addedDraft" | "updated" | "posted" | "drafted" | "deleted">;
 
 export type WorkPostResult =
-  | { kind: "saved"; saved: WorkSaved }
+  /** `held`: posted, but the automatic check is holding it until a person at TTV has looked. */
+  | { kind: "saved"; saved: WorkSaved; held?: boolean }
   /** The form comes back with what was typed: its errors, or why the save failed. */
   | { kind: "render"; status: number; claimId: string | null; values: WorkValues; errors: WorkErrors; failure: WorkFailure | null }
   /** A status change or delete that failed: said once at the top, nothing to keep. */
@@ -139,19 +143,28 @@ const text = (form: FormData, name: string, max: number) => {
 };
 const unavailable: WorkFailure = { title: NOT_SAVED.work, detail: NOT_SAVED.unavailable };
 const changed: WorkFailure = { title: NOT_SAVED.work, detail: NOT_SAVED.changed };
+const takenDown: WorkFailure = { title: NOT_SAVED.work, detail: NOT_SAVED.takenDown };
+/** The API's sentence for work a moderator took down (lib/community/service.ts). */
+const TAKEN_DOWN_REPLY = "A moderator took this down.";
 
-async function answer(send: () => Promise<Response>): Promise<{ ok: true } | { ok: false; status: number; failure: WorkFailure }> {
+type Answer = { ok: true; held: boolean } | { ok: false; status: number; failure: WorkFailure };
+
+async function answer(send: () => Promise<Response>): Promise<Answer> {
   let response: Response;
   try {
     response = await send();
   } catch {
     return { ok: false, status: 503, failure: unavailable };
   }
-  if (response.ok) return { ok: true };
+  if (response.ok) {
+    // A new piece answers { entry }; an edit or a status change answers flat. Both say whether it's held.
+    const saved = (await response.json().catch(() => null)) as { moderationHold?: unknown; entry?: { moderationHold?: unknown } } | null;
+    return { ok: true, held: (saved?.entry?.moderationHold ?? saved?.moderationHold) === true };
+  }
   if (response.status >= 500) return { ok: false, status: 503, failure: unavailable };
-  if (response.status === 409) return { ok: false, status: 409, failure: changed };
-  // A refusal the form could not foresee: the API's own sentence.
   const reply = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  if (response.status === 409) return { ok: false, status: 409, failure: reply?.error === TAKEN_DOWN_REPLY ? takenDown : changed };
+  // A refusal the form could not foresee: the API's own sentence.
   const reason = typeof reply?.error === "string" ? `${reply.error} ` : "";
   return { ok: false, status: response.status, failure: { title: NOT_SAVED.work, detail: `${reason}${NOT_SAVED.kept}` } };
 }
@@ -192,7 +205,8 @@ async function changeWork(
   const status = form.get("status");
   if (status !== "posted" && status !== "draft") return { kind: "refuse", status: 400 };
   const sent = await answer(() => send({ path, method: "PATCH", body: { status } }));
-  return sent.ok ? { kind: "saved", saved: status === "posted" ? "posted" : "drafted" } : { kind: "failed", status: sent.status, failure: sent.failure };
+  if (!sent.ok) return { kind: "failed", status: sent.status, failure: sent.failure };
+  return status === "posted" ? { kind: "saved", saved: "posted", held: sent.held } : { kind: "saved", saved: "drafted" };
 }
 
 /** Posts a new piece of work, or the next revision of the caller's own contribution. */
@@ -225,7 +239,9 @@ async function saveWork(form: FormData, claims: readonly JourneyClaim[], send: (
   }
   const sent = await answer(() => send(write));
   if (!sent.ok) return rendered(sent.status, sent.failure);
-  return { kind: "saved", saved: claimId ? "updated" : values.status === "draft" ? "addedDraft" : "added" };
+  // Nobody else sees a draft, so a check on it is not news to anyone.
+  if (values.status === "draft") return { kind: "saved", saved: claimId ? "updated" : "addedDraft" };
+  return { kind: "saved", saved: claimId ? "updated" : "added", held: sent.held };
 }
 
 /** Reads a post to the editor: its `_action` and form, or why it can't be read. */

@@ -206,16 +206,29 @@ describe("Community's home", () => {
     expect(notice?.hasAttribute("autofocus")).toBe(true);
   });
 
-  it("edits nothing itself: no form posts here, and a post is refused", async () => {
+  it("edits nothing itself: no form posts here, and an old tab's post lands in the editor, told nothing was saved", async () => {
     seeded();
     const page = main((await visit()).body);
     // Onboarding's own prompt may post to its own address; nothing posts to this page.
     expect([...page.querySelectorAll("form")].filter((form) => [null, "", PATH].includes(form.getAttribute("action")))).toEqual([]);
     expect(page.querySelector("[data-community-profile] form, [data-community-journey] form")).toBeNull();
     const { status, headers } = await visit({ method: "POST", form: { form: "profile", headline: "Typed here" } });
-    expect(status).toBe(405);
-    expect(headers.get("allow")).toBe("GET, HEAD");
+    expect(status).toBe(303);
+    expect(headers.get("location")).toBe("/dashboard/me/portfolio");
     expect(sqlite.prepare(`SELECT headline FROM studentProfile WHERE userId = '${MEMBER}'`).get()).toEqual({ headline: "Frontend builder" });
+  });
+
+  it("sends the old page's own links to the same place in the editor", async () => {
+    seeded();
+    for (const [query, location] of [
+      ["?add=1", "/dashboard/me/portfolio?add=1#work-editor"],
+      ["?edit=ledger", "/dashboard/me/portfolio?edit=ledger#work-editor"],
+      ["?profile=edit", "/dashboard/me/portfolio#profile-form"],
+    ]) {
+      const { status, headers } = await visit({ path: `${PATH}${query}` });
+      expect(status, `${query}`).toBe(301);
+      expect(headers.get("location"), `${query}`).toBe(location);
+    }
   });
 
   it("says when it couldn't load the profile at all", async () => {

@@ -113,6 +113,11 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       throw new CommunityError("A moderator took this down.", 409);
     if(row?.kind === "repo") throw new CommunityError("Edit repositories in GitHub highlights.",409);
   }
+  /** Whether the automatic check is holding the caller's own work for a person, after a write. */
+  async function heldWork(id:string): Promise<boolean> {
+    const row=await db.prepare("SELECT moderationOutcome FROM communityJourney WHERE id=? AND userId=?").bind(id,actorId).first<{moderationOutcome:string|null}>();
+    return row?.moderationOutcome === "hold";
+  }
   async function readJourney(target: string): Promise<CommunityJourney[]> {
     const mentorScope = fixtureScope("c.mentorId");
     // The confirmations are read beside the entries rather than after them: one round trip, not two.
@@ -322,7 +327,7 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
           p.description,id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
       if (!result.meta.changes) throw new CommunityError(p.expectedRevision ? "Contribution changed or is no longer available. Reload before editing." : "Contribution not found.",p.expectedRevision?409:404);
       await checkPostedWork(db,id,requireModerationEnv());
-      return {id,updated:true};
+      return {id,updated:true,moderationHold:await heldWork(id)};
     },
     async setJourneyStatus(id: string, input: unknown) {
       requireWritable();
@@ -333,7 +338,7 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
         .bind(workState(p.status), workState(p.status),id,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
       await checkPostedWork(db,id,requireModerationEnv());
-      return {id,status:p.status};
+      return {id,status:p.status,moderationHold:await heldWork(id)};
     },
     async deleteJourney(id: string) {
       requireWritable();

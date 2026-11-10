@@ -61,7 +61,7 @@ describe("buildCertificateView", () => {
     expect(view.instructorName).toBeNull();
   });
 
-  it("derives the first name used by the builder-profile call to action", () => {
+  it("derives the first name used by the profile call to action", () => {
     const view = buildCertificateView({
       source: makeSource(),
       profileHandle: "clinton-john-anozie",

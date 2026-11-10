@@ -68,8 +68,8 @@ export interface StudentJourney {
   visibleLinkIds: StudentDashboardLinkId[];
   unreadLeadCount: number;
   nextStep: StudentNextStep;
-  /** The builder profile as the journey read it, for a page that gates on it without reading it again. */
-  profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null;
+  /** The profile as the journey read it, for a page that gates on it without reading it again. */
+  profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED"; publishedAt?: Date | null } | null;
 }
 
 const APPLICATION_STATE_PRIORITY: ApplicationStatus[] = [
@@ -203,7 +203,7 @@ function buildNextStep({
 function buildPublishedNextStep(unreadLeadCount: number): StudentNextStep {
   const hasUnreadLeads = unreadLeadCount > 0;
   return {
-    title: "Your builder profile is live",
+    title: "Your profile is on the public site",
     description: hasUnreadLeads
       ? `You have ${unreadLeadCount} unread ${unreadLeadCount === 1 ? "message" : "messages"} from the TTV community.`
       : "Your work is part of TTV's community of builders across Africa. See where your skills could connect next.",
@@ -324,7 +324,7 @@ async function readStudentJourney(
       hasCompletedCohort(db, userId),
       db.query.studentProfile.findFirst({
         where: eq(schema.studentProfile.userId, userId),
-        columns: { id: true, status: true },
+        columns: { id: true, status: true, publishedAt: true },
       }),
       db.query.program.findFirst({
         where: and(eq(schema.program.applicationsOpen, true), isDemoUser(userId) ? eq(schema.program.id, DEMO_PREFIX + "program") : undefined),

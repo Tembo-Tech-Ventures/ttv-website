@@ -61,7 +61,7 @@ const content = {
     ],
     journey: "Find the person. Follow the evidence.", intro: "Start with hiring. Explore the work behind a profile and decide what to ask next.",
     steps: [
-      { title: "Start with a name or skill.", text: "Search community profiles for a starting point. A listed skill is a claim to explore, not proof of ability." },
+      { title: "Start with a name or skill.", text: "Search member profiles for a starting point. A listed skill is a claim to explore, not proof of ability." },
       { title: "Understand their part.", text: "Read the contribution, follow its sources, and inspect any mentor confirmation. Keep the member’s claim and the reviewer’s observation distinct." },
       { title: "Decide what to ask next.", text: "Use documented evidence and its gaps to inform your own conversation. Missing evidence is not evidence of low ability." },
     ],

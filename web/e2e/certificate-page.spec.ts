@@ -39,11 +39,11 @@ test.describe("public certificate page", () => {
     await page.screenshot({ path: evidence("certificate"), fullPage: true });
   });
 
-  test("links to the builder profile when one is published", async ({ page }) => {
+  test("links to the profile when one is published", async ({ page }) => {
     await page.goto(VALID_CERTIFICATE);
 
     const profileLink = page.getByRole("link", {
-      name: /builder profile/i,
+      name: /\u2019s profile/i,
     });
     await expect(profileLink).toBeVisible();
     await expect(profileLink).toHaveAttribute("href", "/talent/amina-preview");

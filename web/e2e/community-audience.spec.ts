@@ -9,7 +9,7 @@ test.beforeEach(async ({ page, baseURL }) => {
 
 test("member story stays readable with working navigation and native keyboard disclosures", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Give your work a story.");
-  const join = page.getByRole("link", { name: "Build your community profile" }).first();
+  const join = page.getByRole("link", { name: "Build your profile" }).first();
   await expect(join).toHaveAttribute("href", "/auth/login?next=%2Fdashboard%2Fcommunity");
   await join.focus();
   expect(await join.evaluate(el => getComputedStyle(el).outlineStyle)).toBe("solid");

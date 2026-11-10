@@ -34,14 +34,14 @@ const POSTS = `INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown,stat
     ('draft','profile','ledgers','What ledgers taught me','Fictional.','DRAFT',3,NULL,2),
     ('live','profile','first-cohort','My first cohort','Fictional.','PUBLISHED',5,1794000000,1);`;
 
-function seeded({ status = "PUBLISHED", posts = POSTS }: { status?: "PUBLISHED" | "DRAFT"; posts?: string } = {}) {
+function seeded({ status = "PUBLISHED", posts = POSTS, publishedAt = "NULL" }: { status?: "PUBLISHED" | "DRAFT"; posts?: string; publishedAt?: string } = {}) {
   const { database: sqlite, db } = createSqliteD1();
   databases.push(sqlite);
   for (const file of readdirSync(new URL("../../../lib/db/migrations/", import.meta.url)).filter((name) => name.endsWith(".sql")).toSorted()) {
     sqlite.exec(readMigration(file));
   }
   sqlite.exec(`INSERT INTO user(id,name,email) VALUES ('${BUILDER}','Achieng Otieno','achieng@example.test');
-    INSERT INTO studentProfile(id,userId,handle,status) VALUES ('profile','${BUILDER}','achieng-otieno','${status}');
+    INSERT INTO studentProfile(id,userId,handle,status,publishedAt) VALUES ('profile','${BUILDER}','achieng-otieno','${status}',${publishedAt});
     UPDATE feature_flag SET audience='ALL';
     ${posts}`);
   Object.assign(mocks.env, { DB: withRaw(sqlite, db), DEPLOYMENT_ENVIRONMENT: "production" });
@@ -111,5 +111,15 @@ describe("Writing", () => {
     expect(empty?.querySelector("a")?.getAttribute("href")).toBe("/dashboard/me/portfolio");
     expect(page.textContent).not.toContain("What ledgers taught me");
     expect(primaries(page)).toEqual([]);
+  });
+
+  it("tells someone who took themselves off the public website why writing is closed, and that nothing is gone", async () => {
+    seeded({ status: "DRAFT", publishedAt: "1781000000" });
+    const { page } = await visit();
+    const empty = page.querySelector("[data-empty-state]");
+    expect(empty?.querySelector("h2")?.textContent).toBe("You're off the public website");
+    expect(empty?.textContent).toContain("Nothing is deleted: list yourself again from your profile to write and publish.");
+    expect(empty?.querySelector("a")?.getAttribute("href")).toBe("/dashboard/me/portfolio");
+    expect(page.textContent).not.toContain("What ledgers taught me");
   });
 });

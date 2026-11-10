@@ -11,7 +11,7 @@ import {
 } from "@/lib/talent/profile-moderation";
 
 /*
- * The admin's list of builder profiles: the ones the content check left for
+ * The admin's list of profiles: the ones the content check left for
  * a person, then every profile a page at a time, filtered by status in SQL.
  */
 

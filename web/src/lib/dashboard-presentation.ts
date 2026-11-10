@@ -9,7 +9,7 @@ export function dashboardNextStep(memberStep: StudentNextStep, canDiscover: bool
   return canDiscover ? {
     title: "Discover community builders",
     description: "Explore documented work, review contribution evidence, and ask informed questions about an opportunity.",
-    detail: "Your own community profile and member activities remain available in navigation.",
+    detail: "Your own profile and member activities remain available in navigation.",
     action: { href: "/dashboard/discover", label: "Discover builders" },
   } : memberStep;
 }

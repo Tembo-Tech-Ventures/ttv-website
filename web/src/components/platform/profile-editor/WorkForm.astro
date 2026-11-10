@@ -3,11 +3,12 @@
  * Posting a piece of work, or its next revision: what it is, what you did, when, a link to it, and
  * whether to post it now or keep it as a draft. A plain form that posts to the editor (work-forms.ts),
  * so it saves without a script. An edit carries the revision the person saw: if the work changed
- * since, the API refuses it and nothing is overwritten. It says who will see it before the button.
+ * since, the API refuses it and nothing is overwritten. Who sees it is said once, in each choice's hint
+ * (the page says the rest at its top).
  */
 import { Button, ButtonLink, ChoiceGroup, Notice, TextAreaField, TextField } from "@/components/platform/ui";
 import type { JourneyClaim } from "@/components/discovery/types";
-import { DRAFT_ONLY_YOU, EVERYONE_SEES } from "./copy";
+import { DRAFT_ONLY_YOU, POSTED_SEEN_BY, POSTED_SEEN_BY_STAFF } from "./copy";
 import { DESCRIPTION_MAX, EDITOR_PATH, LINK_MAX, TITLE_MAX, WORK_EDITOR_ID, type WorkErrors, type WorkFailure, type WorkValues } from "./work-forms";
 
 interface Props {
@@ -16,12 +17,14 @@ interface Props {
   values: WorkValues;
   errors?: WorkErrors;
   failure?: WorkFailure | null;
+  /** A mentor or TTV staff: not listed, so posted work is only theirs and the team's to see. */
+  staff?: boolean;
 }
 
-const { claim = null, values, errors = {}, failure = null } = Astro.props;
+const { claim = null, values, errors = {}, failure = null, staff = false } = Astro.props;
 const count = Object.keys(errors).length;
 const STATUS_OPTIONS = [
-  { value: "posted", label: "Post it", hint: "Everyone signed in to TTV can see it, and mentors can confirm it." },
+  { value: "posted", label: "Post it", hint: staff ? POSTED_SEEN_BY_STAFF : POSTED_SEEN_BY },
   { value: "draft", label: "Keep it as a draft", hint: DRAFT_ONLY_YOU },
 ];
 ---
@@ -58,9 +61,8 @@ const STATUS_OPTIONS = [
       defaultValue={values.link} error={errors.link}
     />
     <ChoiceGroup name="status" label="Who sees it" options={STATUS_OPTIONS} defaultValue={values.status} />
-    <Notice tone="info" id="work-visibility">{EVERYONE_SEES}</Notice>
     <div class="flex flex-wrap items-center gap-3">
-      <Button type="submit" variant="primary" size="lg" aria-describedby="work-visibility">{claim ? "Save changes" : "Save"}</Button>
+      <Button type="submit" variant="primary" size="lg">{claim ? "Save changes" : "Save"}</Button>
       <ButtonLink href={`${EDITOR_PATH}#work`} variant="ghost" size="lg">Cancel</ButtonLink>
     </div>
   </form>

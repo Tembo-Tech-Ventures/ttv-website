@@ -676,6 +676,14 @@ export async function unpublishProfile(db: Database, userId: string, profileId: 
       eq(schema.studentProfile.userId, userId),
       eq(schema.studentProfile.status, "PUBLISHED"),
     ));
-  if (!result.meta.changes) return { success: false, error: "Your profile isn't on the public website." };
+  if (!result.meta.changes) {
+    // Already off (a second press, or another tab): the person's wish holds, so say so the same way.
+    const current = await db.query.studentProfile.findFirst({
+      where: and(eq(schema.studentProfile.id, profileId), eq(schema.studentProfile.userId, userId)),
+      columns: { status: true },
+    });
+    if (current?.status === "DRAFT") return { success: true, published: false };
+    return { success: false, error: current ? "Your profile is paused, so it isn't on the public website." : "Your profile isn't on the public website." };
+  }
   return { success: true, published: false };
 }

@@ -20,7 +20,7 @@ test.describe("The profile editor", () => {
     expect((await page.goto(PATH))?.status()).toBe(200);
     await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your profile");
-    await expect(page.locator("[data-public-site='listed']")).toContainText("You're on the public website at /talent/achieng-otieno");
+    await expect(page.locator("[data-public-site='live']")).toContainText("You're on the public website at /talent/achieng-otieno");
     await expect(page.locator("#profile-visibility")).toContainText("Everyone signed in to TTV can see your profile and everything you post.");
 
     await runAxe(page, test.info(), "portfolio");

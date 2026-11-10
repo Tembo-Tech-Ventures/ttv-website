@@ -25,7 +25,7 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
           </div>
           <div>
             <p className="text-lg leading-relaxed text-ink-secondary">For TTV students and builders beyond our cohorts. Share your contributions, supporting evidence, and what you want to do next.</p>
-            <p className="mt-4 text-sm leading-relaxed text-ink-muted">You do not need to join or complete a cohort to build a community profile.</p>
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">You do not need to join or complete a cohort to build a profile.</p>
             <div className="mt-7 flex flex-wrap items-center gap-5">
               <a href={communityEntryHref(isAuthenticated)} className="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-dark hover:bg-primary/90">
                 {isAuthenticated ? "Open my community journey" : "Join the community"} <span aria-hidden="true" className="ml-2">↗</span>

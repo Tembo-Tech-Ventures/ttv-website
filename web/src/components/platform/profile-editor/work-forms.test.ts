@@ -92,7 +92,7 @@ describe("a piece of work's checks", () => {
 describe("posting work", () => {
   it("posts a new piece as the API's own call, or keeps it as a draft", async () => {
     const send = ok();
-    expect(await run("work", WORK, [], send)).toEqual({ kind: "saved", saved: "added" });
+    expect(await run("work", WORK, [], send)).toEqual({ kind: "saved", saved: "added", held: false });
     expect(send).toHaveBeenCalledWith({
       path: "journey", method: "POST",
       body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", status: "posted" },
@@ -100,6 +100,22 @@ describe("posting work", () => {
     const draft = ok();
     expect(await run("work", { ...WORK, status: "draft" }, [], draft)).toEqual({ kind: "saved", saved: "addedDraft" });
     expect(draft.mock.calls[0]?.[0]).toMatchObject({ body: { status: "draft" } });
+  });
+
+  it("says when the automatic check holds what was posted, from the API's reply to a post, an edit or a status change", async () => {
+    const created = vi.fn(async () => Response.json({ entry: { id: "new", moderationHold: true } }, { status: 201 }));
+    expect(await run("work", WORK, [], created)).toEqual({ kind: "saved", saved: "added", held: true });
+    const revised = vi.fn(async () => Response.json({ id: "ledger", updated: true, moderationHold: true }));
+    expect(await run("work", { ...WORK, id: "ledger", revision: "3" }, undefined, revised)).toEqual({ kind: "saved", saved: "updated", held: true });
+    const posted = vi.fn(async () => Response.json({ id: "ledger", status: "posted", moderationHold: true }));
+    expect(await run("work-status", { id: "ledger", status: "posted" }, undefined, posted)).toEqual({ kind: "saved", saved: "posted", held: true });
+    // Nobody else sees a draft, so a check on one is not news.
+    expect(await run("work", { ...WORK, status: "draft" }, [], created)).toEqual({ kind: "saved", saved: "addedDraft" });
+  });
+
+  it("says a moderator took work down, rather than that it changed, when the API refuses an edit for that", async () => {
+    const result = await run("work", { ...WORK, id: "ledger", revision: "3" }, undefined, vi.fn(async () => Response.json({ error: "A moderator took this down." }, { status: 409 })));
+    expect(result).toMatchObject({ kind: "render", status: 409, failure: { detail: "A moderator took this down, so it can't be changed. You can delete it." } });
   });
 
   it("revises a piece at the revision it was opened at, with the status chosen", async () => {
@@ -149,7 +165,7 @@ describe("moving work between posted and draft, and deleting it", () => {
     const send = ok();
     expect(await run("work-status", { id: "ledger", status: "draft" }, undefined, send)).toEqual({ kind: "saved", saved: "drafted" });
     expect(send).toHaveBeenCalledWith({ path: "journey/ledger", method: "PATCH", body: { status: "draft" } });
-    expect(await run("work-status", { id: "ledger", status: "posted" })).toEqual({ kind: "saved", saved: "posted" });
+    expect(await run("work-status", { id: "ledger", status: "posted" })).toEqual({ kind: "saved", saved: "posted", held: false });
     expect(await run("work-status", { id: "ledger", status: "public" })).toEqual({ kind: "refuse", status: 400 });
   });
 

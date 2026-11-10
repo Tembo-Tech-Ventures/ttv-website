@@ -66,12 +66,17 @@ describe("taking a profile off the public website", () => {
     expect((await listPublicPosts(db)).map((post) => post.slug)).toEqual(["ledger-notes"]);
   });
 
-  it("changes only the owner's own listed profile: never a draft, a paused one or someone else's", async () => {
-    for (const state of ["DRAFT", "SUSPENDED"] as const) {
-      const { database, db } = seeded(state);
-      expect(await unpublishProfile(db, "achieng", "profile")).toEqual({ success: false, error: "Your profile isn't on the public website." });
-      expect(status(database).status).toBe(state);
-    }
+  it("answers a second press the same as the first: the person is off, and nothing else changes", async () => {
+    const { database, db } = seeded();
+    expect(await unpublishProfile(db, "achieng", "profile")).toEqual({ success: true, published: false });
+    expect(await unpublishProfile(db, "achieng", "profile")).toEqual({ success: true, published: false });
+    expect(status(database)).toEqual({ status: "DRAFT", handle: "achieng-otieno" });
+  });
+
+  it("changes only the owner's own listed profile: never a paused one or someone else's", async () => {
+    const paused = seeded("SUSPENDED");
+    expect(await unpublishProfile(paused.db, "achieng", "profile")).toEqual({ success: false, error: "Your profile is paused, so it isn't on the public website." });
+    expect(status(paused.database).status).toBe("SUSPENDED");
     const { database, db } = seeded();
     expect(await unpublishProfile(db, "kevin", "profile")).toMatchObject({ success: false });
     expect(status(database).status).toBe("PUBLISHED");

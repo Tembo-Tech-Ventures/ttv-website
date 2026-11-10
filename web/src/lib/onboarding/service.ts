@@ -31,7 +31,7 @@ type RequestRow = Omit<AccessRequestSummary, "seenAt"> & { seenAt: number | null
 
 /**
  * MEMBER is inferred only from an application or a student profile: never from a cohort assignment
- * (programRole holds only instructors, TAs and cohort mentors) or from a community profile or journey,
+ * (programRole holds only instructors, TAs and cohort mentors) or from posted work alone,
  * which mentors keep too. MENTOR and INSTITUTION are inferred from the roles held.
  */
 const hasMemberFootprint = (userParam: string) => `(EXISTS (SELECT 1 FROM programApplication WHERE userId = ${userParam})

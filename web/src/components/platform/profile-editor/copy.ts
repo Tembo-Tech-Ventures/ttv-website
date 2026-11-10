@@ -7,6 +7,17 @@
 export const EVERYONE_SEES =
   "Everyone signed in to TTV can see your profile and everything you post. If you complete a cohort and publish, it's also on the public website, where anyone can see it.";
 
+/**
+ * For mentors and TTV staff, who are not listed in the members directory or on the public website (by
+ * decision), so EVERYONE_SEES isn't true for them.
+ */
+export const STAFF_SEES =
+  "Mentors and TTV staff aren't listed in the members directory or on the public website, so only you and the team see this profile and the work you post here.";
+
+/** Posting a piece of work: who sees it, in the choice's hint. */
+export const POSTED_SEEN_BY = "Everyone signed in to TTV can see it, and mentors can confirm it.";
+export const POSTED_SEEN_BY_STAFF = "Only you and the team see it: mentors and TTV staff aren't listed.";
+
 /** A draft is the one thing nobody else sees. */
 export const DRAFT_ONLY_YOU = "A draft is only for you. Nobody else sees it until you post it.";
 
@@ -19,12 +30,22 @@ export const PUBLIC_SITE = {
   list: "List me on the public website",
   /** A graduate who is listed, and the way off, which is theirs to take. */
   listed: "You're on the public website at",
+  /** A graduate who took themselves off: the way back is the same press. */
+  unlisted: "You took yourself off the public website. You can list yourself again whenever you like, at /talent/{handle}, with the work you've posted.",
+  /** Held by the automatic check and not listed: listing waits for the person who checks it. */
+  heldWaiting: "Your profile is waiting for a check. Once a person at TTV has looked at it, you can list it on the public website.",
+  /** Listed, but no longer shown: the public website is for people who completed a cohort. */
+  listedNotShown: "You chose to list your profile, but the public website only shows people who have completed a TTV cohort, so it isn't there now.",
+  /** Mentors and staff, whatever their status. */
+  staff: "Mentors and TTV staff aren't listed on the public website.",
   /** Listed, but held by the automatic check: nothing shows at the address until a person checks it. */
   listedHeld: "You've listed your profile at {path}, but it's waiting for a check, so nothing shows there until a person at TTV has looked at it.",
   unlist: "Take me off the public website",
   unlistTitle: "Take your profile off the public website?",
-  unlistBody: "Your page at {path} and the pages of your posts come off the public website. You stay in the members directory, where everyone signed in to TTV can see you. Your handle stays yours, so the same links work again if you list it again.",
+  unlistBody: "Your page at {path} and your blog posts come off the public website, and Writing and Opportunities close until you list yourself again. Nothing is deleted. You stay in the members directory, where everyone signed in to TTV can see you. Our sitemap and feed catch up within an hour; search engines can take longer to drop the old pages. Your handle stays yours, so the same links work again if you list yourself again.",
   unlistConfirm: "Take me off",
+  /** A graduate who has saved nothing yet. */
+  saveFirst: "You've completed a cohort, so once you've saved your profile you can list it on the public website, where anyone can see it.",
   /** Suspended by the team. */
   paused: "Your profile is paused, so it isn't shown anywhere. Reach out to the team for next steps.",
 } as const;
@@ -40,6 +61,12 @@ export const SAVED = {
   posted: "Posted",
   drafted: "Moved to your drafts",
   deleted: "Deleted",
+  /** Saved, but the automatic check is holding the profile (said as a warning flash). */
+  profileHeld: "Profile saved, and waiting for a check",
+  profileHeldDetail: "A person at TTV looks at it before anyone else can see the changes. Until then only you and the team can.",
+  /** Posted, but the automatic check is holding it (said as a warning flash). */
+  held: "Saved, and waiting for a check",
+  heldDetail: "A person at TTV looks at it before anyone else can see it. Until then only you and the team can.",
 } as const;
 
 export const NOT_SAVED = {
@@ -51,4 +78,16 @@ export const NOT_SAVED = {
   fixBelow: "Fix the fields marked below. Everything you wrote is kept.",
   unavailable: "That didn't save, through no fault of yours. Try again in a moment.",
   changed: "This changed since you opened it. Reload before editing. Everything you wrote is still here.",
+  takenDown: "A moderator took this down, so it can't be changed. You can delete it.",
+} as const;
+
+/** The handle: the address of the member page, and of the public page and post links once listed. */
+export const HANDLE = {
+  hint: "Your page's address: 3 to 39 lowercase letters, numbers and hyphens. Your GitHub username works well.",
+  /** Locked after the first save, so links to the member page keep working; changing it is a deliberate step. */
+  current: "Your page's address. Links to it keep working as long as you keep it.",
+  change: "Change handle",
+  changeWarning: "Your member page moves to the new address, and links to the old one stop working.",
+  /** Ever listed on the public website: it is part of every post link, so it stays. */
+  locked: "Your handle stays the same once you've been on the public website, because it's part of your post links.",
 } as const;

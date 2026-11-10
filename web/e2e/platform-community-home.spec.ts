@@ -73,7 +73,8 @@ test.describe("without JavaScript", () => {
     await main(page).getByRole("link", { name: "Post work" }).click();
     await expect(page).toHaveURL(new RegExp(`${EDITOR}\\?add=1#work-editor$`));
     const editor = main(page).locator("[data-work-editor='add']");
-    await expect(editor.locator("#work-visibility")).toContainText("Everyone signed in to TTV can see your profile and everything you post.");
+    // Who sees it, said in the choice to post it (the page says the rest at its top).
+    await expect(editor).toContainText("Everyone signed in to TTV can see it, and mentors can confirm it.");
 
     // The browser's own checks let this through; the page's do not.
     await editor.getByLabel("Title").fill("Bus fare splitter");
@@ -109,7 +110,8 @@ test.describe("without JavaScript", () => {
     await expect(page).toHaveURL(new RegExp(`${EDITOR}#profile-form$`));
     const form = main(page).locator("[data-profile-form] form");
     const tooLong = "A skill name well over thirty characters long";
-    await form.getByLabel(/^Handle/).fill("lucy-chebet");
+    // Lucy has a saved profile, so her handle stays put unless she asks to change it.
+    await expect(form.getByLabel(/^Handle/)).toHaveCount(0);
     await form.getByLabel(/^Skills/).fill(tooLong);
     await form.evaluate((element: HTMLFormElement) => element.submit());
     await expect(page).toHaveTitle(/^Error: /);

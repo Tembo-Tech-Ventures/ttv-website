@@ -118,7 +118,7 @@ describe("asking a mentor for time", () => {
     ["an account with no profile or cohort", { member: false }],
     ["a pending applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "PENDING" as const }] }],
     ["a rejected applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "REJECTED" as const }] }],
-    ["a community profile and an institution", { globalRoles: ["INSTITUTION"] }],
+    ["a saved profile and an institution", { globalRoles: ["INSTITUTION"] }],
     ["an approved cohort place", { member: false, applications: [{ programId: "cohort-a", status: "APPROVED" as const }] }],
     ["an audit place", { member: false, applications: [{ programId: "cohort-a", status: "AUDIT" as const }] }],
     ["a completed cohort", { member: false, applications: [{ programId: "cohort-a", status: "COMPLETED" as const }] }],

@@ -66,21 +66,26 @@ export type ProfileStatus = "DRAFT" | "PUBLISHED" | "SUSPENDED";
 
 export type OpportunityGateState = "no_profile" | "not_published" | "published";
 
+/**
+ * Whether the Opportunities page is open: only while the profile is on the public website. `publishedAt`
+ * says it has been there before, so a draft means the person took themselves off, and is told so.
+ */
 export function resolveGateState(
-  profile: { status: ProfileStatus } | null | undefined
+  profile: { status: ProfileStatus; publishedAt?: Date | number | null } | null | undefined
 ): { state: OpportunityGateState; message: string } {
   if (!profile) {
     return {
       state: "no_profile",
       message:
-        "Create and publish your builder profile to see client projects.",
+        "Create and publish your profile to see client projects.",
     };
   }
 
   if (profile.status !== "PUBLISHED") {
     const statusMessages: Record<string, string> = {
-      DRAFT:
-        "Once your profile is published, client projects will open up here.",
+      DRAFT: profile.publishedAt
+        ? "You took yourself off the public website, so client projects are closed. List yourself again from your profile to see them."
+        : "Once your profile is published, client projects will open up here.",
       SUSPENDED:
         "Your profile is currently suspended. Contact the TTV team for help.",
     };

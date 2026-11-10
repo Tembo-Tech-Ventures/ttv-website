@@ -80,7 +80,7 @@ async function visit(form?: Record<string, string>) {
 }
 const count = (body: string, pattern: RegExp) => body.match(pattern)?.length ?? 0;
 
-describe("a builder profile on the style guide", () => {
+describe("a profile on the style guide", () => {
   it("names the builder in the one display title, with the status in its shared name and the public page linked", async () => {
     const { status, body } = await visit();
     expect(status).toBe(200);

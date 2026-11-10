@@ -45,11 +45,11 @@ for (const persona of ["community", "alumna"] as const) {
       await page.setViewportSize({ width, height: 900 });
       await signedIn(page, baseURL, persona);
       await open(page, PATH);
-      await expect(page.locator("h1")).toHaveCount(1);
+      expect(await page.evaluate(() => document.querySelectorAll("h1").length)).toBe(1);
       await expect(main(page).getByRole("heading", { level: 1 })).toHaveText("Your profile");
       await expect(main(page).locator("#profile-visibility")).toContainText(EVERYONE_SEES);
       await expect(main(page).locator("[data-variant='primary']")).toHaveCount(1);
-      await expect(main(page).locator("[data-public-site]")).toHaveAttribute("data-public-site", persona === "alumna" ? "listed" : "not-yet");
+      await expect(main(page).locator("[data-public-site]")).toHaveAttribute("data-public-site", persona === "alumna" ? "live" : "not-yet");
       await noSidewaysScroll(page);
       await page.screenshot({ path: evidence(`${persona}-${width}`), fullPage: true });
       await runAxe(page, test.info(), `profile editor, ${persona}, ${width}`);
@@ -78,25 +78,40 @@ test.describe("without JavaScript", () => {
 
   test("a graduate takes themselves off the public website after a confirm step, and lists themselves again", async ({ page, baseURL }) => {
     test.skip(PREVIEW, "Writes run against the local seed only.");
+    // A graduate of her own (e2e/platform-members.local.sql), so no other spec sees her listing change.
+    const graduate = localPersonaSession("graduate");
+    test.skip(typeof graduate === "string", typeof graduate === "string" ? graduate : "");
+    if (typeof graduate === "string") return;
+    const talent = "/talent/zawadi-mwende";
+    const post = "/blog/zawadi-mwende/offline-first-fares";
     await page.setViewportSize({ width: 390, height: 844 });
-    await signedIn(page, baseURL, "alumna");
+    await signIn(page.context(), baseURL!, graduate);
+    // Listed, with a post, and both in the sitemap.
+    expect((await page.request.get(talent)).status()).toBe(200);
+    expect((await page.request.get(post)).status()).toBe(200);
+    expect(await (await page.request.get("/sitemap.xml")).text()).toContain(post);
+
     await open(page, PATH, { script: false });
     const site = main(page).locator("[data-public-site]");
     await site.getByRole("link", { name: "Take me off the public website" }).click();
     await expect(page).toHaveURL(new RegExp(`${PATH}\\?confirm=unpublish$`));
-    await expect(site).toContainText("Your page at /talent/achieng-otieno and the pages of your posts come off the public website.");
+    await expect(site).toContainText(`Your page at ${talent} and your blog posts come off the public website, and Writing and Opportunities close until you list yourself again.`);
     await expect(site.locator("[data-notice='warning']")).toBeFocused();
     await page.screenshot({ path: evidence("unlist-confirm") });
     await site.getByRole("button", { name: "Take me off" }).click();
     await expect(page).toHaveURL((url) => url.pathname === PATH && url.search === "");
     await expect(main(page).locator("[data-notice='success']")).toContainText("You're off the public website");
-    expect((await page.request.get("/talent/achieng-otieno")).status()).toBe(404);
-    // Still in the members directory, for everyone signed in.
-    expect((await page.request.get("/dashboard/community/members/achieng-otieno")).status()).toBe(200);
+    await expect(site).toHaveAttribute("data-public-site", "unlisted");
+    // Off everything public: the page, the post and the sitemap. Still in the members directory, for everyone signed in.
+    expect((await page.request.get(talent)).status()).toBe(404);
+    expect((await page.request.get(post)).status()).toBe(404);
+    expect(await (await page.request.get("/sitemap.xml")).text()).not.toContain("zawadi-mwende");
+    expect((await page.request.get("/dashboard/community/members/zawadi-mwende")).status()).toBe(200);
 
     await site.getByRole("button", { name: "List me on the public website" }).click();
     await expect(main(page).locator("[data-notice='success']")).toContainText("You're on the public website");
-    expect((await page.request.get("/talent/achieng-otieno")).status()).toBe(200);
+    expect((await page.request.get(talent)).status()).toBe(200);
+    expect((await page.request.get(post)).status()).toBe(200);
   });
 
   test("a member without a cohort posts work as a draft, posts it, and deletes it after a confirm step", async ({ page, baseURL }) => {

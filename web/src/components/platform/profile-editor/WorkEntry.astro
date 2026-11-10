@@ -4,7 +4,8 @@
  * waiting for a check, what they wrote, its link and what each mentor confirmed, with the ways to
  * edit it, post it or move it back to drafts, and delete it. Deleting asks first (ConfirmStep), with
  * no script. A confirmation belongs to the revision it checked: once the work changes, it reads as
- * an earlier version's, never as a confirmation of the new text.
+ * an earlier version's, never as a confirmation of the new text. Work a moderator took down can't be
+ * changed (the API refuses it), so it offers only Delete.
  */
 import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-icons/pi";
 import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
@@ -33,18 +34,22 @@ const confirmations = claim.confirmations.length;
     <Fragment slot="status"><Chip tone={hidden ? "danger" : held ? "warning" : "neutral"}>{hidden ? "Taken down" : held ? "Waiting for a check" : "Draft"}</Chip></Fragment>
   )}
   <Fragment slot="actions">
-    <RowAction href={editWorkHref(claim)} row={claim.title}>Edit</RowAction>
-    <form method="POST" action={EDITOR_PATH} class="contents">
-      <input type="hidden" name="_action" value="work-status" />
-      <input type="hidden" name="id" value={claim.id} />
-      <input type="hidden" name="status" value={draft ? "posted" : "draft"} />
-      <Button type="submit" size="sm">{draft ? "Post" : "Move to drafts"}<span class="sr-only">{` ${claim.title}`}</span></Button>
-    </form>
+    {!hidden && (
+      <>
+        <RowAction href={editWorkHref(claim)} row={claim.title}>Edit</RowAction>
+        <form method="POST" action={EDITOR_PATH} class="contents">
+          <input type="hidden" name="_action" value="work-status" />
+          <input type="hidden" name="id" value={claim.id} />
+          <input type="hidden" name="status" value={draft ? "posted" : "draft"} />
+          <Button type="submit" size="sm">{draft ? "Post" : "Move to drafts"}<span class="sr-only">{` ${claim.title}`}</span></Button>
+        </form>
+      </>
+    )}
     <RowAction href={confirmDeleteHref(claim)} row={claim.title} variant="ghost">Delete</RowAction>
   </Fragment>
   <div class="flex flex-col gap-3" data-work-entry={claim.id} data-work-status={hidden ? "hidden" : held ? "held" : claim.status}>
     {hidden ? (
-      <p>The team took this down, so only you and the team can see it.</p>
+      <p>A moderator took this down, so only you and the team can see it, and it can't be changed. You can delete it.</p>
     ) : held ? (
       <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
     ) : draft ? (

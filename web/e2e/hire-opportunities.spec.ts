@@ -225,7 +225,7 @@ test.describe("/dashboard/opportunities (authed)", () => {
 
     // Assert page content — scope to main content area to avoid matching sidebar links
     await expect(
-      page.getByText(/create and publish your builder profile|once your profile is published/i)
+      page.getByText(/create and publish your profile|once your profile is published/i)
     ).toBeVisible();
 
     await page.screenshot({

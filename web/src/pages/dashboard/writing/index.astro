@@ -24,7 +24,7 @@ const publishedProfile = db.select({ id: schema.studentProfile.id }).from(schema
 const [profile, posts, spaces] = await Promise.all([
   db.query.studentProfile.findFirst({
     where: eq(schema.studentProfile.userId, user.id),
-    columns: { id: true, status: true, handle: true },
+    columns: { id: true, status: true, handle: true, publishedAt: true },
   }),
   db.query.blogPost.findMany({
     where: inArray(schema.blogPost.profileId, publishedProfile),
@@ -35,6 +35,8 @@ const [profile, posts, spaces] = await Promise.all([
 ]);
 
 const hasPublishedProfile = profile?.status === "PUBLISHED";
+// Listed before and a draft now: they took themselves off (publishedAt stays set), and are told so.
+const unlisted = profile?.status === "DRAFT" && Boolean(profile.publishedAt);
 const base = SPACE_PAGE_PATHS.writing;
 const profilePath = SPACE_PAGE_PATHS.portfolio;
 const listed = hasPublishedProfile ? posts : [];
@@ -63,12 +65,14 @@ const detail = (post: (typeof posts)[number]) =>
     </header>
 
     {!hasPublishedProfile && (
-      <EmptyState title={profile ? "Your profile isn't published yet" : "Writing opens with a published profile"} headingLevel={2}>
+      <EmptyState title={!profile ? "Writing opens with a published profile" : unlisted ? "You're off the public website" : "Your profile isn't published yet"} headingLevel={2}>
         {!profile
-          ? "Complete a cohort and publish your builder profile. Once it's live, you can write posts here."
+          ? "Complete a cohort and list your profile on the public website. Once it's there, you can write posts here."
           : profile.status === "SUSPENDED"
             ? "Your profile is suspended, so writing is closed for now. Contact the TTV team for help."
-            : "Your profile is still a draft. Writing opens once it's published."}
+            : unlisted
+              ? "You took yourself off the public website, so your posts are off it too and writing is closed. Nothing is deleted: list yourself again from your profile to write and publish."
+              : "Writing is for people on the public website. Once you've completed a cohort and listed your profile there, you can write posts here."}
         <ButtonLink slot="action" href={profilePath}>Go to your profile</ButtonLink>
       </EmptyState>
     )}

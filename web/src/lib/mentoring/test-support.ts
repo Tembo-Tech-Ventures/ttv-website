@@ -9,7 +9,7 @@ import { mentoringRequest, type MentoringOperation, type MentoringRequestOptions
  * David (MENTOR, 2 spots a month), Mercy (MENTOR, 1 spot, written reviews only), Joseph (MENTOR and
  * INSTITUTION, 3 spots), Peter (MENTOR, paused), Kevin (a saved profile but no MENTOR role), Amani
  * (INSTITUTION only) and Amina (ADMIN). Everyone has agreed to the code of conduct, the caller too
- * unless `conduct: false`; the caller has a community profile (a member account) unless `member: false`. 2026-11-15 12:00 in Nairobi is "now" unless a call says otherwise.
+ * unless `conduct: false`; the caller has a saved profile (a member account) unless `member: false`. 2026-11-15 12:00 in Nairobi is "now" unless a call says otherwise.
  */
 export const NOW = Date.parse("2026-11-15T09:00:00Z");
 export const PEOPLE = {
@@ -52,7 +52,7 @@ export function mentoringDatabase(fixture: Partial<CapabilityCase> & { conduct?:
       profile.monthlyCapacity, profile.paused ? 1 : 0);
   }
   if (fixture.conduct !== false) s.agree();
-  // A member account (requests.ts IS_MEMBER): a community profile, unless the test needs none.
+  // A member account (requests.ts IS_MEMBER): a saved profile, unless the test needs none.
   if (fixture.member !== false) database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(VIEWER,VIEWER,VIEWER);
 
   /** A published project of the caller's (or `owner`'s) at `version`. */
