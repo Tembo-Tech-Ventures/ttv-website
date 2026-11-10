@@ -62,7 +62,7 @@ ttv-website/
 │   │   │   ├── style-guide/      # The public /style-guide's frame, catalogue and specimens
 │   │   │   ├── common/           # Shared UI (Grain, FontPreload)
 │   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
-│   │   │   ├── platform/         # ui/ (the TTV UI kit), spaces shell, overlays, mentors, onboarding (READMEs inside)
+│   │   │   ├── platform/         # ui/ (the TTV UI kit), spaces shell, overlays, mentors, members, onboarding (READMEs inside)
 │   │   │   └── channels/         # Channel view, composer, embeds, Tembo cards
 │   │   ├── lib/                  # Core libraries
 │   │   │   ├── auth.ts           # better-auth server config
@@ -149,6 +149,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`). A mentor conversation opens with the request that started it. Either member reports a message; admins outside it see that message alone, in the moderation queue | Session |
 | `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory with URL filters, the caller's own requests (withdraw) and the "Ask for time" drawer, which also posts without JavaScript; a mentor's requests (accept, suggest another mentor, not this month) and availability (Mentoring space); any signed-in person may ask, as themselves; flag `mentor_requests` (see `web/src/components/platform/mentors/README.md`) | Session |
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
+| `/dashboard/community/members` | Members: everyone with a saved profile, for everyone signed in; institutions see the same. A GET search (`?q&skills&open`) that works without JavaScript, the day's fair order (never "best first"), cursor pages, and the caller's own standing at the top; flag `spaces` (see `web/src/components/platform/members/README.md`) | Session |
+| `/dashboard/community/members/[handle]` | A member's profile and all their posted work, with each mentor confirmation at its revision, and their `/talent` page linked only when they are on the public site. Unknown, unlisted and hidden handles are the same 404; flag `spaces` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
 | `/admin/moderation` | The channel moderation queue (`?state=DECIDED` for decided cases), flag `channels`; with flag `mentor_requests`, a "Request notes" tab (`?tab=request-notes`) to keep or remove mentor requests whose note Tembo's check held or a mentor reported, through `/api/moderation/mentor-requests`. Works without JavaScript | ADMIN |
