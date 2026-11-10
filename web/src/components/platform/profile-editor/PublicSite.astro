@@ -1,0 +1,72 @@
+---
+/**
+ * The public website, in the editor. Being listed there is for people who completed a cohort
+ * (spec rule 2): a graduate chooses it with one press, and comes off it the same way, after a confirm
+ * step that says what comes off (unpublishProfile). Everyone else gets one honest line about how they
+ * get there, and nothing to press. A paused profile is shown nowhere, and says so.
+ */
+import { Button, ButtonLink, Card, ConfirmStep, linkClass } from "@/components/platform/ui";
+import { PUBLIC_SITE } from "./copy";
+import { EDITOR_PATH, UNLIST_ACTION, unlistHref } from "./work-forms";
+
+interface Props {
+  /** Completed a cohort (the journey's `profile` link). */
+  eligible: boolean;
+  /** The saved profile, or null before the first save. */
+  profile: { handle: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null;
+  /** Coming off the public website is being confirmed. */
+  confirming?: boolean;
+  /** Held by the automatic check: listed or not, nothing shows publicly until a person checks it. */
+  held?: boolean;
+}
+
+const { eligible, profile, confirming = false, held = false } = Astro.props;
+const listed = profile?.status === "PUBLISHED";
+const publicPath = profile ? `/talent/${encodeURIComponent(profile.handle)}` : null;
+---
+
+<Card as="section" aria-labelledby="public-site-title" className="flex flex-col gap-3" data-public-site={profile?.status === "SUSPENDED" ? "paused" : listed ? "listed" : eligible ? "offered" : "not-yet"}>
+  <h2 id="public-site-title" class="text-xl leading-snug text-ink-primary">{PUBLIC_SITE.title}</h2>
+  {profile?.status === "SUSPENDED" ? (
+    <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">{PUBLIC_SITE.paused}</p>
+  ) : listed && publicPath ? (
+    <>
+      {held ? (
+        <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary" data-public-site-held>{PUBLIC_SITE.listedHeld.replace("{path}", publicPath)}</p>
+      ) : (
+        <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
+          {PUBLIC_SITE.listed} <a href={publicPath} class={linkClass()}>{publicPath}</a>, with your posted work. Anyone can see it there.
+        </p>
+      )}
+      {confirming ? (
+        <ConfirmStep
+          title={PUBLIC_SITE.unlistTitle}
+          confirmLabel={PUBLIC_SITE.unlistConfirm}
+          cancelHref={EDITOR_PATH}
+          action={EDITOR_PATH}
+          fields={{ _action: UNLIST_ACTION }}
+        >
+          {PUBLIC_SITE.unlistBody.replace("{path}", publicPath)}
+        </ConfirmStep>
+      ) : (
+        <div><ButtonLink href={unlistHref()} variant="ghost">{PUBLIC_SITE.unlist}</ButtonLink></div>
+      )}
+    </>
+  ) : eligible ? (
+    profile ? (
+      <>
+        <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">{PUBLIC_SITE.offer.replace("{handle}", profile.handle)}</p>
+        <form method="POST" action={EDITOR_PATH}>
+          <input type="hidden" name="_action" value="publish" />
+          <Button type="submit">{PUBLIC_SITE.list}</Button>
+        </form>
+      </>
+    ) : (
+      <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
+        You've completed a cohort, so once you've saved your profile you can list it on the public website, where anyone can see it.
+      </p>
+    )
+  ) : (
+    <p class="m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">{PUBLIC_SITE.notYet}</p>
+  )}
+</Card>

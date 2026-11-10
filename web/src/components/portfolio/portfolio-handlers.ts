@@ -657,3 +657,25 @@ function editorValues(
     linkedinUrl: data.linkedinUrl || null,
   };
 }
+
+/**
+ * The owner takes their profile off the public website: PUBLISHED back to DRAFT, nothing else
+ * changed. Everything public follows the listing (publicProfileEligibility and
+ * isEligiblePublicProfile read the status): the /talent page, their post pages and bylines, the
+ * sitemap, the homepage builders and the certificate's link. The profile stays in the signed-in
+ * Members directory, and the handle stays theirs, so re-listing through publishProfile brings the
+ * same addresses back. A consent control, so it needs no check and no one else's approval; a
+ * profile the team has paused (SUSPENDED) is not the owner's to change.
+ */
+export async function unpublishProfile(db: Database, userId: string, profileId: string): Promise<ProfileFormResult> {
+  const result = await db
+    .update(schema.studentProfile)
+    .set({ status: "DRAFT", contentVersion: sql`${schema.studentProfile.contentVersion} + 1` })
+    .where(and(
+      eq(schema.studentProfile.id, profileId),
+      eq(schema.studentProfile.userId, userId),
+      eq(schema.studentProfile.status, "PUBLISHED"),
+    ));
+  if (!result.meta.changes) return { success: false, error: "Your profile isn't on the public website." };
+  return { success: true, published: false };
+}

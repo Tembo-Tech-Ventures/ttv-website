@@ -25,7 +25,7 @@ export const CHOICES: readonly Choice[] = [
     intent: "MEMBER",
     marker: "builder",
     title: "Build and learn",
-    body: "Keep a community profile, add the work you’ve done, and apply to a cohort when one is open.",
+    body: "Make your profile, post the work you’ve done, and apply to a cohort when one is open.",
     needsApproval: false,
   },
   {
@@ -39,7 +39,7 @@ export const CHOICES: readonly Choice[] = [
     intent: "INSTITUTION",
     marker: "institution",
     title: "Find people for your organisation",
-    body: "Use AI tools to explore saved member profiles and their posted work.",
+    body: "Use AI tools to search members’ profiles and the work and evidence behind them.",
     needsApproval: true,
   },
 ];
@@ -75,7 +75,7 @@ export const REQUEST = {
   noteLength: "Between 20 and 600 characters.",
   scope: "I understand approval adds AI tools for the same profiles and posted work every signed-in member can see, and doesn’t arrange introductions.",
   scopeTitle: "What approval opens",
-  /** The approved partner-page wording, consistent with F-4: saved profiles and shared work only. */
+  /** What organisation approval opens: tools over the same profiles and posted work every member sees, nothing wider. */
   opens: [
     "Discover: AI tools to explore saved profiles and posted work.",
     "The same profiles and posted work every signed-in member sees, with sources and mentor confirmations.",
@@ -134,7 +134,7 @@ export const STATUS = {
   view: "View request",
   approved: {
     MENTOR: { title: "Mentoring is open", body: "Mentoring is now one of your spaces. Start with Confirm work.", open: "Open Mentoring" },
-    INSTITUTION: { title: "Discover is open", body: "Use AI tools to explore saved member profiles and their posted work.", open: "Open Discover" },
+    INSTITUTION: { title: "Discover is open", body: "Use its tools to search members’ profiles and the work behind them.", open: "Open Discover" },
   } satisfies Record<AccessRole, { title: string; body: string; open: string }>,
   declined: {
     title: { MENTOR: "Mentor access wasn’t approved this time.", INSTITUTION: "Organisation access wasn’t approved this time." } satisfies Record<AccessRole, string>,
@@ -184,9 +184,9 @@ export const TAKING_PART = {
   lead: "This shapes where you start and what we suggest. It never grants access by itself.",
   exploring: "Just looking around for now",
   rows: {
-    MEMBER: { title: "Build and learn", body: "Community profile, contributions and cohort applications." },
+    MEMBER: { title: "Build and learn", body: "Your profile, your posted work and cohort applications." },
     MENTOR: { title: "Mentor", body: "Review work that members share, and record what you checked." },
-    INSTITUTION: { title: "Find people for your organisation", body: "Use AI tools to explore saved member profiles and their posted work." },
+    INSTITUTION: { title: "Find people for your organisation", body: "AI tools to search members’ profiles and the evidence behind them." },
   } satisfies Record<ChoiceIntent, { title: string; body: string }>,
   sent: (date: string) => `Request sent ${date}. An administrator will review it.`,
   /** What a pending request said, in the person's own words (QAO-03). The administrator is never named. */
@@ -199,15 +199,4 @@ export const TAKING_PART = {
   again: STATUS.declined.again,
   remove: "Remove",
   note: "Access the team has approved stays on until an administrator removes it. To step back, send the team a note through Feedback.",
-} as const;
-
-/**
- * The Profile tab for someone who chose to mentor or find people, and not to build and learn
- * (QA1-08, QAO-07): a public builder profile comes with a completed cohort, so it is explained,
- * not offered as a lock to open by applying.
- */
-export const PROFILE_PARTNER = {
-  title: "Public profiles come with a cohort",
-  body: "A public builder profile opens when a member completes a cohort. To build and learn as well, choose it in",
-  account: "Account",
 } as const;

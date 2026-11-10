@@ -171,6 +171,12 @@ export async function loadOwnProfile() {
  * GET journey, validated and mapped as loadOwnProfile does. Null when either
  * body does not match.
  */
+/** The caller's own work from the body of GET journey, validated and mapped; null when it does not match. */
+export function parseOwnWork(journey: unknown): JourneyClaim[] | null {
+  const parsed = journeySchema.safeParse(journey);
+  return parsed.success ? parsed.data.entries.map(mapJourney) : null;
+}
+
 export function parseOwnJourney(profile: unknown, journey: unknown): CommunityProfile | null {
   const parsedProfile = ownProfileSchema.safeParse(profile);
   const parsedJourney = journeySchema.safeParse(journey);

@@ -29,7 +29,6 @@ const ALUMNA: OverviewFacts = {
   opportunities: { gate: "published", items: [] },
   certificates: [{ id: "app-2", programName: "Cohort 02" }],
   mentorRequests: false,
-  framing: null,
 };
 
 /** A member who has not completed a cohort: no public profile, nothing behind the profile gate. */
@@ -200,21 +199,20 @@ describe("profileOverview for an alumna", () => {
 });
 
 describe("profileOverview without a public profile", () => {
-  it("tells a member the page opens with a completed cohort, and offers applying", () => {
+  it("invites anyone without a profile to make one, and says who sees it", () => {
     const model = profileOverview(MEMBER);
     expect(model.card).toBeNull();
     expect(model.actions).toEqual({ member: null, view: null, edit: null });
-    expect(model.noProfile).toMatchObject({
-      kind: "locked", title: "Your public builder page opens when you complete a cohort",
-      action: { href: "/dashboard/cohort/apply", label: "Apply to a cohort" },
+    expect(model.noProfile).toEqual({
+      kind: "create", title: "Make your profile",
+      body: "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it.",
+      action: { href: "/dashboard/me/portfolio", label: "Make your profile" },
     });
     expect(model.opportunities).toBeNull();
     expect(model.needs).toEqual([]);
-  });
-
-  it("does not ask someone already in a cohort to apply again", () => {
-    for (const journeyState of ["pending", "accepted", "audit"] as const) {
-      expect(profileOverview({ ...MEMBER, journeyState }).noProfile?.action).toBeNull();
+    // Whatever their cohort, or none: nobody is sent to apply before they can have a profile.
+    for (const journeyState of ["no_application", "pending", "accepted", "audit", "rejected"] as const) {
+      expect(profileOverview({ ...MEMBER, journeyState }).noProfile?.action.href).toBe("/dashboard/me/portfolio");
     }
   });
 
@@ -237,14 +235,11 @@ describe("profileOverview without a public profile", () => {
     expect(draft.actions).toMatchObject({ member: "/dashboard/community/members/achieng-otieno", view: null });
   });
 
-  it("invites a graduate without a profile to create one", () => {
+  it("tells a graduate without a profile they can also list it on the public website", () => {
     expect(profileOverview({ ...ALUMNA, profile: null }).noProfile).toMatchObject({
-      kind: "create", action: { href: "/dashboard/me/portfolio", label: "Create your profile" },
+      kind: "create", body: expect.stringContaining("you can also list it on the public website"),
+      action: { href: "/dashboard/me/portfolio", label: "Make your profile" },
     });
-  });
-
-  it("leaves mentors and organisations to the partner note, never asking them to apply (QAO-07)", () => {
-    expect(profileOverview({ ...MEMBER, framing: "partner" }).noProfile).toMatchObject({ kind: "partner", action: null });
   });
 
   it("hides what the journey has not unlocked: visitor messages and writing drafts", () => {

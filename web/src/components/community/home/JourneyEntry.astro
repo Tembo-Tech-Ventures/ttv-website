@@ -10,8 +10,7 @@ import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-ic
 import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
 import { Chip, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
 import { formatCalendarDate } from "@/lib/display-date";
-import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { editHref } from "./home-forms";
+import { editWorkHref, isContribution, reposHref } from "@/components/platform/profile-editor/work-forms";
 
 interface Props {
   claim: JourneyClaim;
@@ -24,10 +23,14 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
 
 <DataListItem title={claim.title} headingLevel={3}>
   <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
-  {(claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip>{claim.moderatorHidden ? "Taken down" : claim.moderationHold ? "Awaiting review" : "Draft"}</Chip></Fragment>}
-  <Fragment slot="actions"><RowAction href={claim.kind === "repo" ? `${SPACE_PAGE_PATHS.portfolio}#highlights-title` : editHref(claim)} row={claim.title}>Edit</RowAction></Fragment>
+  {(claim.moderatorHidden || claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip tone={claim.moderatorHidden ? "danger" : claim.moderationHold ? "warning" : "neutral"}>{claim.moderatorHidden ? "Taken down" : claim.moderationHold ? "Waiting for a check" : "Draft"}</Chip></Fragment>}
+  <Fragment slot="actions"><RowAction href={isContribution(claim) ? editWorkHref(claim) : reposHref()} row={claim.title}>Edit</RowAction></Fragment>
   <div class="flex flex-col gap-3">
-    {claim.moderatorHidden ? <p>A moderator took this down.</p> : claim.moderationHold ? <p>Your work is saved and waiting for a human review. Only you and admins can see it.</p> : claim.status === "draft" && <p>Unpublished draft. Only you can see this contribution.</p>}
+    {claim.moderatorHidden
+      ? <p>The team took this down, so only you and the team can see it.</p>
+      : claim.moderationHold
+        ? <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
+        : claim.status === "draft" && <p>A draft: only you can see it.</p>}
     <p class="whitespace-pre-line break-words">{claim.description}</p>
     {claim.evidence.length > 0 && (
       <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`Sources for ${claim.title}`}>

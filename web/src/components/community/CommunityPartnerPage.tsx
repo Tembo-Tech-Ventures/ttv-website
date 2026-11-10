@@ -35,7 +35,7 @@ const content = {
     context: "A useful note is a specific note.", contextIntro: "Your perspective can make a contribution easier to understand without promising an outcome.",
     notes: [
       { title: "Show the basis for your confidence.", text: "Say what the source demonstrates and how you reviewed it. Avoid filling gaps with assumptions about the member." },
-      { title: "Respect what is shared.", text: "Review shared contributions and sources you are allowed to access. Do not copy private cohort recordings, internal records, or confidential information into a note." },
+      { title: "Respect what is shared.", text: "Review the posted work and sources in front of you. Do not copy private cohort recordings, internal records, or confidential information into a note." },
     ],
     questions: [
       { title: "How much time should I set aside?", text: "Before taking on a review, agree its scope and timing with the team. Start with work you can give careful, specific attention to." },
@@ -68,7 +68,7 @@ const content = {
     context: "More context. Your judgment.", contextIntro: "A profile is a starting point. The contribution and its evidence give you something concrete to discuss.",
     notes: [
       { title: "Keep confirmation in scope.", text: "A mentor note describes the particular work reviewed. It is not a universal score, a certification of the person, or a hiring decision." },
-      { title: "Approval adds AI tools.", text: "Everyone signed in to TTV can see saved profiles and posted work. Institutional approval adds AI discovery and assessment. Private cohort recordings and internal records stay outside institutional discovery." },
+      { title: "Approval adds tools, not access.", text: "Approved organisations see the same saved profiles and posted work as every signed-in member. Their extra is AI tools to search and assess that work. Cohort recordings and internal records stay out of all of it." },
     ],
     questions: [
       { title: "Who can use institutional discovery?", text: {

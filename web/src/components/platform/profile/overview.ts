@@ -2,7 +2,6 @@ import { memberProfileHref } from "@/lib/members/links";
 import type { CommunityJourney } from "@/lib/community/model";
 import type { OpportunityGateState } from "@/components/hire/validation";
 import type { StudentDashboardLinkId, StudentJourneyState } from "@/lib/student/journey";
-import type { CommunityFraming } from "@/components/platform/onboarding/framing";
 import { MENTORS_PATH } from "@/components/platform/mentors/mentor-display";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 
@@ -63,8 +62,6 @@ export interface OverviewFacts {
   certificates: readonly { id: string; programName: string }[];
   /** Whether "Ask for time" is open to this person (mentor requests). */
   mentorRequests: boolean;
-  /** How onboarding frames this person, when it does: "partner" chose to mentor or find people, not to build and learn. */
-  framing: CommunityFraming | null;
 }
 
 export interface OverviewCard {
@@ -82,11 +79,12 @@ export interface OverviewCard {
 }
 
 /** The profile card when there is no public profile yet, saying what opens it. */
+/** The profile card before there is a profile: everyone can make one (one profile model). */
 export interface OverviewNoProfile {
-  kind: "create" | "locked" | "partner";
+  kind: "create";
   title: string;
   body: string;
-  action: { href: string; label: string } | null;
+  action: { href: string; label: string };
 }
 
 export type ProjectState =
@@ -205,24 +203,13 @@ function card(facts: OverviewFacts): OverviewCard | null {
 
 function noProfile(facts: OverviewFacts): OverviewNoProfile | null {
   if (facts.profile) return null;
-  if (facts.eligible) {
-    return {
-      kind: "create",
-      title: "Your public builder page is ready to set up",
-      body: "You've completed a cohort, so you can publish a page with your work, skills and how to reach you. It stays a draft until you publish it.",
-      action: { href: PROFILE_EDITOR_PATH, label: "Create your profile" },
-    };
-  }
-  // Someone who chose to mentor or find people is not sent to apply (QAO-07); PartnerProfileNote says the rest.
-  if (facts.framing === "partner") return { kind: "partner", title: "", body: "", action: null };
-  const applying = facts.journeyState === "no_application" || facts.journeyState === "rejected";
   return {
-    kind: "locked",
-    title: "Your public builder page opens when you complete a cohort",
-    body: applying
-      ? "Cohort graduates get a page with their work and skills. Until then, the work you share on Your journey is how mentors and approved organisations get to know you."
-      : "When your cohort is complete, you can publish a page with your work and skills. Until then, the work you share on Your journey is how mentors and approved organisations get to know you.",
-    action: applying ? { href: SPACE_PAGE_PATHS.apply, label: "Apply to a cohort" } : null,
+    kind: "create",
+    title: "Make your profile",
+    body: facts.eligible
+      ? "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it, and because you've completed a cohort you can also list it on the public website."
+      : "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it.",
+    action: { href: PROFILE_EDITOR_PATH, label: "Make your profile" },
   };
 }
 
@@ -300,7 +287,7 @@ export function profileOverview(facts: OverviewFacts): ProfileOverviewModel {
   return {
     title: "Your profile",
     lead: shown
-      ? "What visitors and approved organisations see, and what's waiting for you."
+      ? "What everyone signed in to TTV sees, and what's waiting for you."
       : "Your work, what's waiting for you, and what opens next.",
     actions: {
       member: shown?.memberHref ?? null,

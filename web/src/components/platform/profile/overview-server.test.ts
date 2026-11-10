@@ -83,7 +83,6 @@ describe("profileOverviewFacts", () => {
       leads: { items: [{ id: "lead" }], total: 7 },
       opportunities: { gate: "published", items: PROJECTS },
       mentorRequests: true,
-      framing: "builder",
     });
     expect(facts.profile?.skills).toEqual(["Python"]);
   });

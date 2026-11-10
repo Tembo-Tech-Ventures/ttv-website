@@ -17,7 +17,8 @@ describe("community entry points", () => {
     expect(html).toContain("You do not need to join or complete a cohort");
     expect(html).toContain("Everyone signed in to TTV can see your profile and everything you post.");
     expect(html).toContain("AI discovery tools require administrator approval after sign-in");
-    expect(html).toContain("Cohort recordings and internal records are not part");
+    expect(html).toContain("If you complete a cohort and publish, it’s also on the public website, where anyone can see it.");
+    expect(html).toContain("Cohort recordings and internal records are never part of a profile.");
     expect(html).toContain("does not guarantee a job");
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).not.toContain("/api/community/profiles");

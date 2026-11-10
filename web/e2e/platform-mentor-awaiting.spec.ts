@@ -73,8 +73,8 @@ test("a mentor sees the same waiting count everywhere, and it follows their conf
     expect(before).toBeGreaterThanOrEqual(1);
     const overview = mentor.locator("#spaces-main [data-awaiting-confirmation]");
     await expect(overview).toHaveText(before === 1
-      ? "1 shared contribution is waiting for your confirmation."
-      : `${before} shared contributions are waiting for your confirmation.`);
+      ? "1 piece of work is waiting for your confirmation."
+      : `${before} pieces of work are waiting for your confirmation.`);
 
     // The sidebar badge counts the same work, and says what it counts.
     const confirmLink = mentor.locator("#space-sidebar a", { hasText: "Confirm work" });

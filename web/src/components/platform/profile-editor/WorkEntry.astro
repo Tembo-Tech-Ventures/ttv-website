@@ -1,0 +1,92 @@
+---
+/**
+ * One piece of the caller's own work in the editor: its title and date, whether it's a draft or
+ * waiting for a check, what they wrote, its link and what each mentor confirmed, with the ways to
+ * edit it, post it or move it back to drafts, and delete it. Deleting asks first (ConfirmStep), with
+ * no script. A confirmation belongs to the revision it checked: once the work changes, it reads as
+ * an earlier version's, never as a confirmation of the new text.
+ */
+import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-icons/pi";
+import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
+import { Button, Chip, ConfirmStep, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
+import { formatCalendarDate } from "@/lib/display-date";
+import { confirmDeleteHref, editWorkHref, EDITOR_PATH, workListHref } from "./work-forms";
+
+interface Props {
+  claim: JourneyClaim;
+  /** This piece's delete is being confirmed. */
+  confirming?: boolean;
+}
+
+const { claim, confirming = false } = Astro.props;
+const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00Z`));
+const draft = claim.status === "draft";
+const held = Boolean(claim.moderationHold);
+const link = claim.evidence[0] ? evidenceHref(claim.evidence[0].url) : null;
+const confirmations = claim.confirmations.length;
+---
+
+<DataListItem title={claim.title} headingLevel={3}>
+  <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
+  {(held || draft) && <Fragment slot="status"><Chip tone={held ? "warning" : "neutral"}>{held ? "Waiting for a check" : "Draft"}</Chip></Fragment>}
+  <Fragment slot="actions">
+    <RowAction href={editWorkHref(claim)} row={claim.title}>Edit</RowAction>
+    <form method="POST" action={EDITOR_PATH} class="contents">
+      <input type="hidden" name="_action" value="work-status" />
+      <input type="hidden" name="id" value={claim.id} />
+      <input type="hidden" name="status" value={draft ? "posted" : "draft"} />
+      <Button type="submit" size="sm">{draft ? "Post" : "Move to drafts"}<span class="sr-only">{` ${claim.title}`}</span></Button>
+    </form>
+    <RowAction href={confirmDeleteHref(claim)} row={claim.title} variant="ghost">Delete</RowAction>
+  </Fragment>
+  <div class="flex flex-col gap-3" data-work-entry={claim.id} data-work-status={held ? "held" : claim.status}>
+    {held ? (
+      <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
+    ) : draft ? (
+      <p>A draft: only you can see it.</p>
+    ) : null}
+    <p class="whitespace-pre-line break-words">{claim.description}</p>
+    {claim.evidence[0] && (
+      link ? (
+        <a href={link} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex w-fit max-w-full items-center gap-1 break-all")}>
+          {claim.evidence[0].title}<span class="sr-only"> (opens in a new tab)</span>
+          <PiArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
+        </a>
+      ) : <p>{claim.evidence[0].title}: the link can't be opened</p>
+    )}
+    {confirmations === 0 ? (
+      <p class="text-ink-secondary">No mentor has confirmed this yet.</p>
+    ) : (
+      <ul class="m-0 flex list-none flex-col gap-3 p-0" aria-label={`Confirmations of ${claim.title}`}>
+        {claim.confirmations.map((confirmation) => {
+          const current = confirmation.journeyVersion === claim.version;
+          return (
+            <li class="flex gap-3" data-confirmation={current ? "current" : "earlier"}>
+              {current
+                ? <PiCheckCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success-ink" />
+                : <PiClockCounterClockwise aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-secondary" />}
+              <div class="min-w-0">
+                <p class="font-semibold text-ink-primary">
+                  {current ? "Confirmed by" : "An earlier version was confirmed by"} {confirmation.mentorName}
+                </p>
+                <p class="break-words whitespace-pre-line">{confirmation.note}</p>
+                <p>How they checked: {confirmation.method}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    )}
+    {confirming && (
+      <ConfirmStep
+        title={`Delete “${claim.title}”?`}
+        confirmLabel="Delete it"
+        cancelHref={workListHref()}
+        action={EDITOR_PATH}
+        fields={{ _action: "work-delete", id: claim.id }}
+      >
+        It goes from your profile for good{confirmations > 0 ? `, with the ${confirmations === 1 ? "mentor confirmation" : `${confirmations} mentor confirmations`} of it` : ""}. This can't be undone.
+      </ConfirmStep>
+    )}
+  </div>
+</DataListItem>

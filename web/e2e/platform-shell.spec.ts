@@ -138,7 +138,7 @@ test.describe("the spaces shell harness", () => {
 
   test("signals shared work waiting for a mentor's confirmation on the bell, with a dot and in its name", async ({ page }) => {
     await open(page, harness("confirming", "community"));
-    const bell = page.getByRole("button", { name: "Attention, 4 shared contributions to confirm" });
+    const bell = page.getByRole("button", { name: "Attention, 4 pieces of work to confirm" });
     await expect(bell).toBeVisible();
     await expect(bell.locator('[data-count-badge="dot"]')).toBeVisible();
     await expect(bell.locator('[data-count-badge="count"]')).toHaveCount(0);

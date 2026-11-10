@@ -28,7 +28,6 @@ const ALUMNA: OverviewFacts = {
   opportunities: { gate: "published", items: [{ id: "savings", title: "Member savings tracker", organization: "Chama Savings", interested: false }] },
   certificates: [{ id: "app-2", programName: "Cohort 02" }],
   mentorRequests: false,
-  framing: null,
 };
 
 let container: AstroContainer;
@@ -69,7 +68,7 @@ describe("ProfileOverview", () => {
     expect(prose?.[1]).toContain(`class="${linkClass()}"`);
   });
 
-  it("asks someone without a profile to apply through a quiet kit button link", async () => {
+  it("asks someone without a profile to make one, as the page's one peach action", async () => {
     const html = await render({
       ...ALUMNA,
       journeyState: "no_application",
@@ -80,7 +79,9 @@ describe("ProfileOverview", () => {
       opportunities: { gate: "no_profile", items: [] },
       certificates: [],
     });
-    expect(html).toMatch(/data-profile-card="locked"[\s\S]*?<a[^>]*href="\/dashboard\/cohort\/apply"[^>]*data-variant="quiet"[^>]*>[\s\S]*?Apply to a cohort/);
+    expect(html).toMatch(/data-profile-card="create"[\s\S]*?<a[^>]*href="\/dashboard\/me\/portfolio"[^>]*data-variant="primary"[^>]*>[\s\S]*?Make your profile/);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
     expect(html).not.toContain("View public page");
+    expect(html).not.toContain("/dashboard/cohort/apply");
   });
 });

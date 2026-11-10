@@ -10,7 +10,6 @@ import {
   PiArrowRight, PiArrowSquareOut, PiCertificate, PiEnvelopeSimple, PiIdentificationCard, PiNotePencil, PiPencilSimple, PiShieldCheck, PiUsersThree,
 } from "react-icons/pi";
 import { Avatar, ButtonLink, Chip, PageTitle, PersonMarker, RAISED, linkClass } from "@/components/platform/ui";
-import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import type { NeedIcon, ProfileOverviewModel } from "./overview";
 
@@ -94,8 +93,7 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
         </section>
       )}
 
-      {noProfile?.kind === "partner" && <PartnerProfileNote />}
-      {noProfile && noProfile.kind !== "partner" && (
+      {noProfile && (
         <section aria-labelledby="profile-card-title" class={SECTION} data-profile-card={noProfile.kind}>
           <div class="flex items-start gap-4">
             <span aria-hidden="true" class="grid size-11 shrink-0 place-items-center rounded-full bg-primary/10">
@@ -107,7 +105,7 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
               {noProfile.action && (
                 <ButtonLink
                   href={noProfile.action.href}
-                  variant={noProfile.kind === "create" ? "primary" : "quiet"}
+                  variant="primary"
                   size="lg"
                   className="mt-4"
                 >

@@ -1,6 +1,6 @@
 import type { MemberCard, MemberFilters } from "@/lib/members/directory";
 import { MEMBERS_PATH } from "@/lib/platform/server/space-routes";
-import { addHref, profileHref } from "@/components/community/home/home-forms";
+import { addWorkHref, profileFormHref } from "@/components/platform/profile-editor/work-forms";
 
 /**
  * The Members directory's addresses, filters and words, shared by its two pages
@@ -142,5 +142,5 @@ export function cardSkills(skills: readonly string[]): { shown: string[]; more: 
 }
 
 /** Where a person makes or changes their own profile, and posts work. */
-export const profileEditorHref = (): string => profileHref();
-export const postWorkHref = (): string => addHref();
+export const profileEditorHref = (): string => profileFormHref();
+export const postWorkHref = (): string => addWorkHref();

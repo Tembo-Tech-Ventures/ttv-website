@@ -187,7 +187,7 @@ describe("the attention page on the server", () => {
     expect(waiting).not.toContain("all caught up");
     expect(waiting).toContain("No new notifications.");
     expect(waiting).toContain('data-attention-awaiting="4"');
-    expect(waiting).toContain("4 shared contributions are waiting for your confirmation.");
+    expect(waiting).toContain("4 pieces of work are waiting for your confirmation.");
     expect(waiting).toContain('href="/dashboard/mentoring/confirm"');
 
     const unknown = render(meByPersona.david);

@@ -217,6 +217,5 @@ export function profileOverviewFacts(
     opportunities,
     certificates,
     mentorRequests: mentorRequestsOpen(me),
-    framing: context.onboarding?.framing ?? null,
   };
 }

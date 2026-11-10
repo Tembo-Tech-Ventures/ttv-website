@@ -51,7 +51,7 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
           <div className="mt-12 grid gap-8 border-t border-[color:var(--color-rule)] pt-10 md:grid-cols-2">
             <section aria-labelledby="community-visibility-heading">
               <h2 id="community-visibility-heading" className="font-display text-2xl text-ink-primary">Know who can see your work.</h2>
-              <p className="mt-4 leading-relaxed text-ink-secondary">Everyone signed in to TTV can see your profile and everything you post. Mentors can review those shared contributions. Cohort recordings and internal records are not part of institutional discovery.</p>
+              <p className="mt-4 leading-relaxed text-ink-secondary">Everyone signed in to TTV can see your profile and everything you post. If you complete a cohort and publish, it’s also on the public website, where anyone can see it. Mentors can confirm the work they check. Cohort recordings and internal records are never part of a profile.</p>
               <p className="mt-4 leading-relaxed text-ink-muted">A contribution or mentor confirmation does not guarantee a job, placement, or introduction.</p>
             </section>
             <section id="institutions" aria-labelledby="community-institution-heading">

@@ -259,7 +259,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   account: { d1: 16, depth: 2 },
   // The profile with its highlights and the GitHub account start beside the space context, and eligibility
   // comes from the frame's journey; the GET no longer calls GitHub or reads the account twice (depth 9 in the audit).
-  "public profile editor": { d1: 16, depth: 3 },
+  // Three more since it became the one editor for everyone (PR D): the caller's own work and its confirmations
+  // (the community API's journey read) and their GitHub repositories, all in the same wave as the profile.
+  "public profile editor": { d1: 19, depth: 3 },
   // Depth 6 (23 queries) for a published builder before the style-guide rollout: the journey, then the
   // profile, then its messages and drafts, then the opportunities, in turn. Now one round trip after the
   // router's, the profile's dependents found through it by subquery: four more queries for someone with

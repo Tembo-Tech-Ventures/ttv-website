@@ -1,0 +1,67 @@
+---
+/**
+ * Posting a piece of work, or its next revision: what it is, what you did, when, a link to it, and
+ * whether to post it now or keep it as a draft. A plain form that posts to the editor (work-forms.ts),
+ * so it saves without a script. An edit carries the revision the person saw: if the work changed
+ * since, the API refuses it and nothing is overwritten. It says who will see it before the button.
+ */
+import { Button, ButtonLink, ChoiceGroup, Notice, TextAreaField, TextField } from "@/components/platform/ui";
+import type { JourneyClaim } from "@/components/discovery/types";
+import { DRAFT_ONLY_YOU, EVERYONE_SEES } from "./copy";
+import { DESCRIPTION_MAX, EDITOR_PATH, LINK_MAX, TITLE_MAX, WORK_EDITOR_ID, type WorkErrors, type WorkFailure, type WorkValues } from "./work-forms";
+
+interface Props {
+  /** The work being revised; none for a new piece. */
+  claim?: JourneyClaim | null;
+  values: WorkValues;
+  errors?: WorkErrors;
+  failure?: WorkFailure | null;
+}
+
+const { claim = null, values, errors = {}, failure = null } = Astro.props;
+const count = Object.keys(errors).length;
+const STATUS_OPTIONS = [
+  { value: "posted", label: "Post it", hint: "Everyone signed in to TTV can see it, and mentors can confirm it." },
+  { value: "draft", label: "Keep it as a draft", hint: DRAFT_ONLY_YOU },
+];
+---
+
+<section id={WORK_EDITOR_ID} aria-labelledby="work-editor-title" class="scroll-mt-6" data-work-editor={claim ? "edit" : "add"}>
+  <h3 id="work-editor-title" class="text-lg text-ink-primary">{claim ? `Edit “${claim.title}”` : "Post your work"}</h3>
+  <p class="mt-2 max-w-prose text-sm leading-relaxed text-ink-secondary">
+    {claim
+      ? "Saving makes a new revision. A mentor's confirmation stays with the revision they checked."
+      : "Something you made or helped make: a project, a fix, a talk, something you wrote. Say what your part was."}
+  </p>
+  <form method="POST" action={EDITOR_PATH} class="mt-5 flex flex-col gap-6">
+    <input type="hidden" name="_action" value="work" />
+    {claim && <input type="hidden" name="id" value={claim.id} />}
+    {claim && <input type="hidden" name="revision" value={String(claim.version)} />}
+    {count > 0 && (
+      <Notice tone="danger" focusOnLoad title={`${count === 1 ? "One thing" : `${count} things`} to fix before this can be saved`}>
+        Everything you wrote is still here.
+      </Notice>
+    )}
+    {failure && <Notice tone="danger" focusOnLoad title={failure.title}>{failure.detail}</Notice>}
+    <TextField
+      id="work-title" name="title" label="Title" placeholder="Made the library's borrowing flow keyboard accessible"
+      maxLength={TITLE_MAX} defaultValue={values.title} error={errors.title} required
+    />
+    <TextAreaField
+      id="work-description" name="description" label="What you did" placeholder="What was your part? What changed? Who did you work with?"
+      rows={5} minLength={20} maxLength={DESCRIPTION_MAX} defaultValue={values.description} error={errors.description} required
+    />
+    <TextField id="work-date" type="date" name="date" label="When" defaultValue={values.date} error={errors.date} required className="max-w-xs" />
+    <TextField
+      id="work-link" type="url" name="link" label="Link" optional placeholder="https://…" maxLength={LINK_MAX}
+      hint="Anything someone can open: the project, the code, a write-up, a recording. Only share what you may share."
+      defaultValue={values.link} error={errors.link}
+    />
+    <ChoiceGroup name="status" label="Who sees it" options={STATUS_OPTIONS} defaultValue={values.status} />
+    <Notice tone="info" id="work-visibility">{EVERYONE_SEES}</Notice>
+    <div class="flex flex-wrap items-center gap-3">
+      <Button type="submit" variant="primary" size="lg" aria-describedby="work-visibility">{claim ? "Save changes" : "Save"}</Button>
+      <ButtonLink href={`${EDITOR_PATH}#work`} variant="ghost" size="lg">Cancel</ButtonLink>
+    </div>
+  </form>
+</section>
