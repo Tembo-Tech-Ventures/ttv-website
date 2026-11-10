@@ -39,7 +39,7 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
           return (
             <li>
               {href ? (
-                <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1")}>
+                <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1 pointer-coarse:min-h-11")}>
                   {source.title}<span class="sr-only"> ({source.kind}, opens in a new tab)</span>
                   <PiArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
                 </a>
