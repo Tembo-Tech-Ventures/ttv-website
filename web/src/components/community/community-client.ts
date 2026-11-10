@@ -13,6 +13,7 @@ import { UiApiError } from "../discovery/ui-errors";
 // Validate the network boundary independently from server-side authorization.
 const profileSchema = z.object({
   userId: z.string(),
+  handle: z.string().nullable().optional(),
   name: z.string(),
   image: z.string().nullable(),
   headline: z.string(),
@@ -102,6 +103,7 @@ export function mapProfile(
   return {
     moderationHold:profile.moderationHold,
     id: profile.userId,
+    handle: profile.handle ?? null,
     version: profile.version,
     name: profile.name,
     image: profile.image,

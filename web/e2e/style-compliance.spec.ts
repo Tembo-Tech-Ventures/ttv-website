@@ -81,9 +81,10 @@ const PAGE_HELPERS = `
 const CONTROLS = "a[href],button,input[type=submit],input[type=button],input[type=reset],summary,[role=button]";
 /**
  * The kit draws every control's focus the same way: FOCUS_RING or INSET_FOCUS_RING in its classes,
- * or, for the space tabs, the same ring in platform-ui.css. A control with neither was written by hand.
+ * or, for the space tabs, the same ring in platform-ui.css, and for a member card's name link, the same
+ * ring on the whole card in members.css. A control with none of these was written by hand.
  */
-const KIT_RING = String.raw`\bfocus-visible:outline-peach-ink\b|\bspace-tab__link\b`;
+const KIT_RING = String.raw`\bfocus-visible:outline-peach-ink\b|\bspace-tab__link\b|\bmember-card__link\b`;
 
 function desktopFacts({ controls, kitRing }: { controls: string; kitRing: string }) {
   const ring = new RegExp(kitRing);

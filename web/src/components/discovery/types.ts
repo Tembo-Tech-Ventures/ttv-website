@@ -41,6 +41,8 @@ export interface CommunityProfile {
   matches?: import("@/lib/community/discovery-contract").DiscoveryMatch[];
   discovery?: {evaluated:number;searched:number};
   id: string;
+  /** Their page's address in the Members directory; null or absent without a saved profile. */
+  handle?: string | null;
   version?: number;
   name: string;
   /** Their photo, when they have one. */

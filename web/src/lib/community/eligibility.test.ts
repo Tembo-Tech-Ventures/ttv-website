@@ -118,9 +118,10 @@ const LIST_SURFACES: Record<string, (db: D1Database, caller: string) => Promise<
     const people = await searchPlatform(db, caller, { q: "Webhook", scope: "people" });
     const projects = await searchPlatform(db, caller, { q: "Webhook", scope: "projects" });
     // The caller's own shared work stays findable as their own, never as discovery.
-    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe(`/talent/${caller}`);
+    // Work leads to its place on its owner's member page (handles equal ids in this fixture).
+    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe(`/dashboard/community/members/${caller}#work-${own.journeyId}`);
     const discovered = projects.projects.filter(p => p.owner.id !== caller);
-    for (const project of discovered) expect(project.href).toBe(`/talent/${project.owner.id}`);
+    for (const project of discovered) expect(project.href).toBe(`/dashboard/community/members/${project.owner.id}#work-${project.journeyId}`);
     return [...new Set([...people.people.filter(p=>p.person.id!==caller).map(p => p.person.id), ...discovered.map(p => p.owner.id)])];
   },
 };
@@ -220,12 +221,19 @@ describe("discoverableMember", () => {
     // Lucy saves an empty profile: she becomes discoverable on every surface.
     await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).updateOwnProfile({ headline: "", bio: "", skills: [], opportunityGoals: "" });
     const service = createCommunityService(db, id("joseph"), undefined, undefined, undefined, {} as Env);
-    expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1 });
+    expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1, handle: expect.stringMatching(/^[a-z0-9-]+$/) });
     expect((await service.searchProfiles({ query: "lucy" })).map(p => p.userId)).toEqual([id("lucy")]);
+  });
+  it("names a member page only for someone the directory lists: never a mentor's or an admin's", async () => {
+    const db = world();
+    for (const staff of ["david", "amina"] as const) {
+      expect(await createCommunityService(db, id(staff), undefined, undefined, undefined, {} as Env).getProfile(id(staff)), `${staff}`)
+        .toMatchObject({ userId: id(staff), handle: null });
+    }
   });
   it("still lets everyone read their own profile without saving one", async () => {
     const db = world();
-    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0 });
+    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0, handle: null });
     expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).listJourney(id("lucy"))).toHaveLength(1);
   });
   it("keeps non-institution callers out before any eligibility lookup", async () => {

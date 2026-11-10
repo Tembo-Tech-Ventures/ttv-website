@@ -1,4 +1,4 @@
-import { publicProfileEligibility } from "@/lib/community/eligibility";
+import { memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
 import { sql } from "drizzle-orm";
 import { and, desc, eq, exists, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
@@ -75,10 +75,9 @@ async function profileFacts(db: Database, userId: string) {
     db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, userId),
       extras: {
-        onPublicSite:
-          sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as(
-            "onPublicSite",
-          ),
+        onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite"),
+        // Listed in the Members directory, by the same rule the directory reads with.
+        listed: sql<number>`${sql.raw(memberEligibility("studentProfile.userId"))}`.as("listed"),
       },
       columns: {
         id: true,
@@ -201,6 +200,7 @@ export function profileOverviewFacts(
     eligible: journey.visibleLinkIds.includes("profile"),
     profile: profile && {
       onPublicSite: profile.onPublicSite,
+      listed: profile.listed,
       status: profile.status,
       handle: profile.handle,
       headline: profile.headline,

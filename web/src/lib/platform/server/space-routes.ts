@@ -73,6 +73,26 @@ export function isMentorPagePath(pathname: string): boolean {
   return mentorPages.has(normalizeSpacePath(pathname));
 }
 
+/**
+ * The Members directory (semi-public member directory, PR C): everyone with a saved profile, under
+ * Community, and one member's profile at `/dashboard/community/members/<handle>`. They need only the
+ * `spaces` flag. A handle matches only as written, in the shape handles are made (never decoded); the
+ * page answers 404 alike for a handle nobody has, a person who is not listed and one the caller can't see.
+ */
+export const MEMBERS_PATH = `${SPACE_PATHS.community}/members`;
+// The rule handles are made by (`validateHandle`): 3–39 characters, no hyphen at either end or two in a row.
+const MEMBER_HANDLE = /^(?!.*--)[a-z0-9][a-z0-9-]{1,37}[a-z0-9]$/;
+
+/** The member a canonical member path names, or null for the directory and anything else. */
+export function memberRoute(pathname: string): { handle: string } | null {
+  const match = /^\/dashboard\/community\/members\/([^/]+)$/.exec(normalizeSpacePath(pathname));
+  return match && MEMBER_HANDLE.test(match[1]) ? { handle: match[1] } : null;
+}
+
+export function isMemberPagePath(pathname: string): boolean {
+  return normalizeSpacePath(pathname) === MEMBERS_PATH || memberRoute(pathname) !== null;
+}
+
 export const SPACE_REDIRECTS = [
   ["/dashboard/apply", "/dashboard/cohort/apply"],
   ["/dashboard/application/:id", "/dashboard/cohort/application/:id"],
@@ -144,5 +164,6 @@ export function isAvailableSpacePath(pathname: string): boolean {
   return Object.values(SPACE_PATHS).some(entry => entry === path)
     || legacySpacePath(path) !== path
     || isChannelPagePath(path)
-    || isMentorPagePath(path);
+    || isMentorPagePath(path)
+    || isMemberPagePath(path);
 }

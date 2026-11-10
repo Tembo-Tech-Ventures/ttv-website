@@ -25,19 +25,21 @@ interface Props {
   title: string;
   /** Prepended to the tab title only: "Error: " after a rejected form. */
   titlePrefix?: string;
+  /** Appended to the title in the tab only. */
+  titleSuffix?: string;
   /** The space whose sheet tone the page takes (Community's when the page names none). */
   space?: SpaceId;
   /** A full-height view (a chat) that sizes itself to the sheet instead of scrolling in it. */
   fill?: boolean;
 }
 
-const { title, titlePrefix = "", space = "community", fill = false } = Astro.props;
+const { title, titlePrefix = "", titleSuffix = "", space = "community", fill = false } = Astro.props;
 const hasSidebar = Astro.slots.has("sidebar");
 // A browser session signs out here, as the account menu does in the spaces shell; a token has no session to end.
 const canSignOut = Boolean(Astro.locals.user && Astro.locals.session && !Astro.locals.personalAccessToken);
 ---
 
-<BaseLayout title={`${titlePrefix}${title}`} noIndex>
+<BaseLayout title={`${titlePrefix}${title}${titleSuffix}`} noIndex>
   <div class="flex min-h-dvh flex-col bg-ground" data-plain-frame>
     <a href="#spaces-main" class:list={["sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-dark focus:px-4 focus:py-2", FOCUS_RING]}>
       Skip to content

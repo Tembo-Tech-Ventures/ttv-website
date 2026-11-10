@@ -62,7 +62,7 @@ describe("groundAnswer: citations are validated on the server", () => {
 
   it("a source given twice keeps one tag, and the book stops at its limit", () => {
     const sources = new SourceBook();
-    const citation = { type: "profile", userId: "u", title: "Achieng · builder profile", href: "/talent/achieng" } as const;
+    const citation = { type: "profile", userId: "u", title: "Achieng · builder profile", href: "/dashboard/community/members/achieng" } as const;
     expect(sources.add(citation, "a")).toBe("S1");
     expect(sources.add({ ...citation }, "a")).toBe("S1");
     for (let i = 0; i < TEMBO_CONFIG.maxSources + 5; i += 1) sources.add({ ...citation, userId: `u${i}` }, "x");

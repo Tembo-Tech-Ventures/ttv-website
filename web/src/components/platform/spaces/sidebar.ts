@@ -1,5 +1,5 @@
 import type { AccessRole, Channel, Me, SpaceId } from "@/lib/platform/contracts";
-import { CONDUCT_PATH, SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
+import { CONDUCT_PATH, MEMBERS_PATH, SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/account-actions";
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
@@ -39,6 +39,7 @@ export type SpacePageKey =
   | "communityChannel"
   | "cohortChannel"
   | "conduct"
+  | "members"
   | "mentors"
   | "mentorRequests"
   | "mentorAvailability"
@@ -202,6 +203,7 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   communityChannel: ["community"],
   cohortChannel: ["cohort"],
   conduct: ["community"],
+  members: ["community"],
   mentors: ["community"],
   mentorRequests: ["mentoring"],
   mentorAvailability: ["mentoring"],
@@ -230,6 +232,8 @@ export const SPACE_PAGE_PATHS = {
   communityChannel: channelPathPrefix("community"),
   cohortChannel: channelPathPrefix("cohort"),
   conduct: CONDUCT_PATH,
+  // The directory; a member's own page under it marks this entry current too.
+  members: MEMBERS_PATH,
   mentors: MENTORS_PATH,
   mentorRequests: MENTOR_REQUESTS_PATH,
   mentorAvailability: MENTOR_AVAILABILITY_PATH,
@@ -360,6 +364,8 @@ function community(facts: SidebarFacts): SidebarModel {
     groups: [
       ...group(facts, undefined, [
         { key: "journey", page: "journey", label: framing === "partner" ? PARTNER.ownWork : "Your journey", icon: "journey" },
+        // Everyone with a saved profile, for everyone signed in: institutions see the same pages.
+        { key: "members", page: "members", label: "Members", icon: "people" },
         mentors && { key: "mentors", page: "mentors", label: "Mentors", icon: "mentors" },
         noCohort && { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
       ]),

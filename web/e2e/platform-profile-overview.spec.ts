@@ -84,6 +84,7 @@ test("an alumna sees her published profile as visitors do, with the editor one c
   await expect(card.locator("[data-profile-meta]")).toHaveText("Backend builder · Kisumu · Cohort 04");
   await expect(card.getByRole("list", { name: "Skills" }).getByRole("listitem")).toHaveText(["TypeScript", "SQL"]);
   await expect(overview(page).getByRole("link", { name: "View public page" })).toHaveAttribute("href", "/talent/achieng-otieno");
+  await expect(overview(page).getByRole("link", { name: "See your member page" })).toHaveAttribute("href", "/dashboard/community/members/achieng-otieno");
   await expect(overview(page).getByRole("link", { name: "Edit", exact: true })).toHaveAttribute("href", EDITOR);
 
   const certificates = overview(page).getByRole("region", { name: "Certificates" });
@@ -124,6 +125,7 @@ test("a member without a public profile is told what opens it, and offered a coh
   await expect(card.getByRole("heading", { level: 2 })).toHaveText("Your public builder page opens when you complete a cohort");
   await expect(card.getByRole("link", { name: "Apply to a cohort" })).toHaveAttribute("href", "/dashboard/cohort/apply");
   await expect(overview(page).getByRole("link", { name: "View public page" })).toHaveCount(0);
+  await expect(overview(page).getByRole("link", { name: "See your member page" })).toHaveCount(0);
   await expect(overview(page).getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   await expect(overview(page).getByRole("region", { name: "Opportunities for you" })).toHaveCount(0);
   await expect(overview(page).getByRole("region", { name: "Needs you" })).toContainText("Nothing needs you right now.");

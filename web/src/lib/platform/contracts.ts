@@ -226,6 +226,8 @@ export type ProjectConfirmation = z.infer<typeof ProjectConfirmation>;
 export const ProjectEmbed = z.object({
   type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText,
   summary: z.string(), skills: z.array(NonEmptyText), link: WebLink.nullable(), confirmations: z.array(ProjectConfirmation),
+  /** The work on its owner's member page, added on each read while it is still posted; never stored. */
+  memberHref: InternalPath.optional(),
 });
 export type ProjectEmbed = z.infer<typeof ProjectEmbed>;
 export const SessionClipEmbed = z.object({
@@ -265,7 +267,7 @@ export const Citation = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("sessionClip"), recordingId: Id, startSeconds: z.number().nonnegative(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("message"), messageId: Id, channelId: Id, title: NonEmptyText, href: InternalPath }),
-  /** A saved member profile, which Tembo may cite in community channels. */
+  /** A member's profile (their page in the Members directory), which Tembo may cite in community channels. */
   z.object({ type: z.literal("profile"), userId: Id, title: NonEmptyText, href: InternalPath.nullable() }),
 ]);
 export type Citation = z.infer<typeof Citation>;

@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { requestScopeActive } from "@/lib/platform/server/request-scope";
-import { discoverableMember, postedWorkEligibility } from "./eligibility";
+import { discoverableMember, memberEligibility, postedWorkEligibility } from "./eligibility";
 import {
   CommunityError, workState,
   workStatusSql, profileInput, journeyInput, journeyUpdateInput, journeyStatusInput, confirmationInput, setAsideInput, searchInput, parseInput,
@@ -18,7 +18,7 @@ import {
 } from "./model";
 
 interface ProfileRow {
-  userId: string; name: string; image: string | null; headline: string | null;
+  userId: string; handle: string | null; name: string; image: string | null; headline: string | null;
   bio: string | null; skills: string | null; opportunityGoals: string | null;
   moderationHold?:number;
   version: number | null; updatedAt: number | null;
@@ -26,12 +26,13 @@ interface ProfileRow {
 function profile(row: ProfileRow): CommunityProfile {
   let skills: string[] = [];
   try { const value: unknown = JSON.parse(row.skills ?? "[]"); if (Array.isArray(value)) skills = value.filter((s): s is string => typeof s === "string"); } catch { /* Older malformed rows have no skills. */ }
-  return { moderationHold:Boolean(row.moderationHold), userId: row.userId, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
+  return { moderationHold:Boolean(row.moderationHold), userId: row.userId, handle: row.handle ?? null, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
     opportunityGoals: row.opportunityGoals ?? "", version: row.version ?? 0, updatedAt: row.updatedAt };
 }
 /** How many shared contributions the Confirm page lists, newest first. */
 const MENTORSHIP_WINDOW = 50;
-const PROFILE_SELECT = `SELECT u.id AS userId,coalesce(p.publicName,u.name) AS name,p.publicAvatarUrl AS image,p.headline,p.bio,p.skills,p.opportunityGoals,p.contentVersion AS version,p.updatedAt,coalesce(p.moderationOutcome='hold',0) AS moderationHold
+// The handle names a member page, so it is given only while the Members directory lists the person (not staff, held or paused).
+const PROFILE_SELECT = `SELECT u.id AS userId,CASE WHEN ${memberEligibility("u.id")} THEN p.handle END AS handle,coalesce(p.publicName,u.name) AS name,p.publicAvatarUrl AS image,p.headline,p.bio,p.skills,p.opportunityGoals,p.contentVersion AS version,p.updatedAt,coalesce(p.moderationOutcome='hold',0) AS moderationHold
   FROM user u LEFT JOIN studentProfile p ON p.userId=u.id`;
 
 function communityService(db: D1Database, actorId: string, fixture: StagingFixtureIdentity | null | undefined, environment: string | undefined, flagsOverride: string | undefined, moderationEnv: MemberModerationEnv | undefined) {

@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { memberProfileHref } from "@/lib/members/links";
 import type { DatabaseSync } from "node:sqlite";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { loadRenderers } from "astro:container";
@@ -111,11 +112,25 @@ describe("Discover", () => {
     expect(person.hasAttribute("data-card")).toBe(true);
     expect(person.querySelector("h3")?.textContent).toBe("Achieng Otieno");
     expect(person.querySelector(`[data-avatar='${MEMBER}']`)).not.toBeNull();
-    const explore = person.querySelector("a")!;
+    const memberPage = person.querySelector("[data-discover-member-page]")!;
+    expect(memberPage.getAttribute("href")).toBe(memberProfileHref({ handle: MEMBER }));
+    expect(memberPage.textContent).toBe("Member page of Achieng Otieno");
+    const explore = person.querySelector("a[data-variant]")!;
     expect(explore.textContent?.trim()).toBe("Explore Achieng's work");
     expect(explore.getAttribute("data-variant")).toBe("quiet");
     expect(explore.getAttribute("href")).toBe(`${PATH}?profile=${MEMBER}&lookup=1&query=Achieng`);
     expect(primaries(page)).toEqual([]);
+  });
+
+  it("links no member page while member pages are closed (the spaces flag off)", async () => {
+    seeded("UPDATE feature_flag SET audience='OFF' WHERE key='spaces';");
+    const results = await visit({ path: `${PATH}?lookup=1&scout=results&query=Achieng` });
+    expect(results.status).toBe(200);
+    expect(results.body).toContain("Achieng Otieno");
+    expect(results.body).not.toContain("data-discover-member-page");
+    const profile = await visit({ path: `${PATH}?profile=${MEMBER}&lookup=1&query=Achieng` });
+    expect(profile.body).toContain("Chama savings ledger");
+    expect(profile.body).not.toContain("data-discover-member-page");
   });
 
   it("opens a person's profile and work, with Explore evidence as the one peach action", async () => {
@@ -125,6 +140,7 @@ describe("Discover", () => {
     const page = main(body);
     expect(page.querySelector("#discover-person-name")?.textContent).toBe("Achieng Otieno");
     expect(page.querySelector("[data-back-link]")?.getAttribute("href")).toBe(`${PATH}?lookup=1&scout=results&query=Achieng`);
+    expect(page.querySelector("[data-discover-member-page]")?.getAttribute("href")).toBe(memberProfileHref({ handle: MEMBER }));
     const work = page.querySelector("[data-data-list] [data-data-list-item]")!;
     expect(work.querySelector("h3")?.textContent).toBe("Chama savings ledger");
     expect(work.querySelector("time")?.textContent).toBe("24 Oct 2026");

@@ -1,0 +1,55 @@
+---
+/**
+ * Community → Members → a member: their profile and everything they have posted,
+ * with what mentors confirmed (spec: semi-public member directory). Everyone
+ * signed in sees the same page; the person's own is the same, with the way to
+ * their editor. Server-rendered with no island; `spaces` flag only.
+ *
+ * A handle nobody has, a person who is not listed, and a profile the caller
+ * can't see all answer the same 404 (readMember's null), so the page never says
+ * whether an account exists. The read starts beside the space context.
+ */
+import { env } from "cloudflare:workers";
+import { readMember } from "@/lib/members/directory";
+import { recordError } from "@/lib/observability/errors";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { BackLink, ButtonLink, Notice } from "@/components/platform/ui";
+import MemberProfile from "@/components/platform/members/MemberProfile";
+import { MEMBERS_PATH } from "@/components/platform/members/member-display";
+// oxlint-disable-next-line import/no-unassigned-import -- The member's work list.
+import "@/components/platform/members/members.css";
+
+const { method } = Astro.request;
+const bare = (status: number, headers: Record<string, string> = {}) =>
+  new Response(status === 404 ? "Not found." : "Not allowed.", { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
+if (method !== "GET" && method !== "HEAD") return bare(405, { Allow: "GET, HEAD" });
+
+const handle = Astro.params.handle ?? "";
+const resolved = await resolveSpacePageWith(Astro.locals, "members", (me) =>
+  readMember(env.DB, { id: me.user.id }, handle)
+    .then((member) => ({ member }), (error: unknown) => ({ error })));
+if (!resolved) return bare(404);
+const [context, read] = resolved;
+if ("error" in read) {
+  await recordError(env.DB, { source: "request", route: `${MEMBERS_PATH}/:handle`, error: read.error });
+  Astro.response.status = 503;
+} else if (!read.member) {
+  return bare(404);
+}
+const member = "error" in read ? null : read.member;
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title={member?.displayName ?? "Members"} titlePrefix={member ? "" : "Error: "}>
+  {member ? <MemberProfile member={member} /> : (
+    <div class="flex max-w-4xl flex-col gap-6">
+      <BackLink href={MEMBERS_PATH} className="w-fit">Members</BackLink>
+      <h1 class="sr-only">Member profile</h1>
+      <Notice tone="danger" title="We couldn't load this profile">
+        Nothing is lost. Try again in a moment.
+        <Fragment slot="actions"><ButtonLink href={Astro.url.pathname}>Try again</ButtonLink></Fragment>
+      </Notice>
+    </div>
+  )}
+</SpacePage>

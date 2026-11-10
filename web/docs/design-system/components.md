@@ -221,7 +221,9 @@ and `actions` take named slots from `.astro`. Hairlines, not boxes.
 `previousHref`, `nextHref` (either may be null), `summary` ("21–40 of 133"),
 `label` when a page has more than one. A named nav of plain links with
 `rel="prev"`/`"next"`; an end of the list has no link rather than a disabled
-one, and a list on one page draws nothing.
+one, and a list on one page draws nothing. A list paged by cursor knows only
+what comes after it, so it passes `firstHref` ("First page", `rel="first"`)
+instead of a `previousHref` it would have to guess (the Members directory).
 
 ### DescriptionList `#description-list`
 

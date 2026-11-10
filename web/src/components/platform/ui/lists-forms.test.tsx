@@ -114,6 +114,16 @@ describe("Pager", () => {
   it("draws nothing for a list that fits on one page", () => {
     expect(renderToStaticMarkup(<Pager />)).toBe("");
   });
+
+  it("goes back to the first page of a list paged by cursor, never to a guessed previous one", () => {
+    const html = renderToStaticMarkup(<Pager firstHref="/members" nextHref="/members?cursor=c" summary="25–48 of 57" label="More members" />);
+    expect(html).toMatch(/^<nav aria-label="More members" data-pager="true"/);
+    expect(/<a [^>]*rel="first"[^>]*>/.exec(html)?.[0]).toContain('href="/members"');
+    expect(/<a [^>]*rel="next"[^>]*>/.exec(html)?.[0]).toContain('href="/members?cursor=c"');
+    expect(html).toContain(">First page<");
+    expect(html).not.toContain("Previous");
+    expect(renderToStaticMarkup(<Pager firstHref="/members" />)).toContain('rel="first"');
+  });
 });
 
 describe("FileField", () => {

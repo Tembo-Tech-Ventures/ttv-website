@@ -70,6 +70,8 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Community
   { path: "/dashboard/community", persona: "community" },
   { path: "/dashboard/community/mentors", persona: "community" },
+  { path: "/dashboard/community/members", persona: "community" },
+  { path: "/dashboard/community/members/[handle]", persona: "institution", detail: { from: "/dashboard/community/members", link: ID("/dashboard/community/members") } },
   { path: "/dashboard/community/conduct", persona: "community" },
   { path: "/dashboard/community/c/[slug]", persona: "community", namedH1: true, detail: { from: "/dashboard/community", link: ID("/dashboard/community/c") } },
 

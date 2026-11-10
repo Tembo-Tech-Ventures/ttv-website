@@ -154,6 +154,25 @@ describe("Tembo leakage matrix: the channel decides what Tembo reads, never the 
     expect(texts.size).toBe(1);
   });
 
+  it("cites a member's profile with their page in the app, never the public website", async () => {
+    const s = temboDatabase(ROLES["institution"]);
+    fixtures.push(s);
+    seed(s);
+    const question = s.question(ASKING.COMMUNITY, "@tembo who works on budgeting canary?");
+    // The conversation is S1–S5; the search's profiles follow it.
+    const { model } = scriptedModel([
+      { search: [["search_projects", "budgeting canary"]] },
+      { answer: "These profiles mention it [S6, S7, S8]." },
+    ]);
+    expect((await s.ask(ASKING.COMMUNITY, question, { temboModel: model })).status).toBe(202);
+    await s.afterResponse();
+    const [answer] = s.rows<{ citations: string }>("SELECT citations FROM channel_message WHERE authorKind = 'TEMBO' AND parentId = ?", question);
+    const profiles = (JSON.parse(answer!.citations) as { type: string; href: string | null }[]).filter((citation) => citation.type === "profile");
+    expect(profiles.length).toBeGreaterThan(0);
+    for (const citation of profiles) expect(citation.href).toMatch(/^\/dashboard\/community\/members\/[a-z0-9-]+$/);
+    expect(answer!.citations).not.toContain("/talent/");
+  });
+
   it("another cohort's channel is not even reachable to ask in", async () => {
     const s = temboDatabase(ROLES["approved member"]);
     fixtures.push(s);

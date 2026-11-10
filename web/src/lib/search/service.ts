@@ -1,4 +1,4 @@
-import { memberProfileHref } from "@/lib/members/links";
+import { memberProfileHref, memberWorkHref } from "@/lib/members/links";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { SearchQuery, SearchResults, WebLink, type PersonSummary } from "@/lib/platform/contracts";
@@ -82,7 +82,7 @@ export async function searchPlatform(
       .all<PublicPersonRow & { id: string; version: number; title: string; summary: string }>();
     results.projects = rows.map(row => ({ journeyId: row.id, version: row.version, title: row.title,
       summary: row.summary, owner: person(row),
-      href: memberProfileHref(row),
+      href: memberWorkHref(row, row.id),
       visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 

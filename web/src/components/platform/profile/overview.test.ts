@@ -20,7 +20,7 @@ const ALUMNA: OverviewFacts = {
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
-    onPublicSite:1, status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
+    onPublicSite: 1, listed: 1, status: "PUBLISHED", handle: "achieng-otieno", headline: "Backend builder", bio: "I build ledger tools.",
     location: "Kisumu", country: "KE", skills: ["TypeScript", "SQL"], publicName: null, publicAvatarUrl: null,
   },
   journey: [],
@@ -83,14 +83,16 @@ describe("projectState", () => {
 });
 
 describe("profileOverview for an alumna", () => {
-  it("shows the published card with only the parts that exist, and links to the public page and the editor", () => {
+  it("shows the published card with only the parts that exist, and links to her member page, the public page and the editor", () => {
     const model = profileOverview(ALUMNA);
     expect(model.title).toBe("Your profile");
     expect(model.card).toMatchObject({
       name: "Achieng Otieno", meta: ["Backend builder", "Kisumu", "Cohort 02"], skills: ["TypeScript", "SQL"],
-      status: { label: "Published", tone: "ring" }, publicHref: "/talent/achieng-otieno",
+      status: { label: "Published", tone: "ring" }, memberHref: "/dashboard/community/members/achieng-otieno", publicHref: "/talent/achieng-otieno",
     });
-    expect(model.actions).toEqual({ view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" } });
+    expect(model.actions).toEqual({
+      member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },
+    });
     expect(model.noProfile).toBeNull();
     expect(model.certificates).toEqual([{ id: "app-2", programName: "Cohort 02", href: "/certificate/app-2" }]);
   });
@@ -201,7 +203,7 @@ describe("profileOverview without a public profile", () => {
   it("tells a member the page opens with a completed cohort, and offers applying", () => {
     const model = profileOverview(MEMBER);
     expect(model.card).toBeNull();
-    expect(model.actions).toEqual({ view: null, edit: null });
+    expect(model.actions).toEqual({ member: null, view: null, edit: null });
     expect(model.noProfile).toMatchObject({
       kind: "locked", title: "Your public builder page opens when you complete a cohort",
       action: { href: "/dashboard/cohort/apply", label: "Apply to a cohort" },
@@ -220,7 +222,19 @@ describe("profileOverview without a public profile", () => {
     const model = profileOverview({ ...ALUMNA, eligible: false });
     expect(model.card?.status.label).toBe("Published");
     expect(model.noProfile).toBeNull();
-    expect(model.actions).toEqual({ view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" } });
+    expect(model.actions).toEqual({
+      member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },
+    });
+  });
+
+  it("links the member page only while the directory lists the profile, and the public page only while it is public", () => {
+    // Held by the check, suspended, or a mentor's or admin's: not listed, so no member page to show.
+    const unlisted = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, listed: 0 } });
+    expect(unlisted.actions.member).toBeNull();
+    expect(unlisted.card?.memberHref).toBeNull();
+    // Listed but not a graduate's published page: the member page, and nothing public.
+    const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT", onPublicSite: 0 } });
+    expect(draft.actions).toMatchObject({ member: "/dashboard/community/members/achieng-otieno", view: null });
   });
 
   it("invites a graduate without a profile to create one", () => {

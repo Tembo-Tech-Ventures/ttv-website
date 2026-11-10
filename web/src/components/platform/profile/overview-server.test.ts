@@ -57,7 +57,7 @@ function reads(linkIds: StudentJourney["visibleLinkIds"]) {
     journey: { state: "published", visibleLinkIds: linkIds, unreadLeadCount: 7, nextStep: null } as unknown as StudentJourney,
     own: {
       profile: {
-        id: "profile", onPublicSite: 1, status: "PUBLISHED" as const, handle: "achieng-otieno", headline: null, bio: null, location: null, country: null,
+        id: "profile", onPublicSite: 1, listed: 1, status: "PUBLISHED" as const, handle: "achieng-otieno", headline: null, bio: null, location: null, country: null,
         skills: '["Python"]', publicName: null, publicAvatarUrl: null,
       },
       leads: [{ id: "lead", fromName: "Grace Wanjiru", organization: "Chama Savings" }],
