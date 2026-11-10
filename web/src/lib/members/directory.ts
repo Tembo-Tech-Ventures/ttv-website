@@ -81,3 +81,8 @@ export function readMember(
 ): Promise<MemberProfileView | null> {
   return Promise.reject(new Error("Member directory implementation pending"));
 }
+
+/** The caller’s own card in the shared view, for the separate You card. */
+export function readOwnMemberCard(_db: D1Database, _caller: DiscoveryCaller): Promise<MemberCard | null> {
+  return Promise.reject(new Error("Member directory implementation pending"));
+}
