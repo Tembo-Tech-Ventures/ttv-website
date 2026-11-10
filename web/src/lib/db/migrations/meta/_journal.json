@@ -288,6 +288,13 @@
       "when": 1794273600000,
       "tag": "0040_member_review_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794291935201,
+      "tag": "0041_profile_suspended_from",
+      "breakpoints": true
     }
   ]
 }

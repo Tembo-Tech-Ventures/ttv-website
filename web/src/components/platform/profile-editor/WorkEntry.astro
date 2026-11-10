@@ -12,6 +12,7 @@ import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
 import { Button, Chip, ConfirmStep, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
 import { formatCalendarDate } from "@/lib/display-date";
 import { confirmDeleteHref, editWorkHref, EDITOR_PATH, workListHref } from "./work-forms";
+import { TAKEN_DOWN, TAKEN_DOWN_DELETE } from "./copy";
 
 interface Props {
   claim: JourneyClaim;
@@ -49,7 +50,7 @@ const confirmations = claim.confirmations.length;
   </Fragment>
   <div class="flex flex-col gap-3" data-work-entry={claim.id} data-work-status={hidden ? "hidden" : held ? "held" : claim.status}>
     {hidden ? (
-      <p>A moderator took this down, so only you and the team can see it, and it can't be changed. You can delete it.</p>
+      <p>{TAKEN_DOWN} {TAKEN_DOWN_DELETE}</p>
     ) : held ? (
       <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
     ) : draft ? (

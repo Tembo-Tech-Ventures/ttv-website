@@ -96,9 +96,15 @@ person has looked); mentors and staff are told they aren't listed anywhere;
 someone who took themselves off (a draft with `publishedAt`) is never asked to
 list again, and Writing and Opportunities tell them why they're closed. Coming
 off twice answers the same as once. A held save of the profile or of work is a
-save, said as a warning. The handle stays put after the first save ("Change
-handle" is a deliberate step that warns old links stop working) and never
-changes once the profile has been listed, since it is part of post links.
+save, said as a warning; a listed profile's held edit writes nothing, so it
+comes back (422) with every value. Listing is the person's own choice: a held
+profile can't be listed until a person clears the check (`publishProfile`
+refuses it), and an admin never publishes a draft. Their Unpublish pauses a
+profile and records what it interrupted (`suspendedFrom`), so restoring it puts
+back the person's choice. The handle stays put after the first save: the
+server renames only a form that opened it (`changeHandle=1`, the "Change
+handle" step, which warns old links stop working), and never once the profile
+has been listed, since it is part of post links.
 
 Every admin page (`/admin/*`) renders in the Admin space while `spaces` is on
 for the admin, with the admin navigation as the space's sidebar and the page

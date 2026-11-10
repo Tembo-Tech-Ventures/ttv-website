@@ -81,6 +81,8 @@ test.describe("without JavaScript", () => {
 
   test("a graduate takes themselves off the public website after a confirm step, and lists themselves again", async ({ page, baseURL }) => {
     test.skip(PREVIEW, "Writes run against the local seed only.");
+    // One project only: both would change the same person's listing at once.
+    test.skip(test.info().project.name !== "chromium", "Runs once, in the chromium project.");
     // A graduate of her own (e2e/platform-members.local.sql), so no other spec sees her listing change.
     const graduate = localPersonaSession("graduate");
     test.skip(typeof graduate === "string", typeof graduate === "string" ? graduate : "");
@@ -89,13 +91,18 @@ test.describe("without JavaScript", () => {
     const post = "/blog/zawadi-mwende/offline-first-fares";
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page.context(), baseURL!, graduate);
+    // A retry after a failure can find her off the public website: list her again first.
+    await open(page, PATH, { script: false });
+    const site = main(page).locator("[data-public-site]");
+    if (await site.getAttribute("data-public-site") === "unlisted") {
+      await site.getByRole("button", { name: "List me on the public website" }).click();
+      await expect(site).toHaveAttribute("data-public-site", "live");
+    }
     // Listed, with a post, and both in the sitemap.
     expect((await page.request.get(talent)).status()).toBe(200);
     expect((await page.request.get(post)).status()).toBe(200);
     expect(await (await page.request.get("/sitemap.xml")).text()).toContain(post);
 
-    await open(page, PATH, { script: false });
-    const site = main(page).locator("[data-public-site]");
     await site.getByRole("link", { name: "Take me off the public website" }).click();
     await expect(page).toHaveURL(new RegExp(`${PATH}\\?confirm=unpublish$`));
     await expect(site).toContainText(`Your page at ${talent} and your blog posts come off the public website, and Writing and Opportunities close until you list yourself again.`);
@@ -115,6 +122,36 @@ test.describe("without JavaScript", () => {
     await expect(main(page).locator("[data-notice='success']")).toContainText("You're on the public website");
     expect((await page.request.get(talent)).status()).toBe(200);
     expect((await page.request.get(post)).status()).toBe(200);
+    expect(await (await page.request.get("/sitemap.xml")).text()).toContain(post);
+  });
+
+  test("a member changes their handle only on purpose, and their member page moves with it", async ({ page, baseURL }) => {
+    test.skip(PREVIEW, "Writes run against the local seed only.");
+    test.skip(test.info().project.name !== "chromium", "Runs once, in the chromium project.");
+    const newcomer = localPersonaSession("newcomer");
+    test.skip(typeof newcomer === "string", typeof newcomer === "string" ? newcomer : "");
+    if (typeof newcomer === "string") return;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page.context(), baseURL!, newcomer);
+    await open(page, PATH, { script: false });
+    const form = main(page).locator("[data-profile-form]");
+    // Brian may not have a profile yet on a fresh seed: make one, with a handle of his own.
+    if (await form.getByRole("button", { name: "Make my profile" }).isVisible()) {
+      await form.getByLabel(/^Handle/).fill(`brian-kiprono-${Date.now() % 100000}`);
+      await form.getByRole("button", { name: "Make my profile" }).click();
+      await expect(main(page).locator("[data-notice='success']")).toContainText("Profile saved");
+    }
+    const before = (await form.locator("input[name='handle']").getAttribute("value"))!;
+    await expect(form.getByLabel(/^Handle/)).toHaveCount(0);
+    await form.getByRole("link", { name: "Change handle" }).click();
+    await expect(form.locator("#handle-warning")).toContainText("links to the old one stop working");
+    const after = `brian-k-${Date.now() % 100000}`;
+    await form.getByLabel(/^Handle/).fill(after);
+    await form.getByRole("button", { name: "Save profile" }).click();
+    await expect(main(page).locator("[data-notice='success']")).toContainText("Profile saved");
+    await expect(form.locator("[data-handle-locked='saved']")).toContainText(`members/${after}`);
+    expect((await page.request.get(`/dashboard/community/members/${after}`)).status()).toBe(200);
+    expect((await page.request.get(`/dashboard/community/members/${before}`)).status()).toBe(404);
   });
 
   test("a member without a cohort posts work as a draft, posts it, and deletes it after a confirm step", async ({ page, baseURL }) => {

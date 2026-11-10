@@ -41,6 +41,8 @@ export interface ProfileFormResult {
   moderationOutcome?: ProfileModerationResult["outcome"];
   moderationMessages?: string[];
   published?: boolean;
+  /** The text was written, even though the check holds it (a draft's save). Never set when nothing was written. */
+  saved?: boolean;
 }
 
 export const PROFILE_CHANGED_MESSAGE =
@@ -349,6 +351,10 @@ export async function saveProfile(
         },
       },
     });
+    // After the first save the handle changes only when the form opened it on purpose
+    // (`changeHandle=1`): a stale tab or another form posting the old value never renames,
+    // and never undoes a rename made elsewhere.
+    if (current && formData.get("changeHandle") !== "1") data.handle = current.handle;
     // `findFirst` yields undefined when there is no row; a Date is always
     // truthy, so this covers "no profile" and "not yet published" together.
     if (
@@ -465,7 +471,7 @@ async function moderateSavedProfile(
     success: result.outcome !== "hold",
     moderationOutcome: result.outcome,
     ...(result.outcome === "hold"
-      ? { error: "Your profile is saved and waiting for a human review." }
+      ? { saved: true, error: "Your profile is saved and waiting for a human review." }
       : {}),
   };
 }
@@ -533,6 +539,16 @@ export async function publishProfile(
     };
   }
 
+  // A held profile waits for a person: asking the check again must never lift the hold on its own.
+  if (profile.moderationOutcome === "hold") {
+    return {
+      success: false,
+      error: "Your profile is waiting for a check. A person at TTV looks at it before it can be listed.",
+      moderationOutcome: "hold",
+      published: false,
+    };
+  }
+
   const moderationState = profileModerationState(profile);
   const moderation = await runContentCheck(
     checkContent,
@@ -546,9 +562,8 @@ export async function publishProfile(
     profile.user.image,
   );
 
-  const canPublish =
-    publishesAfterModeration(moderation) &&
-    !(moderation.outcome === "error" && profile.moderationOutcome === "hold");
+  // A held profile never gets here (above), so only this check's own outcome decides.
+  const canPublish = publishesAfterModeration(moderation);
   const updateResult = await db
     .update(schema.studentProfile)
     .set(

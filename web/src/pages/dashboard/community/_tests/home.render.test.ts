@@ -231,6 +231,16 @@ describe("Community's home", () => {
     }
   });
 
+  it("offers only Delete for work a moderator took down, in the editor's own words", async () => {
+    seeded("UPDATE communityJourney SET moderatorHidden = 1 WHERE id = 'ledger';");
+    const page = main((await visit()).body);
+    const item = page.querySelector("[data-data-list-item]")!;
+    expect(item.textContent).toContain("A moderator took this down, so only you and the team can see it, and it can't be changed. You can delete it.");
+    const actions = [...item.querySelectorAll("[data-row-action]")];
+    expect(actions.map((action) => action.textContent?.trim())).toEqual(["Delete Chama savings ledger"]);
+    expect(actions[0]?.getAttribute("href")).toBe("/dashboard/me/portfolio?confirm=delete-ledger");
+  });
+
   it("says when it couldn't load the profile at all", async () => {
     seeded("DROP TABLE communityConfirmation;");
     const { status, body } = await visit();

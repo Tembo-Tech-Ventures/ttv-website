@@ -62,6 +62,23 @@ test.describe.serial("talent platform integration journey", () => {
     const publishButton = page.getByRole("button", {
       name: /^list me on the public website$/i,
     });
+    const site = page.locator("[data-public-site]");
+    // A hold waits for a person: an admin clears it in /admin/profiles, and only then can the builder list themselves.
+    const clearHold = async () => {
+      const adminContext = await browser.newContext({
+        baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4321",
+        extraHTTPHeaders: { Authorization: `Bearer ${adminToken}` },
+      });
+      try {
+        const adminPage = await adminContext.newPage();
+        await adminPage.goto("/admin/profiles");
+        const held = adminPage.locator("[data-data-list-item]", { hasText: `/talent/${publicHandle}` }).first();
+        await held.getByRole("button", { name: /^clear flag/i }).click();
+        await adminPage.waitForLoadState("load");
+      } finally {
+        await adminContext.close();
+      }
+    };
     if (await publishButton.isVisible().catch(() => false)) {
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],
@@ -82,9 +99,12 @@ test.describe.serial("talent platform integration journey", () => {
             /remove phone numbers, email addresses, or id numbers/i,
           ),
         ).toBeVisible();
+        // Held: pressing again would only ask the check again, so it isn't offered.
+        await mobilePage.goto("/dashboard/portfolio");
+        await expect(mobilePage.locator("[data-public-site]")).toHaveAttribute("data-public-site", "waiting");
         await expect(
           mobilePage.getByRole("button", { name: /^list me on the public website$/i }),
-        ).toBeVisible();
+        ).toHaveCount(0);
         await mobilePage.screenshot({
           path: evidence("integration-02-mobile-held"),
           fullPage: true,
@@ -92,8 +112,14 @@ test.describe.serial("talent platform integration journey", () => {
       } finally {
         await mobileContext.close();
       }
-
+    }
+    // Converges from a run that stopped while held, too.
+    if ((await site.getAttribute("data-public-site").catch(() => null)) !== "live") {
       await page.reload();
+      if ((await site.getAttribute("data-public-site")) === "waiting") {
+        await clearHold();
+        await page.reload();
+      }
       await publishButton.click();
     }
     await expect(page.getByText(/you're on the public website at/i).first()).toBeVisible();

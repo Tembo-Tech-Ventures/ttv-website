@@ -40,7 +40,7 @@ const state: State = profile?.status === "SUSPENDED" ? "paused"
   : profile.everListed ? "unlisted" : "offered";
 const SAY: Partial<Record<State, string>> = {
   paused: PUBLIC_SITE.paused,
-  staff: PUBLIC_SITE.staff,
+  staff: listed ? PUBLIC_SITE.staffListed : PUBLIC_SITE.staff,
   "not-shown": PUBLIC_SITE.listedNotShown,
   "not-yet": PUBLIC_SITE.notYet,
   "save-first": PUBLIC_SITE.saveFirst,
@@ -56,12 +56,13 @@ const text = "m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondar
   <h2 id="public-site-title" class="text-xl leading-snug text-ink-primary">{PUBLIC_SITE.title}</h2>
   {state === "live" && publicPath ? (
     <p class={text}>
-      {PUBLIC_SITE.listed} <a href={publicPath} class={linkClass()}>{publicPath}</a>, with your posted work. Anyone can see it there.
+      {PUBLIC_SITE.listed} <a href={publicPath} class={linkClass()}>{publicPath}</a>{PUBLIC_SITE.listedAfter}
     </p>
   ) : (
     <p class={text} data-public-site-held={state === "held" || state === "waiting" ? "" : undefined}>{SAY[state]}</p>
   )}
-  {listed && publicPath && !staff && (
+  {/* Coming off is always the person's own choice, whoever they are (mentors and staff included). */}
+  {listed && publicPath && (
     confirming ? (
       <ConfirmStep
         title={PUBLIC_SITE.unlistTitle}

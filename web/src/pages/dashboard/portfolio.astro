@@ -21,7 +21,7 @@ import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { preserveFormTextValues } from "@/lib/form-values";
-import { memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
+import { DISCOVERY_EXCLUDED_ROLES_SQL, memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
 import { memberProfileHref } from "@/lib/members/links";
 import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
@@ -37,7 +37,7 @@ import { profileModeration } from "@/components/platform/profile-editor/moderati
 import PublicSite from "@/components/platform/profile-editor/PublicSite.astro";
 import WorkEntry from "@/components/platform/profile-editor/WorkEntry.astro";
 import WorkForm from "@/components/platform/profile-editor/WorkForm.astro";
-import { EVERYONE_SEES, HANDLE, NOT_SAVED, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
+import { EVERYONE_SEES, HANDLE, NOT_SAVED, PAUSED_SEES, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
 import {
   addWorkHref, changeHandleHref, deleteAction, EDITOR_PATH, EMPTY_WORK, HANDLE_ACTION, handleWorkPost, isContribution, PROFILE_FORM_ID,
   profileFormHref, readEditorPost, UNLIST_ACTION, WORK_ACTIONS, workEditorFromUrl, workValuesOf, type WorkAction, type WorkPostResult,
@@ -79,6 +79,8 @@ let refused: "save" | "publish" | "unpublish" | null = null;
 let unavailable = false;
 let submitted: Record<ProfileTextField, string> | null = null;
 let submittedOpenTo = { openToFreelance: false, openToRoles: false };
+/** The refused form had opened the handle on purpose ("Change handle"), so it stays open with what was typed. */
+let renaming = false;
 let work: Exclude<WorkPostResult, { kind: "saved" | "refuse" }> | null = null;
 
 if (method === "POST") {
@@ -111,17 +113,24 @@ if (method === "POST") {
   } else if (action === "save" || action === "publish") {
     const moderation = profileModeration({ env, db, userId: user.id, request: Astro.request, locals: Astro.locals });
     try {
-      const existing = await db.query.studentProfile.findFirst({ where: eq(schema.studentProfile.userId, user.id), columns: { id: true, status: true } });
+      const existing = await db.query.studentProfile.findFirst({
+        where: eq(schema.studentProfile.userId, user.id),
+        columns: { id: true, status: true },
+        // Whether the public website shows it now: only then does a save say it's there too.
+        extras: { onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite") },
+      });
       if (action === "save") {
         submitted = preserveFormTextValues(form, PROFILE_TEXT_FIELDS);
         submittedOpenTo = { openToFreelance: form.get("openToFreelance") === "on", openToRoles: form.get("openToRoles") === "on" };
+        renaming = form.get("changeHandle") === "1";
         profileResult = await moderation.run(() => saveProfile(db, user.id, form, existing?.id, moderation.check));
         if (profileResult.success) {
-          const title = existing?.status === "PUBLISHED" ? SAVED.profilePublic : SAVED.profile;
+          const title = existing?.onPublicSite ? SAVED.profilePublic : SAVED.profile;
           return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title });
         }
-        // Saved, and held by the automatic check: that is a save, said once, as a warning.
-        if (profileResult.moderationOutcome === "hold") {
+        // A draft's text is written and held by the automatic check: that is a save, said once, as a warning.
+        // A listed profile's held edit writes nothing (the live version stays), so it comes back with every value.
+        if (profileResult.saved) {
           return redirectWithFlash(Astro, EDITOR_PATH, { tone: "warning", title: SAVED.profileHeld, message: SAVED.profileHeldDetail });
         }
         refused = "save";
@@ -155,7 +164,11 @@ const [landing, eligible, profile, repos, claims, github] = await Promise.all([
 ]);
 const spaces = landing?.[0] ?? null;
 // Mentors and staff are not listed in the directory or on the public website (by decision), so they are told so.
-const staff = spaces ? spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin : Boolean(Astro.locals.isAdmin);
+const staff = spaces
+  ? spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin
+  : Boolean(await env.DB.prepare(`SELECT 1 FROM UserRoles r JOIN Roles n ON n.id = r.roleId WHERE r.userId = ? AND n.name IN (${DISCOVERY_EXCLUDED_ROLES_SQL})`).bind(user.id).first());
+// A paused profile is shown nowhere and can't be changed: nothing is offered to post.
+const paused = profile?.status === "SUSPENDED";
 const editable = !profile || profile.status !== "SUSPENDED";
 const held = profile?.moderationOutcome === "hold";
 // A POST never carries a flash, and a refused one says what went wrong instead.
@@ -185,6 +198,12 @@ if (refused === "save") {
   }
 }
 const fieldErrors = Object.keys(errors).length > 0;
+// A listed profile's edit the check held: nothing was written, and the live version stays as it was.
+const heldChanges = refused === "save" && profileResult?.moderationOutcome === "hold";
+const refusedTitle = refused === "publish" ? NOT_SAVED.listed
+  : refused === "unpublish" ? (profile?.status === "SUSPENDED" ? NOT_SAVED.paused : NOT_SAVED.unlisted)
+  : heldChanges ? NOT_SAVED.heldChanges
+  : NOT_SAVED.profile;
 const moderationMessages = profileResult?.moderationMessages ?? [];
 const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
 
@@ -194,13 +213,12 @@ const renderedClaim = rendered?.claimId ? contributions.find((item) => item.id =
 // After a refusal, the work form that was sent stays open with what was typed; otherwise the address says which is open.
 const editor = rendered
   ? (renderedClaim ? { kind: "edit" as const, claim: renderedClaim } : { kind: "add" as const })
-  : workEditorFromUrl(Astro.url, contributions);
+  : paused ? null : workEditorFromUrl(Astro.url, contributions);
 const confirming = confirmingAction(Astro.url, [...contributions.map(deleteAction), UNLIST_ACTION, HANDLE_ACTION]);
 // The handle is the member page's address: after the first save it changes only as a deliberate step, and
 // never once the profile has been on the public website, where it is part of every post link.
 const handleLocked = Boolean(profile?.publishedAt);
-const handleChanged = refused === "save" && (Boolean(errors.handle) || values.handle.trim().toLowerCase() !== profile?.handle);
-const handleEditable = !profile || (!handleLocked && (confirming === HANDLE_ACTION || handleChanged));
+const handleEditable = !profile || (!handleLocked && (confirming === HANDLE_ACTION || renaming));
 const existingHighlights = repos.flatMap((repo) => repo.repoFullName ? [{ repoFullName: repo.repoFullName, blurb: repo.blurb ?? "", sortOrder: repo.sortOrder }] : []);
 const memberPage = profile?.listed ? memberProfileHref(profile) : null;
 Astro.response.headers.set("Cache-Control", "no-store");
@@ -213,20 +231,20 @@ Astro.response.headers.set("Cache-Control", "no-store");
       {memberPage && <Fragment slot="action"><ButtonLink href={memberPage}>See your member page</ButtonLink></Fragment>}
     </PageHeader>
 
-    <Notice tone="info" title="Who sees this" id="profile-visibility">{staff ? STAFF_SEES : EVERYONE_SEES}</Notice>
+    <Notice tone="info" title="Who sees this" id="profile-visibility">{paused ? PAUSED_SEES : staff ? STAFF_SEES : EVERYONE_SEES}</Notice>
 
     {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
     {unavailable && <Notice tone="danger" focusOnLoad id="profile-failure" title={NOT_SAVED.profile}>{NOT_SAVED.unavailable}</Notice>}
     {refused && (
-      <Notice tone="danger" focusOnLoad id="profile-failure" title={refused === "publish" ? NOT_SAVED.listed : refused === "unpublish" ? NOT_SAVED.unlisted : NOT_SAVED.profile}>
-        <p class="m-0">{fieldErrors ? NOT_SAVED.fixBelow : profileResult?.error}</p>
+      <Notice tone="danger" focusOnLoad id="profile-failure" title={refusedTitle}>
+        <p class="m-0">{fieldErrors ? NOT_SAVED.fixBelow : heldChanges ? NOT_SAVED.heldChangesDetail : profileResult?.error}</p>
         {moderationMessages.length > 0 && (
           <ul class="m-0 mt-2 list-disc space-y-1 pl-5">{moderationMessages.map((message) => <li>{message}</li>)}</ul>
         )}
       </Notice>
     )}
     {work?.kind === "failed" && <Notice tone="danger" focusOnLoad title={work.failure.title}>{work.failure.detail}</Notice>}
-    {held && flash?.tone !== "warning" && (
+    {held && (
       <Notice tone="warning" title="Your profile is waiting for a check">
         It's saved. A person at TTV checks it before anyone else can see it; until then only you and the team can.
       </Notice>
@@ -244,6 +262,8 @@ Astro.response.headers.set("Cache-Control", "no-store");
                 label="Handle" name="handle" prefix="members/" required maxLength={39} autoComplete="off" spellCheck={false}
                 defaultValue={values.handle} error={errors.handle} hint={HANDLE.hint}
               />
+              {/* The server renames only a form that says so: a stale tab's hidden handle never does. */}
+              {profile && <input type="hidden" name="changeHandle" value="1" />}
               {profile && (
                 <Notice tone="warning" title="Changing your handle" id="handle-warning">
                   {HANDLE.changeWarning}
@@ -257,6 +277,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
               <input type="hidden" name="handle" value={profile.handle} />
               <p class="m-0 text-[0.9375rem] text-ink-primary">members/<strong>{profile.handle}</strong></p>
               <p class={`m-0 ${HINT}`}>{handleLocked ? HANDLE.locked : HANDLE.current}</p>
+              {errors.handle && <p class="m-0 text-sm text-danger-ink" id="handle-error" data-handle-error>{errors.handle}</p>}
               {!handleLocked && <a href={changeHandleHref()} class={linkClass("w-fit pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center")}>{HANDLE.change}</a>}
             </div>
           )}
@@ -305,7 +326,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
             question, not a mark against you.
           </p>
         </div>
-        {editor?.kind !== "add" && contributions.length > 0 && <ButtonLink href={addWorkHref()}>Post work</ButtonLink>}
+        {!paused && editor?.kind !== "add" && contributions.length > 0 && <ButtonLink href={addWorkHref()}>Post work</ButtonLink>}
       </div>
 
       {claims === null ? (
@@ -328,7 +349,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
               {editor?.kind !== "add" && (
                 <EmptyState title="Nothing posted yet">
                   You don't need a finished portfolio. Start with one thing you made or learned.
-                  <Fragment slot="action"><ButtonLink href={addWorkHref()}>Post work</ButtonLink></Fragment>
+                  {!paused && <Fragment slot="action"><ButtonLink href={addWorkHref()}>Post work</ButtonLink></Fragment>}
                 </EmptyState>
               )}
             </Fragment>

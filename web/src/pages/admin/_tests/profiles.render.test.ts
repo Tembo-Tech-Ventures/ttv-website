@@ -101,8 +101,9 @@ describe("the profiles list on the style guide", () => {
   it("offers only the actions that change a held profile, quietly, named by the builder, posting to the page", async () => {
     const { body } = await visit("/admin/profiles?status=DRAFT");
     const actions = [...body.matchAll(/name="_action" value="([a-z_]+)"/g)].map((match) => match[1]);
-    expect(actions).toEqual(["publish", "unpublish", "clear_flag"]);
-    expect(body).toMatch(/data-variant="quiet"[^>]*>Publish<span class="sr-only"> Otieno Ouma<\/span><\/button>/);
+    // Listing is the member's own choice: a held draft is paused or cleared, never published by an admin.
+    expect(actions).toEqual(["unpublish", "clear_flag"]);
+    expect(body).toMatch(/data-variant="quiet"[^>]*>Clear flag<span class="sr-only"> Otieno Ouma<\/span><\/button>/);
     expect(body).not.toMatch(/data-variant="primary"/);
     expect(body).toMatch(/<form method="POST" action="\/admin\/profiles\?status=DRAFT">/);
     expect(body).not.toMatch(/action="[^"]*#/);

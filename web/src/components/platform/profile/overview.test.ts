@@ -132,7 +132,8 @@ describe("profileOverview for an alumna", () => {
     const staff = { ...ALUMNA, staff: true, profile: { ...ALUMNA.profile!, onPublicSite: 0, listed: 0 } };
     expect(profileOverview(staff).card?.status.label).toBe("Not listed: mentors and staff");
     expect(need({ ...staff, profile: { ...off, listed: 0 } })).toBeUndefined();
-    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).toContain("only you and the team see it");
+    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).toContain("work you share in a channel is seen by that channel");
+    expect(profileOverview(staff).lead).toBe("Your profile, and what's waiting for you.");
     expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).not.toContain("Everyone signed in");
   });
 

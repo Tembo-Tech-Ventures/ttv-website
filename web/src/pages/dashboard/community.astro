@@ -24,7 +24,7 @@ import { ButtonLink, DataList, EmptyState, Notice, PageHeader, linkClass } from 
 import ProfileCard from "@/components/community/home/ProfileCard.astro";
 import JourneyEntry from "@/components/community/home/JourneyEntry.astro";
 import { loadCommunityHome } from "@/components/community/home/home-data";
-import { EVERYONE_SEES } from "@/components/platform/profile-editor/copy";
+import { EVERYONE_SEES, STAFF_SEES } from "@/components/platform/profile-editor/copy";
 import { addWorkHref, EDITOR_PATH, editWorkHref, profileFormHref } from "@/components/platform/profile-editor/work-forms";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 
@@ -104,7 +104,7 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
             </p>
           </div>
           <Notice tone="info" title="Who sees this">
-            {EVERYONE_SEES} Drafts are only for you.
+            {spaces && (spaces.me.capabilities.isMentor || spaces.me.capabilities.isAdmin) ? STAFF_SEES : EVERYONE_SEES} Drafts are only for you.
             <Fragment slot="actions"><ButtonLink href={`${SPACE_PATHS.community}/members`}>See the members directory</ButtonLink></Fragment>
           </Notice>
 

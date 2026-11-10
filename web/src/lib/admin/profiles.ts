@@ -30,27 +30,28 @@ interface ActionableProfile {
 }
 
 /**
- * The publishing actions that change something for this profile: Publish when
- * it is not public, Unpublish while it can still be hidden, Clear flag while
- * the content check asks for a person. Never one that would do nothing.
+ * The publishing actions that change something for this profile: Restore a
+ * profile an admin paused, Unpublish (pause) while it can still be hidden,
+ * Clear flag while the content check asks for a person. Never one that would
+ * do nothing, and never listing someone: that is the person's own choice.
  */
 export function profileActionsFor(profile: ActionableProfile): AdminProfileAction[] {
   const actions: AdminProfileAction[] = [];
-  if (profile.status !== "PUBLISHED") actions.push("publish");
+  if (profile.status === "SUSPENDED") actions.push("publish");
   if (profile.status !== "SUSPENDED") actions.push("unpublish");
   if (profile.moderationReviewRequired) actions.push("clear_flag");
   return actions;
 }
 
-/** What an action's button says: a suspended profile is republished. */
-export function profileActionLabel(action: AdminProfileAction, status: string): string {
-  if (action === "publish") return status === "SUSPENDED" ? "Republish" : "Publish";
+/** What an action's button says: a paused profile is republished, or restored to members only. */
+export function profileActionLabel(action: AdminProfileAction, restoresTo: "DRAFT" | "PUBLISHED" = "PUBLISHED"): string {
+  if (action === "publish") return restoresTo === "PUBLISHED" ? "Republish" : "Restore";
   return action === "unpublish" ? "Unpublish" : "Clear flag";
 }
 
 /** What an action says once it is done, as the page's flash. */
 export const PROFILE_DONE: Record<AdminProfileAction, string> = {
-  publish: "Profile published",
+  publish: "Profile restored",
   unpublish: "Profile unpublished",
   clear_flag: "Flag cleared",
 };
@@ -102,6 +103,8 @@ export async function readProfilesPage(db: Database, { status, page }: { status:
         id: true,
         handle: true,
         status: true,
+        suspendedFrom: true,
+        publishedAt: true,
         updatedAt: true,
         contentVersion: true,
         moderationOutcome: true,
@@ -130,7 +133,7 @@ export async function moderateProfile(
 ): Promise<ProfileModerationResult> {
   const current = await db.query.studentProfile.findFirst({
     where: eq(schema.studentProfile.id, profileId),
-    columns: { status: true, publishedAt: true, contentVersion: true, publicName: true, publicAvatarUrl: true },
+    columns: { status: true, suspendedFrom: true, publishedAt: true, contentVersion: true, publicName: true, publicAvatarUrl: true },
     with: { user: { columns: { name: true, image: true } } },
   });
   if (!current) return "missing";

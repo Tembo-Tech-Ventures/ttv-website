@@ -13,16 +13,17 @@ describe("the admin's profile list", () => {
   it("offers only the actions that would change the profile", () => {
     expect(profileActionsFor({ status: "PUBLISHED", moderationReviewRequired: false })).toEqual(["unpublish"]);
     expect(profileActionsFor({ status: "PUBLISHED", moderationReviewRequired: true })).toEqual(["unpublish", "clear_flag"]);
-    expect(profileActionsFor({ status: "DRAFT", moderationReviewRequired: true })).toEqual(["publish", "unpublish", "clear_flag"]);
+    // Listing is the member's own choice: an admin never publishes a draft, only restores a paused profile.
+    expect(profileActionsFor({ status: "DRAFT", moderationReviewRequired: true })).toEqual(["unpublish", "clear_flag"]);
     expect(profileActionsFor({ status: "SUSPENDED", moderationReviewRequired: true })).toEqual(["publish", "clear_flag"]);
   });
 
   it("says each action in words, a suspended profile being republished", () => {
-    expect(profileActionLabel("publish", "DRAFT")).toBe("Publish");
-    expect(profileActionLabel("publish", "SUSPENDED")).toBe("Republish");
-    expect(profileActionLabel("unpublish", "PUBLISHED")).toBe("Unpublish");
-    expect(profileActionLabel("clear_flag", "PUBLISHED")).toBe("Clear flag");
-    expect(Object.values(PROFILE_DONE)).toEqual(["Profile published", "Profile unpublished", "Flag cleared"]);
+    expect(profileActionLabel("publish", "PUBLISHED")).toBe("Republish");
+    expect(profileActionLabel("publish", "DRAFT")).toBe("Restore");
+    expect(profileActionLabel("unpublish")).toBe("Unpublish");
+    expect(profileActionLabel("clear_flag")).toBe("Clear flag");
+    expect(Object.values(PROFILE_DONE)).toEqual(["Profile restored", "Profile unpublished", "Flag cleared"]);
   });
 
   it("explains why a profile waits for a person in the check's own words", () => {

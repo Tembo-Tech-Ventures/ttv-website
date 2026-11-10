@@ -216,7 +216,7 @@ function noProfile(facts: OverviewFacts): OverviewNoProfile | null {
     kind: "create",
     title: "Make your profile",
     body: facts.staff
-      ? "Who you are and what you work with, with the work you post. Mentors and TTV staff aren't listed in the members directory or on the public website, so only you and the team see it."
+      ? "Who you are and what you work with, with the work you post. Mentors and TTV staff aren't listed in the members directory or on the public website; work you share in a channel is seen by that channel."
       : facts.eligible
         ? "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it, and because you've completed a cohort you can also list it on the public website."
         : "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it.",
@@ -300,9 +300,12 @@ export function profileOverview(facts: OverviewFacts): ProfileOverviewModel {
   const opportunitiesOpen = visible.has("opportunities") && facts.opportunities.gate === "published";
   return {
     title: "Your profile",
-    lead: shown
+    // Only someone the directory lists is seen by everyone signed in (not staff, held or paused).
+    lead: shown && facts.profile?.listed && !facts.staff
       ? "What everyone signed in to TTV sees, and what's waiting for you."
-      : "Your work, what's waiting for you, and what opens next.",
+      : shown
+        ? "Your profile, and what's waiting for you."
+        : "Your work, what's waiting for you, and what opens next.",
     actions: {
       member: shown?.memberHref ?? null,
       view: shown?.publicHref ?? null,

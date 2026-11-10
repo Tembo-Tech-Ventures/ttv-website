@@ -31,10 +31,12 @@ test.describe("admin review surfaces", () => {
     await expect(table.getByRole("link", { name: "Kwame Fixture" })).toBeVisible();
 
     // Each profile in the content check's queue offers only the actions that
-    // would change it, each named by the builder it acts on.
+    // would change it, each named by the builder it acts on. Listing a draft is
+    // the member's own choice, so no admin action publishes it.
     const held = page.getByRole("region", { name: "Held by the content check" });
     await expect(held.getByRole("link", { name: "Kwame Fixture" })).toBeVisible();
-    for (const action of ["Publish", "Unpublish", "Clear flag"]) {
+    await expect(held.getByRole("button", { name: "Publish Kwame Fixture", exact: true })).toHaveCount(0);
+    for (const action of ["Unpublish", "Clear flag"]) {
       await expect(
         held.getByRole("button", { name: `${action} Kwame Fixture`, exact: true }),
       ).toBeVisible();
@@ -100,9 +102,11 @@ test.describe("admin review surfaces", () => {
       ),
     ).toBeVisible();
     await expect(page.getByText("91%", { exact: true })).toHaveCount(0);
+    // A draft: only the member can list it, so there is nothing to publish here.
     await expect(
       page.getByRole("button", { name: "Publish", exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(page.getByText("Only the member can list it there.")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Unpublish", exact: true }),
     ).toBeVisible();

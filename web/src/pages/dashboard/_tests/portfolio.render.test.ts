@@ -260,18 +260,57 @@ describe("the public website, for graduates", () => {
 });
 
 describe("mentors and staff", () => {
-  it("are told the truth: not in the directory or on the public website, so only they and the team see it", async () => {
+  it("are told the truth: not in the directory or on the public website, and a channel sees what they share there", async () => {
     seeded(COMPLETED + PROFILE("PUBLISHED") + `INSERT INTO Roles(id,name) VALUES ('role-mentor','MENTOR') ON CONFLICT(name) DO NOTHING;
       INSERT INTO UserRoles(id,userId,roleId) SELECT 'mentor-role','${MEMBER}',id FROM Roles WHERE name='MENTOR';`);
     const page = main((await visit()).body);
-    expect(page.querySelector("#profile-visibility")?.textContent).toContain("Mentors and TTV staff aren't listed in the members directory or on the public website");
-    expect(page.querySelector("#profile-visibility")?.textContent).not.toContain("Everyone signed in");
+    const sees = page.querySelector("#profile-visibility")?.textContent;
+    expect(sees).toContain("Mentors and TTV staff aren't listed in the members directory or on the public website.");
+    // Work they share in a channel is seen there: never "only you and the team".
+    expect(sees).toContain("Work you share in a channel is seen by that channel.");
+    expect(sees).not.toContain("Everyone signed in");
     const site = page.querySelector("[data-public-site='staff']")!;
-    expect(site.textContent).toContain("Mentors and TTV staff aren't listed on the public website.");
+    expect(site.textContent).toContain("Mentors and TTV staff aren't listed on the public website, so your page there doesn't show.");
     expect(site.textContent).not.toContain("You're on the public website");
-    expect(site.querySelector("form, a, button")).toBeNull();
+    // Their earlier listing is still theirs to take off.
+    expect([...site.querySelectorAll("a")].map((link) => link.textContent)).toEqual(["Take me off the public website"]);
     // Not in the directory, so no member page to see.
     expect(page.querySelector("[data-page-header] a")).toBeNull();
+    expect((await post({ _action: "unpublish" })).status).toBe(303);
+    expect(sqlite.prepare("SELECT status FROM studentProfile WHERE id = 'profile'").get()).toEqual({ status: "DRAFT" });
+  });
+});
+
+describe("a listed profile's edit the check holds", () => {
+  it("is not saved, says so with a 422, keeps every value, and leaves the live version as it was", async () => {
+    seeded(COMPLETED + PROFILE("PUBLISHED"));
+    const check = vi.spyOn(clef, "checkProfileContent").mockResolvedValue({ outcome: "hold", flags: ["contains_contact_details"], scores: {} });
+    const { status, body } = await post({ _action: "save", handle: "akinyi-builds", headline: "Call me on 0712 000 000", bio: "Kept bio" });
+    check.mockRestore();
+    expect(status).toBe(422);
+    const page = main(body);
+    const notice = page.querySelector("[data-notice='danger']")!;
+    expect(notice.textContent).toContain(NOT_SAVED.heldChanges);
+    expect(notice.textContent).toContain("They need a check before they go live. Your public page stays as it was");
+    expect(notice.textContent).not.toMatch(/saved, and waiting/i);
+    expect(page.querySelector("input[name='headline']")?.getAttribute("value")).toBe("Call me on 0712 000 000");
+    expect(page.querySelector("textarea[name='bio']")?.textContent).toBe("Kept bio");
+    expect(sqlite.prepare("SELECT headline, status FROM studentProfile WHERE id = 'profile'").get()).toEqual({ headline: "Builder in Kisumu", status: "PUBLISHED" });
+  });
+});
+
+describe("a paused profile", () => {
+  it("says it's paused everywhere, offers nothing to post, and isn't told it's still on the public website", async () => {
+    seeded(COMPLETED + PROFILE("SUSPENDED") + WORK);
+    const page = main((await visitAt(new URL(`${PATH}?add=1`, ORIGIN))).body);
+    expect(page.querySelector("#profile-visibility")?.textContent).toContain("Your profile is paused, so nobody else sees it");
+    expect(page.querySelector("[data-work-editor]")).toBeNull();
+    expect([...page.querySelectorAll("a")].some((link) => link.textContent === "Post work")).toBe(false);
+    const { status, body } = await post({ _action: "unpublish" });
+    expect(status).toBe(409);
+    const notice = main(body).querySelector("[data-notice='danger']")!;
+    expect(notice.textContent).toContain(NOT_SAVED.paused);
+    expect(notice.textContent).not.toContain(NOT_SAVED.unlisted);
   });
 });
 
@@ -286,6 +325,24 @@ describe("the handle", () => {
     form = main((await visitAt(new URL(`${PATH}?confirm=handle`, ORIGIN))).body).querySelector("[data-profile-form]")!;
     expect(form.querySelector("input[name='handle']")?.getAttribute("type")).not.toBe("hidden");
     expect(form.querySelector("#handle-warning")?.textContent).toContain("links to the old one stop working");
+  });
+
+  it("renames only a form that opened the handle, and a stale tab's save never undoes a rename", async () => {
+    seeded(PROFILE("DRAFT"));
+    // The Change handle step posts changeHandle=1 with the new value.
+    expect((await post({ _action: "save", changeHandle: "1", handle: "akinyi-renamed", headline: "Builder in Kisumu" })).status).toBe(303);
+    expect(sqlite.prepare("SELECT handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-renamed" });
+    // A tab opened before the rename posts the old handle as its fixed value: the rename stands.
+    expect((await post({ _action: "save", handle: "akinyi-builds", headline: "Saved from an old tab" })).status).toBe(303);
+    expect(sqlite.prepare("SELECT handle, headline FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-renamed", headline: "Saved from an old tab" });
+  });
+
+  it("refuses a forged rename of a listed profile, with the reason by the handle", async () => {
+    seeded(COMPLETED + PROFILE("PUBLISHED") + "UPDATE studentProfile SET publishedAt = 1781000000;");
+    const { status, body } = await post({ _action: "save", changeHandle: "1", handle: "someone-else", headline: "Builder in Kisumu" });
+    expect(status).toBe(400);
+    expect(main(body).querySelector("[data-handle-error]")?.textContent).toContain("Your handle is locked once your profile is published");
+    expect(sqlite.prepare("SELECT handle FROM studentProfile WHERE id = 'profile'").get()).toEqual({ handle: "akinyi-builds" });
   });
 
   it("never changes once the profile has been on the public website, where it's part of every post link", async () => {
@@ -418,12 +475,17 @@ describe("posting work", () => {
   });
 });
 
-it("an unavailable publish check leaves a held draft off the public website", async () => {
+it("never lets a forged publish lift a hold: a person checks it first, whatever the check would now say", async () => {
   seeded(COMPLETED + PROFILE("DRAFT") + "UPDATE studentProfile SET moderationOutcome='hold',moderationReviewRequired=1;");
+  const check = vi.spyOn(clef, "checkProfileContent").mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
   const result = await visit({ body: new URLSearchParams({ _action: "publish" }) });
-  expect(sqlite.prepare("SELECT status,moderationOutcome FROM studentProfile").get()).toEqual({ status: "DRAFT", moderationOutcome: "hold" });
+  expect(check).not.toHaveBeenCalled();
+  check.mockRestore();
+  expect(result.status).toBe(422);
+  expect(sqlite.prepare("SELECT status,moderationOutcome,moderationReviewRequired FROM studentProfile").get())
+    .toEqual({ status: "DRAFT", moderationOutcome: "hold", moderationReviewRequired: 1 });
   expect(result.body).not.toContain("Your profile is live");
-  expect(result.body).toContain("Your profile needs attention before it can go live.");
+  expect(result.body).toContain("Your profile is waiting for a check. A person at TTV looks at it before it can be listed.");
 });
 
 it("never labels a held public listing as live", async () => {

@@ -25,6 +25,7 @@ import {
   applyAdminProfileAction,
   parseAdminProfileAction,
   parseAdminProfileVersion,
+  restoredStatus,
 } from "@/lib/talent/profile-moderation";
 import { profileReviewReasons } from "@/lib/admin/profiles";
 import {
@@ -42,7 +43,7 @@ const { id } = Astro.params;
 
 if (!id) return Astro.redirect(LIST_PATH);
 
-const PROFILE_DONE = { publish: "Profile published", unpublish: "Profile unpublished", clear_flag: "Flag cleared" } as const;
+const PROFILE_DONE = { publish: "Profile restored", unpublish: "Profile unpublished", clear_flag: "Flag cleared" } as const;
 let actionError: string | undefined;
 // A rejected post action keeps the note typed for that post.
 let postedNote: { postId: string; note: string } | undefined;
@@ -83,6 +84,7 @@ if (Astro.request.method === "POST") {
       where: eq(schema.studentProfile.id, id),
       columns: {
         status: true,
+        suspendedFrom: true,
         publishedAt: true,
         contentVersion: true,
         publicName: true,
@@ -105,7 +107,9 @@ if (Astro.request.method === "POST") {
       );
 
       if (!updated) {
-        actionError = "The builder changed this profile while you were looking at it. Check it below before acting again.";
+        actionError = action === "publish" && current.status !== "SUSPENDED"
+          ? "Only a profile an admin paused can be restored here. Listing on the public website is the member's own choice."
+          : "The builder changed this profile while you were looking at it. Check it below before acting again.";
         Astro.response.status = 409;
       } else {
         return redirectWithFlash(Astro, Astro.url.pathname, { tone: "success", title: PROFILE_DONE[action] });
@@ -357,18 +361,20 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
         <h2 class="text-lg text-ink-primary">Publishing</h2>
         <p class="text-sm text-ink-secondary">
           {profile.status === "PUBLISHED"
-            ? "Anyone can read it now. Unpublishing hides it at once; publishing brings it back."
+            ? "Anyone can read it now. Unpublishing pauses it at once, everywhere; restoring puts it back."
             : profile.status === "SUSPENDED"
-              ? "It's hidden from the public. Republishing shows it again as it is now."
-              : "The builder hasn't published it yet."}
+              ? restoredStatus(profile) === "PUBLISHED"
+                ? "It's paused, so nobody else sees it. Republishing puts it back on the public website as it is now."
+                : "It's paused, so nobody else sees it. Restoring puts it back for members only: they had taken it off the public website, and only they can list it again."
+              : "It isn't on the public website. Only the member can list it there."}
         </p>
         <div class="flex flex-wrap gap-2">
-          {profile.status !== "PUBLISHED" && (
+          {profile.status === "SUSPENDED" && (
             <form method="POST" action={Astro.url.pathname}>
               <input type="hidden" name="_action" value="moderate-profile" />
               <input type="hidden" name="profileAction" value="publish" />
               <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-              <Button type="submit" variant="primary">{profile.status === "SUSPENDED" ? "Republish" : "Publish"}</Button>
+              <Button type="submit" variant="primary">{restoredStatus(profile) === "PUBLISHED" ? "Republish" : "Restore"}</Button>
             </form>
           )}
           {profile.status !== "SUSPENDED" && (

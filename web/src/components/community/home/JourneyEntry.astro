@@ -4,13 +4,15 @@
  * author can see it, what they wrote, the source they attached, and what each
  * mentor checked. A confirmation belongs to the revision it reviewed: once the
  * contribution changes, it reads as the previous revision's, never as a
- * confirmation of the new text.
+ * confirmation of the new text. Work a moderator took down can't be changed,
+ * so it offers only Delete (a contribution's, in the editor), with the same words.
  */
 import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-icons/pi";
 import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
 import { Chip, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
 import { formatCalendarDate } from "@/lib/display-date";
-import { editWorkHref, isContribution, reposHref } from "@/components/platform/profile-editor/work-forms";
+import { confirmDeleteHref, editWorkHref, isContribution, reposHref } from "@/components/platform/profile-editor/work-forms";
+import { TAKEN_DOWN, TAKEN_DOWN_DELETE } from "@/components/platform/profile-editor/copy";
 
 interface Props {
   claim: JourneyClaim;
@@ -24,10 +26,14 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
 <DataListItem title={claim.title} headingLevel={3}>
   <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
   {(claim.moderatorHidden || claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip tone={claim.moderatorHidden ? "danger" : claim.moderationHold ? "warning" : "neutral"}>{claim.moderatorHidden ? "Taken down" : claim.moderationHold ? "Waiting for a check" : "Draft"}</Chip></Fragment>}
-  <Fragment slot="actions"><RowAction href={isContribution(claim) ? editWorkHref(claim) : reposHref()} row={claim.title}>Edit</RowAction></Fragment>
+  <Fragment slot="actions">
+    {claim.moderatorHidden
+      ? isContribution(claim) && <RowAction href={confirmDeleteHref(claim)} row={claim.title} variant="ghost">Delete</RowAction>
+      : <RowAction href={isContribution(claim) ? editWorkHref(claim) : reposHref()} row={claim.title}>Edit</RowAction>}
+  </Fragment>
   <div class="flex flex-col gap-3">
     {claim.moderatorHidden
-      ? <p>The team took this down, so only you and the team can see it.</p>
+      ? <p>{TAKEN_DOWN}{isContribution(claim) ? ` ${TAKEN_DOWN_DELETE}` : ""}</p>
       : claim.moderationHold
         ? <p>Saved, and waiting for a person at TTV to check it. Only you and the team can see it until then.</p>
         : claim.status === "draft" && <p>A draft: only you can see it.</p>}

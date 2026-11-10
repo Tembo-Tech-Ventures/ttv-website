@@ -12,11 +12,19 @@ export const EVERYONE_SEES =
  * decision), so EVERYONE_SEES isn't true for them.
  */
 export const STAFF_SEES =
-  "Mentors and TTV staff aren't listed in the members directory or on the public website, so only you and the team see this profile and the work you post here.";
+  "Mentors and TTV staff aren't listed in the members directory or on the public website. Work you share in a channel is seen by that channel.";
+
+/** A profile the team paused: shown nowhere, and nothing new can be posted to it. */
+export const PAUSED_SEES =
+  "Your profile is paused, so nobody else sees it or the work on it. Reach out to the team for next steps.";
 
 /** Posting a piece of work: who sees it, in the choice's hint. */
 export const POSTED_SEEN_BY = "Everyone signed in to TTV can see it, and mentors can confirm it.";
-export const POSTED_SEEN_BY_STAFF = "Only you and the team see it: mentors and TTV staff aren't listed.";
+export const POSTED_SEEN_BY_STAFF = "Mentors and TTV staff aren't listed, so it shows where you share it: everyone in that channel sees it.";
+
+/** Work a moderator took down: said the same wherever it shows, with the one thing left to do. */
+export const TAKEN_DOWN = "A moderator took this down, so only you and the team can see it, and it can't be changed.";
+export const TAKEN_DOWN_DELETE = "You can delete it.";
 
 /** A draft is the one thing nobody else sees. */
 export const DRAFT_ONLY_YOU = "A draft is only for you. Nobody else sees it until you post it.";
@@ -30,6 +38,7 @@ export const PUBLIC_SITE = {
   list: "List me on the public website",
   /** A graduate who is listed, and the way off, which is theirs to take. */
   listed: "You're on the public website at",
+  listedAfter: ", with your posted work. Anyone can see it there.",
   /** A graduate who took themselves off: the way back is the same press. */
   unlisted: "You took yourself off the public website. You can list yourself again whenever you like, at /talent/{handle}, with the work you've posted.",
   /** Held by the automatic check and not listed: listing waits for the person who checks it. */
@@ -38,6 +47,8 @@ export const PUBLIC_SITE = {
   listedNotShown: "You chose to list your profile, but the public website only shows people who have completed a TTV cohort, so it isn't there now.",
   /** Mentors and staff, whatever their status. */
   staff: "Mentors and TTV staff aren't listed on the public website.",
+  /** A mentor or staff member whose earlier listing still stands: it shows nowhere, and coming off is still theirs to choose. */
+  staffListed: "Mentors and TTV staff aren't listed on the public website, so your page there doesn't show. You can still take your listing off.",
   /** Listed, but held by the automatic check: nothing shows at the address until a person checks it. */
   listedHeld: "You've listed your profile at {path}, but it's waiting for a check, so nothing shows there until a person at TTV has looked at it.",
   unlist: "Take me off the public website",
@@ -79,6 +90,11 @@ export const NOT_SAVED = {
   unavailable: "That didn't save, through no fault of yours. Try again in a moment.",
   changed: "This changed since you opened it. Reload before editing. Everything you wrote is still here.",
   takenDown: "A moderator took this down, so it can't be changed. You can delete it.",
+  /** A listed profile's edit held by the check: nothing written, the live version unchanged. */
+  heldChanges: "Your changes weren't saved",
+  heldChangesDetail: "They need a check before they go live. Your public page stays as it was, and everything you wrote is still here.",
+  /** Unlisting a paused profile: it isn't anywhere to come off. */
+  paused: "Your profile is paused",
 } as const;
 
 /** The handle: the address of the member page, and of the public page and post links once listed. */
