@@ -56,9 +56,9 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
             </section>
             <section id="institutions" aria-labelledby="community-institution-heading">
               <h2 id="community-institution-heading" className="font-display text-2xl text-ink-primary">Exploring talent for an opportunity?</h2>
-              <p className="mt-4 leading-relaxed text-ink-secondary">Explore community members and their documented work.</p>
-              <a href={communityEntryHref(isAuthenticated, true)} className="mt-5 inline-block font-semibold text-primary underline underline-offset-4">Continue to institutional access</a>
-              <p className="mt-3 text-sm leading-relaxed text-ink-muted">Institutional access requires administrator approval after sign-in.</p>
+              <p className="mt-4 leading-relaxed text-ink-secondary">Sign in to explore saved member profiles and posted work. Institutional approval adds AI discovery and assessment tools.</p>
+              <a href={communityEntryHref(isAuthenticated, true)} className="mt-5 inline-block font-semibold text-primary underline underline-offset-4">Request AI discovery tools</a>
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">AI discovery tools require administrator approval after sign-in.</p>
             </section>
           </div>
         </>}

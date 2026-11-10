@@ -2,7 +2,7 @@ import { checkedModerationColumns } from "@/lib/members/moderation-state";
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq } from "drizzle-orm";
+import { and, isNull, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -163,6 +163,7 @@ async function persistHighlights(
         and(
           eq(schema.communityJourney.id, row.id),
           eq(schema.communityJourney.version, row.version),
+          isNull(schema.communityJourney.moderationCheckedAt),
           eq(schema.communityJourney.moderationReviewRequired, true),
           eq(schema.communityJourney.moderatorHidden, false),
         ),

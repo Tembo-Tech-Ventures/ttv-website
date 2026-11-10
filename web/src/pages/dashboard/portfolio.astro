@@ -263,9 +263,14 @@ const draft = profile?.status === "DRAFT";
 
     {eligible && profile && (
       <div data-profile-status={profile.status}>
+        {profile.moderationOutcome === "hold" && (
+          <Notice tone="warning" title="Your profile is waiting for a human review">
+            Only you and admins can see it until the hold is cleared.
+          </Notice>
+        )}
         {profile.status === "DRAFT" && (
           <Notice tone="info" title="Your profile is not on the public website">
-            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> Signed-in members can see your saved profile. Graduates can also list it on the public website.</span>
+            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> {profile.moderationOutcome === "hold" ? "Your saved profile is held for review." : "Signed-in members can see your saved profile."} Graduates can also list it on the public website.</span>
             <Fragment slot="actions">
               <form method="POST">
                 <input type="hidden" name="_action" value="publish" />
@@ -274,7 +279,7 @@ const draft = profile?.status === "DRAFT";
             </Fragment>
           </Notice>
         )}
-        {profile.status === "PUBLISHED" && (
+        {profile.status === "PUBLISHED" && profile.moderationOutcome !== "hold" && (
           <Notice tone="success" title="Your profile is live">
             <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="PUBLISHED" /> <span>Live at <a href={`/talent/${profile.handle}`} class={linkClass()}>/talent/{profile.handle}</a>.</span></span>
             Saved edits go live straight away. An automatic check runs as you save, and if it holds an edit for the team, you'll see why.

@@ -245,7 +245,7 @@ it("reorders preserve holds and keeps, and deletion cannot erase a hidden reposi
   const row = database.prepare("SELECT id FROM communityJourney").get() as {
     id: string;
   };
-  await service.deleteJourney(row.id);
+  await expect(service.deleteJourney(row.id)).rejects.toMatchObject({ status: 409, message: "A moderator took this down." });
   await replaceProfileHighlights(
     db,
     { ...profile, contentVersion: 11 },

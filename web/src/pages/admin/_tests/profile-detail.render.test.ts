@@ -40,7 +40,7 @@ function profile(overrides: Record<string, unknown> = {}) {
     githubLogin: "achieng", contentVersion: 3, moderationOutcome: null, moderationFlags: null, moderationCheckedAt: null,
     moderationReviewRequired: false, publishedAt: AT, createdAt: AT, updatedAt: AT,
     user: { id: "achieng", name: "Achieng Otieno", email: "achieng@example.test" },
-    work: [{ id: "h1",
+    work: [{ id: "h1", version: 1,
         title: "achieng/ledger",
         evidenceUrl: "https://github.com/achieng/ledger",
         kind: "repo",
@@ -157,4 +157,21 @@ describe("a builder profile on the style guide", () => {
     expect(body).toContain("None yet. The builder's posts show here as they write them.");
     expect(body).not.toContain("data-highlights");
   });
+});
+
+it("hides author-only drafts and offers a takedown for posted work", async () => {
+  const posted = profile().work[0];
+  store.find.mockResolvedValue(profile({ work: [posted, { ...posted, id: "draft", state: "DRAFT", title: "Private title", description: "Private body" }] }));
+  const { body } = await visit();
+  expect(body).not.toContain("Private title");
+  expect(body).not.toContain("Private body");
+  expect(body).toContain('action="/admin/profiles"');
+  expect(body).toContain('name="decision" value="hide"');
+  expect(body).toContain('name="revision" value="1"');
+});
+it("explains a queued draft without claiming it was published or held", async () => {
+  store.find.mockResolvedValue(profile({ status: "DRAFT", moderationOutcome: null, moderationReviewRequired: true }));
+  const { body } = await visit();
+  expect(body).toContain("The content check has not finished.");
+  expect(body).not.toContain("published automatically");
 });

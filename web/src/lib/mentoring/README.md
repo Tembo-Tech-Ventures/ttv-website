@@ -109,9 +109,9 @@ month". Plan: SAM idea 01M68GQAP1DCSVMRJMZS771ZRB, §3 and Phase 4; design:
 
 ### Data (migration `0036_mentor_requests.sql`)
 
-| Table            | Holds                                                                                                                                                                                                                                                       |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mentor_profile` | One row per mentor, written only by themselves: headline, bio, areas, the formats they offer, monthly capacity (0–20), paused                                                                                                                               |
+| Table | Holds |
+|---|---|
+| `mentor_profile` | One row per mentor, written only by themselves: headline, bio, areas, the formats they offer, monthly capacity (0–20), paused |
 | `mentor_request` | Asking a mentor for time: requester, mentor, format, note, the detectors' reasons on the note, the attached project (a snapshot with its `journeyId` and revision), and once answered the conversation it opened, the suggested mentor or the mentor's note |
 
 The database enforces the state machine's shape: exactly one PENDING request
@@ -154,15 +154,15 @@ otherwise: it waits on the mentor answering.
 
 ### Requests (`requests.ts`)
 
-| Route                                                         | Who                                       | Does                                                                                                                                            |
-| ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/mentor-requests`                                   | Any signed-in person, as themselves       | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing                               |
-| `GET /api/mentor-requests?as=requester\|mentor&status&cursor` | Anyone                                    | The requests the caller sent or received, newest first, 20 a page                                                                               |
-| `GET /api/mentor-requests/:id`                                | Its two parties                           | One request                                                                                                                                     |
-| `POST …/:id/accept`                                           | The mentor, still holding the MENTOR role | Opens the conversation (below)                                                                                                                  |
-| `POST …/:id/redirect` `{ mentorId, note? }`                   | The mentor                                | Suggests another listed mentor (not themselves, not the asker); the asker decides whether to ask them, and nothing reaches the suggested mentor |
-| `POST …/:id/decline` `{ note? }`                              | The mentor                                | "Not this month"; it counts against nobody                                                                                                      |
-| `POST …/:id/withdraw`                                         | The person asking                         | Takes the request back                                                                                                                          |
+| Route | Who | Does |
+|---|---|---|
+| `POST /api/mentor-requests` | Any signed-in person, as themselves | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing |
+| `GET /api/mentor-requests?as=requester\|mentor&status&cursor` | Anyone | The requests the caller sent or received, newest first, 20 a page |
+| `GET /api/mentor-requests/:id` | Its two parties | One request |
+| `POST …/:id/accept` | The mentor, still holding the MENTOR role | Opens the conversation (below) |
+| `POST …/:id/redirect` `{ mentorId, note? }` | The mentor | Suggests another listed mentor (not themselves, not the asker); the asker decides whether to ask them, and nothing reaches the suggested mentor |
+| `POST …/:id/decline` `{ note? }` | The mentor | "Not this month"; it counts against nobody |
+| `POST …/:id/withdraw` | The person asking | Takes the request back |
 
 - Only the two parties see a request; anyone else, admins included, gets the
   same 404 as for a missing one. The wrong party gets 403; a request that is
@@ -265,10 +265,10 @@ The mentor may **report** a waiting request (`POST
   status) and in the admins' notices until an admin decides it, for the
   record.
 
-| Table                   | Holds                                                                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mentor_request_case`   | At most one per request: OPEN or DECIDED, Clef's reasons when Clef held it, when it last opened, and the latest decision (KEEP or REMOVE, the reason, the admin, when) |
-| `mentor_request_report` | The mentor's report: one per request, with their reason                                                                                                                |
+| Table | Holds |
+|---|---|
+| `mentor_request_case` | At most one per request: OPEN or DECIDED, Clef's reasons when Clef held it, when it last opened, and the latest decision (KEEP or REMOVE, the reason, the admin, when) |
+| `mentor_request_report` | The mentor's report: one per request, with their reason |
 
 Admins decide in their own queue. It is separate from the channel
 `moderation_case` queue, whose contract is unchanged.
@@ -278,7 +278,7 @@ Admins decide in their own queue. It is separate from the channel
   Each item has the request with its note as written, Clef's reasons, the
   report and the latest decision.
 - `POST /api/moderation/mentor-requests/:id`, `{ action: "keep" | "remove",
-reason }`:
+  reason }`:
   - **keep** releases the request to its mentor as it is (PENDING), and the
     mentor is told once, if they had not been. It holds a spot again, even if
     the mentor filled their month meanwhile.

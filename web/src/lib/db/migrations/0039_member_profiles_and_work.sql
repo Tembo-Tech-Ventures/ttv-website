@@ -77,6 +77,21 @@ SELECT 'member-profile-'||c.userId,c.userId,'member-'||c.handleNumber,c.headline
 FROM numbered c JOIN user u ON u.id=c.userId WHERE true
 ON CONFLICT(userId) DO NOTHING;
 --> statement-breakpoint
+-- Existing work is already shared: give its owners the same saved-profile access.
+-- Leave identity unchecked (publicName NULL) and queue a human review.
+WITH owners AS (
+ SELECT DISTINCT j.userId FROM communityJourney j
+ WHERE NOT EXISTS (SELECT 1 FROM studentProfile p WHERE p.userId=j.userId)
+), numbered AS (
+ SELECT userId,row_number() OVER (ORDER BY userId) + coalesce((
+ SELECT max(CAST(substr(handle,8) AS INTEGER)) FROM studentProfile
+ WHERE handle LIKE 'member-%' AND substr(handle,8)<>'' AND length(substr(handle,8))<=9 AND substr(handle,8) NOT GLOB '*[^0-9]*'),0) AS handleNumber
+ FROM owners
+)
+INSERT INTO studentProfile(id,userId,handle,publicName,moderationReviewRequired)
+SELECT 'member-profile-'||userId,userId,'member-'||handleNumber,NULL,1 FROM numbered WHERE true
+ON CONFLICT(userId) DO NOTHING;
+--> statement-breakpoint
 INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,
  repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,moderationReviewRequired,moderationOutcome,moderationCheckedAt,createdAt,updatedAt)
 SELECT 'repo-'||h.id,p.userId,h.repoFullName,coalesce(h.blurb,h.description,''),h.repoUrl,

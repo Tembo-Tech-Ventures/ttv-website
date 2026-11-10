@@ -489,3 +489,69 @@ it("raw and Drizzle work predicates agree; anonymous work additionally requires 
       .get(),
   ).toEqual({ id: "staff" });
 });
+
+it("the first completed check wins when two checks screen the same work revision", async () => {
+  const { db, database } = fixture();
+  database.exec("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('race','member','Work','Evidence','2026-11-09','institution')");
+  const checks: Array<(result: clef.ProfileModerationResult) => void> = [];
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(() => new Promise(resolve => { checks.push(resolve); }));
+  const first = checkPostedWork(db, "race", env);
+  const second = checkPostedWork(db, "race", env);
+  await vi.waitFor(() => expect(checks).toHaveLength(2));
+  checks[0]({ outcome: "hold", flags: [], scores: {} });
+  await first;
+  checks[1]({ outcome: "pass", flags: [], scores: {} });
+  await second;
+  expect(database.prepare("SELECT moderationOutcome FROM communityJourney WHERE id='race'").get()).toEqual({ moderationOutcome: "hold" });
+});
+
+function graduate(database: ReturnType<typeof createSqliteD1>["database"]) {
+  database.exec(`INSERT INTO curriculum(id,title,description) VALUES ('curriculum','Foundations','Test');
+    INSERT INTO program(id,name,description,curriculumId,startDate) VALUES ('cohort','Cohort','Test','curriculum',0);
+    INSERT INTO programApplication(id,userId,programId,status,application,completedAt) VALUES ('done','member','cohort','COMPLETED','{}',1700000000);
+    INSERT INTO studentProfile(id,userId,handle) VALUES ('profile','member','builder');`);
+}
+
+it("an unavailable check cannot publish an already-held draft", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  database.exec("UPDATE studentProfile SET moderationOutcome='hold'");
+  expect(await publishProfile(drizzle(db, { schema }), "member", "profile")).toMatchObject({ success: false, published: false });
+  expect(database.prepare("SELECT status,moderationOutcome FROM studentProfile").get()).toEqual({ status: "DRAFT", moderationOutcome: "hold" });
+});
+
+it("a whole-profile pass releases only the exact unchecked posted work it screened", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  for (const id of ["unchecked", "held", "hidden", "draft", "edited"])
+    database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind) VALUES (?,'member','Repo','Snapshot','2026-11-09','institution','repo')").run(id);
+  database.exec("UPDATE communityJourney SET moderationOutcome='hold' WHERE id='held'; UPDATE communityJourney SET moderatorHidden=1 WHERE id='hidden'; UPDATE communityJourney SET state='DRAFT' WHERE id='draft'");
+  const result = await publishProfile(drizzle(db, { schema }), "member", "profile", async state => {
+    expect(state.highlights).toHaveLength(5);
+    database.exec("UPDATE communityJourney SET version=2 WHERE id='edited'");
+    return { outcome: "pass", flags: [], scores: {} };
+  });
+  expect(result).toMatchObject({ success: true, published: true });
+  expect(database.prepare("SELECT id FROM communityJourney WHERE moderationOutcome='pass'").all()).toEqual([{ id: "unchecked" }]);
+});
+
+it("pages older human-hidden work without dropping the independent pending queue", async () => {
+  const { db, database } = fixture();
+  for (let i = 0; i < 51; i++) database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderatorHidden,moderationOutcome,updatedAt) VALUES (?,'member','Hidden','Evidence','2026-11-09','institution','DRAFT',1,'hold',?)").run(`hidden-${i}`,i);
+  database.exec("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('pending','member','Pending','Evidence','2026-11-09','institution')");
+  const first = await listWorkReviews(db, "all");
+  const older = await listWorkReviews(db, "all", 2);
+  expect(first.filter(w => w.moderatorHidden)).toHaveLength(50);
+  expect(older.map(w => w.id)).toEqual(["pending", "hidden-0"]);
+});
+
+it("a passed edit to a published profile checks its migrated unchecked work", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  database.exec("UPDATE studentProfile SET status='PUBLISHED'; INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind) VALUES ('repo','member','Repo','Snapshot','2026-11-09','institution','repo')");
+  const form = new FormData();
+  form.set("handle", "builder");
+  form.set("headline", "Updated public profile");
+  expect(await saveProfile(drizzle(db, { schema }), "member", form, "profile", async () => ({ outcome: "pass", flags: [], scores: {} }))).toMatchObject({ success: true });
+  expect(database.prepare("SELECT moderationOutcome,moderationReviewRequired FROM communityJourney WHERE id='repo'").get()).toEqual({ moderationOutcome: "pass", moderationReviewRequired: 0 });
+});

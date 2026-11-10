@@ -10,6 +10,7 @@ import {
 } from "@/lib/moderation/clef";
 import type { CommunityProfileInput } from "@/lib/community/model";
 import { CommunityError } from "@/lib/community/model";
+import { profileModerationState } from "./moderation-state";
 import { nextMemberHandle } from "./handles";
 
 export type MemberModerationEnv = Pick<Env, "AI" | "AI_GATEWAY_NAME"> &
@@ -129,14 +130,12 @@ export async function saveMemberText(
         existing?.handle,
         attempt,
       );
-      const state = {
-        ...emptyModerationState,
-        displayName: existing?.publicName ?? identity.name,
+      const state = profileModerationState({
+        ...input,
+        skills: JSON.stringify(input.skills),
+        publicName: existing?.publicName ?? identity.name,
         handle,
-        headline: input.headline,
-        bio: `${input.bio}\n${input.opportunityGoals}`,
-        skills: input.skills,
-      };
+      });
       const screened = await screenPublicEdit(
         existing?.status,
         env,
@@ -215,7 +214,7 @@ export async function checkPostedWork(
   await db
     .prepare(
       `UPDATE communityJourney SET moderationOutcome=${checkedOutcome},moderationFlags=?,moderationScores=?,moderationCheckedAt=unixepoch(),
-    moderationReviewRequired=? WHERE id=? AND version=? AND state='POSTED' AND moderatorHidden=0 AND moderationReviewRequired=1`,
+    moderationReviewRequired=? WHERE id=? AND version=? AND state='POSTED' AND moderatorHidden=0 AND moderationReviewRequired=1 AND moderationCheckedAt IS NULL`,
     )
     .bind(
       result.outcome,

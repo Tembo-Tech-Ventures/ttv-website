@@ -84,7 +84,7 @@ new screen or test.
 - Onboarding (library `/reports/platform-onboarding-2026-11-01/SPEC.md` §5):
   intents choose routing and copy only and never reach `capabilitiesFor()`.
   `EXPLORING` stands alone; inferred intents are computed, never written.
-  Mentor and institution access are _access requests_ (not `MentorRequest`,
+  Mentor and institution access are *access requests* (not `MentorRequest`,
   which asks a mentor for time). Requester-facing shapes (`AccessRequestSummary`,
   `OnboardingState`, `access_decided` attention) never identify the deciding
   administrator: `decidedBy` exists only on `AdminAccessRequest`, and

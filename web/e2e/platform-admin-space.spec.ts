@@ -302,7 +302,8 @@ test.describe("every admin page", () => {
     await filters.getByRole("link", { name: "Not on public website", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/profiles\?status=DRAFT$/);
     await expect(filters.getByRole("link", { name: "Not on public website", exact: true })).toHaveAttribute("aria-current", "page");
-    const drafts = page.getByRole("table", { name: "Profiles, draft" });
+    const drafts = page.getByRole("table", { name: "Profiles, not on public website" });
+    expect(await drafts.locator("td[data-label='Status']").count()).toBeGreaterThan(0);
     for (const status of await drafts.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Not on public website");
     expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
 

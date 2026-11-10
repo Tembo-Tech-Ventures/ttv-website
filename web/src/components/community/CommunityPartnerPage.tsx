@@ -68,7 +68,7 @@ const content = {
     context: "More context. Your judgment.", contextIntro: "A profile is a starting point. The contribution and its evidence give you something concrete to discuss.",
     notes: [
       { title: "Keep confirmation in scope.", text: "A mentor note describes the particular work reviewed. It is not a universal score, a certification of the person, or a hiring decision." },
-      { title: "Approval is not unrestricted access.", text: "Everyone signed in to TTV can see saved profiles and posted work. Private cohort recordings and internal records stay outside institutional discovery." },
+      { title: "Approval adds AI tools.", text: "Everyone signed in to TTV can see saved profiles and posted work. Institutional approval adds AI discovery and assessment. Private cohort recordings and internal records stay outside institutional discovery." },
     ],
     questions: [
       { title: "Who can use institutional discovery?", text: {

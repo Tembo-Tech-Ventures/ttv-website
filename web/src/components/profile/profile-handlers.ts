@@ -6,7 +6,7 @@ import {
 import { and, eq, exists, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import { profileModerationMessages} from "@/lib/moderation/clef";
+import { profileModerationMessages } from "@/lib/moderation/clef";
 import { publishesAfterModeration } from "@/lib/talent/profile-moderation";
 import {
   PROFILE_CHANGED_MESSAGE,
@@ -145,9 +145,9 @@ export async function saveProfileIdentity(
       .where(eq(schema.user.id, userId));
     return { success: true };
   }
-  const moderationState= profileModerationState(profile, {
+  const moderationState = profileModerationState(profile, {
     displayName: proposedName,
-    });
+  });
   const saveTextFirst = profile.status === "DRAFT";
   // Saved profiles are visible to members. Save text first, then check
   // the exact new revision. Keep the previous safe avatar until its check ends.

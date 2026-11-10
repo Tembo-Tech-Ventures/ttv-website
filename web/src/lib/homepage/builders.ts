@@ -1,7 +1,5 @@
 import { publicProfileEligibility, postedWorkColumnsEligibility } from "@/lib/community/eligibility";
-import { sql as eligibilitySql ,
-  and, asc, desc, eq, isNotNull ,
-} from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql as eligibilitySql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";

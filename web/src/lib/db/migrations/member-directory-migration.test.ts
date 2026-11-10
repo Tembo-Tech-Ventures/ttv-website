@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { readMigration } from "@/test/sqlite-d1";
+import { postedWorkEligibility } from "@/lib/community/eligibility";
+import { listOwnProjects, resolveOwnProject } from "@/lib/channels/embeds";
+import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 
 const migration = "0039_member_profiles_and_work.sql";
 function productionSeed() {
@@ -11,7 +13,7 @@ function productionSeed() {
     .filter((n) => /^\d+.*\.sql$/.test(n) && n < migration)
     .toSorted())
     db.exec(readMigration(name));
-  for (let i = 0; i < 7; i++)
+  for (let i = 0; i < 8; i++)
     db.prepare("INSERT INTO user(id,name,email) VALUES (?,?,?)").run(
       `u${i}`,
       `Synthetic Wanjiku ${i}`,
@@ -32,12 +34,14 @@ function productionSeed() {
       i,
     );
   db.exec(`
-    INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('original','u0','Work','Evidence','2026-11-09','institution');
+    INSERT OR IGNORE INTO Roles(id,name) VALUES ('mentor-role','MENTOR');
+    INSERT INTO UserRoles(id,userId,roleId) SELECT 'grant-'||u.id,u.id,r.id FROM user u,Roles r WHERE u.id IN ('u5','u6') AND r.name='MENTOR';
+    INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('original','u7','Work','Evidence','2026-11-09','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES
       ('c1','original','u5','Confirmed evidence','Review',1), ('c2','original','u6','Confirmed evidence','Review',1);
     INSERT INTO communitySetAside(mentorId,journeyId,journeyVersion) VALUES ('u5','original',1);
     INSERT INTO mentor_request(id,requesterId,mentorId,format,note,journeyId,journeyVersion,project)
-      VALUES ('request','u0','u5','WRITTEN_REVIEW','Review please','original',1,'{}');
+      VALUES ('request','u7','u5','WRITTEN_REVIEW','Review please','original',1,'{}');
     INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown,status) VALUES ('post','p0','post','Post','Writing','PUBLISHED');
     INSERT INTO profileContact(id,profileId,fromName,fromEmail,message) VALUES ('contact','p0','Synthetic Amina','amina@example.test','Hello');
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description) VALUES ('project','Synthetic','Amina','amina@example.test','Project','Work');
@@ -47,13 +51,13 @@ function productionSeed() {
 }
 
 describe("one-profile additive D1 migration", () => {
-  it("preserves exact production-shaped counts, snapshots, order and foreign-key links", () => {
+  it("preserves exact production-shaped counts, snapshots, order and foreign-key links", async () => {
     const db = productionSeed();
     try {
       db.exec(readMigration(migration));
       db.exec(readMigration("0040_member_review_safety.sql"));
       for (const [table, count] of Object.entries({
-        studentProfile: 5,
+        studentProfile: 6,
         communityJourney: 17,
         communityConfirmation: 2,
         communitySetAside: 1,
@@ -113,6 +117,12 @@ describe("one-profile additive D1 migration", () => {
           sortOrder: i,
           snapshotAt: 123,
         });
+      expect(db.prepare(`SELECT id FROM communityJourney j WHERE id='original' AND ${postedWorkEligibility("j")}`).all()).toEqual([{ id: "original" }]);
+      expect(db.prepare(`SELECT count(*) n FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId AND j.version=c.journeyVersion WHERE j.id='original' AND ${postedWorkEligibility("j", true)}`).get()).toEqual({ n: 2 });
+      expect(db.prepare("SELECT publicName,moderationOutcome,moderationReviewRequired FROM studentProfile WHERE userId='u7'").get()).toEqual({ publicName: null, moderationOutcome: null, moderationReviewRequired: 1 });
+      const embed = await resolveOwnProject(createSqliteD1(db).db, "u7", { type: "project", journeyId: "original", version: 1 });
+      expect(embed.title).toBe("Work");
+      expect((await listOwnProjects(createSqliteD1(db).db, "u7"))[0].confirmations).toHaveLength(2);
       expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(
         db

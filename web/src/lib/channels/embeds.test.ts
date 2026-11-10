@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ChannelShareables, ErrorEnvelope, Message, MessageList, type EmbedRef, type MessageEmbedView, type SessionClipEmbed,
@@ -512,3 +513,14 @@ it.each([
     ).toMatchObject({ status: 400, message });
   },
 );
+
+it("keeps migrated work shareable when its owner had no saved profile", async () => {
+  const s = setup();
+  s.journey("legacy-work");
+  s.database.prepare("DELETE FROM studentProfile WHERE userId=?").run(VIEWER);
+  const migration = readFileSync(new URL("../db/migrations/0039_member_profiles_and_work.sql", import.meta.url), "utf8");
+  const backfill = migration.split("--> statement-breakpoint").find(statement => statement.includes("WITH owners AS"));
+  expect(backfill).toBeTruthy();
+  s.database.exec(backfill!);
+  expect((await s.share("help", [s.project("legacy-work")])).status).toBe(201);
+});

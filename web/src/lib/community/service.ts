@@ -196,8 +196,8 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       const eligible = discoverableMember("u.id", caller);
       const { results } = await db.prepare(`${PROFILE_SELECT}
         WHERE ${eligible.clause}
-          AND instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
-        ORDER BY u.name,u.id LIMIT ?`).bind(...eligible.values,query,...skills,...scope.values,p.limit).all<ProfileRow>();
+          AND instr(lower(coalesce(p.publicName,u.name) || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
+        ORDER BY coalesce(p.publicName,u.name),u.id LIMIT ?`).bind(...eligible.values,query,...skills,...scope.values,p.limit).all<ProfileRow>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results.map(profile);
     },
@@ -249,7 +249,7 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       // They are returned only with the rows, so a caller the rows' mentor check refuses learns nothing.
       const [results, {results: confirmations}] = await Promise.all([
         mentorshipRows<Omit<CommunityJourney, "confirmations"> & { memberName: string }>(
-          "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,lower(j.state) AS status,j.version,j.createdAt,j.updatedAt"),
+          `j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,${workStatusSql("j.state")} AS status,j.version,j.createdAt,j.updatedAt`),
         db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
           FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
           WHERE ${postedWorkEligibility("j")} AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>(),
@@ -339,14 +339,11 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       await requireFixtureTarget(actorId);
       const result = await db.prepare(`DELETE FROM communityJourney WHERE id=? AND userId=? AND NOT (kind='repo' AND moderatorHidden=1)`,
         ).bind(id,actorId).run();
-      if (!result.meta.changes&&
-        !(await db
-          .prepare(
-            "SELECT 1 FROM communityJourney WHERE id=? AND userId=? AND kind='repo' AND moderatorHidden=1",
-          )
-          .bind(id, actorId)
-          .first())
-      ) throw new CommunityError("Contribution not found.",404);
+      if (!result.meta.changes) {
+        const hidden = await db.prepare("SELECT 1 FROM communityJourney WHERE id=? AND userId=? AND kind='repo' AND moderatorHidden=1").bind(id,actorId).first();
+        if (hidden) throw new CommunityError("A moderator took this down.",409);
+        throw new CommunityError("Contribution not found.",404);
+      }
       return {deleted:true};
     },
     async confirmJourney(id: string, input: unknown) {

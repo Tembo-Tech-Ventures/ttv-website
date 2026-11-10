@@ -36,13 +36,15 @@ export async function reviewWork(
 export async function listWorkReviews(
   db: D1Database,
   hidden: boolean | "all" = false,
+  hiddenPage = 1,
 ) {
+  const offset = (Math.max(1, Math.min(10000, Math.trunc(hiddenPage) || 1)) - 1) * 50;
   const query = (
     showHidden: boolean,
   ) => `SELECT w.id,w.title,w.description,w.blurb,w.topics,w.version,w.moderationOutcome,w.moderatorHidden,
     coalesce(p.publicName,u.name) AS authorName FROM communityJourney w JOIN user u ON u.id=w.userId
     LEFT JOIN studentProfile p ON p.userId=w.userId
-    WHERE ${showHidden ? "w.moderatorHidden=1" : "w.moderationReviewRequired=1 AND w.state='POSTED' AND w.moderatorHidden=0"} ORDER BY w.moderationOutcome DESC,w.updatedAt DESC,w.id DESC LIMIT 50`;
+    WHERE ${showHidden ? "w.moderatorHidden=1" : "w.moderationReviewRequired=1 AND w.state='POSTED' AND w.moderatorHidden=0"} ORDER BY w.moderationOutcome DESC,w.updatedAt DESC,w.id DESC LIMIT 50 OFFSET ${showHidden ? offset : 0}`;
   const { results } = await db
     .prepare(
       hidden === "all"

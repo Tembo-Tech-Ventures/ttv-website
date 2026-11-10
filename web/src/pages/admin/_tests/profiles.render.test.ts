@@ -8,9 +8,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  * list with its status filter, and the publishing actions, with the reads and
  * the write mocked. The SQL itself runs in round-trips.render.test.ts.
  */
-const store = vi.hoisted(() => ({ read: vi.fn(), moderate: vi.fn(), work:vi.fn(),reviewWork:vi.fn() }));
-vi.mock("cloudflare:workers", () => ({ env: { DB: {prepare:()=>({all:store.work})} } }));
-vi.mock("@/lib/members/moderation",()=>({reviewWork:store.reviewWork,listWorkReviews:async()=>(await store.work()).results}));
+const store = vi.hoisted(() => ({ read: vi.fn(), moderate: vi.fn(), work: vi.fn(), reviewWork: vi.fn() }));
+vi.mock("cloudflare:workers", () => ({ env: { DB: { prepare: () => ({ all: store.work }) } } }));
+vi.mock("@/lib/members/moderation", () => ({ reviewWork: store.reviewWork, listWorkReviews: async () => (await store.work()).results }));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: () => ({}) }));
 vi.mock("@/layouts/AdminLayout.astro", () => import("@/test/StubLayout.astro"));
 vi.mock("@/components/platform/spaces/space-page", () => ({ resolveSpacePage: async () => null }));
@@ -95,7 +95,7 @@ describe("the profiles list on the style guide", () => {
     store.read.mockResolvedValue({ rows: [], total: 0, review: { held: [], unavailable: [held({ status: "PUBLISHED", moderationOutcome: "error", moderationFlags: null })] } });
     const published = await visit();
     expect([...published.body.matchAll(/name="_action" value="([a-z_]+)"/g)].map((match) => match[1])).toEqual(["unpublish", "clear_flag"]);
-    expect(published.body).toContain("The content check was unavailable, so this profile published automatically.");
+    expect(published.body).toContain("The check was unavailable. This profile remains listed and needs review.");
   });
 
   it("answers a change with a 303 back to the same view and a flash", async () => {

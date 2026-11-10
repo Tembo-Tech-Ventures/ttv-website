@@ -16,14 +16,14 @@ to both the query and source. Non-ASCII letters match their exact case.
 SQL wildcard characters are literal. This is substring search, not semantic
 matching, token expansion or ranking.
 
-| Scope             | Groups searched                                                                        |
-| ----------------- | -------------------------------------------------------------------------------------- |
-| all               | People, authorized projects, own-cohort session moments, messages in readable channels |
-| community         | People, authorized projects, and messages in community channels; no recordings         |
-| cohort            | Explicitly accessible cohort transcripts, and messages in readable cohort channels     |
-| sessionMoments    | Explicitly accessible cohort transcripts                                               |
-| people / projects | Only the named group                                                                   |
-| messages          | Messages in readable channels                                                          |
+| Scope | Groups searched |
+| --- | --- |
+| all | People, authorized projects, own-cohort session moments, messages in readable channels |
+| community | People, authorized projects, and messages in community channels; no recordings |
+| cohort | Explicitly accessible cohort transcripts, and messages in readable cohort channels |
+| sessionMoments | Explicitly accessible cohort transcripts |
+| people / projects | Only the named group |
+| messages | Messages in readable channels |
 
 An optional `programId` narrows `all`, `cohort` or `sessionMoments` to that
 authorized cohort (messages to that cohort's channels), excluding

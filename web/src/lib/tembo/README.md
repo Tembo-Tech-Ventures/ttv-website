@@ -30,10 +30,10 @@ writes; a `channels:write` personal access token acts as its (admin) owner and
 a `channels:read` one is 403; agent sessions act as their person. Restricted
 staging identities cannot reach either (they never post).
 
-| Route                                                  | Does                                                                                                                                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/channels/:id/tembo` `{ messageId }`         | Ask about one of your own messages in this channel. 202 `pending` (the answer follows after the response), then 200 `answer` with the posted message once it exists |
-| `POST /api/messages/:id/tembo-feedback` `{ feedback }` | "helpful" or "not_quite" on a Tembo answer you can see; one per person and answer, the latest kept                                                                  |
+| Route | Does |
+|---|---|
+| `POST /api/channels/:id/tembo` `{ messageId }` | Ask about one of your own messages in this channel. 202 `pending` (the answer follows after the response), then 200 `answer` with the posted message once it exists |
+| `POST /api/messages/:id/tembo-feedback` `{ feedback }` | "helpful" or "not_quite" on a Tembo answer you can see; one per person and answer, the latest kept |
 
 A post that mentions `@tembo` (`mention.ts`: the word on its own, not
 `name@tembo.org`, `@tembotech` or `@tembo.co`) asks exactly as the route
@@ -102,11 +102,11 @@ The **channel alone** decides, never the asker: the answer is posted where
 every reader of the channel sees it, so an admin asking in a cohort channel
 reaches no more than its members.
 
-| Channel   | Tools                               | Sources                                                                                                                                                                                                                               |
-| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| COHORT    | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages                                                                                                                                     |
+| Channel | Tools | Sources |
+|---|---|---|
+| COHORT | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages |
 | COMMUNITY | `search_projects`, `search_channel` | Saved, eligible member profiles and their posted work; projects their owners shared in this channel, while still readable; this channel's messages. Never recordings |
-| DIRECT    | `search_channel`                    | This conversation only, and only when someone in it asks                                                                                                                                                                              |
+| DIRECT | `search_channel` | This conversation only, and only when someone in it asks |
 
 Messages are read as a reader without privileges reads them: a person's (never
 Tembo's own), neither deleted nor hidden, not a reply under a hidden message,

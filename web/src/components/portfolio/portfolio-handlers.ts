@@ -4,7 +4,7 @@ import {
   profileModerationState,
 } from "@/lib/members/moderation-state";
 import { hasCompletedCohort } from "@/lib/talent/eligibility";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import {
@@ -14,7 +14,8 @@ import {
 } from "@/lib/talent/handles";
 import {
   profileEditorSchema,
-  serializeSkills} from "@/lib/talent/profile";
+  serializeSkills,
+} from "@/lib/talent/profile";
 import {
   profileModerationMessages,
   type ProfileModerationResult,
@@ -88,6 +89,8 @@ interface CurrentProfile extends Partial<ProfileValues> {
   publicName: string | null;
   publicAvatarUrl: string | null;
   work?: Array<{
+    id: string;
+    version: number;
     repoFullName: string | null;
     description: string | null;
     blurb: string | null;
@@ -194,11 +197,7 @@ async function savePublishedProfileEdit(
   current: CurrentProfile,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
-  const moderationState= profileModerationState(
-    {
-    ...current, ...values },
-    { skills },
-    );
+  const moderationState = profileModerationState({ ...current, ...values }, { skills });
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -219,13 +218,13 @@ async function savePublishedProfileEdit(
     .update(schema.studentProfile)
     .set({
       ...values,
-      contentVersion: sql`${schema.studentProfile.contentVersion}+1`,
       ...moderationValues,
       ...publicIdentityColumns(
         moderation,
         moderationState,
         current.publicAvatarUrl,
       ),
+      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
     })
     .where(
       and(
@@ -236,6 +235,7 @@ async function savePublishedProfileEdit(
       ),
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
+  if (moderation.outcome === "pass") await passCheckedWork(db, current.work);
   return {
     success: true,
     moderationOutcome: moderation.outcome,
@@ -336,6 +336,8 @@ export async function saveProfile(
         user: { columns: { name: true, image: true } },
         work: {
           columns: {
+            id: true,
+            version: true,
             title: true,
             repoDescription: true,
             repoFullName: true,
@@ -507,6 +509,8 @@ export async function publishProfile(
       user: { columns: { name: true, image: true } },
       work: {
         columns: {
+          id: true,
+          version: true,
           title: true,
           repoDescription: true,
           repoFullName: true,
@@ -530,7 +534,7 @@ export async function publishProfile(
     };
   }
 
-  const moderationState= profileModerationState(profile);
+  const moderationState = profileModerationState(profile);
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -543,10 +547,13 @@ export async function publishProfile(
     profile.user.image,
   );
 
+  const canPublish =
+    publishesAfterModeration(moderation) &&
+    !(moderation.outcome === "error" && profile.moderationOutcome === "hold");
   const updateResult = await db
     .update(schema.studentProfile)
     .set(
-      publishesAfterModeration(moderation)
+      canPublish
         ? {
             ...moderationValues,
             ...identityValues,
@@ -570,9 +577,7 @@ export async function publishProfile(
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
 
-  if (!publishesAfterModeration(moderation)||
-    (moderation.outcome === "error" && profile.moderationOutcome === "hold")
-  ) {
+  if (!canPublish) {
     return {
       success: false,
       error: "Your profile needs attention before it can go live.",
@@ -582,12 +587,35 @@ export async function publishProfile(
     };
   }
 
+  if (moderation.outcome === "pass") await passCheckedWork(db, profile.work);
   return {
     success: true,
     moderationOutcome: moderation.outcome,
     published: true,
   };
 }
+
+/** A whole-profile pass covers only the exact unchecked posted work that was screened. */
+async function passCheckedWork(db: Database, work: CurrentProfile["work"] = []) {
+  const updates = work.map(item =>
+    db.update(schema.communityJourney)
+      .set({
+        moderationOutcome: "pass",
+        moderationCheckedAt: new Date(),
+        moderationReviewRequired: false,
+      })
+      .where(and(
+        eq(schema.communityJourney.id, item.id),
+        eq(schema.communityJourney.version, item.version),
+        eq(schema.communityJourney.state, "POSTED"),
+        eq(schema.communityJourney.moderatorHidden, false),
+        isNull(schema.communityJourney.moderationOutcome),
+        isNull(schema.communityJourney.moderationCheckedAt),
+      )),
+  );
+  if (updates.length > 0) await db.batch([updates[0], ...updates.slice(1)]);
+}
+
 function unchangedProfileText(current: CurrentProfile, values: ProfileValues) {
   const textKeys = [
     "handle",

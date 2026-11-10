@@ -391,3 +391,13 @@ it('counts waiting confirmations over exactly the rows the Confirm page lists',a
   const entries=await f.member.listJourney(); expect(entries[0]).toMatchObject({status:"posted"}); expect(entries[0]).not.toHaveProperty("visibility");
   await expect(f.member.setJourneyStatus(draft.id,{status:"draft",visibility:"institution"})).rejects.toMatchObject({status:400});
  });
+
+it("searches and sorts by the member's chosen name, falling back to the account name", async () => {
+  const f = fixture();
+  await f.member.updateOwnProfile(profile);
+  await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateOwnProfile(profile);
+  f.sql.exec("UPDATE studentProfile SET publicName='Zuri' WHERE userId='member'; UPDATE studentProfile SET publicName=NULL WHERE userId='other'");
+  expect((await f.institution.searchProfiles({ query: "Zuri" })).map(p => p.name)).toEqual(["Zuri"]);
+  expect(await f.institution.searchProfiles({ query: "Member" })).toEqual([]);
+  expect((await f.institution.searchProfiles({})).map(p => p.name)).toEqual(["Other", "Zuri"]);
+});

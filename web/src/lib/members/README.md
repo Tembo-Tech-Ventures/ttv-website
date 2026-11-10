@@ -25,7 +25,7 @@ PUBLISHED means opting into the public website, not becoming visible to members.
 `src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
 one D1 batch each. The directory always shows the shared view, even to the author.
 
-Community read tokens may read the same saved members as signed-in browsers. Institution scope adds AI discovery and assessment, not additional evidence.
+Community read tokens may read the same saved members as signed-in browsers.
 
 The retired visibility column cannot be dropped: its table-level CHECK would require rebuilding a referenced D1 table, deleting dependent rows.
 

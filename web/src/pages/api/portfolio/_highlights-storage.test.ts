@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
-const runtime = vi.hoisted(() => ({ env: {} as Env }));
+const runtime = vi.hoisted(() => ({ env: {} as Env, check: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: runtime.env }));
 vi.mock("@/lib/auth", () => ({
   createAuth: () => ({
@@ -27,11 +27,12 @@ vi.mock("@/lib/moderation/clef", async () => ({
   ...(await vi.importActual<typeof import("@/lib/moderation/clef")>(
     "@/lib/moderation/clef",
   )),
-  checkProfileContent: async () => ({ outcome: "pass", flags: [], scores: {} }),
+  checkProfileContent: runtime.check,
 }));
 import { PUT } from "./highlights";
 let database: ReturnType<typeof createSqliteD1>["database"];
 beforeEach(() => {
+  runtime.check.mockReset().mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
   const fixture = createSqliteD1();
   database = fixture.database;
   runtime.env.DB = fixture.db;
@@ -95,4 +96,19 @@ describe("repository refresh storage", () => {
         .get(),
     ).toEqual({ n: 1 });
   });
+});
+
+it("a later repository check cannot overwrite a hold for the same revision", async () => {
+  const results: Array<(value: { outcome: string; flags: string[]; scores: object }) => void> = [];
+  runtime.check.mockImplementation(() => new Promise(resolve => { results.push(resolve); }));
+  const request = () => PUT({ request: new Request("https://example.test/api/portfolio/highlights", { method: "PUT" }) } as never);
+  const first = request();
+  await vi.waitFor(() => expect(results).toHaveLength(1));
+  const second = request();
+  await vi.waitFor(() => expect(results).toHaveLength(2));
+  results[0]({ outcome: "hold", flags: [], scores: {} });
+  expect((await first).status).toBe(422);
+  results[1]({ outcome: "pass", flags: [], scores: {} });
+  expect((await second).status).toBe(200);
+  expect(database.prepare("SELECT moderationOutcome FROM communityJourney WHERE id='posted'").get()).toEqual({ moderationOutcome: "hold" });
 });

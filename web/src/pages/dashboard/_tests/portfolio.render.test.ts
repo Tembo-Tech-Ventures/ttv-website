@@ -169,3 +169,18 @@ describe("Public profile", () => {
     expect(page.querySelector("#highlights-title")).toBeNull();
   });
 });
+
+it("an unavailable publish check leaves a held draft off the public website", async () => {
+  seeded(COMPLETED + PROFILE("DRAFT") + "UPDATE studentProfile SET moderationOutcome='hold',moderationReviewRequired=1;");
+  const result = await visit({ body: new URLSearchParams({ _action: "publish" }) });
+  expect(sqlite.prepare("SELECT status,moderationOutcome FROM studentProfile").get()).toEqual({ status: "DRAFT", moderationOutcome: "hold" });
+  expect(result.body).not.toContain("Your profile is live");
+  expect(result.body).toContain("Your profile needs attention before it can go live.");
+});
+
+it("never labels a held public listing as live", async () => {
+  seeded(COMPLETED + PROFILE("PUBLISHED") + "UPDATE studentProfile SET moderationOutcome='hold',moderationReviewRequired=1;");
+  const { body } = await visit();
+  expect(body).toContain("Your profile is waiting for a human review");
+  expect(body).not.toContain("Your profile is live");
+});
