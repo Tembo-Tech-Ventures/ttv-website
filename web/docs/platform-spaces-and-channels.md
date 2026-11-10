@@ -85,8 +85,20 @@ revisions nobody has confirmed, drafts), the client projects open to them and
 their certificates. The one profile editor, for everyone, is
 `/dashboard/me/portfolio` ("Edit profile"): the profile, posting work (a link,
 or GitHub repositories), and, for graduates, listing on the public website and
-coming off it. Community's home links there; it edits nothing itself. The
-Overview only reads; every row links to the page that does the work.
+coming off it. Community's home links there; it edits nothing itself, and an
+old tab's post or link to it lands in the editor. The Overview only reads;
+every row links to the page that does the work.
+
+What the editor and the Overview say is what the directory and the public
+website show: "listed" is `publicProfileEligibility`, never the status alone.
+A held profile is told it waits for a check (and is offered no listing until a
+person has looked); mentors and staff are told they aren't listed anywhere;
+someone who took themselves off (a draft with `publishedAt`) is never asked to
+list again, and Writing and Opportunities tell them why they're closed. Coming
+off twice answers the same as once. A held save of the profile or of work is a
+save, said as a warning. The handle stays put after the first save ("Change
+handle" is a deliberate step that warns old links stop working) and never
+changes once the profile has been listed, since it is part of post links.
 
 Every admin page (`/admin/*`) renders in the Admin space while `spaces` is on
 for the admin, with the admin navigation as the space's sidebar and the page
