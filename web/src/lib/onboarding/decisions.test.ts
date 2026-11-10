@@ -223,8 +223,8 @@ describe("grantCommunityRole and revokeCommunityRole", () => {
 
   it("refuses roles outside MENTOR and INSTITUTION", async () => {
     const s = setup();
-    // @ts-expect-error ADMIN is not an access role.
-    await expect(grantCommunityRole(s.context, { userId: "wairimu", role: "ADMIN", actorId: "amina" })).rejects.toThrow(/Invalid option/);
+    await expect(grantCommunityRole(s.context, { userId: "wairimu", // @ts-expect-error ADMIN is not an access role.
+        role: "ADMIN", actorId: "amina" })).rejects.toThrow(/Invalid option/);
     // @ts-expect-error ADMIN is not an access role.
     await expect(revokeCommunityRole(s.db, "amina", "ADMIN")).rejects.toThrow(/Invalid option/);
     expect(s.rolesOf("wairimu")).toEqual([]);
@@ -236,7 +236,7 @@ describe("setAccess, through grantCommunityRole and revokeCommunityRole", () => 
   it("answers the pending request when an administrator grants the role directly", async () => {
     const s = setup();
     const id = await createAccessRequest(s.db, "wairimu", mentor, T);
-    const service = createCommunityService(s.db, "amina", null, "production");
+    const service = createCommunityService(s.db, "amina", null, "production", undefined, {} as Env);
     expect(await service.setAccess({ userId: "wairimu", role: "MENTOR", granted: true }))
       .toEqual({ userId: "wairimu", role: "MENTOR", granted: true });
     expect(s.rows("SELECT status, decidedBy FROM access_request WHERE id = ?", id)).toEqual([{ status: "APPROVED", decidedBy: "amina" }]);

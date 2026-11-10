@@ -29,8 +29,8 @@ describe("GET /api/search", () => {
     if (fixture.signedIn !== false) {
       const result = SearchResults.parse(await response.json());
       expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
-      expect(result.projects).toHaveLength(fixture.expected.isInstitution || fixture.expected.isAdmin ? 1 : 0);
-      expect(result.people.map(p => p.person.id)).toEqual(["synthetic-otieno"]);
+      expect(result.projects).toHaveLength(3);
+      expect(result.people.map(p => p.person.id)).toEqual(["synthetic-ineligible", "synthetic-otieno", "synthetic-private"]);
       // Everyone signed in reads the community; cohort B's channel, its people and admins.
       const readsCohortB = fixture.expected.isAdmin || fixture.expected.cohortIds.includes("cohort-b");
       expect(result.messages.map(m => m.id)).toEqual(readsCohortB ? ["message-cohort-b", "message-help"] : ["message-help"]);
@@ -73,8 +73,8 @@ describe("GET /api/search", () => {
   it.each(SearchScope.options)("selects only the requested groups: %s", async scope => {
     const s = setup({ globalRoles: ["INSTITUTION"], applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const result = SearchResults.parse(await (await searchRequest(context(`q=Webhook&scope=${scope}`), environment(s))).json());
-    expect(result.people).toHaveLength(["all", "people", "community"].includes(scope) ? 1 : 0);
-    expect(result.projects).toHaveLength(["all", "projects", "community"].includes(scope) ? 1 : 0);
+    expect(result.people).toHaveLength(["all", "people", "community"].includes(scope) ? 3 : 0);
+    expect(result.projects).toHaveLength(["all", "projects", "community"].includes(scope) ? 3 : 0);
     expect(result.sessionMoments).toHaveLength(["all", "sessionMoments", "cohort"].includes(scope) ? 1 : 0);
     expect(result.messages).toHaveLength(["all", "messages", "community"].includes(scope) ? 1 : 0);
   });

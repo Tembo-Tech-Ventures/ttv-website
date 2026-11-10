@@ -1,5 +1,7 @@
 # Platform contracts and synthetic fixtures
 
+See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
+
 Astra owns `contracts.ts`. Each exported Zod 4 schema has an inferred TypeScript
 type with the same PascalCase name. `ROUTES` uses camelCase keys and preserves
 the shared `RouteDef<P, Q, B, R>` / `defineRoute` structure. These files install

@@ -1,9 +1,10 @@
+import { memberProfileHref } from "@/lib/members/links";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { SearchQuery, SearchResults, WebLink, type PersonSummary } from "@/lib/platform/contracts";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
-import { DISCOVERY_EXCLUDED_ROLES_SQL, discoverableMember } from "@/lib/community/eligibility";
+import { memberEligibility, publicProfileEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 import { searchMessages } from "./messages";
 
@@ -11,12 +12,9 @@ export const SEARCH_RESULT_LIMIT = 10;
 
 export class SearchScopeError extends Error {}
 
-// Match the public talent page: publication alone does not confer eligibility. `p` is studentProfile.
-export const PUBLIC_PROFILE = `p.status='PUBLISHED' AND EXISTS (
-  SELECT 1 FROM programApplication a WHERE a.userId=p.userId
-  AND a.status='COMPLETED' AND a.completedAt IS NOT NULL)`;
 
 interface PublicPersonRow {
+  onPublicSite:number;
   userId: string; handle: string; publicName: string | null; publicAvatarUrl: string | null;
 }
 function person(row: PublicPersonRow): PersonSummary {
@@ -26,27 +24,13 @@ function person(row: PublicPersonRow): PersonSummary {
     avatarUrl: avatar.success ? avatar.data : null, roleBadges: [] };
 }
 
-/**
- * Institutional discovery's one eligibility rule narrows what institutions see
- * of people and of other owners' shared projects. Admins keep their reach, and
- * everyone else sees the public talent directory unchanged.
- */
-function discoveryScopes(caps: { isInstitution: boolean; isAdmin: boolean }, userId: string) {
-  const discoverable = discoverableMember("p.userId", { id: userId, isAdmin: caps.isAdmin });
-  const narrowed = caps.isInstitution && !caps.isAdmin;
-  return {
-    people: narrowed ? { clause: ` AND ${discoverable.clause}`, values: discoverable.values } : { clause: "", values: [] as string[] },
-    othersProjects: caps.isInstitution || caps.isAdmin ? discoverable : { clause: "0", values: [] as string[] },
-  };
-}
-
 export interface SearchOptions {
   /** Whether the `channels` flag is on for the caller: off, messages are never read. */
   messages?: boolean;
 }
 
 /**
- * One canonical access lookup per search, before retrieving any content.
+ * Canonical capability lookup for scopes that need channels or cohorts; member-only scopes need no role lookup.
  * No AI/Vectorize binding is accepted: v1 performs literal text search over
  * authorized sources, not the chat tool's global vector query. Limits apply
  * after matching, so a large cohort does not silently lose searchable content.
@@ -57,7 +41,7 @@ export async function searchPlatform(
   if (!userId) throw new SearchScopeError("Authentication required.");
   const query = SearchQuery.parse(input);
   const db = drizzle(d1, { schema });
-  const caps = await capabilitiesFor(db, { id: userId });
+  const caps = await searchCapabilities(db,userId,query,messages);
   if (query.programId && !["all", "cohort", "sessionMoments"].includes(query.scope)) {
     throw new SearchScopeError("This scope does not accept a cohort.");
   }
@@ -70,40 +54,36 @@ export async function searchPlatform(
   // Demo identities may never use their global roles to discover real records.
   const publicScope = demo ? ` AND p.userId IN (SELECT value FROM json_each(?))` : "";
   const publicValues = demo ? [JSON.stringify(DEMO_USER_IDS)] : [];
-  const publicColumns = "p.userId,p.handle,p.publicName,p.publicAvatarUrl";
+  const publicColumns = `p.userId,p.handle,coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId)) AS publicName,p.publicAvatarUrl,${publicProfileEligibility("p")} AS onPublicSite`;
   const includePublic = !query.programId && ["all", "community"].includes(query.scope);
-  const discovery = discoveryScopes(caps, userId);
+
 
   if (includePublic || query.scope === "people") {
     const { results: rows } = await d1.prepare(`SELECT ${publicColumns},substr(coalesce(p.bio,''),1,500) AS bio
-      FROM studentProfile p WHERE ${PUBLIC_PROFILE}${publicScope}${discovery.people.clause}
-      AND (instr(lower(coalesce(p.publicName,'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
+      FROM studentProfile p WHERE ${memberEligibility("p.userId")}${publicScope}
+      AND (instr(lower(coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId),'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
         OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill
           WHERE skill.type='text' AND instr(lower(skill.value),lower(?))>0))
-      ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, ...discovery.people.values, term, term)
+      ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term, term)
       .all<PublicPersonRow & { bio: string }>();
     results.people = rows.map(row => ({ person: person(row), bio: row.bio,
-      href: `/talent/${encodeURIComponent(row.handle)}`, visibility: { kind: "PUBLIC", label: "Public profile" } }));
+      href: memberProfileHref(row), visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 
   if (includePublic || query.scope === "projects") {
-    // Institution-shared journeys are NOT community-public. Even privileged
-    // callers receive no private journeys or unpublished profile identities.
+    // Every signed-in caller gets the same eligible posted work.
     const { results: rows } = await d1.prepare(`
       SELECT ${publicColumns},j.id,j.version,substr(j.title,1,500) AS title,
         substr(j.description,1,500) AS summary
       FROM communityJourney j JOIN studentProfile p ON p.userId=j.userId
-      WHERE ${PUBLIC_PROFILE}${publicScope} AND j.visibility='institution'
-        AND (j.userId=? OR ${discovery.othersProjects.clause})
-        AND NOT EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles role ON role.id=ur.roleId
-          WHERE ur.userId=j.userId AND role.name IN (${DISCOVERY_EXCLUDED_ROLES_SQL}))
+      WHERE ${memberEligibility("p.userId")}${publicScope} AND ${postedWorkEligibility("j")}
         AND instr(lower(j.title || ' ' || j.description),lower(?))>0
-      ORDER BY j.id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, userId, ...discovery.othersProjects.values, term)
+      ORDER BY j.id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term)
       .all<PublicPersonRow & { id: string; version: number; title: string; summary: string }>();
     results.projects = rows.map(row => ({ journeyId: row.id, version: row.version, title: row.title,
       summary: row.summary, owner: person(row),
-      href: row.userId === userId ? "/dashboard/community" : `/dashboard/discover?profile=${encodeURIComponent(row.userId)}`,
-      visibility: { kind: "PRIVATE", label: "Shared with approved institutions" } }));
+      href: memberProfileHref(row),
+      visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 
   if (["all", "cohort", "sessionMoments"].includes(query.scope) && caps.cohortIds.length > 0) {
@@ -130,4 +110,8 @@ export async function searchPlatform(
     results.messages = await searchMessages(d1, db, { userId, capabilities: caps, query, limit: SEARCH_RESULT_LIMIT });
   }
   return SearchResults.parse(results);
+}
+
+async function searchCapabilities(db:schema.Database,userId:string,query:SearchQuery,messages:boolean) {
+  return messages || query.programId || ["all","cohort","sessionMoments"].includes(query.scope) ? capabilitiesFor(db,{id:userId}) : capabilitiesFor(db,null);
 }

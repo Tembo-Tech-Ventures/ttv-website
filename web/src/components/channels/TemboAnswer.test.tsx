@@ -114,7 +114,7 @@ describe("a Tembo answer (U-3.1)", () => {
       .toEqual(["1Source 1: Chama ledger · rev 3", "2Source 2: This thread"]);
     // No live count under an answer: it read as a fact about that answer (QA3-07).
     expect(answer().querySelector(".channel-tembo__foot")?.textContent)
-      .toBe("Sees: this channel, projects shared in it and public builder profiles");
+      .toBe("Sees: this channel, saved member profiles and their posted work");
     expect(answer().querySelector("[data-tembo-feedback]")).toBeNull();
   });
 
@@ -188,7 +188,7 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     expect($("[data-channel-announcer]")?.textContent).toBe("Tembo is looking into it");
     expect($(".channel-composer__scope")?.textContent).toContain("You: 7 of 10 in channels today");
     // A narrow composer says it shorter, but still says what Tembo sees (QA4-08).
-    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, projects shared in it and public builder profiles · 7 of 10 in channels today");
+    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, saved member profiles and their posted work · 7 of 10 in channels today");
 
     expect(client.answerTembo()).toBe(1);
     await poll();
@@ -209,7 +209,7 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     await act(async () => box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
     await settle();
     const waiting = $("[data-thread-rail] [data-tembo-question=pending]")!;
-    expect(waiting.textContent).toContain("Looking through this channel, projects shared in it and public builder profiles. The answer will appear here.");
+    expect(waiting.textContent).toContain("Looking through this channel, saved member profiles and their posted work. The answer will appear here.");
     expect(waiting.querySelector(".channel-meta")?.textContent).toBe("TemboAI");
     // The kit's role badge, as on Tembo's own messages.
     expect(waiting.querySelector("[data-role-badge=AI]")?.textContent).toBe("AI");
@@ -224,7 +224,7 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
   it("says when today's questions are used up, and when they come back", async () => {
     const { client } = await mount({ ...wanjiku, temboUsage: { ...wanjiku.temboUsage, used: 10 } });
     expect($(".channel-composer__scope")?.textContent).toContain("You: 10 of 10 in channels today · No questions left in channels today; more after midnight East Africa Time");
-    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, projects shared in it and public builder profiles · No questions left in channels today");
+    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, saved member profiles and their posted work · No questions left in channels today");
     await send("@tembo one more?");
     expect(client.tembo().asked).toEqual([]);
     const line = $("[data-tembo-question=exhausted]")!;

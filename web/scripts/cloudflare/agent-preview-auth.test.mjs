@@ -317,8 +317,8 @@ describe("seedAgentPreviewFixtures", () => {
     expect(aminaProfile?.[2]).toContain("Kenya");
     expect(aminaProfile?.[1]).toContain("'error'");
     expect(aminaProfile?.[1]).toContain('"moderationReviewRequired" = 1');
-    const aminaCommunity = findInsertByParam("communityProfile", "ttv-fixture-user-amina");
-    expect(aminaCommunity?.[1]).toContain('ON CONFLICT("userId") DO UPDATE');
+    const aminaCommunity = calls.find(call => call[1].startsWith('UPDATE studentProfile') && call[2].includes("ttv-fixture-user-amina"));
+    expect(aminaCommunity?.[1]).toContain('opportunityGoals');
     const readerPost = findByParam("ttv-fixture-post-amina-reader");
     expect(readerPost?.[1]).toContain('INSERT INTO "blogPost"');
     expect(readerPost?.[2]).toContain("building-resilient-interfaces");
@@ -365,7 +365,7 @@ describe("seedAgentPreviewFixtures", () => {
     // Every INSERT must be idempotent; deterministic DELETEs only reset
     // isolated fixture rows before recreating their convergent state.
     for (const call of executeQuery.mock.calls) {
-      if (call[1].trimStart().startsWith("DELETE")) continue;
+      if (/^(DELETE|UPDATE)\b/.test(call[1].trimStart())) continue;
       expect(call[1]).toContain("ON CONFLICT");
     }
   });

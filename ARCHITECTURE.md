@@ -190,6 +190,10 @@ BaseLayout (HTML shell, global CSS, meta tags)
 
 SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/schema.ts`.
 
+### Member profiles and work
+
+`studentProfile` holds the single saved profile; `communityJourney` holds posted work and author-only drafts, including repository snapshots. Shared reads use one eligibility predicate; public listing additionally requires completed-cohort eligibility. See [member visibility and migration constraints](web/src/lib/members/README.md).
+
 ### Core Models
 
 **Authentication (better-auth)**
@@ -238,7 +242,7 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `channel_action` — a short-lived log of edits and reaction changes for their rate limits, pruned by a trigger after an hour
 - `channel_message_version`, `moderation_case`, `moderation_allowlist` — moderation (B-2.5): earlier texts kept as evidence for moderators, the admin queue (one case per message, kept by triggers on `moderation_event`), and what an admin's "fine as is" allowlisted. Detectors flag contact details and spam before the write; Clef flash checks after the response, hides only near-certain abuse and fails open; flagged contact details are masked for everyone but the author, the channel's moderators and admins until a person decides
 - `channel_message_search` + `channel_message_fts` — the FTS5 index over the bodies of messages nobody deleted or hid, kept by triggers (never embeds); `/api/search` reads it for the channels the caller can read (see `web/src/lib/search/README.md`)
-- `tembo_ask`, `tembo_usage`, `tembo_feedback` (flag `tembo_channels`, B-3.1; see `web/src/lib/tembo/README.md`) — one question per asking message (PENDING/ANSWERED/FAILED under a run's claim), accepted questions per person per Africa/Nairobi day, and "helpful"/"not quite" per person and answer. Tembo reads only what the channel allows (a cohort's transcripts, public profiles and projects shared there, or the conversation), never masked contact details, and every sentence it posts cites a source it was given
+- `tembo_ask`, `tembo_usage`, `tembo_feedback` (flag `tembo_channels`, B-3.1; see `web/src/lib/tembo/README.md`) — one question per asking message (PENDING/ANSWERED/FAILED under a run's claim), accepted questions per person per Africa/Nairobi day, and "helpful"/"not quite" per person and answer. Tembo reads only what the channel allows (a cohort's transcripts, eligible saved member profiles and posted work shared there, or the conversation), never masked contact details, and every sentence it posts cites a source it was given
 - Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; DIRECT conversations for their two members only (an admin outside one can't open it, and sees only a single reported or flagged message in the moderation queue); STAFF posting for admins and the cohort's instructors/TAs
 
 **Mentor connections** (flag `mentor_requests`; see `web/src/lib/mentoring/README.md`)

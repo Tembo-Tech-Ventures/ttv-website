@@ -36,7 +36,7 @@ export function editorFromUrl(url: URL, claims: readonly JourneyClaim[]): HomeEd
   const edit = url.searchParams.get(EDIT_PARAM);
   if (edit !== null) {
     const claim = claims.find((item) => item.id === edit);
-    return claim ? { kind: "edit", claim } : null;
+    return claim && claim.kind !== "repo" ? { kind: "edit", claim } : null;
   }
   if (url.searchParams.get(PROFILE_PARAM) === "edit") return { kind: "profile" };
   if (url.searchParams.has(ADD_PARAM)) return { kind: "add" };
@@ -197,14 +197,14 @@ function prepareContribution(form: FormData, claims: readonly JourneyClaim[]): P
     evidenceUrl: values.sourceUrl.trim() || null,
     occurredAt: values.date,
   };
-  if (!claimId) return { render, saved: "added", write: { path: "journey", method: "POST", body: { ...body, visibility: "institution" } } };
+  if (!claimId) return { render, saved: "added", write: { path: "journey", method: "POST", body: { ...body, status: "posted" } } };
   const revision = Number(form.get("revision"));
   const claim = claims.find((item) => item.id === claimId);
   if (!claim || !Number.isSafeInteger(revision) || revision < 1) return { kind: "render", status: 409, render, failure: CHANGED };
   return {
     render,
     saved: "updated",
-    write: { path: `journey/${encodeURIComponent(claimId)}`, method: "PUT", body: { ...body, visibility: claim.visibility, expectedRevision: revision } },
+    write: { path: `journey/${encodeURIComponent(claimId)}`, method: "PUT", body: { ...body, status: claim.status, expectedRevision: revision } },
   };
 }
 

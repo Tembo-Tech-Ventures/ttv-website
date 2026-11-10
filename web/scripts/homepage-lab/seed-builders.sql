@@ -48,7 +48,7 @@ INSERT INTO studentProfile (id, userId, handle, status, headline, country, skill
   ('fixture-profile-7', 'fixture-user-7', 'fixture-akinyi', 'PUBLISHED', 'Product-minded developer building a clinic queue SMS tool', 'Kenya', '["Twilio","Node.js","UX research"]', 1, 1, 1737936000, 'Akinyi Ochieng'),
   ('fixture-profile-8', 'fixture-user-8', 'fixture-baraka', 'PUBLISHED', 'Junior developer learning in public with weekly write-ups', 'Kenya', '["JavaScript","Git","Writing"]', 0, 1, 1737849600, 'Baraka Njoroge');
 
-INSERT INTO profileHighlight (id, profileId, repoFullName, repoUrl, description, language, stars, sortOrder, snapshotAt, blurb) VALUES
+WITH repos(id, profileId, repoFullName, repoUrl, description, language, stars, sortOrder, snapshotAt, blurb) AS (VALUES
   ('fixture-hl-1', 'fixture-profile-1', 'fixture/chama-ledger', 'https://example.invalid/chama-ledger', 'Shared savings ledger for a chama, with M-Pesa statement import.', 'TypeScript', 14, 0, 1738454400, 'Wrote the statement parser and its tests.'),
   ('fixture-hl-2', 'fixture-profile-2', 'fixture/matatu-routes', 'https://example.invalid/matatu-routes', 'Offline route finder for Nairobi matatus.', 'Kotlin', 9, 0, 1738368000, 'Built the offline sync layer.'),
   ('fixture-hl-3', 'fixture-profile-3', 'fixture/form-kit', 'https://example.invalid/form-kit', 'Accessible form components tested with screen readers.', 'TypeScript', 21, 0, 1738281600, 'Designed the error-message pattern.'),
@@ -56,4 +56,7 @@ INSERT INTO profileHighlight (id, profileId, repoFullName, repoUrl, description,
   ('fixture-hl-5', 'fixture-profile-5', 'fixture/duka-stock', 'https://example.invalid/duka-stock', 'Stock tracker for a neighbourhood shop.', 'Astro', 4, 0, 1738108800, 'Shipped it to a real shop counter.'),
   ('fixture-hl-6', 'fixture-profile-6', 'fixture/ratiba', 'https://example.invalid/ratiba', 'Timetable generator for secondary schools.', 'Go', 11, 0, 1738022400, 'Wrote the constraint solver.'),
   ('fixture-hl-7', 'fixture-profile-7', 'fixture/foleni', 'https://example.invalid/foleni', 'SMS queue tickets for a busy clinic.', 'JavaScript', 8, 0, 1737936000, 'Ran the patient interviews.'),
-  ('fixture-hl-8', 'fixture-profile-8', 'fixture/learning-log', 'https://example.invalid/learning-log', 'Weekly notes on what I learned and broke.', 'JavaScript', 3, 0, 1737849600, '52 weeks of posts, no gaps.');
+  ('fixture-hl-8', 'fixture-profile-8', 'fixture/learning-log', 'https://example.invalid/learning-log', 'Weekly notes on what I learned and broke.', 'JavaScript', 3, 0, 1737849600, '52 weeks of posts, no gaps.'))
+INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,kind,repoFullName,repoUrl,repoDescription,language,stars,sortOrder,snapshotAt,blurb)
+SELECT repos.id,p.userId,repos.repoFullName,repos.blurb,repos.repoUrl,date(repos.snapshotAt,'unixepoch'),'institution','repo',repos.repoFullName,repos.repoUrl,repos.description,repos.language,repos.stars,repos.sortOrder,repos.snapshotAt,repos.blurb
+FROM repos JOIN studentProfile p ON p.id=repos.profileId;

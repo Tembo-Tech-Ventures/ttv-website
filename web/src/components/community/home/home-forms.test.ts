@@ -7,9 +7,9 @@ import {
 
 const ORIGIN = "https://ttv.invalid";
 const PAGE = `${ORIGIN}/dashboard/community`;
-const claim = (overrides: Partial<JourneyClaim> = {}): JourneyClaim => ({
+const claim = (overrides: Partial<JourneyClaim> = {}): JourneyClaim => ({ kind:"contribution" as const, repoFullName:null,
   id: "ledger", title: "Chama savings ledger", description: "Built and tested a fictional savings ledger.", date: "2026-10-24",
-  skills: [], evidence: [], version: 3, visibility: "private", confirmations: [], ...overrides,
+  skills: [], evidence: [], version: 3, status: "draft", confirmations: [], ...overrides,
 });
 const CONTRIBUTION = { form: "contribution", title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", date: "2026-10-30", sourceUrl: "" };
 const post = (form: Record<string, string>, origin: string | null = ORIGIN) =>
@@ -88,7 +88,7 @@ describe("a post to Community", () => {
     expect(await handleCommunityHomePost(post(CONTRIBUTION), [], send)).toEqual({ kind: "saved", saved: "added" });
     expect(send).toHaveBeenCalledWith({
       path: "journey", method: "POST",
-      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", visibility: "institution" },
+      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", status: "posted" },
     });
   });
 
@@ -98,7 +98,7 @@ describe("a post to Community", () => {
     expect(result).toEqual({ kind: "saved", saved: "updated" });
     expect(send.mock.calls[0]?.[0]).toEqual({
       path: "journey/ledger", method: "PUT",
-      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: "https://github.com/example/fares", occurredAt: "2026-10-30", visibility: "private", expectedRevision: 3 },
+      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: "https://github.com/example/fares", occurredAt: "2026-10-30", status: "draft", expectedRevision: 3 },
     });
   });
 
@@ -146,4 +146,8 @@ describe("a post to Community", () => {
     const result = await handleCommunityHomePost(post(CONTRIBUTION), [], async () => Response.json({ error: "Read-only synthetic probe." }, { status: 403 }));
     expect(result).toMatchObject({ kind: "render", status: 403, failure: { detail: "Read-only synthetic probe. Everything you wrote is still here." } });
   });
+});
+
+it("does not open the contribution editor for repository work",()=>{
+  expect(editorFromUrl(new URL(`${PAGE}?edit=repo`),[claim({id:"repo",kind:"repo",repoFullName:"member/repo"})])).toBeNull();
 });

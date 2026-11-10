@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ChannelShareables, ErrorEnvelope, Message, MessageList, type EmbedRef, type MessageEmbedView, type SessionClipEmbed,
@@ -28,10 +29,12 @@ function setup(fixture: Parameters<typeof channelDatabase>[0] = cohortMember) {
   /** A project, published unless told otherwise. */
   function journey(id: string, options: { owner?: string; visibility?: "institution" | "private"; version?: number; title?: string;
     description?: string; evidenceUrl?: string | null; updatedAt?: number } = {}) {
-    database.prepare(`INSERT INTO communityJourney (id, userId, title, description, evidenceUrl, occurredAt, visibility, version, updatedAt)
-      VALUES (?, ?, ?, ?, ?, '2026-10-01', ?, ?, ?)`).run(id, options.owner ?? VIEWER, options.title ?? `Project ${id}`,
+    const owner=options.owner ?? VIEWER;
+    database.prepare("INSERT INTO studentProfile(id,handle,userId) VALUES (?,?,?) ON CONFLICT(userId) DO NOTHING").run(owner,owner,owner);
+    database.prepare(`INSERT INTO communityJourney (id, userId, title, description, evidenceUrl, occurredAt, visibility, state, version, updatedAt)
+      VALUES (?, ?, ?, ?, ?, '2026-10-01', 'institution', ?, ?, ?)`).run(id, options.owner ?? VIEWER, options.title ?? `Project ${id}`,
       options.description ?? "Turns M-Pesa receipts into one shared ledger.", options.evidenceUrl === undefined ? `https://example.com/${id}` : options.evidenceUrl,
-      options.visibility ?? "institution", options.version ?? 1, options.updatedAt ?? 1);
+      options.visibility === "private" ? "DRAFT" : "POSTED", options.version ?? 1, options.updatedAt ?? 1);
   }
   const confirm = (journeyId: string, mentorId: string, version: number) => database.prepare(`INSERT INTO communityConfirmation
       (id, journeyId, mentorId, statement, method, journeyVersion) VALUES (?, ?, ?, 'Reviewed the code with them.', 'Code review', ?)`)
@@ -138,8 +141,9 @@ describe("sharing a project", () => {
 
   it("lets an admin's keep allowlist the shared work it was screened with, so the same post is not flagged again", async () => {
     const s = setup({ ...cohortMember, globalRoles: ["ADMIN"] });
-    s.journey("invite", { title: "Study group", description: "", evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
-    const share = () => s.call("postMessage", { id: s.channel("help"), body: { ...post("Have a look"), embeds: [s.project("invite")] } });
+    s.agree("synthetic-otieno");
+    s.journey("invite", { owner:"synthetic-otieno", title: "Study group", description: "", evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
+    const share = () => s.call("postMessage", { id: s.channel("help"), user:"synthetic-otieno", body: { ...post("Have a look"), embeds: [s.project("invite")] } });
     const flagged = sent(await share());
     expect(flagged.moderation?.state).toBe("FLAGGED");
     expect((await s.call("moderateMessage", { id: flagged.id, body: { action: "keep", reason: "The group's own link" } })).status).toBe(200);
@@ -194,13 +198,13 @@ describe("a shared project later", () => {
     s.confirm("ledger", "synthetic-faith", 1);
     const message = sent(await s.share("show-your-work", [s.project("ledger")]));
     // Making a project private is an edit: its revision moves on.
-    s.database.exec("UPDATE communityJourney SET visibility = 'private', version = version + 1 WHERE id = 'ledger'");
+    s.database.exec("UPDATE communityJourney SET state = 'DRAFT', version = version + 1 WHERE id = 'ledger'");
     for (const user of [VIEWER, "synthetic-otieno", "synthetic-faith"]) {
       const response = await s.call("listMessages", { id: s.channel("show-your-work"), user });
       expect(MessageList.parse(response.body).items.find((item) => item.id === message.id)?.embeds, `${user}`).toEqual(unavailable);
       expect(JSON.stringify(response.body), `${user}`).not.toMatch(/Chama ledger|Secret sauce|ledger|Faith Njeri/);
     }
-    s.database.exec("UPDATE communityJourney SET visibility = 'institution', version = version + 1 WHERE id = 'ledger'");
+    s.database.exec("UPDATE communityJourney SET state = 'POSTED', version = version + 1 WHERE id = 'ledger'");
     expect(await s.seen("show-your-work", message.id, "synthetic-otieno")).toMatchObject([{ type: "project", version: 1, title: "Chama ledger" }]);
   });
 
@@ -352,7 +356,7 @@ describe("attaching: limits and retries", () => {
     expect([again.status, Message.parse(again.body).id]).toEqual([200, first.id]);
     expect(await refused(s, s.share("help", [s.project("other")], { nonce: "retry-1" }))).toMatchObject({ status: 409, code: "conflict" });
     expect(await refused(s, s.share("help", [], { nonce: "retry-1" }))).toMatchObject({ status: 409, code: "conflict" });
-    s.database.exec("UPDATE communityJourney SET visibility = 'private', version = 2 WHERE id = 'ledger'");
+    s.database.exec("UPDATE communityJourney SET state = 'DRAFT', version = 2 WHERE id = 'ledger'");
     const late = await s.share("help", [s.project("ledger")], { nonce: "retry-1" });
     expect([late.status, Message.parse(late.body).embeds]).toEqual([200, [{ type: "unavailable", was: "project" }]]);
   });
@@ -477,11 +481,46 @@ describe("embeds: query plans", () => {
       await s.call("listShareables", { id: s.channel("cohort-04") });
     });
     expect(plan).toContain("transcript_segment_recording_time_idx");
-    expect(plan).toContain("communityJourney_userId_visibility_idx");
+    expect(plan).toContain("communityJourney_userId_state_idx");
     expect(plan).toContain("communityConfirmation_journeyId_idx");
     expect(plan).toContain("recording_program_idx");
     expect(plan).not.toMatch(/SCAN (j|r|s|c|cu|recording|transcript_segment|communityJourney|communityConfirmation)\b/);
     // `q` reads only the newest sessions' transcripts: a bounded co-routine, then each one's segments by index.
     expect(plan).toMatch(/CO-ROUTINE recent\nSEARCH recording USING INDEX recording_program_idx[\s\S]*SCAN recent\nSEARCH s USING INDEX transcript_segment_recording_time_idx/);
   });
+});
+it.each(["ADMIN", "MENTOR"] as const)(
+  "still lets %s explicitly share their own posted work",
+  async (role) => {
+    const s = setup({ ...cohortMember, globalRoles: [role] });
+    s.journey("staff-work");
+    expect((await s.share("help", [s.project("staff-work")])).status).toBe(201);
+  },
+);
+it.each([
+  ["moderationOutcome='hold'", "This work is held for a human review."],
+  ["moderatorHidden=1,state='DRAFT'", "A moderator took this work down."],
+] as const)(
+  "explains an embed refusal for %s truthfully",
+  async (update, message) => {
+    const s = setup();
+    s.journey("restricted");
+    s.database.exec(
+      `UPDATE communityJourney SET ${update} WHERE id='restricted'`,
+    );
+    expect(
+      await refused(s, s.share("help", [s.project("restricted")])),
+    ).toMatchObject({ status: 400, message });
+  },
+);
+
+it("keeps migrated work shareable when its owner had no saved profile", async () => {
+  const s = setup();
+  s.journey("legacy-work");
+  s.database.prepare("DELETE FROM studentProfile WHERE userId=?").run(VIEWER);
+  const migration = readFileSync(new URL("../db/migrations/0039_member_profiles_and_work.sql", import.meta.url), "utf8");
+  const backfill = migration.split("--> statement-breakpoint").find(statement => statement.includes("WITH owners AS"));
+  expect(backfill).toBeTruthy();
+  s.database.exec(backfill!);
+  expect((await s.share("help", [s.project("legacy-work")])).status).toBe(201);
 });

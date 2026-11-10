@@ -11,6 +11,7 @@ const COLUMNS: Record<Exclude<StatusDomain, "token" | "studentFeedback">, readon
   feedback: schema.feedback.status.enumValues,
   theme: schema.feedbackTheme.status.enumValues,
   profile: schema.studentProfile.status.enumValues,
+  post: schema.blogPost.status.enumValues,
   project: schema.clientProject.status.enumValues,
   contact: schema.profileContact.status.enumValues,
   recording: schema.recording.processingStatus.enumValues,
@@ -27,8 +28,8 @@ describe("statusTone", () => {
     expect(Object.keys(STATUSES.studentFeedback).toSorted()).toEqual([...states].toSorted());
   });
 
-  it("names a blog post's statuses as a profile's, since they share the column's values", () => {
-    expect(Object.keys(STATUSES.profile).toSorted()).toEqual([...schema.blogPost.status.enumValues].toSorted());
+  it("keeps blog post status vocabulary independent of profiles", () => {
+    expect(Object.keys(STATUSES.post).toSorted()).toEqual([...schema.blogPost.status.enumValues].toSorted());
   });
 
   it("reads APPROVED as “Accepted” in every domain that has it", () => {

@@ -1,5 +1,7 @@
 # Mentoring
 
+See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
+
 ## Shared work waiting for confirmation (F-2, QA1-06)
 
 `awaitingConfirmation({ db, env, locals })` returns how many contributions on
@@ -12,7 +14,7 @@ sidebar badge and the attention panel read that one number.
 `GET /api/community/mentorship` lists, through the same code:
 `createCommunityService(...).countAwaitingConfirmation()` and `listMentorship()`
 share one query (`mentorshipRows`): MENTOR or ADMIN roles from the database,
-contributions shared beyond their author (`visibility='institution'`), never
+contributions shared beyond their author (`state='POSTED'`, unheld and with an eligible saved profile), never
 the mentor's own, the 50 newest, and the demo and staging-fixture scopes. The
 caller is built by the route's own `communityActor(locals)` and passes the
 route's `requireBrowser` gate, so personal access tokens and delegated agent
@@ -74,7 +76,7 @@ so there is nothing for a set-aside to clear there.
 from real existing events with a real recipient, and forbids inventing a
 matching domain. Nothing in the data records "shared with this mentor":
 
-- sharing is a visibility flag on `communityJourney`, addressed to every mentor
+- posting is the POSTED state on `communityJourney`, visible to every signed-in member
   and institution at once, with no recipient and no event row;
 - `communityConfirmation` records what a mentor did, not what was asked of
   them;

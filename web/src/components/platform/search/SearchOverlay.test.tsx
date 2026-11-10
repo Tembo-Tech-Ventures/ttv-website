@@ -116,6 +116,16 @@ async function key(name: string) {
 }
 
 describe("SearchOverlay", () => {
+  it("shows a member without a destination as text and never navigates on Enter or click",async()=>{
+    const {client,state}=backend();
+    state.fail.push({data:{...searchResults,query:{q:"builder",scope:"all"},messages:[],projects:[],sessionMoments:[],people:[{...searchResults.people[0],href:null}]}});
+    await mount(wanjiku,client);await type("builder");await settle(300);
+    expect(options()).toHaveLength(1);
+    expect(options()[0].textContent).toContain("on TTV");
+    await act(async()=>options()[0].click());
+    await key("ArrowDown");await key("Enter");
+    expect(assign).not.toHaveBeenCalled();
+  });
   it("promises only what this person can find, and marks when it is listening", async () => {
     const lucy = { ...meByPersona.lucy, flags: { ...meByPersona.lucy.flags, channels: false } };
     await act(async () => root.render(<SearchOverlay me={lucy} client={backend().client} />));

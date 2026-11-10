@@ -102,6 +102,7 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
 
     {home ? (
       <>
+        {home.moderationHold && <Notice tone="info" title="Your profile is waiting for a human review">Your profile is saved. Only you and admins can see it until a human has reviewed it.</Notice>}
         {editor?.kind === "profile"
           ? (
             <ProfileForm
@@ -121,9 +122,9 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
             </p>
           </div>
           <Notice tone="info" title="Who can discover this?">
-            Approved institutions can discover your saved community profile and the contributions you share. Mentors
-            can review those shared contributions. Private contributions remain visible only to you. Private calls,
-            recordings, and internal information do not belong here.
+            Everyone signed in to TTV can see your saved profile and posted work. If you complete a cohort and
+            publish your profile, it also appears on the public website. Unpublished drafts are only visible to you.
+            Held content is only visible to you and admins while it waits for a human review.
           </Notice>
 
           {editor?.kind === "add" && (

@@ -77,7 +77,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
               </span>
             )}
             <Why entry={entry} query={query} />
-            <span className="search-option__meta">{visibility.label}</span>
+            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
           </span>
         </>
       );
@@ -103,7 +103,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
               )}
             </span>
             <Why entry={entry} query={query} />
-            <span className="search-option__meta">{visibility.label}</span>
+            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
           </span>
         </>
       );
@@ -122,7 +122,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
             <span className="search-option__text">
               “<Marked text={quote} query={query} />”
             </span>
-            <span className="search-option__meta">{visibility.label}</span>
+            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
           </span>
         </>
       );
@@ -139,7 +139,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
             <span className="search-option__text">
               “<MaskedText text={excerpt} asNote={false} render={(words) => <Marked text={words} query={query} />} />”
             </span>
-            <span className="search-option__meta">{visibility.label}</span>
+            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
           </span>
         </>
       );
@@ -218,12 +218,12 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
     .filter(({ entries }) => entries.length > 0);
 
   return (
-    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a combobox's popup: a native select cannot hold rich, grouped results
-    <div id={listboxId} role="listbox" aria-label="Results" hidden={!shown} className="search-results">
+    <div id={listboxId} // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- combobox popup with rich results
+      role="listbox" aria-label="Results" hidden={!shown} className="search-results">
       {shown &&
         groups.map(({ group, entries }) => (
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- an ARIA group of options inside the listbox; fieldset is not allowed there
-          <div key={group} role="group" aria-label={GROUP_LABEL[group]} className="search-group">
+          <div key={group} // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- option group inside a combobox
+            role="group" aria-label={GROUP_LABEL[group]} className="search-group">
             <div aria-hidden="true" className="search-group__label">
               {GROUP_LABEL[group]}
             </div>
@@ -237,11 +237,11 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
                 role="option"
                 aria-selected={state.selected === index}
                 data-search-option={entry.group}
-                onClick={() => onOpen(index)}
+                onClick={() => { if (entry.item.href) onOpen(index); }}
                 className="search-option"
               >
                 <Option entry={entry} query={query} />
-                {state.selected === index && (
+                {state.selected === index && entry.item.href && (
                   <span aria-hidden="true" className="search-option__enter">
                     Enter
                   </span>
@@ -375,7 +375,7 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
     // Choosing with the pointer is choosing that option: select it, then open it.
     store.setState((current) => ({ ...current, selected: index }));
     const chosen = store.select();
-    if (chosen) window.location.assign(chosen.item.href);
+    if (chosen?.item.href) window.location.assign(chosen.item.href);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {

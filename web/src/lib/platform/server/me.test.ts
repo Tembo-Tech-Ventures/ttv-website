@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
@@ -35,6 +36,7 @@ function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql"]) {
     result.database.exec(readMigration(migration));
   }
+  addMemberSchema(result.database);
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   const user: AuthUser | null = result.user ? {
     id: result.user.id, name: "Wanjiku Njeri", image: "https://example.test/avatar.png",
@@ -132,11 +134,13 @@ describe("real /me and Astro context adapters", () => {
     const { database, context } = setup({ globalRoles: ["MENTOR"] });
     const mentorId = context.locals.user!.id;
     database.exec(`INSERT INTO user (id,name,email) VALUES ('synthetic-member','Member','member@example.test')`);
+    database.exec("INSERT INTO studentProfile(id,userId,handle) VALUES ('member-profile','synthetic-member','synthetic-member')");
     const journey = database.prepare("INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Work','Fictional work','2026-10-01',?)");
     journey.run("shared", "synthetic-member", "institution");
     journey.run("shared-confirmed", "synthetic-member", "institution");
     journey.run("private", "synthetic-member", "private");
     journey.run("own", mentorId, "institution");
+    database.exec("UPDATE communityJourney SET state='DRAFT' WHERE id='private'");
     database.prepare("INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('c','shared-confirmed',?,'I checked it','Review',1)").run(mentorId);
     expect(Me.parse((await request(context)).body).mentoring).toEqual({ awaitingConfirmation: 1 });
 
@@ -265,8 +269,8 @@ describe("real /me and Astro context adapters", () => {
   it.each([
     { name: "", image: null, expectedName: "Member", expectedAvatar: null },
     { name: " \t ", image: "", expectedName: "Member", expectedAvatar: null },
-    // oxlint-disable-next-line no-script-url -- regression fixture: this stored URL must be rejected
-    { name: " Wanjiku Njeri ", image: "javascript:alert(1)", expectedName: "Wanjiku Njeri", expectedAvatar: null },
+    { name: " Wanjiku Njeri ", // oxlint-disable-next-line no-script-url -- adversarial URL fixture must be refused
+      image: "javascript:alert(1)", expectedName: "Wanjiku Njeri", expectedAvatar: null },
     { name: "Wanjiku Njeri", image: "data:image/svg+xml,unsafe", expectedName: "Wanjiku Njeri", expectedAvatar: null },
     { name: "Wanjiku Njeri", image: "//example.test/avatar", expectedName: "Wanjiku Njeri", expectedAvatar: null },
     { name: "Wanjiku Njeri", image: "/images/avatar.png", expectedName: "Wanjiku Njeri", expectedAvatar: "/images/avatar.png" },

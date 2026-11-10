@@ -1,0 +1,54 @@
+---
+import { formatDistanceToNow } from "date-fns";
+import { parseTopicsJson } from "@/lib/talent/profile";
+import type { communityJourney } from "@/lib/db/schema";
+interface Props { work: typeof communityJourney.$inferSelect & {confirmations: {journeyVersion:number; statement:string; method:string; mentor:{name:string}}[]} }
+const {work:h}=Astro.props;
+const topics=parseTopicsJson(h.topics);
+---
+                <div class="rounded-lg border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] p-5">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    {h.evidenceUrl ? <a
+                      href={h.evidenceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      class="font-body text-base font-semibold text-ink-primary transition-colors hover:text-primary"
+                    >
+                      {h.title}
+                    </a> : <span class="font-body text-base font-semibold text-ink-primary">{h.title}</span>}
+                    <div class="flex items-center gap-3 font-body text-xs text-ink-muted">
+                      {h.language && <span>{h.language}</span>}
+                      {h.stars > 0 && <span>&starf; {h.stars}</span>}
+                    </div>
+                  </div>
+
+                  {(h.kind === "repo" ? h.repoDescription : h.description) && (
+                    <p class="mt-2 font-body text-sm text-ink-secondary">
+                      {h.kind === "repo" ? h.repoDescription : h.description}
+                    </p>
+                  )}
+
+                  {h.blurb && (
+                    <blockquote class="mt-3 border-l-2 border-primary/40 pl-4 font-body text-sm italic text-ink-secondary/90">
+                      {h.blurb}
+                    </blockquote>
+                  )}
+
+                  {h.confirmations.filter(c=>c.journeyVersion===h.version).map(c=>(
+                    <blockquote class="mt-3 rounded-lg bg-success-ink/10 p-4 font-body text-sm" data-confirmation="current">
+                      <p>{c.statement}</p><footer>Confirmed by {c.mentor.name} · {c.method}</footer>
+                    </blockquote>
+                  ))}
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                    {topics.map((topic) => (
+                      <span class="inline-flex rounded-full border border-[color:var(--color-rule)] px-2 py-0.5 font-body text-xs text-ink-muted">
+                        {topic}
+                      </span>
+                    ))}
+                    {h.pushedAt && (
+                      <span class="font-body text-xs text-ink-muted">
+                        updated {formatDistanceToNow(h.pushedAt, { addSuffix: false })} ago
+                      </span>
+                    )}
+                  </div>
+                </div>

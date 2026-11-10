@@ -36,7 +36,7 @@ export function confirmationCitation(c: CommunityConfirmation, userId: string): 
 /** Literal coverage of supplied criteria, never an inference of ability or truth. */
 export function assessEvidence(profile: CommunityProfile, journeys: CommunityJourney[], input: unknown) {
   const rubric = parseInput(rubricInput, input);
-  const sources = journeys.filter((j) => j.userId === profile.userId && j.visibility === "institution");
+  const sources = journeys.filter((j) => j.userId === profile.userId && j.status === "posted" && !j.moderationHold);
   return {
     method: "deterministic-literal-evidence-coverage-v1" as const,
     disclaimer: "Literal evidence matching, not verification, an ability rating, or a hiring recommendation.",

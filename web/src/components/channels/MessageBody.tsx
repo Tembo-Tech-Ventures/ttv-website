@@ -76,6 +76,11 @@ function Cited({ text, citations }: { text: string; citations: readonly Citation
     if (!citation) continue;
     // The space before a sentence's first marker doesn't break, so a marker never wraps alone onto a line.
     if (match.index > last) pieces.push(text.slice(last, match.index).replace(/ $/u, "\u00A0"));
+    if (!citation.href) {
+      pieces.push(<span key={match.index} data-cite={n} aria-label={`Source ${n}: ${citation.title} · on TTV`}><sup>{n}</sup></span>);
+      last=match.index+match[0].length;
+      continue;
+    }
     pieces.push(
       <a key={match.index} href={citation.href} className={cx("channel-cite-ref", FOCUS_RING)} data-cite={n} aria-label={`Source ${n}: ${citation.title}`}>
         <sup aria-hidden="true">{n}</sup>

@@ -318,8 +318,8 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await settled(page);
     const scope = main(page).getByRole("region", { name: "What approval opens" });
     await expect(scope.getByRole("listitem")).toHaveText([
-      "Discover: search saved community profiles.",
-      "The contributions members share with institutions, with their sources and any mentor confirmations.",
+      "Discover: AI tools to explore saved profiles and posted work.",
+      "The same profiles and posted work every signed-in member sees, with sources and mentor confirmations.",
       "Not private cohort recordings, transcripts or internal records.",
       "Not introductions or interviews. Those stay your own next step.",
     ]);

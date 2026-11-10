@@ -7,8 +7,8 @@ import CommunityLanding from "./CommunityLanding";
   it.each([false, true])("offers all three persona routes and correct entry paths (authenticated=%s)", isAuthenticated => {
     const html = renderToStaticMarkup(<CommunityLanding isAuthenticated={isAuthenticated} />);
     expect(html.match(/<h1 /g)).toHaveLength(1);
-    expect(html).toContain("Approved institutions can discover your saved community profile and the contributions you share.");
-    expect(html).toContain("Approved institutions can discover saved community profiles and the contributions members share.");
+    expect(html).toContain("Everyone signed in to TTV can see your profile and everything you post.");
+    expect(html).toContain("Everyone signed in to TTV can see saved profiles and posted work.");
     expect(html).not.toContain("can explore documented work");
     for (const persona of ["members", "mentors", "institutions"]) expect(html).toContain(`href="/community/${persona}"`);
     for (const destination of ["/dashboard/community", "/dashboard/discover"]) {

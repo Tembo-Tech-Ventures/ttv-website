@@ -286,8 +286,8 @@ describe("wire invariants", () => {
     ["duplicate space", C.Me, { ...F.meByPersona.lucy, spaces: ["community", "community", "profile"] }],
     ["mentoring summary without the Mentoring space", C.Me, { ...F.meByPersona.wanjiku, mentoring: { awaitingConfirmation: 1 } }],
     ["negative waiting confirmations", C.Me, { ...F.meByPersona.david, mentoring: { awaitingConfirmation: -1 } }],
-    // oxlint-disable-next-line no-script-url -- Adversarial input must be rejected by the link contract.
-    ["unsafe embed link", C.ProjectEmbed, { ...F.projects.chamaLedger, link: "javascript:alert(1)" }],
+    ["unsafe embed link", C.ProjectEmbed, // oxlint-disable-next-line no-script-url -- adversarial URL fixture must be refused
+      { ...F.projects.chamaLedger, link: "javascript:alert(1)" }],
     ["protocol-relative link", C.InternalPath, "//example.com"],
     ["backslash link", C.InternalPath, "/\\example.com"],
     ["unknown error code", C.ErrorEnvelope, { error: { code: "oops", message: "Failed" } }],
@@ -313,6 +313,7 @@ describe("Tembo contracts (B-3.1)", () => {
   it("cites a public builder profile by an internal link, and reports when the allowance resets", () => {
     const profile = { type: "profile", userId: "synthetic-achieng", title: "Achieng Atieno · builder profile", href: "/talent/achieng" } as const;
     expect(C.Citation.parse(profile)).toEqual(profile);
+    expect(C.Citation.parse({...profile,href:null}).href).toBeNull();
     expect(C.TemboUsage.parse({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) })).toEqual({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) });
   });
 });
@@ -451,8 +452,8 @@ describe("onboarding contracts", () => {
     ["blank organisation", C.CreateAccessRequest, { ...createInstitutionAccess, organisation: "  " }],
     ["unacknowledged scope", C.CreateAccessRequest, { ...createInstitutionAccess, scopeAcknowledged: false }],
     ["missing scope acknowledgement", C.CreateAccessRequest, { ...createInstitutionAccess, scopeAcknowledged: undefined }],
-    // oxlint-disable-next-line no-script-url -- Adversarial input must be rejected by the link contract.
-    ["script link", C.CreateAccessRequest, { ...createMentorAccess, link: "javascript:alert(1)" }],
+    ["script link", C.CreateAccessRequest, // oxlint-disable-next-line no-script-url -- adversarial URL fixture must be refused
+      { ...createMentorAccess, link: "javascript:alert(1)" }],
     ["internal path as link", C.CreateAccessRequest, { ...createMentorAccess, link: "/admin/access-requests" }],
     ["link with a disguising user name", C.ExternalLink, "https://tembotechventures.com@other.example/portfolio"],
     ["link with credentials", C.ExternalLink, "https://user:secret@example.com/"],

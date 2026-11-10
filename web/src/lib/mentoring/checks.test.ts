@@ -84,7 +84,7 @@ describe("Clef on a new request's note", () => {
     expect([mine?.status, mine?.check]).toEqual(["PENDING", "waiting"]);
     // Mercy's one spot is free: another member may ask her.
     expect((await capacityOf(s, PEOPLE.mercy))?.used).toBe(0);
-    s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(PEOPLE.amani);
+    s.database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(PEOPLE.amani,PEOPLE.amani,PEOPLE.amani);
     await ask(s, {}, { mentorId: PEOPLE.mercy, user: PEOPLE.amani });
     expect((await capacityOf(s, PEOPLE.mercy))?.used).toBe(1);
     // Attention: the mentor hears only of the request that was not held; admins hear of the hold.
@@ -227,7 +227,7 @@ describe("who decides", () => {
   it("never one of the request's two parties, even an admin", async () => {
     const s = setup();
     // Amina, an admin with a member profile, asks David, and Clef holds her request.
-    s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(PEOPLE.amina);
+    s.database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(PEOPLE.amina,PEOPLE.amina,PEOPLE.amina);
     s.database.prepare("INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,1,1) ON CONFLICT DO NOTHING").run(PEOPLE.amina);
     const own = await ask(s, ABUSE, { user: PEOPLE.amina });
     const refused = await decide(s, own, "keep");
@@ -362,7 +362,7 @@ describe("the admins' queue", () => {
       const user = `synthetic-member-${String(i).padStart(2, "0")}`;
       s.database.prepare('INSERT INTO "user"(id,name,email) VALUES (?,?,?)').run(user, `Member ${i}`, `${user}@example.test`);
       s.database.prepare("INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,1,1)").run(user);
-      s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(user);
+      s.database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(user,user,user);
       s.database.prepare("UPDATE mentor_profile SET monthlyCapacity = 20 WHERE userId = ?").run(PEOPLE.joseph);
       await s.call("createMentorRequest", { user, now: () => 1_000 + i, env: clef(ABUSE).env,
         body: { mentorId: PEOPLE.joseph, note: `Note ${i}`, project: null, format: "CALL_30_MIN" } });
@@ -495,7 +495,7 @@ describe("finding and deciding checks (QA4-04, QA4-10)", () => {
     const withdrawn = await ask(s, ABUSE, { mentorId: PEOPLE.mercy });
     await step(s, s.call("withdrawMentorRequest", { id: withdrawn, body: {} }));
     // Amina's own request, held: another admin decides it, and her queue and count leave it out.
-    s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(PEOPLE.amina);
+    s.database.prepare("INSERT INTO studentProfile(id,handle,userId, headline) VALUES (?,?,?, 'Builder')").run(PEOPLE.amina,PEOPLE.amina,PEOPLE.amina);
     s.database.prepare("INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,1,1) ON CONFLICT DO NOTHING").run(PEOPLE.amina);
     const own = await ask(s, ABUSE, { user: PEOPLE.amina });
     expect([await countOpenChecks(s.d1, PEOPLE.amina), (await queue(s)).items.length]).toEqual([1, 1]);

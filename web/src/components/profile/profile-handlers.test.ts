@@ -19,7 +19,7 @@ const publishedProfile = {
   linkedinUrl: null,
   publicName: "Old Name",
   publicAvatarUrl: "/api/avatar/avatars/user-1/old.webp",
-  highlights: [],
+  work: [],
   user: {
     name: "Old Name",
     image: "/api/avatar/avatars/user-1/old.webp",
@@ -136,13 +136,7 @@ describe("saveProfileIdentity", () => {
         "Remove claims that you represent TTV or another organisation unless that role is accurate.",
       ],
     });
-    expect(setProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        moderationOutcome: "hold",
-        moderationReviewRequired: true,
-      }),
-    );
-    expect(setProfile.mock.calls[0][0]).not.toHaveProperty("publicAvatarUrl");
+    expect(setProfile).not.toHaveBeenCalled();
     expect(setUser).not.toHaveBeenCalled();
   });
 
@@ -163,7 +157,7 @@ describe("saveProfileIdentity", () => {
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         publicName: "New Name",
-        moderationOutcome: "error",
+        moderationOutcome: expect.any(Object),
         moderationReviewRequired: true,
       }),
     );
@@ -190,7 +184,7 @@ describe("saveProfileIdentity", () => {
 
   it("lets only one checked identity update win a deterministic interleaving", async () => {
     let persistedVersion = publishedProfile.contentVersion;
-    let persistedName = publishedProfile.user.name;
+    let persistedAvatar = publishedProfile.user.image;
     let releaseFirstCheck!: () => void;
     let markFirstCheckStarted!: () => void;
     const firstCheckStarted = new Promise<void>((resolve) => {
@@ -223,7 +217,7 @@ describe("saveProfileIdentity", () => {
         const wins = persistedVersion === publishedProfile.contentVersion;
         if (wins) {
           const userWrite = writes.find((write) => write.table === schema.user);
-          persistedName = String(userWrite?.values.name);
+          persistedAvatar = String(userWrite?.values.image);
           persistedVersion += 1;
         }
         return writes.map(() => ({ meta: { changes: wins ? 1 : 0 } }));
@@ -234,7 +228,7 @@ describe("saveProfileIdentity", () => {
     const delayed = saveProfileIdentity(
       db as never,
       "user-1",
-      { name: "Delayed Name" },
+      { avatarUrl: "/api/avatar/avatars/user-1/delayed.webp" },
       async () => {
         markFirstCheckStarted();
         await firstCheckCanFinish;
@@ -245,7 +239,7 @@ describe("saveProfileIdentity", () => {
     const winner = await saveProfileIdentity(
       db as never,
       "user-1",
-      { name: "Winning Name" },
+      { avatarUrl: "/api/avatar/avatars/user-1/winning.webp" },
       () => Promise.resolve(pass),
     );
     releaseFirstCheck();
@@ -258,7 +252,7 @@ describe("saveProfileIdentity", () => {
         "This profile changed while your request was running. Reload and try again.",
     });
     expect(persistedVersion).toBe(5);
-    expect(persistedName).toBe("Winning Name");
+    expect(persistedAvatar).toBe("/api/avatar/avatars/user-1/winning.webp");
   });
 
   it("queues the checked identity and version change in one atomic batch", async () => {
@@ -293,12 +287,15 @@ describe("saveProfileIdentity", () => {
     expect(batch).toHaveBeenCalledOnce();
   });
 
-  it("clears a held draft decision when private identity changes", async () => {
+  it("saves a member-visible draft name before checking and holds the saved revision", async () => {
     const { db, setProfile, setUser, profileWhere } = mockDb({
       ...publishedProfile,
       status: "DRAFT",
     });
-    const check = vi.fn();
+    const check = vi.fn(async () => {
+      expect(setUser).toHaveBeenCalledWith({name:"Draft Name"});
+      return {outcome:"hold" as const,flags:[],scores:{}};
+    });
 
     const result = await saveProfileIdentity(
       db as never,
@@ -307,17 +304,17 @@ describe("saveProfileIdentity", () => {
       check,
     );
 
-    expect(result).toEqual({ success: true });
-    expect(check).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: true,moderationOutcome:"hold" });
+    expect(check).toHaveBeenCalledOnce();
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
-        publicName: null,
-        publicAvatarUrl: null,
-        moderationOutcome: null,
-        moderationReviewRequired: false,
+        publicName: "Draft Name",
+        moderationOutcome: expect.any(Object),
+        moderationReviewRequired: true,
       }),
     );
     expect(setUser).toHaveBeenCalledWith({ name: "Draft Name" });
     expectVersionedStatusGuard(profileWhere, "DRAFT");
+    expect(setProfile).toHaveBeenLastCalledWith(expect.objectContaining({moderationOutcome:"hold",moderationReviewRequired:true}));
   });
 });

@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCommunityService } from "@/lib/community/service";
@@ -18,8 +19,9 @@ function database() {
   sql.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT NOT NULL, image TEXT);
     CREATE TABLE Roles (id TEXT PRIMARY KEY, name TEXT UNIQUE, createdAt INTEGER DEFAULT (unixepoch()), updatedAt INTEGER DEFAULT (unixepoch()));
     CREATE TABLE UserRoles (id TEXT PRIMARY KEY, userId TEXT, roleId TEXT, UNIQUE(userId, roleId));
-    INSERT INTO user VALUES ('wanjiru', 'Wanjiru Kamau', null), ('otieno', 'Otieno Ouma', null), ('akinyi', 'Akinyi Njeri', null);`);
+    INSERT INTO user VALUES ('wanjiru', 'Wanjiru Kamau', '/api/avatar/avatars/wanjiru/checked.webp'), ('otieno', 'Otieno Ouma', null), ('akinyi', 'Akinyi Njeri', null);`);
   for (const name of ["0017_community_discovery.sql", "0018_confirmation_role_snapshot.sql", "0021_feature_flags.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql"]) sql.exec(readMigration(name));
+  addMemberSchema(sql);
   for (const [user, role] of [["otieno", "MENTOR"], ["akinyi", "INSTITUTION"]]) sql.prepare("INSERT INTO UserRoles VALUES (?, ?, (SELECT id FROM Roles WHERE name = ?))").run(user, user, role);
   return { sql, db: createSqliteD1(sql).db };
 }
@@ -50,9 +52,9 @@ beforeEach(async () => {
   const fixture = database();
   sql = fixture.sql;
   runtime.env.DB = fixture.db;
-  const member = createCommunityService(fixture.db, "wanjiru");
+  const member = createCommunityService(fixture.db, "wanjiru", undefined, undefined, undefined, {} as Env);
   await member.updateOwnProfile({ headline: "Builder", bio: "Builds M-Pesa reconciliation tools", skills: ["TypeScript"], opportunityGoals: "First developer role" });
-  await member.createJourney({ title: "Chama savings ledger", description: "Built and tested a fictional ledger", evidenceUrl: "https://github.com/example/ledger", occurredAt: "2026-10-24", visibility: "institution" });
+  await member.createJourney({ title: "Chama savings ledger", description: "Built and tested a fictional ledger", evidenceUrl: "https://github.com/example/ledger", occurredAt: "2026-10-24", status: "posted" });
 });
 afterEach(() => {
   sql.close();
@@ -72,7 +74,7 @@ describe("the Community page's own data", () => {
   it("carries the member's own profile, photo and journey", async () => {
     sql.exec("UPDATE user SET image = 'https://avatars.example.test/wanjiru.png' WHERE id = 'wanjiru'");
     const home = await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env);
-    expect(home).toMatchObject({ id: "wanjiru", name: "Wanjiru Kamau", image: "https://avatars.example.test/wanjiru.png", headline: "Builder", evidenceLoaded: true });
+    expect(home).toMatchObject({ id: "wanjiru", name: "Wanjiru Kamau", image: "/api/avatar/avatars/wanjiru/checked.webp", headline: "Builder", evidenceLoaded: true });
     expect(home?.claims.map((claim) => claim.title)).toEqual(["Chama savings ledger"]);
   });
 
@@ -108,7 +110,7 @@ describe("a Community form's save", () => {
   it("goes through the API's own handler as the browser's same-origin call", async () => {
     const response = await sendCommunityWrite(post({ Origin: ORIGIN, Cookie: "session=1" }), locals("wanjiru"), runtime.env, {
       path: "journey", method: "POST",
-      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", visibility: "institution" },
+      body: { title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", evidenceUrl: null, occurredAt: "2026-10-30", status: "posted" },
     });
     expect(response.status).toBe(201);
     const home = await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env);

@@ -25,7 +25,7 @@ const ordered=items=>items.map(item=>Object.fromEntries(Object.entries(item).toS
 export async function qaSeedDigest(target){
  const data=buildDemoDataset(),snapshot={};
  for(const[table,records]of Object.entries(data)){
-  const key=table==='communityProfile'?'userId':'id';
+  const key=table==='studentProfile'?'userId':'id';
   const found=await query(target,`SELECT * FROM "${table}" WHERE "${key}" IN (SELECT value FROM json_each(?))`,[JSON.stringify(records.map(r=>r[key]))]);
   ensure(found.length===records.length);snapshot[table]=ordered(found);
  }

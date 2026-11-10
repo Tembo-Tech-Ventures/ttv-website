@@ -211,7 +211,7 @@ describe("asking a mentor for time", () => {
   it("re-checks attached work on every read: unavailable once it is made private", async () => {
     const s = setup();
     const id = await s.ask(PEOPLE.david, { project: s.project("ledger") });
-    s.database.exec("UPDATE communityJourney SET visibility = 'private', version = 2 WHERE id = 'ledger'");
+    s.database.exec("UPDATE communityJourney SET state = 'DRAFT', version = 2 WHERE id = 'ledger'");
     for (const user of [VIEWER, PEOPLE.david]) {
       expect(request((await s.call("getMentorRequest", { id, user })).body).project).toEqual({ type: "unavailable", was: "project" });
     }

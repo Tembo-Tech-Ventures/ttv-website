@@ -71,7 +71,7 @@ export async function runDemoDiagnostic(env, { validate = validateStagingRevisio
     records.UserRoles = [records.user[0], records.user[1], ...records.programApplication.map(application => ({ id: application.userId }))].map(user => ({id: `${user.id}-role`}));
     const ownedCounts = {};
     for (const [table, list] of Object.entries(records)) {
-      const key = table === "communityProfile" ? "userId" : "id";
+      const key = table === "studentProfile" ? "userId" : "id";
       let total = 0;
       for (let start = 0; start < list.length; start += 40) {
         const ids = list.slice(start, start + 40).map(record => record[key]);

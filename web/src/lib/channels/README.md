@@ -1,5 +1,7 @@
 # Channels
 
+See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
+
 Human chat channels for cohorts and the community. Shipped dark behind the
 `channels` flag, which stays OFF until the coordinator switches it. Plan: SAM
 idea 01M68GQAP1DCSVMRJMZS771ZRB, §3; wire contracts in
@@ -577,12 +579,11 @@ v1.
 
 | Work | Shared when | Refused |
 |---|---|---|
-| Project (`journeyId` + `version`) | It is the poster's own published project (`communityJourney.visibility = 'institution'`) at its current revision | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one |
+| Project (`journeyId` + `version`) | It is the poster's own posted project (`communityJourney.state = 'POSTED'`, with no moderation hold) at its current revision | Missing or someone else's: 400 “This project can't be shared here.” Other 400 refusals: “A moderator took this work down.”; “This work is held for a human review.”; “This project is a private draft. Publish it before you share it.”; “This work cannot be shared while its profile is unavailable.” Another revision: 409 `conflict` “This project has changed since you picked it. Pick it again to share the latest revision.” |
 | Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording is that program's, complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
 
 - **Whose consent.** A project's owner sharing it is the consent for that
-  channel's readers, so nobody shares another person's work (`institution`
-  visibility alone is not community-public; see `src/lib/search/README.md`).
+  channel's readers, so nobody shares another person's work (see the shared member visibility rules linked above).
   A clip goes only where every reader can see the recording: every reader of
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
   admins) has that cohort's recordings.

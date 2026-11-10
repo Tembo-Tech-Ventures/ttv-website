@@ -1,4 +1,6 @@
 ---
+import { parseTopicsJson } from "@/lib/talent/profile";
+import { reviewWork, listWorkReviews } from "@/lib/members/moderation";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import AdminLayout from "@/layouts/AdminLayout.astro";
@@ -46,11 +48,23 @@ import { parseAdminProfileAction, parseAdminProfileVersion } from "@/lib/talent/
  */
 const db = drizzle(env.DB, { schema });
 // Forms post back to this address, filter and page included, never with a #fragment.
-const here = `${Astro.url.pathname}${Astro.url.search}`;
+let here = `${Astro.url.pathname}${Astro.url.search}`;
 let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
+  if (formData.get("form") === "work") {
+    const decision = formData.get("decision");
+    const id = formData.get("workId");
+    const revision = Number(formData.get("revision"));
+    if (typeof id === "string" && (decision === "keep" || decision === "hide")) {
+      const saved = await reviewWork(env.DB, Astro.locals.user!.id, id, revision, decision);
+      const profileId = formData.get("returnProfileId");
+      if (typeof profileId === "string" && profileId) here = `/admin/profiles/${encodeURIComponent(profileId)}`;
+      return redirectWithFlash(Astro, here, { tone: saved ? "success" : "info", title: saved ? "Work review saved" : "This work changed; review the current revision" });
+    }
+    return new Response("Invalid work review", { status: 400 });
+  }
   const profileId = formData.get("profileId");
   const action = parseAdminProfileAction(formData.get("_action"));
   const expectedVersion = parseAdminProfileVersion(formData.get("contentVersion"));
@@ -73,12 +87,16 @@ if (Astro.request.method === "POST") {
 
 const statusFilter = parseProfileStatus(Astro.url.searchParams.get("status"));
 const page = parsePage(Astro.url.searchParams.get("page"));
+const hiddenPage = parsePage(Astro.url.searchParams.get("hiddenPage"));
 const flash = takeFlash(Astro);
-const [{ rows, total, review }, spaces] = await Promise.all([
+const [workRows, { rows, total, review }, spaces] = await Promise.all([
+  listWorkReviews(env.DB, "all", hiddenPage),
   readProfilesPage(db, { status: statusFilter, page }),
   resolveSpacePage(Astro.locals, "adminProfiles"),
 ]);
 
+const workReview = workRows.filter(w => !w.moderatorHidden);
+const hiddenWork = workRows.filter(w => w.moderatorHidden);
 const lastPage = lastPageOf(total);
 const statusLabel = (status: ProfileStatus) => statusTone("profile", status).label;
 const filterName = statusFilter ? statusLabel(statusFilter).toLowerCase() : null;
@@ -94,15 +112,15 @@ const reviewSections = [
   {
     id: "held",
     title: "Held by the content check",
-    description: "Not public, unless an earlier version was already live. Publish it, hide it, or clear the flag to leave it as it is.",
+    description: "Hidden from other readers. Clear the flag to release it for signed-in members, or hide it. Public listing still requires a completed cohort.",
     empty: "Nothing is held by the content check.",
     profiles: review.held,
   },
   {
     id: "unavailable",
-    title: "Published while the check was unavailable",
-    description: "These went live without a check. Read each one, then clear the flag or unpublish it.",
-    empty: "Nothing published without a check.",
+    title: "Profiles awaiting a completed check",
+    description: "These saved profiles need review. Read each one, then clear the flag or hide it.",
+    empty: "No profiles are awaiting a check.",
     profiles: review.unavailable,
   },
 ];
@@ -116,6 +134,34 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
 
     {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
+
+    {[
+      { title: "Work awaiting a human review", items: workReview },
+      { title: "Work hidden by a moderator", items: hiddenWork },
+    ].map(section => <Card as="section" aria-label={section.title} className="flex flex-col gap-4">
+      <h2 class="text-lg">{section.title}</h2>
+      {section.items.map(work => <article>
+        <h3 class="text-base">{work.title}</h3>
+        <p>By {work.authorName}</p>
+        <p>{work.description}</p>
+        {work.blurb && work.blurb !== work.description && <p>{work.blurb}</p>}
+        {work.topics && <p>Topics: {parseTopicsJson(work.topics).join(", ")}</p>}
+        <p>{work.moderatorHidden ? "A moderator took this down." : work.moderationOutcome === "hold" ? "Hidden from other readers until reviewed." : "Posted work awaiting a completed content check."}</p>
+        <form method="POST" action={here} class="flex flex-wrap gap-2">
+          <input type="hidden" name="form" value="work" />
+          <input type="hidden" name="workId" value={work.id} />
+          <input type="hidden" name="revision" value={String(work.version)} />
+          <Button type="submit" name="decision" value="keep">Keep posted</Button>
+          <Button type="submit" name="decision" value="hide" variant="quiet">Take down</Button>
+        </form>
+      </article>)}
+      {section.items.length === 0 && <p>No work in this list.</p>}
+    </Card>)}
+
+    {(hiddenPage > 1 || hiddenWork.length === 50) && <nav aria-label="Hidden work pages" class="flex gap-4">
+      {hiddenPage > 1 && <a href={`?hiddenPage=${hiddenPage - 1}`} class={linkClass()}>Newer hidden work</a>}
+      {hiddenWork.length === 50 && <a href={`?hiddenPage=${hiddenPage + 1}`} class={linkClass()}>Older hidden work</a>}
+    </nav>}
 
     {
       reviewSections.map((section) => (

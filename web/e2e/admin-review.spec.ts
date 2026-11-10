@@ -41,7 +41,7 @@ test.describe("admin review surfaces", () => {
     }
 
     const unavailable = page.getByRole("region", {
-      name: "Published while the check was unavailable",
+      name: "Profiles awaiting a completed check",
     });
     await expect(unavailable.getByRole("link", { name: "Amina Fixture" })).toBeVisible();
     await expect(

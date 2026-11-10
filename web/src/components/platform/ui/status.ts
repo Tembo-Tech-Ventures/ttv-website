@@ -54,8 +54,14 @@ export const STATUSES = {
     DONE: { label: "Done", tone: "success" },
     NOT_PLANNED: { label: "Not planned", tone: "neutral" },
   },
-  /** studentProfile.status, and a blog post's. */
+  /** studentProfile.status. */
   profile: {
+    DRAFT: { label: "Not on public website", tone: "neutral" },
+    PUBLISHED: { label: "Published", tone: "success" },
+    SUSPENDED: { label: "Suspended", tone: "danger" },
+  },
+  /** blogPost.status */
+  post: {
     DRAFT: { label: "Draft", tone: "neutral" },
     PUBLISHED: { label: "Published", tone: "success" },
     SUSPENDED: { label: "Suspended", tone: "danger" },

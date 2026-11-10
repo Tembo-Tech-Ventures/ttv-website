@@ -28,13 +28,13 @@ async function fixture() {
 }
 function contribute(db, personas) {
   const { member, mentor } = personas;
-  for (const persona of [member, mentor]) db.prepare("INSERT INTO communityProfile(userId,headline,skills) VALUES (?,?,?)").run(persona.userId, "Synthetic builder", '["TypeScript"]');
+  for (const persona of [member, mentor]) db.prepare("INSERT INTO studentProfile(id,handle,userId,headline,skills) VALUES (?,?,?,?,?)").run(persona.userId, persona.userId, persona.userId, "Synthetic builder", '["TypeScript"]');
   const journeyId = `${member.userId}-journey`;
   db.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,?,?,?,?)").run(journeyId, member.userId, "Synthetic project", "Synthetic evidence", "2026-10-24", "institution");
   db.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,?,?,?,?)").run(`${member.userId}-draft`, member.userId, "Synthetic draft", "Unpublished synthetic evidence", "2026-10-24", "private");
   db.prepare("INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES (?,?,?,?,?,1,'MENTOR')").run(`${journeyId}-confirmation`, journeyId, mentor.userId, "I reviewed the synthetic artifact", "Local fixture review");
 }
-const communityTables = ["communityProfile", "communityJourney", "communityConfirmation"];
+const communityTables = ["studentProfile", "communityJourney", "communityConfirmation"];
 const snapshot = db => Object.fromEntries(communityTables.map(table => [table, db.prepare(`SELECT * FROM "${table}" ORDER BY rowid`).all()]));
 
 describe("real persona cleanup cascades community evidence", () => {
@@ -76,7 +76,7 @@ describe("real persona cleanup cascades community evidence", () => {
         db.prepare("DELETE FROM user WHERE id=?").run(personas.mentor.userId);
         expect(db.prepare("SELECT * FROM communityConfirmation").all()).toEqual([]);
         // The other member is provisioned with a saved profile, so institutions can discover them.
-        expect(db.prepare("SELECT userId FROM communityProfile ORDER BY userId").all())
+        expect(db.prepare("SELECT userId FROM studentProfile ORDER BY userId").all())
           .toEqual([personas.member.userId, personas.otherMember.userId].toSorted().map(userId => ({ userId })));
         expect(db.prepare("SELECT count(*) AS n FROM communityJourney WHERE userId=?").get(personas.member.userId).n).toBe(2);
         expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);

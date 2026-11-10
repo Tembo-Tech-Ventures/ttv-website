@@ -1,0 +1,570 @@
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { saveProfileIdentity } from "@/components/profile/profile-handlers";
+import {
+  saveProfile,
+  publishProfile,
+} from "@/components/portfolio/portfolio-handlers";
+import { readdirSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
+import { saveMemberText, checkPostedWork } from "./writes";
+import { reviewWork, listWorkReviews } from "./moderation";
+import { readMember } from "./directory";
+import * as clef from "@/lib/moderation/clef";
+const databases: ReturnType<typeof createSqliteD1>["database"][] = [];
+afterEach(() => {
+  vi.restoreAllMocks();
+  databases.splice(0).forEach((d) => d.close());
+});
+function fixture() {
+  const f = createSqliteD1();
+  databases.push(f.database);
+  for (const name of readdirSync(new URL("../db/migrations/", import.meta.url))
+    .filter((n) => /^\d+.*\.sql$/.test(n))
+    .toSorted())
+    f.database.exec(readMigration(name));
+  f.database
+    .exec(`INSERT INTO user(id,name,email) VALUES ('member','Synthetic Wanjiku','w@example.test'),('admin','Synthetic Amina','a@example.test');
+ INSERT OR IGNORE INTO Roles(id,name) VALUES ('admin-role','ADMIN');
+ INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-grant','admin',id FROM Roles WHERE name='ADMIN';`);
+  return f;
+}
+const text = {
+  headline: "Builder",
+  bio: "Useful work",
+  skills: ["SQL"],
+  opportunityGoals: "Collaborate",
+};
+const env = { AI: {} as Ai, AI_GATEWAY_NAME: "test" };
+describe("member publish-then-check", () => {
+  it("lets a non-graduate use the portfolio write path but refuses public publication", async () => {
+    const { db, database } = fixture();
+    const orm = drizzle(db, { schema });
+    const form = new FormData();
+    form.set("handle", "wanjiku");
+    form.set("headline", "Builder");
+    form.set("opportunityGoals", "Collaborate");
+    form.set("openToRoles", "on");
+    expect(
+      await saveProfile(orm, "member", form, undefined, async () => ({
+        outcome: "pass",
+        flags: [],
+        scores: {},
+      })),
+    ).toMatchObject({ success: true });
+    const row = database
+      .prepare(
+        "SELECT id,opportunityGoals,openToRoles FROM studentProfile WHERE userId='member'",
+      )
+      .get() as { id: string };
+    expect(row).toMatchObject({
+      opportunityGoals: "Collaborate",
+      openToRoles: 1,
+    });
+    expect(await publishProfile(orm, "member", row.id)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("Complete a cohort"),
+    });
+    expect(database.prepare("SELECT status FROM studentProfile").get()).toEqual(
+      { status: "DRAFT" },
+    );
+  });
+  it("saves a single profile, generates distinct valid handles, and fails open", async () => {
+    const { db, database } = fixture();
+    await saveMemberText(db, "member", text, {} as Env);
+    await saveMemberText(
+      db,
+      "member",
+      { ...text, headline: "Updated" },
+      {} as Env,
+    );
+    await saveMemberText(db, "admin", text, {} as Env);
+    const rows = database
+      .prepare(
+        "SELECT handle,contentVersion,moderationOutcome FROM studentProfile ORDER BY userId",
+      )
+      .all() as {
+      handle: string;
+      contentVersion: number;
+      moderationOutcome: string;
+    }[];
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.handle)).size).toBe(2);
+    expect(rows[1]).toMatchObject({
+      contentVersion: 2,
+      moderationOutcome: "error",
+    });
+    expect(rows.map((r) => r.handle)).toEqual([
+      "synthetic-amina",
+      "synthetic-wanjiku",
+    ]);
+  });
+  it("holds the saved profile from every directory reader, including its owner", async () => {
+    const { db, database } = fixture();
+    vi.spyOn(clef, "checkProfileContent").mockResolvedValue({
+      outcome: "hold",
+      flags: ["contains_contact_details"],
+      scores: {},
+    });
+    await saveMemberText(db, "member", text, env);
+    const { handle } = database
+      .prepare("SELECT handle FROM studentProfile")
+      .get() as { handle: string };
+    expect(await readMember(db, { id: "member" }, handle)).toBeNull();
+    expect(
+      database
+        .prepare("SELECT headline,moderationReviewRequired FROM studentProfile")
+        .get(),
+    ).toEqual({ headline: "Builder", moderationReviewRequired: 1 });
+  });
+  it("does not let a slow profile check overwrite a newer revision", async () => {
+    const { db, database } = fixture();
+    vi.spyOn(clef, "checkProfileContent").mockImplementation(async () => {
+      database.exec(
+        "UPDATE studentProfile SET contentVersion=contentVersion+1,moderationOutcome='pass'",
+      );
+      return { outcome: "hold", flags: [], scores: {} };
+    });
+    await saveMemberText(db, "member", text, env);
+    expect(
+      database.prepare("SELECT moderationOutcome FROM studentProfile").get(),
+    ).toEqual({ moderationOutcome: "pass" });
+  });
+  it("lets only admins decide current work holds, preserving the work revision", async () => {
+    const { db, database } = fixture();
+    await saveMemberText(db, "member", text, {} as Env);
+    database.exec(
+      "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,moderationReviewRequired) VALUES ('work','member','Work','Evidence','2026-11-09','institution',1)",
+    );
+    vi.spyOn(clef, "checkProfileContent").mockResolvedValue({
+      outcome: "hold",
+      flags: [],
+      scores: {},
+    });
+    await checkPostedWork(db, "work", env);
+    await expect(
+      reviewWork(db, "member", "work", 1, "keep"),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await reviewWork(db, "admin", "work", 2, "keep")).toBe(false);
+    expect(await reviewWork(db, "admin", "work", 1, "keep")).toBe(true);
+    expect(
+      database
+        .prepare(
+          "SELECT version,state,moderationOutcome,moderationReviewRequired FROM communityJourney",
+        )
+        .get(),
+    ).toEqual({
+      version: 1,
+      state: "POSTED",
+      moderationOutcome: "pass",
+      moderationReviewRequired: 0,
+    });
+  });
+});
+
+it("screens a published name before saving and retains the previous public identity", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  database.exec("UPDATE studentProfile SET status='PUBLISHED'");
+  const orm = drizzle(db, { schema });
+  await saveProfileIdentity(
+    orm,
+    "member",
+    { name: "Changed Name" },
+    async () => {
+      expect(
+        database.prepare("SELECT publicName FROM studentProfile").get(),
+      ).toEqual({ publicName: "Synthetic Wanjiku" });
+      return { outcome: "hold", flags: [], scores: {} };
+    },
+  );
+  expect(
+    database
+      .prepare("SELECT publicName,moderationOutcome FROM studentProfile")
+      .get(),
+  ).toEqual({ publicName: "Synthetic Wanjiku", moderationOutcome: "error" });
+});
+
+it("allocates readable handles across duplicate names, reserved names and empty slugs", async () => {
+  const { db, database } = fixture();
+  database.exec(
+    "INSERT INTO user(id,name,email) VALUES ('same','Synthetic Wanjiku','same@example.test'),('reserved','Admin','reserved@example.test'),('symbols','!!!','symbols@example.test')",
+  );
+  await saveMemberText(db, "member", text, {} as Env);
+  await saveMemberText(db, "same", text, {} as Env);
+  await saveMemberText(db, "reserved", text, {} as Env);
+  await saveMemberText(db, "symbols", text, {} as Env);
+  expect(
+    database.prepare("SELECT handle FROM studentProfile ORDER BY userId").all(),
+  ).toEqual([
+    { handle: "synthetic-wanjiku" },
+    { handle: "admin-member" },
+    { handle: "synthetic-wanjiku-2" },
+    { handle: "member-1" },
+  ]);
+});
+
+it("keeps an existing profile hold during a recheck and after a Clef outage", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  database.exec("UPDATE studentProfile SET moderationOutcome='hold'");
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(async () => {
+    expect(
+      database
+        .prepare(
+          "SELECT moderationOutcome,moderationReviewRequired FROM studentProfile",
+        )
+        .get(),
+    ).toEqual({ moderationOutcome: "hold", moderationReviewRequired: 1 });
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  await saveMemberText(
+    db,
+    "member",
+    { ...text, headline: "Edited while held" },
+    env,
+  );
+  expect(
+    database
+      .prepare(
+        "SELECT moderationOutcome,moderationReviewRequired FROM studentProfile",
+      )
+      .get(),
+  ).toEqual({ moderationOutcome: "hold", moderationReviewRequired: 1 });
+});
+
+it("queues an unfinished check and lets only an admin restore hidden work", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(async () => {
+    expect(
+      database
+        .prepare("SELECT moderationReviewRequired FROM communityJourney")
+        .get(),
+    ).toEqual({ moderationReviewRequired: 1 });
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  const work = await service.createJourney({
+    title: "Work",
+    description: "Evidence",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(await reviewWork(db, "admin", work.id, 1, "hide")).toBe(true);
+  await expect(
+    service.setJourneyStatus(work.id, { status: "posted" }),
+  ).rejects.toMatchObject({ status: 409 });
+  expect(
+    database
+      .prepare(
+        "SELECT state,moderatorHidden,moderationOutcome FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({ state: "DRAFT", moderatorHidden: 1, moderationOutcome: "hold" });
+  expect(await reviewWork(db, "admin", work.id, 1, "keep")).toBe(true);
+  expect(
+    database
+      .prepare("SELECT state,moderatorHidden FROM communityJourney")
+      .get(),
+  ).toEqual({ state: "POSTED", moderatorHidden: 0 });
+});
+
+it("ignores overflowing and mixed handle suffixes", async () => {
+  const { db, database } = fixture();
+  database.exec(
+    "INSERT INTO studentProfile(id,userId,handle) VALUES ('p','admin','member-999999999999999999999999')",
+  );
+  database.exec("UPDATE user SET name='!!!' WHERE id='member'");
+  await saveMemberText(db, "member", text, {} as Env);
+  expect(
+    database
+      .prepare("SELECT handle FROM studentProfile WHERE userId='member'")
+      .get(),
+  ).toEqual({ handle: "member-1" });
+});
+
+it("identifies repository work and refuses contribution-form edits without changing it", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  database.exec(
+    "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind,repoFullName) VALUES ('repo','member','member/repo','Snapshot','2026-11-09','institution','repo','member/repo')",
+  );
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  expect((await service.listJourney())[0]).toMatchObject({
+    kind: "repo",
+    repoFullName: "member/repo",
+  });
+  await expect(
+    service.updateJourney("repo", {
+      title: "Changed",
+      description: "Changed",
+      occurredAt: "2026-11-09",
+      status: "posted",
+    }),
+  ).rejects.toMatchObject({
+    status: 409,
+    message: "Edit repositories in GitHub highlights.",
+  });
+  await expect(
+    service.setJourneyStatus("repo", { status: "draft" }),
+  ).rejects.toMatchObject({ status: 409 });
+  expect(
+    database
+      .prepare("SELECT title,description,state,version FROM communityJourney")
+      .get(),
+  ).toEqual({
+    title: "member/repo",
+    description: "Snapshot",
+    state: "POSTED",
+    version: 1,
+  });
+});
+
+it("status toggles preserve a checked hold and an admin keep without rerunning Clef", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  const check = vi
+    .spyOn(clef, "checkProfileContent")
+    .mockResolvedValue({ outcome: "hold", flags: [], scores: {} });
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  const work = await service.createJourney({
+    title: "Evidence",
+    description: "A useful contribution",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(check).toHaveBeenCalledTimes(1);
+  check.mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
+  await service.setJourneyStatus(work.id, { status: "draft" });
+  expect(await listWorkReviews(db)).toEqual([]);
+  await service.setJourneyStatus(work.id, { status: "posted" });
+  expect(
+    database.prepare("SELECT moderationOutcome FROM communityJourney").get(),
+  ).toEqual({ moderationOutcome: "hold" });
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(await reviewWork(db, "admin", work.id, 1, "keep")).toBe(true);
+  await service.setJourneyStatus(work.id, { status: "draft" });
+  await service.setJourneyStatus(work.id, { status: "posted" });
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(
+    database
+      .prepare(
+        "SELECT moderationOutcome,moderationReviewRequired FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({ moderationOutcome: "pass", moderationReviewRequired: 0 });
+  await service.updateJourney(work.id, {
+    title: "Changed evidence",
+    description: "Updated contribution",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(check).toHaveBeenCalledTimes(2);
+});
+
+it("keeps drafts out of the review queue and hidden history cannot starve held work", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  for (let i = 0; i < 60; i++)
+    database
+      .prepare(
+        "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderatorHidden,moderationReviewRequired) VALUES (?,'member','Hidden','Evidence','2026-11-09','institution','DRAFT',1,0)",
+      )
+      .run(`hidden-${i}`);
+  database.exec(`INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderationOutcome,moderationReviewRequired) VALUES
+    ('draft','member','Private','Private draft','2026-11-09','institution','DRAFT',NULL,1),
+    ('pending','member','Pending','Unfinished check','2026-11-09','institution','POSTED',NULL,1),
+    ('held','member','Held','Held check','2026-11-09','institution','POSTED','hold',1);`);
+  expect((await listWorkReviews(db)).map((w) => w.id)).toEqual([
+    "held",
+    "pending",
+  ]);
+  expect(await listWorkReviews(db, true)).toHaveLength(50);
+  const plan = database
+    .prepare(
+      "EXPLAIN QUERY PLAN SELECT id FROM communityJourney WHERE moderationReviewRequired=1 AND state='POSTED' AND moderatorHidden=0 ORDER BY moderationOutcome DESC,updatedAt DESC,id DESC LIMIT 50",
+    )
+    .all();
+  expect(JSON.stringify(plan)).toContain("communityJourney_review_idx");
+  expect(JSON.stringify(plan)).not.toContain("TEMP B-TREE");
+});
+
+it("first work creates a named profile without duplicating its name as a headline and completes its check", async () => {
+  const { db, database } = fixture();
+  const check = vi
+    .spyOn(clef, "checkProfileContent")
+    .mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
+  const { ensureMemberProfile } = await import("./writes");
+  await ensureMemberProfile(db, "member", env);
+  await ensureMemberProfile(db, "member", env);
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(
+    database
+      .prepare(
+        "SELECT publicName,headline,moderationReviewRequired FROM studentProfile",
+      )
+      .get(),
+  ).toEqual({
+    publicName: "Synthetic Wanjiku",
+    headline: "",
+    moderationReviewRequired: 0,
+  });
+  database.exec("UPDATE studentProfile SET publicName='Chosen Name'");
+  await saveMemberText(db, "member", text, env);
+  expect(
+    database.prepare("SELECT publicName FROM studentProfile").get(),
+  ).toEqual({ publicName: "Chosen Name" });
+});
+
+it("raw and Drizzle work predicates agree; anonymous work additionally requires a pass", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  await saveMemberText(db, "admin", text, {} as Env);
+  for (const [id, state, outcome, owner] of [
+    ["pending", "POSTED", null, "member"],
+    ["pass", "POSTED", "pass", "member"],
+    ["held", "POSTED", "hold", "member"],
+    ["draft", "DRAFT", "pass", "member"],
+    ["staff", "POSTED", "pass", "admin"],
+  ]) {
+    database
+      .prepare(
+        "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderationOutcome) VALUES (?,?,?,'Evidence','2026-11-09','institution',?,?)",
+      )
+      .run(id, owner, id, state, outcome);
+  }
+  const { postedWorkEligibility, postedWorkColumnsEligibility } =
+    await import("@/lib/community/eligibility");
+  const raw = database
+    .prepare(
+      `SELECT id FROM communityJourney w WHERE ${postedWorkEligibility("w")} ORDER BY id`,
+    )
+    .all();
+  const orm = drizzle(db, { schema });
+  const { asc } = await import("drizzle-orm");
+  const rows = await orm
+    .select({ id: schema.communityJourney.id })
+    .from(schema.communityJourney)
+    .where(postedWorkColumnsEligibility(schema.communityJourney))
+    .orderBy(asc(schema.communityJourney.id));
+  expect(rows).toEqual(raw);
+  expect(rows.map((w) => w.id)).toEqual(["pass", "pending"]);
+  expect(
+    await orm
+      .select({ id: schema.communityJourney.id })
+      .from(schema.communityJourney)
+      .where(postedWorkColumnsEligibility(schema.communityJourney, true)),
+  ).toEqual([{ id: "pass" }]);
+  expect(
+    database
+      .prepare(
+        `SELECT id FROM communityJourney w WHERE ${postedWorkEligibility("w", true)} AND id='staff'`,
+      )
+      .get(),
+  ).toEqual({ id: "staff" });
+});
+
+it("the first completed check wins when two checks screen the same work revision", async () => {
+  const { db, database } = fixture();
+  database.exec("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('race','member','Work','Evidence','2026-11-09','institution')");
+  const checks: Array<(result: clef.ProfileModerationResult) => void> = [];
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(() => new Promise(resolve => { checks.push(resolve); }));
+  const first = checkPostedWork(db, "race", env);
+  const second = checkPostedWork(db, "race", env);
+  await vi.waitFor(() => expect(checks).toHaveLength(2));
+  checks[0]({ outcome: "hold", flags: [], scores: {} });
+  await first;
+  checks[1]({ outcome: "pass", flags: [], scores: {} });
+  await second;
+  expect(database.prepare("SELECT moderationOutcome FROM communityJourney WHERE id='race'").get()).toEqual({ moderationOutcome: "hold" });
+});
+
+function graduate(database: ReturnType<typeof createSqliteD1>["database"]) {
+  database.exec(`INSERT INTO curriculum(id,title,description) VALUES ('curriculum','Foundations','Test');
+    INSERT INTO program(id,name,description,curriculumId,startDate) VALUES ('cohort','Cohort','Test','curriculum',0);
+    INSERT INTO programApplication(id,userId,programId,status,application,completedAt) VALUES ('done','member','cohort','COMPLETED','{}',1700000000);
+    INSERT INTO studentProfile(id,userId,handle) VALUES ('profile','member','builder');`);
+}
+
+it("an unavailable check cannot publish an already-held draft", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  database.exec("UPDATE studentProfile SET moderationOutcome='hold'");
+  expect(await publishProfile(drizzle(db, { schema }), "member", "profile")).toMatchObject({ success: false, published: false });
+  expect(database.prepare("SELECT status,moderationOutcome FROM studentProfile").get()).toEqual({ status: "DRAFT", moderationOutcome: "hold" });
+});
+
+it("an unavailable publish check cannot overwrite a concurrent hold", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  const result = await publishProfile(drizzle(db, { schema }), "member", "profile", async () => {
+    database.exec("UPDATE studentProfile SET moderationOutcome='hold', moderationReviewRequired=1");
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  expect(result).toMatchObject({ success: false });
+  expect(database.prepare("SELECT status,moderationOutcome,contentVersion FROM studentProfile").get()).toEqual({
+    status: "DRAFT", moderationOutcome: "hold", contentVersion: 0,
+  });
+});
+
+it("a whole-profile pass releases only the exact unchecked posted work it screened", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  for (const id of ["unchecked", "held", "hidden", "draft", "edited"])
+    database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind) VALUES (?,'member','Repo','Snapshot','2026-11-09','institution','repo')").run(id);
+  database.exec("UPDATE communityJourney SET moderationOutcome='hold' WHERE id='held'; UPDATE communityJourney SET moderatorHidden=1 WHERE id='hidden'; UPDATE communityJourney SET state='DRAFT' WHERE id='draft'");
+  const result = await publishProfile(drizzle(db, { schema }), "member", "profile", async state => {
+    expect(state.highlights).toHaveLength(5);
+    database.exec("UPDATE communityJourney SET version=2 WHERE id='edited'");
+    return { outcome: "pass", flags: [], scores: {} };
+  });
+  expect(result).toMatchObject({ success: true, published: true });
+  expect(database.prepare("SELECT id FROM communityJourney WHERE moderationOutcome='pass'").all()).toEqual([{ id: "unchecked" }]);
+});
+
+it("pages older human-hidden work without dropping the independent pending queue", async () => {
+  const { db, database } = fixture();
+  for (let i = 0; i < 51; i++) database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderatorHidden,moderationOutcome,updatedAt) VALUES (?,'member','Hidden','Evidence','2026-11-09','institution','DRAFT',1,'hold',?)").run(`hidden-${i}`,i);
+  database.exec("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('pending','member','Pending','Evidence','2026-11-09','institution')");
+  const first = await listWorkReviews(db, "all");
+  const older = await listWorkReviews(db, "all", 2);
+  expect(first.filter(w => w.moderatorHidden)).toHaveLength(50);
+  expect(older.map(w => w.id)).toEqual(["pending", "hidden-0"]);
+});
+
+it("a passed edit to a published profile checks its migrated unchecked work", async () => {
+  const { db, database } = fixture();
+  graduate(database);
+  database.exec("UPDATE studentProfile SET status='PUBLISHED'; INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind) VALUES ('repo','member','Repo','Snapshot','2026-11-09','institution','repo')");
+  const form = new FormData();
+  form.set("handle", "builder");
+  form.set("headline", "Updated public profile");
+  expect(await saveProfile(drizzle(db, { schema }), "member", form, "profile", async () => ({ outcome: "pass", flags: [], scores: {} }))).toMatchObject({ success: true });
+  expect(database.prepare("SELECT moderationOutcome,moderationReviewRequired FROM communityJourney WHERE id='repo'").get()).toEqual({ moderationOutcome: "pass", moderationReviewRequired: 0 });
+});

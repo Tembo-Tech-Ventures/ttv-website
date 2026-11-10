@@ -39,7 +39,7 @@ export const CHOICES: readonly Choice[] = [
     intent: "INSTITUTION",
     marker: "institution",
     title: "Find people for your organisation",
-    body: "Search saved community profiles and explore the work and evidence behind them.",
+    body: "Use AI tools to explore saved member profiles and their posted work.",
     needsApproval: true,
   },
 ];
@@ -73,12 +73,12 @@ export const REQUEST = {
   institutionLink: "Organisation website",
   optional: "(optional)",
   noteLength: "Between 20 and 600 characters.",
-  scope: "I understand approval lets me explore saved community profiles and shared contributions only, and doesn’t arrange introductions.",
+  scope: "I understand approval adds AI tools for the same profiles and posted work every signed-in member can see, and doesn’t arrange introductions.",
   scopeTitle: "What approval opens",
   /** The approved partner-page wording, consistent with F-4: saved profiles and shared work only. */
   opens: [
-    "Discover: search saved community profiles.",
-    "The contributions members share with institutions, with their sources and any mentor confirmations.",
+    "Discover: AI tools to explore saved profiles and posted work.",
+    "The same profiles and posted work every signed-in member sees, with sources and mentor confirmations.",
   ],
   excludes: [
     "Not private cohort recordings, transcripts or internal records.",
@@ -134,7 +134,7 @@ export const STATUS = {
   view: "View request",
   approved: {
     MENTOR: { title: "Mentoring is open", body: "Mentoring is now one of your spaces. Start with Confirm work.", open: "Open Mentoring" },
-    INSTITUTION: { title: "Discover is open", body: "Search saved community profiles and explore the work behind them.", open: "Open Discover" },
+    INSTITUTION: { title: "Discover is open", body: "Use AI tools to explore saved member profiles and their posted work.", open: "Open Discover" },
   } satisfies Record<AccessRole, { title: string; body: string; open: string }>,
   declined: {
     title: { MENTOR: "Mentor access wasn’t approved this time.", INSTITUTION: "Organisation access wasn’t approved this time." } satisfies Record<AccessRole, string>,
@@ -186,7 +186,7 @@ export const TAKING_PART = {
   rows: {
     MEMBER: { title: "Build and learn", body: "Community profile, contributions and cohort applications." },
     MENTOR: { title: "Mentor", body: "Review work that members share, and record what you checked." },
-    INSTITUTION: { title: "Find people for your organisation", body: "Explore saved community profiles and the evidence behind them." },
+    INSTITUTION: { title: "Find people for your organisation", body: "Use AI tools to explore saved member profiles and their posted work." },
   } satisfies Record<ChoiceIntent, { title: string; body: string }>,
   sent: (date: string) => `Request sent ${date}. An administrator will review it.`,
   /** What a pending request said, in the person's own words (QAO-03). The administrator is never named. */

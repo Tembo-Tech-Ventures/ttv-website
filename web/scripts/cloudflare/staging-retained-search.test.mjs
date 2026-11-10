@@ -13,7 +13,7 @@ describe('retained runner safeguards',()=>{
   expect(executeQuery).not.toHaveBeenCalled();expect(withPersonas).not.toHaveBeenCalled();
  });
  it('computes literal filters and stable alphabetical limits independently from fresh seed',()=>{
-  const data=buildDemoDataset(), profiles=data.user.map(u=>({...u,...data.communityProfile.find(p=>p.userId===u.id),saved:data.communityProfile.some(p=>p.userId===u.id),excluded:u.id.endsWith('-mentor')}));
+  const data=buildDemoDataset(), profiles=data.user.map(u=>({...u,...data.studentProfile.find(p=>p.userId===u.id),saved:data.studentProfile.some(p=>p.userId===u.id),excluded:u.id.endsWith('-mentor')}));
   expect(expectedMatches(profiles,{query:'Kotlin',limit:50})).toHaveLength(15);
   // Institutional discovery lists only saved community profiles.
   const [first]=expectedMatches(profiles,{query:'Kotlin',limit:1});

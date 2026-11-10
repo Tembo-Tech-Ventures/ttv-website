@@ -15,8 +15,8 @@ describe("community entry points", () => {
   it("explains noncohort membership and approval without exposing a people directory", () => {
     const html = renderToStaticMarkup(<CommunityIntro full />);
     expect(html).toContain("You do not need to join or complete a cohort");
-    expect(html).toContain("Approved institutions can discover your saved community profile and the contributions you share.");
-    expect(html).toContain("Institutional access requires administrator approval after sign-in");
+    expect(html).toContain("Everyone signed in to TTV can see your profile and everything you post.");
+    expect(html).toContain("AI discovery tools require administrator approval after sign-in");
     expect(html).toContain("Cohort recordings and internal records are not part");
     expect(html).toContain("does not guarantee a job");
     expect(html.match(/<h1/g)).toHaveLength(1);

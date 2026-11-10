@@ -49,7 +49,7 @@ function evidence(profile: CommunityProfile, journeys: CommunityJourney[]) {
     citation: { kind: "profile", id: profile.userId, version: profile.version, userId: profile.userId, quote: profile.bio?.slice(0, 400), observedAt: profile.updatedAt },
     text: JSON.stringify({ headline: profile.headline, bio: profile.bio, skills: profile.skills }),
   });
-  for (const j of journeys.filter(entry => entry.userId === profile.userId && entry.visibility === "institution")) {
+  for (const j of journeys.filter(entry => entry.userId === profile.userId && entry.status === "posted" && !entry.moderationHold)) {
     sources.push({ citation: journeyCitation(j), text: JSON.stringify({ title: j.title, description: j.description, occurredAt: j.occurredAt }),
       staleConfirmations: j.confirmations.filter(c => c.journeyVersion !== j.version).length });
     for (const c of j.confirmations.filter(confirmation => confirmation.journeyId === j.id && confirmation.journeyVersion === j.version)) {

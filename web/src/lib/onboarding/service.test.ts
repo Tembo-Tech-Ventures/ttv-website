@@ -44,7 +44,7 @@ describe("getOnboardingState", () => {
     ["a student profile", "INSERT INTO studentProfile(id,userId,handle) VALUES ('p','wairimu','wairimu')", ["MEMBER"]],
     ...(["MENTOR", "TA", "INSTRUCTOR"] as const).map((name) => [`a cohort ${name} assignment alone`,
       `INSERT INTO programRole(id,userId,programId,name) VALUES ('r','wairimu','cohort-a','${name}')`, []] as const),
-    ["a community profile alone", "INSERT INTO communityProfile(userId) VALUES ('wairimu')", []],
+    ["a saved member profile", "INSERT INTO studentProfile(id,handle,userId) VALUES ('wairimu','wairimu','wairimu')", ["MEMBER"]],
     ["a journey alone", "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('j','wairimu','Built','A thing','2026-10','private')", []],
     ["the MENTOR role", "INSERT INTO UserRoles(id,userId,roleId) SELECT 'ur','wairimu',id FROM Roles WHERE name='MENTOR'", ["MENTOR"]],
     ["the INSTITUTION role", "INSERT INTO UserRoles(id,userId,roleId) SELECT 'ur','wairimu',id FROM Roles WHERE name='INSTITUTION'", ["INSTITUTION"]],

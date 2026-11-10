@@ -31,7 +31,7 @@ function setup() {
   const items = async (user: string = PEOPLE.david) => WorthAnotherLook.parse((await look(user)).body).items;
   /** The ids the Confirm page lists for `user`, where every item's link sends them. */
   const confirmPage = async (user: string = PEOPLE.david) =>
-    (await createCommunityService(s.d1, user).listMentorship()).map((entry) => entry.id);
+    (await createCommunityService(s.d1, user, undefined, undefined, undefined, {} as Env).listMentorship()).map((entry) => entry.id);
   return { s, confirm, look, items, confirmPage };
 }
 
@@ -65,7 +65,7 @@ describe("Worth another look (B-4.2)", () => {
     for (const change of [
       (t: ReturnType<typeof setup>) => t.confirm("ledger", PEOPLE.david, 3),
       (t: ReturnType<typeof setup>) => t.s.database.exec(`INSERT INTO communitySetAside(mentorId, journeyId, journeyVersion) VALUES ('${PEOPLE.david}', 'ledger', 3)`),
-      (t: ReturnType<typeof setup>) => t.s.database.exec("UPDATE communityJourney SET visibility = 'private' WHERE id = 'ledger'"),
+      (t: ReturnType<typeof setup>) => t.s.database.exec("UPDATE communityJourney SET state = 'DRAFT' WHERE id = 'ledger'"),
       (t: ReturnType<typeof setup>) => t.s.database.exec("DELETE FROM communityJourney WHERE id = 'ledger'"),
     ]) {
       const t = setup();

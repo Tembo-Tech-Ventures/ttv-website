@@ -14,7 +14,7 @@ function profile(overrides: Partial<BuilderProfileRow> = {}): BuilderProfileRow 
     skills: JSON.stringify(["TypeScript", " PostgreSQL ", "", "Node.js", "Go"]),
     publicName: "Wanjiru Kamau",
     publicAvatarUrl: null,
-    highlights: [{ repoFullName: "fixture/chama-ledger", description: "Shared savings ledger.", language: "TypeScript" }],
+    work: [{ repoFullName: "fixture/chama-ledger", description: "Shared savings ledger.", language: "TypeScript" }],
     user: { programApplications: [completed] },
     ...overrides,
   };
@@ -56,7 +56,7 @@ describe("toHomepageBuilder", () => {
 
   it("tolerates missing optional fields", () => {
     const card = toHomepageBuilder(
-      profile({ headline: "   ", country: null, skills: null, highlights: [], user: { programApplications: [{ ...completed, program: null }] } }),
+      profile({ headline: "   ", country: null, skills: null, work: [], user: { programApplications: [{ ...completed, program: null }] } }),
     );
     expect(card).toMatchObject({ headline: null, country: null, skills: [], project: null, cohort: null });
   });
@@ -88,5 +88,25 @@ describe("loadHomepageBuildersSafely", () => {
     await expect(
       loadHomepageBuildersSafely({ d1: d1Failing("no such table: studentProfile"), route: "/" }),
     ).rejects.toThrow("Failed query");
+  });
+});
+it("shows a posted contribution as the homepage builder's work", () => {
+  expect(
+    toHomepageBuilder(
+      profile({
+        work: [
+          {
+            repoFullName: null,
+            title: "Community workshop",
+            description: "Taught a local workshop",
+            language: null,
+          },
+        ],
+      }),
+    )?.project,
+  ).toEqual({
+    name: "Community workshop",
+    description: "Taught a local workshop",
+    language: null,
   });
 });

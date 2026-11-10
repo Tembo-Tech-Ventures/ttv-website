@@ -437,7 +437,7 @@ function TopBar({
 
       {/* A draft's phone bar keeps its room for Publish; the panel says where it stands. */}
       <span className={status === "DRAFT" ? "hidden sm:inline-flex" : "inline-flex"}>
-        <StatusChip domain="profile" status={status} />
+        <StatusChip domain="post" status={status} />
       </span>
       <SaveIndicator label={saveLabel} state={saveState} />
 

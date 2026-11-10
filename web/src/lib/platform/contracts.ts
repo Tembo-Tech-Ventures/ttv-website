@@ -157,6 +157,12 @@ export const MarkAttentionRead = z.union([
 ]);
 export type MarkAttentionRead = z.infer<typeof MarkAttentionRead>;
 
+/** Work has publication state, never an institutional audience tier. */
+export const WorkKind = z.enum(["contribution", "repo"]);
+export type WorkKind = z.infer<typeof WorkKind>;
+export const WorkStatus = z.enum(["posted", "draft"]);
+export type WorkStatus = z.infer<typeof WorkStatus>;
+
 export const VisibilityKind = z.enum(["PUBLIC", "COMMUNITY", "COHORT", "DIRECT", "PRIVATE"]);
 export type VisibilityKind = z.infer<typeof VisibilityKind>;
 export const Visibility = z.object({ kind: VisibilityKind, label: NonEmptyText });
@@ -170,11 +176,11 @@ export const SearchMessage = z.object({
   excerpt: z.string(), href: InternalPath, createdAt: Timestamp, visibility: Visibility,
 });
 export type SearchMessage = z.infer<typeof SearchMessage>;
-export const SearchPerson = z.object({ person: PersonSummary, bio: z.string(), href: InternalPath, visibility: Visibility });
+export const SearchPerson = z.object({ person: PersonSummary, bio: z.string(), href: InternalPath.nullable(), visibility: Visibility });
 export type SearchPerson = z.infer<typeof SearchPerson>;
 export const SearchProject = z.object({
   journeyId: Id, version: z.int().positive(), title: NonEmptyText, summary: z.string(),
-  owner: PersonSummary, href: InternalPath, visibility: Visibility,
+  owner: PersonSummary, href: InternalPath.nullable(), visibility: Visibility,
 });
 export type SearchProject = z.infer<typeof SearchProject>;
 export const SearchSessionMoment = z.object({
@@ -259,8 +265,8 @@ export const Citation = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("sessionClip"), recordingId: Id, startSeconds: z.number().nonnegative(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("message"), messageId: Id, channelId: Id, title: NonEmptyText, href: InternalPath }),
-  /** A public builder profile (/talent/<handle>), which Tembo may cite in community channels. */
-  z.object({ type: z.literal("profile"), userId: Id, title: NonEmptyText, href: InternalPath }),
+  /** A saved member profile, which Tembo may cite in community channels. */
+  z.object({ type: z.literal("profile"), userId: Id, title: NonEmptyText, href: InternalPath.nullable() }),
 ]);
 export type Citation = z.infer<typeof Citation>;
 export const ReactionKind = z.enum(["useful", "learned", "thanks", "agree", "congrats"]);

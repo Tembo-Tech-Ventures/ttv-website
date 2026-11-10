@@ -12,7 +12,7 @@ export const ALL: APIRoute = async ({ request, locals }) => {
   return handleCommunityMcp(request, {
     userId: locals.user.id,
     scopes,
-  }, createCommunityService(env.DB, locals.user.id, locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE), env, [
+  }, createCommunityService(env.DB, locals.user.id, locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE, env), env, [
     moderationMcpTools({ db: env.DB, env, locals, scopes }),
   ]);
 };

@@ -22,9 +22,9 @@ interface Props {
 
 const { claim = null, values, errors = {}, failure = null } = Astro.props;
 const count = Object.keys(errors).length;
-const sharing = claim?.visibility === "private"
+const sharing = claim?.status === "draft"
   ? "Saving keeps this contribution private. Earlier mentor statements remain part of its revision history."
-  : "Saving shares this contribution with approved institutions and makes it available for mentor review. This is not a private draft.";
+  : "Everyone signed in to TTV can see posted work. If you complete a cohort and publish your profile, it also appears on the public website.";
 ---
 
 <section id={CONTRIBUTION_EDITOR_ID} aria-labelledby="contribution-editor-title" class="scroll-mt-6" data-contribution-editor={claim ? "edit" : "add"}>

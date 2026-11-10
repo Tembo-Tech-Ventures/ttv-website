@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { assessCommunityProfile, assessEvidenceSupport } from "./assessment-ai";
 import type { CommunityJourney, CommunityProfile } from "./model";
 const profile = { userId: "member", version: 2, headline: "", bio: "", skills: [] } as unknown as CommunityProfile;
-const journey = { id: "journey", userId: "member", title: "TypeScript library", description: "Implemented accessible navigation", visibility: "institution", version: 3, confirmations: [], updatedAt: 123 } as unknown as CommunityJourney;
+const journey = { id: "journey", userId: "member", title: "TypeScript library", description: "Implemented accessible navigation", status: "posted", version: 3, confirmations: [], updatedAt: 123 } as unknown as CommunityJourney;
 const rubric = { id: "hiring", version: 1, criteria: [{ id: "ts", label: "Documented TypeScript contribution", terms: ["TypeScript"] }] };
 const reference = { kind: "journey", id: "journey", version: 3 };
 const criterion = { criterionId: "ts", status: "assessed", rating: 3, explanation: "A detailed direct contribution is documented; the external artifact was not read.", citations: [reference] };
@@ -34,7 +34,7 @@ describe("model evidence support boundary", () => {
   it("excludes private/foreign entries and stale or foreign-journey confirmations before inference", async () => {
     const p = provider();
     const current = { id: "current", journeyId: "journey", journeyVersion: 3, statement: "Current support", mentorId: "mentor", mentorRole: "MENTOR", createdAt: 100 };
-    await assessEvidenceSupport(profile, [{ ...journey, confirmations: [current, { ...current, id: "stale", journeyVersion: 2, statement: "STALE SECRET" }, { ...current, id: "unrelated", journeyId: "different", statement: "UNRELATED SECRET" }] as CommunityJourney["confirmations"] }, { ...journey, id: "private", visibility: "private", description: "PRIVATE SECRET" }, { ...journey, userId: "other", description: "FOREIGN SECRET" }], rubric, p);
+    await assessEvidenceSupport(profile, [{ ...journey, confirmations: [current, { ...current, id: "stale", journeyVersion: 2, statement: "STALE SECRET" }, { ...current, id: "unrelated", journeyId: "different", statement: "UNRELATED SECRET" }] as CommunityJourney["confirmations"] }, { ...journey, id: "private", status: "draft", description: "PRIVATE SECRET" }, { ...journey, userId: "other", description: "FOREIGN SECRET" }], rubric, p);
     const data = p.complete.mock.calls[0][0][1].content;
     for (const secret of ["STALE SECRET", "UNRELATED SECRET", "PRIVATE SECRET", "FOREIGN SECRET"]) expect(data).not.toContain(secret);
     expect(data).toContain("Current support");

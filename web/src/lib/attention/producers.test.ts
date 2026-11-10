@@ -128,9 +128,9 @@ it("confirmation integration emits after authorized commit and never on rejected
   const s = setup();
   try {
     s.database.exec("DELETE FROM communityConfirmation");
-    const mentor = createCommunityService(s.db, "mercy");
+    const mentor = createCommunityService(s.db, "mercy", undefined, undefined, undefined, {} as Env);
     const input = { expectedRevision: 1, statement: "I reviewed the implementation", method: "Code review" };
-    await expect(createCommunityService(s.db, "otieno").confirmJourney("journey", input)).rejects.toMatchObject({ status: 403 });
+    await expect(createCommunityService(s.db, "otieno", undefined, undefined, undefined, {} as Env).confirmJourney("journey", input)).rejects.toMatchObject({ status: 403 });
     expect(s.rows()).toEqual([]);
     await mentor.confirmJourney("journey", input); expect(s.rows()).toHaveLength(1);
     await expect(mentor.confirmJourney("journey", input)).rejects.toMatchObject({ status: 409 });
@@ -192,7 +192,7 @@ it("a secondary attention failure does not change successful application, contac
     const statement = buildApplicationTransitionStatement({ applicationId: "application", transition: planApplicationTransition({ currentStatus: "PENDING", expectedStatus: "PENDING", targetStatus: "APPROVED" }) });
     await applyApplicationMutationWithAttention(s.context, { statement, applicationIds: ["application"], actorId: "amina", status: "APPROVED" as const, staleCode: "STALE_TRANSITION", staleMessage: "Stale" });
     await saveVisitorMessageWithAttention(s.context, { profileId: "profile", fromName: "Visitor", fromEmail: "visitor@example.test", organization: null, message: "Hello" });
-    await createCommunityService(s.db, "mercy").confirmJourney("journey", { expectedRevision: 1, statement: "I reviewed the implementation", method: "Code review" });
+    await createCommunityService(s.db, "mercy", undefined, undefined, undefined, {} as Env).confirmJourney("journey", { expectedRevision: 1, statement: "I reviewed the implementation", method: "Code review" });
     expect(s.database.prepare("SELECT status FROM programApplication WHERE id='application'").get()).toEqual({ status: "APPROVED" });
     expect(s.database.prepare("SELECT COUNT(*) AS count FROM profileContact").get()).toEqual({ count: 2 });
     expect(s.database.prepare("SELECT COUNT(*) AS count FROM communityConfirmation").get()).toEqual({ count: 1 });

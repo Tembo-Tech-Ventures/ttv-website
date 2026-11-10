@@ -63,7 +63,7 @@ test("a mentor sees the same waiting count everywhere, and it follows their conf
   const title = `Fictional F-2 ${randomUUID().slice(0, 8)}: M-Pesa receipts tracker`;
   const created = await community(member, "POST", "journey", {
     title, description: "Built and tested a fictional receipts tracker for a savings group.",
-    occurredAt: "2026-10-20", visibility: "institution",
+    occurredAt: "2026-10-20", status: "posted",
   });
   expect(created.status).toBe(201);
   const journeyId = (created.json as { entry: { id: string } }).entry.id;
@@ -129,7 +129,7 @@ test("a mentor can privately set aside work they can't confirm, and undo it", as
   const title = `Fictional F-7 ${randomUUID().slice(0, 8)}: Chama savings ledger`;
   const contribution = {
     title, description: "Built a fictional ledger for a savings group, with reconciliation tests.",
-    occurredAt: "2026-10-21", visibility: "institution",
+    occurredAt: "2026-10-21", status: "posted",
   };
   const created = await community(member, "POST", "journey", contribution);
   expect(created.status).toBe(201);

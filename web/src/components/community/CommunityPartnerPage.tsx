@@ -68,12 +68,12 @@ const content = {
     context: "More context. Your judgment.", contextIntro: "A profile is a starting point. The contribution and its evidence give you something concrete to discuss.",
     notes: [
       { title: "Keep confirmation in scope.", text: "A mentor note describes the particular work reviewed. It is not a universal score, a certification of the person, or a hiring decision." },
-      { title: "Approval is not unrestricted access.", text: "Approved institutions can discover saved community profiles and the contributions members share. Private cohort recordings and internal records stay outside institutional discovery." },
+      { title: "Approval adds AI tools.", text: "Everyone signed in to TTV can see saved profiles and posted work. Institutional approval adds AI discovery and assessment. Private cohort recordings and internal records stay outside institutional discovery." },
     ],
     questions: [
       { title: "Who can use institutional discovery?", text: {
-        request: "Organisations an administrator has approved. Signing in alone does not enable discovery. After you sign in, choose “Find people for your organisation”, then name your organisation and what you would like to explore. An administrator reads each request and decides; approval is not guaranteed. While it is pending, you can use Community and your Profile like any member. If it is approved, Discover opens as one of your spaces.",
-        legacy: "Institutional access must be granted by an administrator after sign-in. Signing in alone does not enable discovery. Without that access, the page explains the requirement and links to your community journey.",
+        request: "Organisations an administrator has approved. Signing in lets you see the same profiles and work as other members. The AI discovery tools require approval. After you sign in, choose “Find people for your organisation”, then name your organisation and what you would like to explore. An administrator reads each request and decides; approval is not guaranteed. While it is pending, you can use Community and your Profile like any member. If it is approved, Discover opens as one of your spaces.",
+        legacy: "Institutional access must be granted by an administrator after sign-in. Signing in lets you see the same profiles and work as other members. The AI discovery tools require approval. Without that access, the page explains the requirement and links to your community journey.",
       } },
       { title: "Does discovery arrange an introduction?", text: "No. Exploring a profile does not send a message, book an interview, or arrange an introduction. Use the documented work to inform your own next steps; participation does not guarantee a job or placement." },
     ],

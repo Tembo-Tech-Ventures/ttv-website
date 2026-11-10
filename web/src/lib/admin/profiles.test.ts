@@ -28,8 +28,11 @@ describe("the admin's profile list", () => {
   it("explains why a profile waits for a person in the check's own words", () => {
     expect(profileReviewReasons({ moderationFlags: '["contains_contact_details"]', moderationOutcome: "hold" })[0]).toMatch(/phone numbers, email addresses/);
     expect(profileReviewReasons({ moderationFlags: null, moderationOutcome: "error" })).toEqual([
-      "The content check was unavailable, so this profile published automatically.",
+      "The check was unavailable. This saved profile needs review.",
     ]);
+    expect(profileReviewReasons({ moderationFlags: null, moderationOutcome: "pass" })).toEqual([]);
+    expect(profileReviewReasons({ moderationFlags: null, moderationOutcome: null })).toEqual(["The content check has not finished. This saved profile needs review."]);
+    expect(profileReviewReasons({ status: "PUBLISHED", moderationFlags: null, moderationOutcome: "error" })).toEqual(["The check was unavailable. This profile remains listed and needs review."]);
     expect(profileReviewReasons({ moderationFlags: null, moderationOutcome: "hold" })).toEqual(["The content check held this profile."]);
   });
 });

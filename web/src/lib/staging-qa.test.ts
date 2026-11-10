@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,7 @@ function setup(){
  CREATE TABLE Roles(id TEXT PRIMARY KEY,name TEXT UNIQUE,createdAt INTEGER,updatedAt INTEGER);CREATE TABLE UserRoles(id TEXT PRIMARY KEY,userId TEXT,roleId TEXT,UNIQUE(userId,roleId));
  CREATE TABLE program(id TEXT PRIMARY KEY,curriculumId TEXT,applicationsOpen INTEGER);CREATE TABLE programApplication(id TEXT PRIMARY KEY,userId TEXT,programId TEXT,status TEXT);`);
  for(const name of ['0017_community_discovery','0018_confirmation_role_snapshot','0020_retained_persona_qa','0027_mentor_set_aside'])sql.exec(readFileSync(new URL(`./db/migrations/${name}.sql`,import.meta.url),'utf8').replaceAll('--> statement-breakpoint',''));
+ addMemberSchema(sql);
  sql.prepare('INSERT INTO stagingQaRun VALUES(?,?,?,?,?,?,?)').run(QA_RUN_ID,now,now+3600,null,'b'.repeat(40),QA_KEY_PIN,'seed-digest');
  sql.prepare('INSERT INTO program VALUES(?,?,0)').run(DEMO_PREFIX+'program',DEMO_PREFIX+'curriculum');
  const tokens:Record<string,string>={};
@@ -108,7 +110,7 @@ it('guards QA own-entry edits by loaded revision without widening ownership',asy
  expect((await f.call('member-noncohort','journey/'+id,'PUT',{...entry,description:'Updated fictional work',expectedRevision:1})).status).toBe(200);
  expect((await f.call('member-noncohort','journey/'+id,'PUT',{...entry,expectedRevision:1})).status).toBe(409);
  expect((await f.call('institution','journey/'+id,'PUT',{...entry,expectedRevision:2})).status).toBe(403);
- expect(f.sql.prepare('SELECT version,visibility FROM communityJourney WHERE id=?').get(id)).toMatchObject({version:2,visibility:'private'});
+ expect(f.sql.prepare('SELECT version,state,visibility FROM communityJourney WHERE id=?').get(id)).toMatchObject({version:2,state:'DRAFT',visibility:'institution'});
 });
 
 it('rejects cohort and old-run credentials even when their source rows exist',async()=>{

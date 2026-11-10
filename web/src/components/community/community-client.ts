@@ -1,3 +1,4 @@
+import { WorkKind } from "@/lib/platform/contracts";
 import { matchSchema } from "@/lib/community/discovery-contract";
 import { z } from "zod";
 import type {
@@ -18,6 +19,8 @@ const profileSchema = z.object({
   bio: z.string(),
   skills: z.array(z.string()),
   opportunityGoals: z.string(),
+  moderationHold:z.boolean().optional(),
+  moderatorHidden: z.coerce.boolean().optional(),
   version: z.number().int(),
   updatedAt: z.number().nullable(),
 });
@@ -31,13 +34,17 @@ const confirmationSchema = z.object({
   createdAt: z.number(),
 });
 const entrySchema = z.object({
+  kind:WorkKind.default("contribution"),
+  repoFullName:z.string().nullable().default(null),
   id: z.string(),
   userId: z.string(),
   title: z.string(),
   description: z.string(),
   evidenceUrl: z.string().nullable().optional(),
   occurredAt: z.string(),
-  visibility: z.enum(["institution", "private"]),
+  status: z.enum(["posted", "draft"]),
+  moderationHold:z.boolean().optional(),
+  moderatorHidden: z.coerce.boolean().optional(),
   version: z.number().int().positive(),
   confirmations: z.array(confirmationSchema).default([]),
 });
@@ -61,7 +68,11 @@ export function mapJourney(entry: EntryDto): JourneyClaim {
     description: entry.description,
     date: entry.occurredAt,
     version: entry.version,
-    visibility: entry.visibility,
+    status: entry.status,
+    kind:entry.kind,
+    repoFullName:entry.repoFullName,
+    moderationHold:entry.moderationHold,
+    moderatorHidden: entry.moderatorHidden,
     skills: [],
     evidence: entry.evidenceUrl
       ? [
@@ -89,6 +100,7 @@ export function mapProfile(
   entries?: EntryDto[],
 ): CommunityProfile {
   return {
+    moderationHold:profile.moderationHold,
     id: profile.userId,
     version: profile.version,
     name: profile.name,
@@ -192,7 +204,7 @@ export async function saveContribution(draft: ClaimDraft) {
       description: draft.description,
       evidenceUrl: draft.sourceUrl.trim() || null,
       occurredAt: draft.date,
-      visibility: "institution",
+      status: "posted",
     },
   );
   return mapJourney(result.entry);
@@ -200,7 +212,7 @@ export async function saveContribution(draft: ClaimDraft) {
 export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft): Promise<JourneyClaim> {
   await communityRequest(`journey/${encodeURIComponent(claim.id)}`,z.object({id:z.string(),updated:z.literal(true)}),"PUT",{
     title:draft.title,description:draft.description,evidenceUrl:draft.sourceUrl.trim()||null,occurredAt:draft.date,
-    visibility:claim.visibility??"institution",expectedRevision:claim.version,
+    status:claim.status??"posted",expectedRevision:claim.version,
   });
   const current=await communityRequest("journey",z.object({entries:z.array(entrySchema)}));
   const saved=current.entries.find(entry=>entry.id===claim.id);

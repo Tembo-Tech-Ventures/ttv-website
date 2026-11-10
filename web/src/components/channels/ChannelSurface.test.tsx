@@ -411,9 +411,9 @@ describe("live behaviour", () => {
     const options = $$("[role=option]");
     expect(options[0].dataset.mentionOption).toBe("tembo");
     // The option and the line under it say the same reach: this channel, not "this thread".
-    expect(options[0].textContent).toContain("Answers from this channel, projects shared in it and public builder profiles");
+    expect(options[0].textContent).toContain("Answers from this channel, saved member profiles and their posted work");
     expect(text(".channel-mentions__scope")).toBe(
-      "Tembo sees: this channel, projects shared in it and public builder profiles. Never cohort recordings or private conversations. You: 6 of 10 today.",
+      "Tembo sees: this channel, saved member profiles and their posted work. Never cohort recordings or private conversations. You: 6 of 10 today.",
     );
     expect(box.getAttribute("aria-activedescendant")).toBe(options[0].id);
     await key(box, "ArrowDown");

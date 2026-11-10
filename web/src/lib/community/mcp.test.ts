@@ -16,7 +16,7 @@ describe("community MCP boundary", () => {
     const init = await (await handleCommunityMcp(request("initialize"), member, service())).json() as RpcResult;
     expect(init.result.capabilities).toEqual({ tools: {} });
     const list = await (await handleCommunityMcp(request("tools/list"), member, service())).json() as RpcResult;
-    expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(["assess_profile", "list_journey", "get_own_profile"]);
+    expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(["assess_profile", "list_journey", "get_own_profile", "search_profiles", "get_profile"]);
   });
   it("keeps own-profile identity in actor-bound service", async () => {
     const deps = service();
@@ -25,19 +25,19 @@ describe("community MCP boundary", () => {
     const res = await (await handleCommunityMcp(request("tools/call", { name: "get_own_profile" }), member, deps)).json() as RpcResult;
     expect(res.result.structuredContent.result.userId).toBe("member");
   });
-  it("blocks member directory access and missing write scope", async () => {
+  it("blocks missing write scope", async () => {
     const deps = service(true);
-    for (const name of ["search_profiles", "update_own_profile", "get_profile"]) {
+    for (const name of ["update_own_profile"]) {
       const res = await (await handleCommunityMcp(request("tools/call", { name, arguments: { userId: "other" } }), member, deps)).json() as RpcResult;
       expect(res.error.code).toBe(-32003);
     }
     expect(deps.searchProfiles).not.toHaveBeenCalled();
   });
-  it("revalidates revoked institutional approval on every call", async () => {
+  it("allows shared profile reads without institutional approval", async () => {
     const deps = service(false);
     const res = await (await handleCommunityMcp(request("tools/call", { name: "search_profiles" }), { userId: "institution", scopes: ["institution:read"] }, deps)).json() as RpcResult;
-    expect(res.error.code).toBe(-32003);
-    expect(deps.searchProfiles).not.toHaveBeenCalled();
+    expect(res.error).toBeUndefined();
+    expect(deps.searchProfiles).toHaveBeenCalled();
   });
   it("requires cookie origins and rejects foreign bearer origins", async () => {
     expect((await handleCommunityMcp(request("initialize"), { userId: "member", scopes: null }, service())).status).toBe(403);
@@ -61,7 +61,8 @@ describe("community MCP boundary", () => {
     const own = await (await handleCommunityMcp(request("tools/call", { name: "list_journey" }), member, deps)).json() as RpcResult;
     expect(own.error).toBeUndefined();
     const denied = await (await handleCommunityMcp(request("tools/call", { name: "list_journey", arguments: { userId: "other" } }), member, deps)).json() as RpcResult;
-    expect(denied.error.code).toBe(-32003);
+    expect(denied.error).toBeUndefined();
+    expect(deps.listJourney).toHaveBeenCalledWith("other");
     const allowed = await handleCommunityMcp(request("tools/call", { name: "get_profile", arguments: { userId: "other" } }), { userId: "institution", scopes: ["institution:read"] }, deps);
     expect(await allowed.text()).toContain('"entries":[]');
   });
@@ -73,7 +74,7 @@ describe("community MCP boundary", () => {
   it("assesses own evidence while denying other subjects without institutional scope", async () => {
     const deps = service();
     vi.mocked(deps.getProfile).mockResolvedValue({ userId: "member", name: "Member", image: null, headline: "", bio: "", skills: [], opportunityGoals: "", version: 1, updatedAt: null });
-    vi.mocked(deps.listJourney).mockResolvedValue([{ id: "private-entry", userId: "member", title: "TypeScript private work", description: "private-only-secret", occurredAt: "2026-10-24", visibility: "private", version: 1, createdAt: 1, updatedAt: 1, confirmations: [] }]);
+    vi.mocked(deps.listJourney).mockResolvedValue([{ kind:"contribution" as const, repoFullName:null, id: "private-entry", userId: "member", title: "TypeScript private work", description: "private-only-secret", occurredAt: "2026-10-24", status: "draft", version: 1, createdAt: 1, updatedAt: 1, confirmations: [] }]);
     const rubric = { id: "test", version: 1, criteria: [{ id: "code", label: "Code", terms: ["TypeScript"] }] };
     const own = await handleCommunityMcp(request("tools/call", { name: "assess_profile", arguments: { userId: "member", rubric } }), member, deps);
     const text = await own.text();

@@ -49,8 +49,8 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
       // Institutional discovery lists only saved community profiles. The other
       // member arrives with one; the member saves theirs during verification.
       // Deleting the user cascades it away.
-      if (persona === "otherMember") await execute('INSERT INTO "communityProfile" ("userId","headline","bio","skills","opportunityGoals","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?)',
-        [userId, "Fictional mobile builder", "Synthetic staging profile. I build offline-first field data apps.", '["Kotlin","SQL"]', "Field data work", timestamp, timestamp]);
+      if (persona === "otherMember") await execute('INSERT INTO "studentProfile" ("id","handle","userId","headline","bio","skills","opportunityGoals","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?,?,?)',
+        [`${userId}-profile`, `member-${runId.slice(0, 20)}`, userId, "Fictional mobile builder", "Synthetic staging profile. I build offline-first field data apps.", '["Kotlin","SQL"]', "Field data work", timestamp, timestamp]);
       const token = randomBytes(32).toString("hex");
       await execute('INSERT INTO "session" ("id","expiresAt","token","userAgent","userId","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?)',
         [sessionId, expiresAt, token, marker, userId, timestamp, timestamp]);

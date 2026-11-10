@@ -34,7 +34,7 @@ const timestamps = { createdAt: epoch, updatedAt: epoch };
 
 /** Fixed synthetic corpus; no random identities, private records, scores or inference. */
 export function buildDemoDataset() {
-  const records = { curriculum: [], program: [], user: [], communityProfile: [], programApplication: [], communityJourney: [], communityConfirmation: [] };
+  const records = { curriculum: [], program: [], user: [], studentProfile: [], programApplication: [], communityJourney: [], communityConfirmation: [] };
   records.curriculum.push({ id: `${DEMO_NAMESPACE}-curriculum`, title: "Fictional demo curriculum", description: "Synthetic staging material; no real cohort or teaching claim.", ...timestamps });
   records.program.push({ id: `${DEMO_NAMESPACE}-program`, name: "Fictional community demo cohort", description: "Synthetic staging cohort; no real enrolment or recordings.", curriculumId: `${DEMO_NAMESPACE}-curriculum`, applicationsOpen: 0, ...timestamps });
   for (let i = 0; i < 150; i++) {
@@ -43,12 +43,12 @@ export function buildDemoDataset() {
     const [project, skills, contribution, goal] = tracks[(i + 9) % tracks.length];
     const cohort = i === 2 || (i >= 4 && i % 2 === 0);
     records.user.push({ id, name, email: `${id}@invalid.ttv`, emailVerified: 1, ...timestamps });
-    records.communityProfile.push({ userId: id, headline: i === 0 ? "Fictional mentor · scoped contribution review" : `Fictional builder · ${skills[0]}`, bio: `Synthetic Kenyan demonstration profile. ${i === 0 ? "Mentor statements describe fictional review activity only." : `Exploring ${project.toLowerCase()}; ${i % 3 === 0 ? "documentation is still incomplete" : "claims are self-reported and supporting links are placeholders"}.`} This is not a real person or a verified ability claim.`, skills: JSON.stringify(i === 0 ? ["Mentoring", "Testing"] : skills), opportunityGoals: i === 0 ? "Fictional contribution review" : `Explore ${goal}; fictional example, no placement promise.`, version: 1, ...timestamps });
+    records.studentProfile.push({ id: `${id}-profile`, handle: `demo-${i}`, publicName: name, userId: id, headline: i === 0 ? "Fictional mentor · scoped contribution review" : `Fictional builder · ${skills[0]}`, bio: `Synthetic Kenyan demonstration profile. ${i === 0 ? "Mentor statements describe fictional review activity only." : `Exploring ${project.toLowerCase()}; ${i % 3 === 0 ? "documentation is still incomplete" : "claims are self-reported and supporting links are placeholders"}.`} This is not a real person or a verified ability claim.`, skills: JSON.stringify(i === 0 ? ["Mentoring", "Testing"] : skills), opportunityGoals: i === 0 ? "Fictional contribution review" : `Explore ${goal}; fictional example, no placement promise.`, contentVersion: 1, ...timestamps });
     if (cohort) records.programApplication.push({ id: `${id}-application`, programId: `${DEMO_NAMESPACE}-program`, userId: id, status: "APPROVED", application: JSON.stringify({ synthetic: true, namespace: DEMO_NAMESPACE, note: "Fictional demo membership only" }), ...timestamps });
     const entryCount = i === 0 || i % 11 === 0 ? 0 : 1 + i % 3;
     for (let j = 0; j < entryCount; j++) {
       const journeyId = `${id}-journey-${j + 1}`;
-      records.communityJourney.push({ id: journeyId, userId: id, title: `Fictional ${project}${j > 0 ? ` · iteration ${j + 1}` : ""}`, description: `Synthetic example: I worked on ${contribution}${j > 0 ? " and documented a follow-up change" : ""}. ${i % 4 === 0 ? "Testing notes are incomplete; do not infer production experience." : "This is a self-reported demonstration, not externally verified work."}`, evidenceUrl: i % 5 === 0 && j === 0 ? null : `https://example.com/ttv-fictional-demo/${i}/${j + 1}`, occurredAt: `2026-10-${String(19 + j).padStart(2, "0")}`, visibility: j === 2 && i % 2 === 0 ? "private" : "institution", version: 1, ...timestamps });
+      records.communityJourney.push({ id: journeyId, userId: id, title: `Fictional ${project}${j > 0 ? ` · iteration ${j + 1}` : ""}`, description: `Synthetic example: I worked on ${contribution}${j > 0 ? " and documented a follow-up change" : ""}. ${i % 4 === 0 ? "Testing notes are incomplete; do not infer production experience." : "This is a self-reported demonstration, not externally verified work."}`, evidenceUrl: i % 5 === 0 && j === 0 ? null : `https://example.com/ttv-fictional-demo/${i}/${j + 1}`, occurredAt: `2026-10-${String(19 + j).padStart(2, "0")}`, visibility: "institution", state: j === 2 && i % 2 === 0 ? "DRAFT" : "POSTED", version: 1, ...timestamps });
       if ((i + j) % 3 === 0) records.communityConfirmation.push({ id: `${journeyId}-confirmation`, journeyId, mentorId: DEMO_PERSONAS.mentor, statement: "Synthetic mentor statement: in this fictional example, I reviewed the described change and its stated limits. No real review or endorsement occurred.", method: "Fictional walkthrough of demonstration notes; placeholder source not independently inspected.", journeyVersion: 1, mentorRole: "MENTOR", ...timestamps });
     }
   }
@@ -59,7 +59,7 @@ const chunks = (values, size) => Array.from({ length: Math.ceil(values.length / 
 const placeholders = values => values.map(() => "?").join(",");
 const descriptors = {
   curriculum: ["id", ["title"]], program: ["id", ["curriculumId"]], user: ["id", ["email"]],
-  communityProfile: ["userId", []], programApplication: ["id", ["userId", "programId"]],
+  studentProfile: ["userId", []], programApplication: ["id", ["userId", "programId"]],
   communityJourney: ["id", ["userId"]], communityConfirmation: ["id", ["journeyId", "mentorId"]], UserRoles: ["id", ["userId", "roleId"]],
 };
 

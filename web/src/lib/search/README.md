@@ -1,5 +1,7 @@
 # Platform search v1
 
+See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
+
 `GET /api/search` implements the existing `ROUTES.search`, `SearchQuery` and
 `SearchResults` contracts. The client search store can consume it unchanged.
 Every response is `no-store`. `spaces` OFF returns 404 before parsing or source
@@ -29,34 +31,15 @@ people/projects. Incompatible or inaccessible
 cohort scopes return the same 403 without revealing whether a cohort exists.
 All four groups are always present.
 
-`capabilitiesFor` runs once per search. No implicit administrator, global
+Capabilities are loaded only for scopes that need cohort or channel access. No implicit administrator, global
 mentor or institution recording override is used. Approved/audit/completed
 members and assigned instructors/TAs/mentors receive only their explicit
 cohorts. Demo identities are additionally limited to demo public profiles and
 their canonical demo cohort. Revocation is effective on the next request.
 
-People require a published `studentProfile` and a completed application with
-`completedAt`, matching the existing public talent page. Only public identity
-snapshots are searched or emitted; private authentication names, emails and
-moderation fields are excluded. Project results use current `communityJourney`
-revisions with `institution` visibility, and additionally require a publicly
-eligible owner profile. Mentor/admin owners are excluded. Only the owner or
-canonical institution/admin can read them.
+People and projects use the shared member predicates linked above. Names fall back to account names only on signed-in surfaces; email and moderation details are never search results. The visibility kind is `COMMUNITY`, labelled for signed-in members. Private drafts never appear, including for their owner.
 
-Institutional discovery's shared rule, `discoverableMember` in
-`src/lib/community/eligibility.ts` (owner decision 2026-11-01), requires a
-saved community profile, no MENTOR or ADMIN role, and not the caller. The
-INSTITUTION role never excludes an otherwise eligible member. Institution
-callers see only such people and such owners' shared projects. Admins keep
-their reach: the public talent directory, and shared projects of every owner
-who is not a mentor or admin. A caller holding both ADMIN and INSTITUTION is
-an admin here. Everyone else sees the public talent directory unchanged.
-
-`institution` does not mean community-public. Private projects never
-appear, even for their owner. The `PRIVATE` visibility kind carries the explicit
-label “Shared with approved institutions”; no institution enum is added.
-
-Links use existing supported destinations: public talent profiles, an owner's
+Links use existing supported destinations: member profiles, an owner's
 community workspace, the institutional profile view, and recording timestamps.
 Project links open the containing profile/workspace; no unsupported revision or
 project anchor is invented. Session quotes come from `transcript_segment` joined

@@ -1,3 +1,4 @@
+import type { WorkIdentity } from "@/components/community/community-types";
 export interface EvidenceSource {
   id: string;
   title: string;
@@ -5,7 +6,7 @@ export interface EvidenceSource {
   kind: string;
 }
 
-export interface JourneyClaim {
+export interface JourneyClaim extends WorkIdentity {
   id: string;
   title: string;
   description: string;
@@ -13,7 +14,9 @@ export interface JourneyClaim {
   skills: string[];
   evidence: EvidenceSource[];
   version: number;
-  visibility: "institution" | "private";
+  status: "posted" | "draft";
+  moderationHold?: boolean;
+  moderatorHidden?:boolean;
   confirmations: ClaimConfirmation[];
 }
 
@@ -34,6 +37,7 @@ export function currentConfirmations(claim: JourneyClaim): ClaimConfirmation[] {
 }
 
 export interface CommunityProfile {
+  moderationHold?:boolean;
   matches?: import("@/lib/community/discovery-contract").DiscoveryMatch[];
   discovery?: {evaluated:number;searched:number};
   id: string;

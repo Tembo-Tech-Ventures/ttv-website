@@ -40,7 +40,11 @@ function profile(overrides: Record<string, unknown> = {}) {
     githubLogin: "achieng", contentVersion: 3, moderationOutcome: null, moderationFlags: null, moderationCheckedAt: null,
     moderationReviewRequired: false, publishedAt: AT, createdAt: AT, updatedAt: AT,
     user: { id: "achieng", name: "Achieng Otieno", email: "achieng@example.test" },
-    highlights: [{ id: "h1", repoFullName: "achieng/ledger", repoUrl: "https://github.com/achieng/ledger", stars: 3, language: "TypeScript", description: "A ledger.", blurb: "My best work.", sortOrder: 0 }],
+    work: [{ id: "h1", version: 1,
+        title: "achieng/ledger",
+        evidenceUrl: "https://github.com/achieng/ledger",
+        kind: "repo",
+        state: "POSTED", repoFullName: "achieng/ledger", repoUrl: "https://github.com/achieng/ledger", stars: 3, language: "TypeScript", description: "A ledger.", blurb: "My best work.", sortOrder: 0 }],
     posts: [
       { id: "post-1", title: "Notes on ledgers", slug: "ledgers", status: "PUBLISHED", adminNote: null, updatedAt: AT },
       { id: "post-2", title: "A draft", slug: "draft", status: "DRAFT", adminNote: null, updatedAt: AT },
@@ -96,6 +100,7 @@ describe("a builder profile on the style guide", () => {
     expect(body).toContain("Kisumu, KE");
     expect(body).toContain("Open to freelance work");
     expect(body).toMatch(/<a href="https:\/\/example.test\/achieng" class="[^"]*underline[^"]*min-h-11[^"]*" target="_blank" rel="noopener noreferrer">Portfolio<span class="sr-only"> \(opens in a new tab\)<\/span><\/a>/);
+    expect(body).toContain('name="returnProfileId" value="profile-1"');
     // Highlights and posts are hairline lists, not cards inside a card.
     expect(body).toMatch(/<ul class="divide-y divide-hairline" data-highlights>[\s\S]*?achieng\/ledger[\s\S]*?3 stars · TypeScript/);
     expect(body).not.toMatch(/<ul class="divide-y divide-hairline" data-(highlights|posts)>(?:(?!<\/ul>)[\s\S])*data-card/);
@@ -146,11 +151,28 @@ describe("a builder profile on the style guide", () => {
   });
 
   it("says plainly when there is nothing to list", async () => {
-    store.find.mockResolvedValue(profile({ highlights: [], posts: [] }));
+    store.find.mockResolvedValue(profile({ work: [], posts: [] }));
     store.cohorts.mockResolvedValue([]);
     const { body } = await visit();
     expect(body).toContain("None yet. A cohort shows here once its application is marked completed.");
     expect(body).toContain("None yet. The builder's posts show here as they write them.");
     expect(body).not.toContain("data-highlights");
   });
+});
+
+it("hides author-only drafts and offers a takedown for posted work", async () => {
+  const posted = profile().work[0];
+  store.find.mockResolvedValue(profile({ work: [posted, { ...posted, id: "draft", state: "DRAFT", title: "Private title", description: "Private body" }] }));
+  const { body } = await visit();
+  expect(body).not.toContain("Private title");
+  expect(body).not.toContain("Private body");
+  expect(body).toContain('action="/admin/profiles"');
+  expect(body).toContain('name="decision" value="hide"');
+  expect(body).toContain('name="revision" value="1"');
+});
+it("explains a queued draft without claiming it was published or held", async () => {
+  store.find.mockResolvedValue(profile({ status: "DRAFT", moderationOutcome: null, moderationReviewRequired: true }));
+  const { body } = await visit();
+  expect(body).toContain("The content check has not finished.");
+  expect(body).not.toContain("published automatically");
 });

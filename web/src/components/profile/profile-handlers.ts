@@ -1,15 +1,13 @@
+import {
+  pendingProfileModeration,
+  checkedModerationColumns,
+  profileModerationState,
+} from "@/lib/members/moderation-state";
 import { and, eq, exists, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import { parseSkillsJson, parseTopicsJson } from "@/lib/talent/profile";
-import {
-  profileModerationMessages,
-  type ProfileModerationState,
-} from "@/lib/moderation/clef";
-import {
-  moderationColumns,
-  publishesAfterModeration,
-} from "@/lib/talent/profile-moderation";
+import { profileModerationMessages } from "@/lib/moderation/clef";
+import { publishesAfterModeration } from "@/lib/talent/profile-moderation";
 import {
   PROFILE_CHANGED_MESSAGE,
   type ProfileContentCheck,
@@ -20,16 +18,6 @@ export interface ProfileIdentityInput {
   name?: string;
   avatarUrl?: string;
 }
-
-const clearedModeration = {
-  publicName: null,
-  publicAvatarUrl: null,
-  moderationOutcome: null,
-  moderationFlags: null,
-  moderationScores: null,
-  moderationCheckedAt: null,
-  moderationReviewRequired: false,
-} as const;
 
 function changedDuringCheck(): ProfileFormResult {
   return {
@@ -49,7 +37,7 @@ async function applyVersionedIdentityUpdate(
   db: Database,
   userId: string,
   profile: { id: string; contentVersion: number },
-  expectedStatus: "DRAFT" | "PUBLISHED",
+  expectedStatus: typeof schema.studentProfile.$inferSelect.status,
   input: ProfileIdentityInput,
   profileValues: Record<string, unknown>,
 ): Promise<boolean> {
@@ -103,6 +91,7 @@ export async function saveProfileIdentity(
       handle: true,
       headline: true,
       bio: true,
+      opportunityGoals: true,
       location: true,
       country: true,
       skills: true,
@@ -114,8 +103,10 @@ export async function saveProfileIdentity(
     },
     with: {
       user: { columns: { name: true, image: true } },
-      highlights: {
+      work: {
         columns: {
+          title: true,
+          repoDescription: true,
           repoFullName: true,
           description: true,
           blurb: true,
@@ -134,19 +125,6 @@ export async function saveProfileIdentity(
     return { success: true };
   }
 
-  if (profile.status === "DRAFT") {
-    const updated = await applyVersionedIdentityUpdate(
-      db,
-      userId,
-      profile,
-      "DRAFT",
-      input,
-      clearedModeration,
-    );
-    if (!updated) return changedDuringCheck();
-    return { success: true };
-  }
-
   if (profile.status === "SUSPENDED") {
     await db
       .update(schema.user)
@@ -157,27 +135,36 @@ export async function saveProfileIdentity(
 
   const proposedName = input.name ?? profile.publicName ?? profile.user.name;
   const proposedAvatarUrl = input.avatarUrl ?? profile.publicAvatarUrl;
-  const moderationState: ProfileModerationState = {
+  if (
+    proposedName === (profile.publicName ?? profile.user.name) &&
+    proposedAvatarUrl === profile.publicAvatarUrl
+  ) {
+    await db
+      .update(schema.user)
+      .set(userIdentityValues(input))
+      .where(eq(schema.user.id, userId));
+    return { success: true };
+  }
+  const moderationState = profileModerationState(profile, {
     displayName: proposedName,
-    handle: profile.handle,
-    headline: profile.headline,
-    bio: profile.bio,
-    location: profile.location,
-    country: profile.country,
-    skills: parseSkillsJson(profile.skills),
-    githubLogin: profile.githubLogin,
-    portfolioUrl: profile.portfolioUrl,
-    linkedinUrl: profile.linkedinUrl,
-    highlights: profile.highlights.map(
-      ({ repoFullName, description, blurb, language, topics }) => ({
-        repoFullName,
-        description,
-        blurb,
-        language,
-        topics: parseTopicsJson(topics),
-      }),
-    ),
-  };
+  });
+  const saveTextFirst = profile.status === "DRAFT";
+  // Saved profiles are visible to members. Save text first, then check
+  // the exact new revision. Keep the previous safe avatar until its check ends.
+  if (saveTextFirst) {
+    const saved = await applyVersionedIdentityUpdate(
+      db,
+      userId,
+      profile,
+      profile.status,
+      input,
+      {
+        publicName: proposedName,
+        ...pendingProfileModeration(),
+      },
+    );
+    if (!saved) return changedDuringCheck();
+  }
   let moderation: Awaited<ReturnType<ProfileContentCheck>>;
   try {
     moderation = await (checkContent?.(moderationState, proposedAvatarUrl) ??
@@ -186,7 +173,16 @@ export async function saveProfileIdentity(
     moderation = { outcome: "error" as const, flags: [], scores: {} };
   }
 
-  const moderationValues = moderationColumns(moderation);
+  const moderationValues = checkedModerationColumns(moderation);
+  if (saveTextFirst)
+    return finishSavedIdentity(
+      db,
+      userId,
+      profile,
+      proposedName,
+      proposedAvatarUrl,
+      moderation,
+    );
   const profileValues = publishesAfterModeration(moderation)
     ? {
         ...moderationValues,
@@ -197,21 +193,6 @@ export async function saveProfileIdentity(
       }
     : moderationValues;
   if (!publishesAfterModeration(moderation)) {
-    const updateResult = await db
-      .update(schema.studentProfile)
-      .set({
-        ...profileValues,
-        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-      })
-      .where(
-        and(
-          eq(schema.studentProfile.id, profile.id),
-          eq(schema.studentProfile.userId, userId),
-          eq(schema.studentProfile.status, "PUBLISHED"),
-          eq(schema.studentProfile.contentVersion, profile.contentVersion),
-        ),
-      );
-    if (!updateResult.meta.changes) return changedDuringCheck();
     return {
       success: false,
       error: "Your changes need attention before they can go live.",
@@ -233,5 +214,46 @@ export async function saveProfileIdentity(
     success: true,
     moderationOutcome: moderation.outcome,
     published: true,
+  };
+}
+
+async function finishSavedIdentity(
+  db: Database,
+  userId: string,
+  profile: {
+    id: string;
+    status: typeof schema.studentProfile.$inferSelect.status;
+    contentVersion: number;
+  },
+  proposedName: string,
+  proposedAvatarUrl: string | null,
+  moderation: Awaited<ReturnType<ProfileContentCheck>>,
+): Promise<ProfileFormResult> {
+  const result = await db
+    .update(schema.studentProfile)
+    .set({
+      publicName: proposedName,
+      ...checkedModerationColumns(moderation),
+      ...(publishesAfterModeration(moderation)
+        ? {
+            publicAvatarUrl: Object.hasOwn(moderation, "publicAvatarUrl")
+              ? (moderation.publicAvatarUrl ?? null)
+              : proposedAvatarUrl,
+          }
+        : {}),
+    })
+    .where(
+      and(
+        eq(schema.studentProfile.id, profile.id),
+        eq(schema.studentProfile.userId, userId),
+        eq(schema.studentProfile.status, profile.status),
+        eq(schema.studentProfile.contentVersion, profile.contentVersion + 1),
+      ),
+    );
+  if (!result.meta.changes) return changedDuringCheck();
+  return {
+    success: true,
+    moderationOutcome: moderation.outcome,
+    ...(profile.status === "PUBLISHED" ? { published: true } : {}),
   };
 }

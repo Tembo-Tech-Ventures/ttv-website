@@ -56,6 +56,7 @@ export const PROFILE_DONE: Record<AdminProfileAction, string> = {
 };
 
 interface ReviewableProfile {
+  status?: string;
   moderationFlags: string | null;
   moderationOutcome: string | null;
 }
@@ -64,11 +65,14 @@ interface ReviewableProfile {
 export function profileReviewReasons(profile: ReviewableProfile): string[] {
   const flags = parseModerationFlags(profile.moderationFlags);
   if (flags.length > 0) return flags.map((flag) => PROFILE_MODERATION_MESSAGES[flag]);
-  return [
-    profile.moderationOutcome === "error"
-      ? "The content check was unavailable, so this profile published automatically."
-      : "The content check held this profile.",
+  if (profile.moderationOutcome === "pass") return [];
+  if (profile.moderationOutcome === "hold") return ["The content check held this profile."];
+  if (profile.moderationOutcome === "error") return [
+    profile.status === "PUBLISHED"
+      ? "The check was unavailable. This profile remains listed and needs review."
+      : "The check was unavailable. This saved profile needs review.",
   ];
+  return ["The content check has not finished. This saved profile needs review."];
 }
 
 // Drafts first, then public profiles, then hidden ones; within each, the newest change first.

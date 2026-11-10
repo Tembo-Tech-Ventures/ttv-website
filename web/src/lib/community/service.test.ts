@@ -1,3 +1,4 @@
+import { addMemberSchema } from "@/test/member-schema";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +19,7 @@ function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
   // Role grants also answer pending access requests (src/lib/onboarding/decisions.ts), in one batch.
   for (const name of ["0021_feature_flags.sql","0025_onboarding.sql","0027_mentor_set_aside.sql"]) sql.exec(readFileSync(new URL(`../db/migrations/${name}`,import.meta.url),"utf8").replaceAll("--> statement-breakpoint", ""));
   for (const [actor,role] of [["mentor","MENTOR"],["institution","INSTITUTION"]]) sql.prepare(`INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(actor,actor,role);
+  addMemberSchema(sql);
   const db = { prepare(query: string) {
     let values: (string | number | null)[] = [];
     const statement = {
@@ -31,10 +33,10 @@ function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
     try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec("COMMIT"); return results; }
     catch (error) { sql.exec("ROLLBACK"); throw error; }
   } } as unknown as D1Database;
-  return { db, sql, member: createCommunityService(db,"member"), institution: createCommunityService(db,"institution"), mentor: createCommunityService(db,"mentor") };
+  return { db, sql, member: createCommunityService(db, "member", undefined, undefined, undefined, {} as Env), institution: createCommunityService(db, "institution", undefined, undefined, undefined, {} as Env), mentor: createCommunityService(db, "mentor", undefined, undefined, undefined, {} as Env) };
 }
 const profile = { headline: "Builder", bio: "Builds tools", skills: ["TypeScript"], opportunityGoals: "First developer role" };
-const entry = { title: "Built a tool", description: "Implemented and tested a tool", evidenceUrl: "https://github.com/example/tool", occurredAt: "2026-10-24", visibility: "institution" };
+const entry = { title: "Built a tool", description: "Implemented and tested a tool", evidenceUrl: "https://github.com/example/tool", occurredAt: "2026-10-24", status: "posted" };
 describe("community service real SQL boundaries", () => {
   it("lets non-cohort members contribute and versions profile edits", async () => {
     const f = fixture();
@@ -47,11 +49,11 @@ describe("community service real SQL boundaries", () => {
   it("searches only saved community profiles and revalidates institutional approval", async () => {
     const f = fixture();
     expect(await f.institution.searchProfiles({query:"Other"})).toEqual([]);
-    await createCommunityService(f.db,"other").updateOwnProfile(profile);
+    await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateOwnProfile(profile);
     expect(await f.institution.searchProfiles({query:"Other"})).toEqual([expect.objectContaining({userId:"other",version:1})]);
-    await expect(f.member.searchProfiles({})).rejects.toMatchObject({status:403});
+    expect(await f.member.searchProfiles({})).toHaveLength(1);
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("institution");
-    await expect(f.institution.searchProfiles({})).rejects.toMatchObject({status:403});
+    expect(await f.institution.searchProfiles({})).toHaveLength(1);
   });
   it("applies talent eligibility before query, skill filtering and pagination", async () => {
     const f = fixture();
@@ -65,10 +67,10 @@ describe("community service real SQL boundaries", () => {
     for (const [id,roles,included] of candidates) {
       f.sql.prepare("INSERT INTO user VALUES (?,?,null)").run(id,`${included ? "Z" : "A"} ${id}`);
       for (const role of roles) f.sql.prepare("INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))").run(`${id}-${role}`,id,role);
-      const service=createCommunityService(f.db,id);
+      const service=createCommunityService(f.db, id, undefined, undefined, undefined, {} as Env);
       await service.updateOwnProfile({...profile,headline:"Eligibility candidate",skills:["TypeScript"]});
       await service.createJourney(entry);
-      await service.createJourney({...entry,visibility:"private",description:"Hidden evidence"});
+      await service.createJourney({...entry,status:"draft",description:"Hidden evidence"});
     }
     const all=await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"]});
     expect(all.map(p=>p.userId).toSorted()).toEqual(candidates.filter(c=>c[2]).map(c=>c[0]).toSorted());
@@ -86,7 +88,7 @@ describe("community service real SQL boundaries", () => {
         await expect(f.institution.listJourney(id)).rejects.toMatchObject({status:404});
       }
       // Removing the saved profile removes the person from discovery.
-      f.sql.prepare("DELETE FROM communityProfile WHERE userId=?").run(id);
+      f.sql.prepare("DELETE FROM studentProfile WHERE userId=?").run(id);
       expect(await f.institution.searchProfiles({query:id})).toEqual([]);
       await expect(f.institution.getProfile(id)).rejects.toMatchObject({status:404});
     }
@@ -94,10 +96,10 @@ describe("community service real SQL boundaries", () => {
   it("refuses a caller without institutional access the same way whether or not the person exists", async () => {
     const f = fixture();
     await f.member.updateOwnProfile(profile);
-    for (const target of ["member", "nobody-at-all"]) {
-      await expect(f.mentor.getProfile(target)).rejects.toMatchObject({ status: 403 });
-      await expect(f.mentor.listJourney(target)).rejects.toMatchObject({ status: 403 });
-      await expect(f.mentor.getProfileWithJourney(target)).rejects.toMatchObject({ status: 403 });
+    for (const target of ["nobody-at-all"]) {
+      await expect(f.mentor.getProfile(target)).rejects.toMatchObject({ status: 404 });
+      await expect(f.mentor.listJourney(target)).rejects.toMatchObject({ status: 404 });
+      await expect(f.mentor.getProfileWithJourney(target)).rejects.toMatchObject({ status: 404 });
     }
     await expect(f.institution.getProfileWithJourney("nobody-at-all")).rejects.toMatchObject({ status: 404 });
   });
@@ -115,19 +117,19 @@ describe("community service real SQL boundaries", () => {
   it("AND matches skill criteria before limiting results", async () => {
     const f = fixture();
     await f.member.updateOwnProfile({...profile,skills:["React","TypeScript"]});
-    await createCommunityService(f.db,"other").updateOwnProfile({...profile,skills:["React"]});
+    await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateOwnProfile({...profile,skills:["React"]});
     expect(await f.institution.searchProfiles({skills:["react","typescript"],limit:1})).toEqual([expect.objectContaining({userId:"member"})]);
     expect(await f.institution.searchProfiles({skills:["act"]})).toEqual([]);
     await expect(f.institution.searchProfiles({skills:Array(11).fill("React")})).rejects.toMatchObject({status:400});
   });
   it("excludes private contributions from institution and mentor reads", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); await f.member.createJourney(entry);
-    const hidden = await f.member.createJourney({...entry,title:"Private",description:"Private call",visibility:"private"});
+    const hidden = await f.member.createJourney({...entry,title:"Private",description:"Private call",status:"draft"});
     expect(await f.member.listJourney()).toHaveLength(2);
     const shared = await f.institution.listJourney("member"); expect(shared).toHaveLength(1);
     expect(JSON.stringify(shared)).not.toContain("Private call");
     await expect(f.mentor.confirmJourney(hidden.id,{expectedRevision:1,statement:"I checked the code",method:"Review"})).rejects.toMatchObject({status:404});
-    await expect(createCommunityService(f.db,"other").getProfile("member")).rejects.toMatchObject({status:403});
+    expect(await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).getProfile("member")).toMatchObject({userId:"member"});
   });
   it("records scoped mentor provenance and rejects self confirmation and revoked mentors", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
@@ -135,7 +137,7 @@ describe("community service real SQL boundaries", () => {
     await f.mentor.confirmJourney(item.id,claim);
     expect((await f.institution.listJourney("member"))[0].confirmations).toEqual([expect.objectContaining({mentorId:"mentor",journeyVersion:1,mentorRole:"MENTOR",statement:claim.statement,method:claim.method})]);
     await expect(f.member.confirmJourney(item.id,claim)).rejects.toMatchObject({status:403});
-    const own = await f.mentor.createJourney(entry); await expect(f.mentor.confirmJourney(own.id,claim)).rejects.toMatchObject({status:403});
+    const own = await f.mentor.createJourney(entry); await expect(f.mentor.confirmJourney(own.id,claim)).rejects.toMatchObject({status:404});
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("mentor"); await expect(f.mentor.confirmJourney(item.id,claim)).rejects.toMatchObject({status:403});
   });
   it("rejects injected ownership, unsafe evidence links and invalid calendar dates", async () => {
@@ -145,7 +147,7 @@ describe("community service real SQL boundaries", () => {
   });
   it("limits mentor review to shared contributions and excludes self", async () => {
     const f = fixture();
-    await f.member.createJourney(entry); await f.member.createJourney({...entry,visibility:"private"}); await f.mentor.createJourney(entry);
+    await f.member.createJourney(entry); await f.member.createJourney({...entry,status:"draft"}); await f.mentor.createJourney(entry);
     expect(await f.mentor.listMentorship()).toEqual([expect.objectContaining({userId:"member",memberName:"Member"})]);
     await expect(f.member.listMentorship()).rejects.toMatchObject({status:403});
   });
@@ -155,9 +157,9 @@ describe("community service real SQL boundaries", () => {
     f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('admin','ADMIN'); INSERT INTO UserRoles VALUES ('admin-grant','member','admin');`);
     await f.member.setAccess({userId:"other",role:"INSTITUTION",granted:true});
     await f.member.setAccess({userId:"other",role:"INSTITUTION",granted:true});
-    expect((await createCommunityService(f.db,"other").access()).isInstitution).toBe(true);
+    expect((await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).access()).isInstitution).toBe(true);
     await f.member.setAccess({userId:"other",role:"INSTITUTION",granted:false});
-    expect((await createCommunityService(f.db,"other").access()).isInstitution).toBe(false);
+    expect((await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).access()).isInstitution).toBe(false);
     await expect(f.member.setAccess({userId:"other",role:"ADMIN",granted:true})).rejects.toMatchObject({status:400});
   });
   it("rejects confirmation if its evidence revision changes during review", async () => {
@@ -172,7 +174,7 @@ describe("community service real SQL boundaries", () => {
   it("versions edited evidence without transferring a mentor confirmation to the revision", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
     await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked the original implementation",method:"Review"});
-    await expect(createCommunityService(f.db,"other").updateJourney(item.id,{...entry,title:"Changed"})).rejects.toMatchObject({status:404});
+    await expect(createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateJourney(item.id,{...entry,title:"Changed"})).rejects.toMatchObject({status:404});
     await f.member.updateJourney(item.id,{...entry,title:"Changed implementation"});
     const [saved] = await f.institution.listJourney("member");
     expect(saved).toMatchObject({version:2,title:"Changed implementation"});
@@ -184,8 +186,8 @@ describe("community service real SQL boundaries", () => {
   it("lets owners retract shared evidence while rejecting other users", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
     await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I reviewed this code",method:"Review"});
-    await expect(createCommunityService(f.db,"other").setJourneyVisibility(item.id,{visibility:"private"})).rejects.toMatchObject({status:404});
-    await f.member.setJourneyVisibility(item.id,{visibility:"private"});
+    await expect(createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).setJourneyStatus(item.id,{status:"draft"})).rejects.toMatchObject({status:404});
+    await f.member.setJourneyStatus(item.id,{status:"draft"});
     expect(await f.institution.listJourney("member")).toEqual([]);
     expect(await f.mentor.listMentorship()).toEqual([]);
     await expect(f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked this code",method:"Review"})).rejects.toMatchObject({status:404});
@@ -196,13 +198,13 @@ describe("community service real SQL boundaries", () => {
   it("requires ADMIN for self-grants and preserves additive member roles", async () => {
     const f = fixture();
     for (const actor of ["member", "mentor", "institution"]) {
-      const service = createCommunityService(f.db, actor);
+      const service = createCommunityService(f.db, actor, undefined, undefined, undefined, {} as Env);
       await expect(service.setAccess({ userId: actor, role: "INSTITUTION", granted: true })).rejects.toMatchObject({ status: 403 });
     }
     expect((await f.member.access()).isInstitution).toBe(false);
     f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('admin','ADMIN'),('student','STUDENT');
       INSERT INTO UserRoles VALUES ('member-student','member','student'),('other-admin','other','admin');`);
-    const admin = createCommunityService(f.db, "other");
+    const admin = createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env);
     await admin.setAccess({ userId: "member", role: "INSTITUTION", granted: true });
     expect(await f.member.access()).toMatchObject({ isInstitution: true, isAdmin: false });
     expect(f.sql.prepare(`SELECT r.name FROM Roles r JOIN UserRoles ur ON ur.roleId=r.id WHERE ur.userId='member' ORDER BY r.name`).all()).toEqual([{ name: "INSTITUTION" }, { name: "STUDENT" }]);
@@ -220,51 +222,51 @@ describe("community service real SQL boundaries", () => {
 describe("community HTTP", () => {
   it("requires auth, same origin and correct scopes", async () => {
     const {db} = fixture(); const get = new Request("https://ttv.example/api/community/profile");
-    expect((await handleCommunityRequest(get,"profile",null,db)).status).toBe(401);
-    expect((await handleCommunityRequest(new Request(get.url,{method:"PUT",body:JSON.stringify(profile)}),"profile",{id:"member",scopes:null},db)).status).toBe(403);
-    expect((await handleCommunityRequest(get,"profiles",{id:"institution",scopes:["community:read"]},db)).status).toBe(403);
+    expect((await handleCommunityRequest(get,"profile",null,db, {} as Env)).status).toBe(401);
+    expect((await handleCommunityRequest(new Request(get.url,{method:"PUT",body:JSON.stringify(profile)}),"profile",{id:"member",scopes:null},db, {} as Env)).status).toBe(403);
+    expect((await handleCommunityRequest(get,"profiles",{id:"institution",scopes:["community:read"]},db, {} as Env)).status).toBe(200);
   });
   it("supports actual writes and evidence reads", async () => {
     const {db} = fixture(); const put = new Request("https://ttv.example/api/community/profile",{method:"PUT",headers:{Origin:"https://ttv.example"},body:JSON.stringify(profile)});
-    expect((await handleCommunityRequest(put,"profile",{id:"member",scopes:null},db)).status).toBe(200);
-    const res = await handleCommunityRequest(new Request(put.url),"profiles/member",{id:"institution",scopes:["institution:read"]},db);
+    expect((await handleCommunityRequest(put,"profile",{id:"member",scopes:null},db, {} as Env)).status).toBe(200);
+    const res = await handleCommunityRequest(new Request(put.url),"profiles/member",{id:"institution",scopes:["institution:read"]},db, {} as Env);
     expect(await res.json()).toMatchObject({profile:{headline:"Builder"},entries:[]});
   });
   it("returns safe errors for malformed JSON and storage failure", async () => {
     const {db} = fixture(); const req = new Request("https://ttv.example/api/community/profile",{method:"PUT",headers:{Origin:"https://ttv.example"},body:"{"});
-    expect((await handleCommunityRequest(req,"profile",{id:"member",scopes:null},db)).status).toBe(400);
+    expect((await handleCommunityRequest(req,"profile",{id:"member",scopes:null},db, {} as Env)).status).toBe(400);
     const broken = {prepare(){throw new Error("private database text");}} as unknown as D1Database;
-    const res = await handleCommunityRequest(new Request(req.url),"profile",{id:"member",scopes:null},broken);
+    const res = await handleCommunityRequest(new Request(req.url),"profile",{id:"member",scopes:null},broken, {} as Env);
     expect(res.status).toBe(500); expect(await res.text()).not.toContain("private database");
   });
   it("blocks delegated role grants and limits streamed request size", async () => {
     const {db} = fixture();
     const req = () => new Request("https://ttv.example/api/community/access",{method:"POST",headers:{Origin:"https://ttv.example"},body:JSON.stringify({userId:"other",role:"INSTITUTION",granted:true})});
-    expect((await handleCommunityRequest(req(),"access",{id:"member",scopes:["community:write"]},db)).status).toBe(403);
-    expect((await handleCommunityRequest(req(),"access",{id:"member",scopes:null,delegatedSession:true},db)).status).toBe(403);
+    expect((await handleCommunityRequest(req(),"access",{id:"member",scopes:["community:write"]},db, {} as Env)).status).toBe(403);
+    expect((await handleCommunityRequest(req(),"access",{id:"member",scopes:null,delegatedSession:true},db, {} as Env)).status).toBe(403);
     const huge = new Request(req().url,{method:"PUT",headers:{Origin:"https://ttv.example"},body:"x".repeat(32001)});
-    expect((await handleCommunityRequest(huge,"profile",{id:"member",scopes:null},db)).status).toBe(413);
+    expect((await handleCommunityRequest(huge,"profile",{id:"member",scopes:null},db, {} as Env)).status).toBe(413);
   });
   it("assesses only authorized shared evidence and rejects unknown bearer fallback", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); await f.member.createJourney(entry);
-    await f.member.createJourney({...entry,description:"secret skill",visibility:"private"});
+    await f.member.createJourney({...entry,description:"secret skill",status:"draft"});
     const body = {id:"hiring",version:1,criteria:[{id:"tool",label:"Tool evidence",terms:["implemented"]}]};
     const req = new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
-    const res = await handleCommunityRequest(req,"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db);
+    const res = await handleCommunityRequest(req,"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db, {} as Env);
     expect(res.status).toBe(200); expect(await res.json()).toMatchObject({assessment:{status:"unavailable",errorCode:"provider_unavailable",rubric:{version:1},criteria:[]}});
     const spoof = new Request("https://ttv.example/api/community/profile",{headers:{Authorization:"Bearer unknown"}});
-    expect((await handleCommunityRequest(spoof,"profile",{id:"member",scopes:null},f.db)).status).toBe(401);
+    expect((await handleCommunityRequest(spoof,"profile",{id:"member",scopes:null},f.db, {} as Env)).status).toBe(401);
   });
   it("uses the validated model contract over REST and authorizes before inference", async () => {
     const f = fixture(); await f.member.updateOwnProfile(profile); const contribution = await f.member.createJourney(entry);
-    await f.member.createJourney({...entry,description:"private-only-secret",visibility:"private"});
+    await f.member.createJourney({...entry,description:"private-only-secret",status:"draft"});
     const complete = vi.fn().mockResolvedValue(JSON.stringify({criteria:[{criterionId:"tool",status:"assessed",rating:3,explanation:"Specific documented contribution, not inferred ability.",citations:[{kind:"journey",id:contribution.id,version:1}]}]}));
     vi.spyOn(assessmentProvider,"createAssessmentProvider").mockReturnValue({model:"test-model",complete});
     const body = {id:"hiring",version:1,criteria:[{id:"tool",label:"Tool evidence",terms:["implemented"]}]};
     const request = () => new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
-    const denied = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"other",scopes:["institution:read"]},f.db);
+    const denied = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"other",scopes:["institution:read"]},f.db, {} as Env);
     expect(denied.status).toBe(403); expect(complete).not.toHaveBeenCalled();
-    const response = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db);
+    const response = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db, {} as Env);
     expect(await response.json()).toMatchObject({assessment:{status:"completed",method:"model-evidence-support-v1",criteria:[{criterionId:"tool",label:"Tool evidence",rating:3,citations:[{id:contribution.id,userId:"member",quote:entry.description}]}]}});
     expect(JSON.stringify(complete.mock.calls)).not.toContain("private-only-secret");
   });
@@ -278,9 +280,9 @@ describe('retained demo dataset isolation',()=>{
     const member=prefix+'member-cohort',institution=prefix+'institution',mentor=prefix+'mentor';
     for(const id of [member,institution,mentor,prefix+'unknown']) f.sql.prepare('INSERT INTO user VALUES(?,?,null)').run(id,id);
     for(const [id,role] of [[institution,'INSTITUTION'],[mentor,'MENTOR']]) f.sql.prepare('INSERT INTO UserRoles VALUES(?,?,(SELECT id FROM Roles WHERE name=?))').run(id,id,role);
-    const demoMember=createCommunityService(f.db,member,null,'staging');
-    const demoInstitution=createCommunityService(f.db,institution,null,'staging');
-    const demoMentor=createCommunityService(f.db,mentor,null,'staging');
+    const demoMember=createCommunityService(f.db, member, null, 'staging', undefined, {} as Env);
+    const demoInstitution=createCommunityService(f.db, institution, null, 'staging', undefined, {} as Env);
+    const demoMentor=createCommunityService(f.db, mentor, null, 'staging', undefined, {} as Env);
     await demoMember.updateOwnProfile(profile);
     const realEntry=await f.member.createJourney(entry);
     const demoEntry=await demoMember.createJourney(entry);
@@ -297,8 +299,8 @@ describe('retained demo dataset isolation',()=>{
     expect((await demoMentor.listMentorship()).map(j=>j.id)).toEqual([demoEntry.id]);
     await expect(demoMentor.confirmJourney(realEntry.id,{statement:'Observed work',method:'Review',expectedRevision:1})).rejects.toMatchObject({status:404});
     await expect(demoInstitution.setAccess({userId:member,role:'MENTOR',granted:true})).rejects.toMatchObject({status:403});
-    expect(()=>createCommunityService(f.db,member,null,'production')).toThrow('Verified demo');
-    expect(()=>createCommunityService(f.db,prefix+'unknown',null,'staging')).toThrow('Verified demo');
+    expect(()=>createCommunityService(f.db, member, null, 'production', undefined, {} as Env)).toThrow('Verified demo');
+    expect(()=>createCommunityService(f.db, prefix+'unknown', null, 'staging', undefined, {} as Env)).toThrow('Verified demo');
   });
 });
 
@@ -314,7 +316,7 @@ it("atomically permits one confirmation per mentor and revision, preserving earl
  expect((await f.mentor.listMentorship())[0].reviewedByCurrentMentor).toBe(false);
  await f.mentor.confirmJourney(item.id,{...review,expectedRevision:2});
  f.sql.prepare("INSERT INTO UserRoles VALUES ('other-mentor','other',(SELECT id FROM Roles WHERE name='MENTOR'))").run();
- const other=createCommunityService(f.db,'other');await other.confirmJourney(item.id,{...review,expectedRevision:2});
+ const other=createCommunityService(f.db, 'other', undefined, undefined, undefined, {} as Env);await other.confirmJourney(item.id,{...review,expectedRevision:2});
  expect((await f.institution.listJourney('member'))[0].confirmations).toHaveLength(3);
 });
 
@@ -327,19 +329,19 @@ it('keeps already-reviewed status authoritative when the display history limit o
 });
 
 it('edits an owned contribution once per loaded revision and preserves confirmation history',async()=>{
- const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney({...entry,visibility:'private'});
- await f.member.setJourneyVisibility(item.id,{visibility:'institution'});await f.mentor.confirmJourney(item.id,{expectedRevision:2,statement:'Reviewed original contribution',method:'Source review'});
- const next={...entry,title:'Updated documented tool',expectedRevision:2};
+ const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney({...entry,status:'draft'});
+ await f.member.setJourneyStatus(item.id,{status:'posted'});await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:'Reviewed original contribution',method:'Source review'});
+ const next={...entry,title:'Updated documented tool',expectedRevision:1};
  const results=await Promise.allSettled([f.member.updateJourney(item.id,next),f.member.updateJourney(item.id,next)]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.find(r=>r.status==='rejected')).toMatchObject({reason:{status:409}});
- const saved=(await f.member.listJourney())[0];expect(saved.version).toBe(3);expect(saved.confirmations).toHaveLength(1);expect(saved.confirmations[0].journeyVersion).toBe(2);
- await expect(createCommunityService(f.db,'other').updateJourney(item.id,{...next,expectedRevision:3})).rejects.toMatchObject({status:409});expect((await f.member.listJourney())[0].version).toBe(3);
+ const saved=(await f.member.listJourney())[0];expect(saved.version).toBe(2);expect(saved.confirmations).toHaveLength(1);expect(saved.confirmations[0].journeyVersion).toBe(1);
+ await expect(createCommunityService(f.db, 'other', undefined, undefined, undefined, {} as Env).updateJourney(item.id,{...next,expectedRevision:3})).rejects.toMatchObject({status:409});expect((await f.member.listJourney())[0].version).toBe(2);
 });
 
 describe("discovery corpus authorization",()=>{
   it("includes published courses, excludes private journeys and superseded confirmations",async()=>{
     const f=fixture();await f.member.updateOwnProfile(profile);const course=await f.member.createJourney({...entry,title:"First Aid Course"});
-    await f.member.createJourney({...entry,visibility:"private",title:"Secret"});
-    await f.institution.createJourney({...entry,visibility:"private",title:"Institution private"});
+    await f.member.createJourney({...entry,status:"draft",title:"Secret"});
+    await f.institution.createJourney({...entry,status:"draft",title:"Institution private"});
     await f.mentor.confirmJourney(course.id,{statement:"Reviewed the completed training",method:"Discussion",expectedRevision:1});
     let corpus=await f.institution.discoveryEvidence();
     expect(corpus.map(p=>p.profile.userId)).not.toContain("mentor");
@@ -354,13 +356,14 @@ describe("discovery corpus authorization",()=>{
   it("protects the POST discovery endpoint before inference",async()=>{
     const f=fixture();
     const req=()=>new Request("https://ttv.test/api/community/profiles/discover",{method:"POST",headers:{Origin:"https://ttv.test","Content-Type":"application/json"},body:JSON.stringify({context:"Python",skills:"",query:""})});
-    expect((await handleCommunityRequest(req(),"profiles/discover",{id:"institution",scopes:["community:read"]},f.db)).status).toBe(403);
-    expect((await handleCommunityRequest(req(),"profiles/discover",null,f.db)).status).toBe(401);
+    expect((await handleCommunityRequest(req(),"profiles/discover",{id:"institution",scopes:["community:read"]},f.db, {} as Env)).status).toBe(403);
+    expect((await handleCommunityRequest(req(),"profiles/discover",null,f.db, {} as Env)).status).toBe(401);
   });
 });
 
 it('counts waiting confirmations over exactly the rows the Confirm page lists',async()=>{
  const f=fixture();
+ await f.member.updateOwnProfile(profile);
  const insert=f.sql.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,createdAt) VALUES(?,?,?,?,?,'institution',?)");
  for(let i=0;i<55;i++)insert.run(`window-${String(i).padStart(2,'0')}`,'member','Built a tool','Implemented and tested a tool','2026-10-24',i);
  const newest=await f.mentor.listMentorship();
@@ -377,4 +380,24 @@ it('counts waiting confirmations over exactly the rows the Confirm page lists',a
  expect(await f.mentor.countAwaitingConfirmation()).toBe(0);
  await expect(f.member.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
  await expect(f.institution.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
+});
+
+ it("normalizes deprecated work inputs but emits only posted/draft status", async () => {
+  const f=fixture(); await f.member.updateOwnProfile(profile);
+  const fields={title:entry.title,description:entry.description,evidenceUrl:entry.evidenceUrl,occurredAt:entry.occurredAt};
+  const draft=await f.member.createJourney({...fields,visibility:"private"});
+  expect(draft).toMatchObject({status:"draft"}); expect(draft).not.toHaveProperty("visibility");
+  expect(await f.member.setJourneyStatus(draft.id,{visibility:"institution"})).toEqual({id:draft.id,status:"posted"});
+  const entries=await f.member.listJourney(); expect(entries[0]).toMatchObject({status:"posted"}); expect(entries[0]).not.toHaveProperty("visibility");
+  await expect(f.member.setJourneyStatus(draft.id,{status:"draft",visibility:"institution"})).rejects.toMatchObject({status:400});
+ });
+
+it("searches and sorts by the member's chosen name, falling back to the account name", async () => {
+  const f = fixture();
+  await f.member.updateOwnProfile(profile);
+  await createCommunityService(f.db, "other", undefined, undefined, undefined, {} as Env).updateOwnProfile(profile);
+  f.sql.exec("UPDATE studentProfile SET publicName='Zuri' WHERE userId='member'; UPDATE studentProfile SET publicName=NULL WHERE userId='other'");
+  expect((await f.institution.searchProfiles({ query: "Zuri" })).map(p => p.name)).toEqual(["Zuri"]);
+  expect(await f.institution.searchProfiles({ query: "Member" })).toEqual([]);
+  expect((await f.institution.searchProfiles({})).map(p => p.name)).toEqual(["Other", "Zuri"]);
 });

@@ -65,7 +65,7 @@ for (const viewport of [DESKTOP, PHONE]) {
     // One AI badge: the server's role badge on Tembo.
     await expect(answer.locator(".channel-meta").getByText("AI", { exact: true })).toHaveCount(1);
     // No live count under an answer (QA3-07): the composer's line carries it.
-    await expect(answer.locator(".channel-tembo__foot")).toHaveText(/^Sees: this channel, projects shared in it and public builder profiles/);
+    await expect(answer.locator(".channel-tembo__foot")).toHaveText(/^Sees: this channel, saved member profiles and their posted work/);
     await expect(answer.locator(".channel-tembo__foot")).not.toContainText("You:");
     await expect(page.locator(".channel-composer__scope")).toContainText("You: 7 of 10 in channels today");
     // Each [n] links to the source it names, and the chips carry the same numbers (QA3-02).

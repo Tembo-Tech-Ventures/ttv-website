@@ -69,6 +69,7 @@ function seed(s: TemboFixture) {
   // Shared here once, then made private by its owner: the channel no longer shows it, and nor does Tembo.
   s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
     ('journey-withdrawn', 'synthetic-otieno', 'Withdrawn', 'x', '2026-10-01', 'private')`);
+  s.database.exec("UPDATE communityJourney SET state='DRAFT',visibility='institution' WHERE visibility='private'");
   const withdrawn = s.message("help", { body: "Another project" });
   s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
     type: "project", journeyId: "journey-withdrawn", version: 1, title: "MADEPRIVATE budgeting canary", summary: "x", confirmations: [],
@@ -83,7 +84,7 @@ function seed(s: TemboFixture) {
 /** Labels each kind of channel must show (positive controls) and must never show. */
 const ALLOWED: Record<TemboScope, string[]> = {
   COHORT: ["HERE-COHORT-04", "MASKED-COHORT-04", "OWNSESSION"],
-  COMMUNITY: ["HERE-HELP", "MASKED-HELP", "PUBLICPROFILE", "SHAREDPROJECT"],
+  COMMUNITY: ["HERE-HELP", "MASKED-HELP", "PUBLICPROFILE", "UNPUBLISHEDPROFILE", "NOTCOMPLETEDPROFILE", "SHAREDPROJECT", "SHAREDNOW", "UNSHAREDJOURNEY"],
   DIRECT: ["HERE-DIRECT-MINE", "MASKED-DIRECT-MINE"],
 };
 const EVERY_LABEL = [

@@ -55,7 +55,7 @@ export const ALL: APIRoute = async ({ request, locals }) => {
   const parsed = tokenInput.safeParse(input);
   if (!parsed.success) return json({ error: "Invalid label, duration or community scopes" }, 400);
   const validated = parsed.data;
-  if (validated.scopes.includes("institution:read") && !(await createCommunityService(env.DB, locals.user.id).access()).isInstitution) return json({ error: "Approved institutional access required" }, 403);
+  if (validated.scopes.includes("institution:read") && !(await createCommunityService(env.DB, locals.user.id, undefined, undefined, undefined, env).access()).isInstitution) return json({ error: "Approved institutional access required" }, 403);
   try {
     return json(await createPersonalAccessToken({ db: env.DB, userId: locals.user.id, label: validated.label, durationHours: validated.durationHours, scopes: validated.scopes }), 201);
   } catch { return json({ error: "Token could not be created. Check label and active-token limit." }, 400); }

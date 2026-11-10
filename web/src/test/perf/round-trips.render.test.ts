@@ -58,7 +58,7 @@ function seeded() {
     INSERT INTO studentProfile(id,userId,handle,status,headline) VALUES ('profile','synthetic-achieng','achieng-otieno','PUBLISHED','Fictional builder');
     INSERT INTO profileContact(id,profileId,fromName,fromEmail,organization,message) VALUES ('lead','profile','Grace Wanjiru','grace@example.test','Chama Savings','Fictional message.');
     INSERT INTO blogPost(id,profileId,slug,title,contentMarkdown) VALUES ('draft','profile','first-draft','A first draft','Fictional.');
-    INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals) VALUES ('synthetic-achieng','Fictional builder','Builds savings tools.','["TypeScript"]','A first role');
+    UPDATE studentProfile SET bio='Builds savings tools.',skills='["TypeScript"]',opportunityGoals='A first role' WHERE userId='synthetic-achieng';
     INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('contribution','synthetic-achieng','Savings tracker','Fictional work.','2026-01-01','institution');
     INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('confirmation','contribution','${MENTOR}','Fictional statement.','REVIEWED_WORK',1);
     INSERT INTO clientProject(id,organization,contactName,contactEmail,title,description,status) VALUES ('project','Chama Savings','Grace Wanjiru','grace@example.test','Member savings tracker','Fictional project.','APPROVED');
@@ -299,7 +299,7 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "admin applications": { d1: 15, depth: 2 },
   "admin application": { d1: 14, depth: 2 },
   // Depth 4 before the style-guide rollout: every profile was read and filtered in JS, then the space.
-  "admin profiles": { d1: 16, depth: 2 },
+  "admin profiles": { d1: 17, depth: 2 }, // One bounded work-review queue read, parallel with the profile reads.
   "admin profile": { d1: 16, depth: 3 },
   // Depth 4 before the style-guide rollout: every project with its interests, filtered in JS, then the space.
   "admin projects": { d1: 15, depth: 2 },

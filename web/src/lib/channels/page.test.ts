@@ -68,7 +68,7 @@ describe("loadChannelPage", () => {
 describe("loadChannelShareables", () => {
   it("lists the caller's attach tools in one read, and gives null where they cannot post", async () => {
     const { s, channel } = await setup();
-    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    s.database.exec(`INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
       ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution')`);
     const prepare = vi.spyOn(s.d1, "prepare");
     const shareables = await loadChannelShareables(s.d1, VIEWER, channel);

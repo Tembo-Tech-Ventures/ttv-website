@@ -299,11 +299,12 @@ test.describe("every admin page", () => {
     await expect(table.getByRole("columnheader")).toHaveText(["Builder", "Handle", "Status", "Updated", "Published"]);
 
     const filters = page.getByRole("navigation", { name: "Profile status" });
-    await filters.getByRole("link", { name: "Draft", exact: true }).click();
+    await filters.getByRole("link", { name: "Not on public website", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/profiles\?status=DRAFT$/);
-    await expect(filters.getByRole("link", { name: "Draft", exact: true })).toHaveAttribute("aria-current", "page");
-    const drafts = page.getByRole("table", { name: "Profiles, draft" });
-    for (const status of await drafts.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Draft");
+    await expect(filters.getByRole("link", { name: "Not on public website", exact: true })).toHaveAttribute("aria-current", "page");
+    const drafts = page.getByRole("table", { name: "Profiles, not on public website" });
+    expect(await drafts.locator("td[data-label='Status']").count()).toBeGreaterThan(0);
+    for (const status of await drafts.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Not on public website");
     expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
 
     await filters.getByRole("link", { name: "Published", exact: true }).click();

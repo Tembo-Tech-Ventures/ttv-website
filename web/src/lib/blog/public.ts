@@ -1,3 +1,5 @@
+import { publicProfileEligibility } from "@/lib/community/eligibility";
+import { sql as eligibilitySql } from "drizzle-orm";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -98,7 +100,7 @@ type EligibleProfileRow = Awaited<
 
 async function queryEligibleProfileRowsWithPosts(db: Database) {
   const rows = await db.query.studentProfile.findMany({
-    where: eq(schema.studentProfile.status, "PUBLISHED"),
+    where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     columns: profileColumns,
     with: {
       user: {
@@ -162,7 +164,7 @@ function toPublicPosts(row: EligibleProfileRow): PublicPostSummary[] {
 
 export async function listPublicProfiles(db: Database): Promise<PublicProfile[]> {
   const rows = await db.query.studentProfile.findMany({
-    where: eq(schema.studentProfile.status, "PUBLISHED"),
+    where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     columns: profileColumns,
     with: {
       user: {
@@ -208,7 +210,7 @@ export async function findPublicPost(
   const row = await db.query.studentProfile.findFirst({
     where: and(
       eq(schema.studentProfile.handle, handle),
-      eq(schema.studentProfile.status, "PUBLISHED")
+      eligibilitySql.raw(publicProfileEligibility("studentProfile"))
     ),
     columns: profileColumns,
     with: {

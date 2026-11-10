@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { publicProfileEligibility, postedWorkColumnsEligibility } from "@/lib/community/eligibility";
+import { and, asc, desc, eq, isNotNull, sql as eligibilitySql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -27,7 +28,7 @@ export interface BuilderProfileRow extends PublicIdentitySnapshot {
   headline: string | null;
   country: string | null;
   skills: string | null;
-  highlights: Array<{ repoFullName: string; description: string | null; language: string | null }>;
+  work: Array<{ repoFullName: string | null; title?: string; description: string | null; language: string | null }>;
   user: {
     programApplications: Array<CompletionState & { program: { name: string } | null }>;
   };
@@ -40,7 +41,7 @@ export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder |
   const completion = profile.user.programApplications.find(isValidCompletion);
   if (!completion) return null;
   const identity = resolvePublicProfileIdentity(profile);
-  const highlight = profile.highlights[0];
+  const highlight = profile.work[0];
   return {
     handle: profile.handle,
     href: `/talent/${profile.handle}`,
@@ -57,7 +58,7 @@ export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder |
       .slice(0, MAX_SKILLS),
     project: highlight
       ? {
-          name: highlight.repoFullName.split("/").pop() ?? highlight.repoFullName,
+          name: highlight.repoFullName?.split("/").pop() ?? highlight.title ?? "",
           description: highlight.description?.trim() || null,
           language: highlight.language,
         }
@@ -68,7 +69,7 @@ export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder |
 /** Most recently published public builders first. */
 export async function loadHomepageBuilders(db: Database, limit = 8): Promise<HomepageBuilder[]> {
   const profiles = await db.query.studentProfile.findMany({
-    where: eq(schema.studentProfile.status, "PUBLISHED"),
+    where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     orderBy: desc(schema.studentProfile.publishedAt),
     columns: {
       handle: true,
@@ -79,10 +80,11 @@ export async function loadHomepageBuilders(db: Database, limit = 8): Promise<Hom
       publicAvatarUrl: true,
     },
     with: {
-      highlights: {
-        orderBy: asc(schema.profileHighlight.sortOrder),
+      work: {
+        where: (work) => postedWorkColumnsEligibility(work, true),
+        orderBy: asc(schema.communityJourney.sortOrder),
         limit: 1,
-        columns: { repoFullName: true, description: true, language: true },
+        columns: { title: true, repoFullName: true, description: true, language: true },
       },
       user: {
         columns: { id: true },

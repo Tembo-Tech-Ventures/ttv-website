@@ -437,7 +437,7 @@ export function temboSees(scope: TemboScope): string {
     case "COHORT":
       return "this cohort's recordings and this channel";
     case "COMMUNITY":
-      return "this channel, projects shared in it and public builder profiles";
+      return "this channel, saved member profiles and their posted work";
     case "DIRECT":
       return "only this conversation";
   }

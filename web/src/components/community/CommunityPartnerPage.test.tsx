@@ -82,7 +82,7 @@ describe("community partner audience pages", () => {
   });
   it("separates evidence from human judgment and respects private-data boundaries", () => {
     const html = renderToStaticMarkup(<CommunityPartnerPage audience="institutions" />);
-    expect(html).toContain("Approved institutions can discover saved community profiles and the contributions members share.");
+    expect(html).toContain("Everyone signed in to TTV can see saved profiles and posted work.");
     expect(html).toContain("Start with hiring. Explore the work behind a profile and decide what to ask next.");
     expect(html).not.toContain("single, generic role");
     expect(html).toContain("Member claim:");

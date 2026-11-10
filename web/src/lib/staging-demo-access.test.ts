@@ -13,7 +13,7 @@ const signed=(token:string)=>encodeURIComponent(token+'.'+createHmac('sha256',se
 function setup() {
   const sql=new DatabaseSync(':memory:');databases.push(sql);
   sql.exec(`CREATE TABLE user(id TEXT PRIMARY KEY,email TEXT);CREATE TABLE session(id TEXT PRIMARY KEY,userId TEXT,token TEXT,userAgent TEXT,createdAt INTEGER,updatedAt INTEGER,expiresAt INTEGER);
-    CREATE TABLE communityProfile(userId TEXT);CREATE TABLE communityJourney(id TEXT,userId TEXT);CREATE TABLE communityConfirmation(id TEXT,journeyId TEXT);
+    CREATE TABLE studentProfile(userId TEXT);CREATE TABLE communityJourney(id TEXT,userId TEXT);CREATE TABLE communityConfirmation(id TEXT,journeyId TEXT);
     CREATE TABLE credentialAuditLog(id TEXT PRIMARY KEY,provider TEXT,action TEXT,outcome TEXT,actorUserId TEXT,createdAt INTEGER);
     CREATE TABLE program(id TEXT PRIMARY KEY,curriculumId TEXT,applicationsOpen INTEGER);CREATE TABLE programApplication(id TEXT PRIMARY KEY,userId TEXT,programId TEXT,status TEXT);CREATE TABLE Roles(id TEXT PRIMARY KEY,name TEXT);CREATE TABLE UserRoles(id TEXT PRIMARY KEY,userId TEXT,roleId TEXT);
     INSERT INTO Roles VALUES ('admin','ADMIN'),('mentor','MENTOR'),('institution','INSTITUTION');
@@ -142,15 +142,15 @@ it('fails closed and preserves both sessions when the audit cannot be recorded',
 it('counts only fixed synthetic records and denies ordinary readers without touching data',async()=>{
  const f=setup();
  const id=DEMO_PERSONAS['member-cohort'].userId;
- f.sql.prepare('INSERT INTO communityProfile VALUES(?)').run(id);
- f.sql.prepare('INSERT INTO communityProfile VALUES(?)').run('raph');
+ f.sql.prepare('INSERT INTO studentProfile VALUES(?)').run(id);
+ f.sql.prepare('INSERT INTO studentProfile VALUES(?)').run('raph');
  f.sql.prepare('INSERT INTO communityJourney VALUES(?,?)').run('ttv-staging-demo-v1-work',id);
  f.sql.prepare('INSERT INTO communityJourney VALUES(?,?)').run('human-work','raph');
  f.sql.prepare('INSERT INTO communityConfirmation VALUES(?,?)').run('ttv-staging-demo-v1-confirmation','ttv-staging-demo-v1-work');
  expect(await demoDatasetStatus(f.env,f.request(),now)).toEqual({people:4,profiles:1,contributions:1,confirmations:1});
  f.sql.prepare('DELETE FROM UserRoles WHERE userId=?').run('raph');
  await expect(demoDatasetStatus(f.env,f.request(),now)).rejects.toMatchObject({status:401});
- expect(f.sql.prepare('SELECT count(*) n FROM communityProfile').get()?.n).toBe(2);
+ expect(f.sql.prepare('SELECT count(*) n FROM studentProfile').get()?.n).toBe(2);
 });
 
 it('never permits return in production or from a foreign origin even with an authentic admin cookie',async()=>{

@@ -379,7 +379,7 @@ Tembo is the AI assistant, named the same everywhere. In channels
   | Channel | Tembo reads |
   |---|---|
   | COHORT | That program's session transcripts and this channel's messages |
-  | COMMUNITY | Public builder profiles and highlights, projects their owners shared in this channel, and this channel's messages. Never recordings |
+  | COMMUNITY | Saved member profiles and their posted work, projects their owners shared in this channel, and this channel's messages. Never recordings |
   | DIRECT | This conversation only, and only when one of its members asks |
 
 - **Unprivileged reads.** Tembo reads messages as a reader without moderator

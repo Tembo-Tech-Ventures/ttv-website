@@ -12,7 +12,7 @@ const rubric = { id: "hiring", version: 1, criteria: [{ id: "ts", label: "TypeSc
 const reference = { kind: "journey", id: "j", version: 3 };
 const env = { AI_GATEWAY_MODEL: "configured", AI_GATEWAY_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "gateway", AI: {run: async () => { const value = await chatComplete(); return Response.json({ choices: [{ message: { role: "assistant", content: value.content, ...(value.toolCalls.length > 0 ? { tool_calls: value.toolCalls } : {}) }, finish_reason: value.toolCalls.length > 0 ? "tool_calls" : "stop" }] }); }} } as unknown as Env;
 function service(institution = true) {
-  return { access: vi.fn().mockResolvedValue({ isInstitution: institution }), getProfile: vi.fn().mockResolvedValue({ userId: "member", version: 2, skills: [] }), getOwnProfile: vi.fn().mockResolvedValue({ userId: "member", version: 2, skills: [] }), listJourney: vi.fn().mockResolvedValue([{ id: "j", userId: "member", version: 3, title: "TypeScript", description: "Built accessible navigation", visibility: "institution", confirmations: [] }]) } as unknown as CommunityService;
+  return { access: vi.fn().mockResolvedValue({ isInstitution: institution }), getProfile: vi.fn().mockResolvedValue({ userId: "member", version: 2, skills: [] }), getOwnProfile: vi.fn().mockResolvedValue({ userId: "member", version: 2, skills: [] }), listJourney: vi.fn().mockResolvedValue([{ id: "j", userId: "member", version: 3, title: "TypeScript", description: "Built accessible navigation", status: "posted", confirmations: [] }]) } as unknown as CommunityService;
 }
 function call(name: string, args: unknown) { return { id: `${name}-${crypto.randomUUID()}`, type: "function" as const, function: { name, arguments: JSON.stringify(args) } }; }
 beforeEach(() => {
