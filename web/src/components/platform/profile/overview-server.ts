@@ -11,7 +11,10 @@ import { parseSkillsJson } from "@/lib/talent/profile";
 import { resolveGateState } from "@/components/hire/validation";
 import { getStudentJourney } from "@/lib/student/journey";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
-import { loadCertificates, type SpacePageContext } from "@/components/platform/spaces/space-page";
+import {
+  loadCertificates,
+  type SpacePageContext,
+} from "@/components/platform/spaces/space-page";
 import { OVERVIEW_LIMITS, type OverviewFacts } from "./overview";
 
 /*
@@ -23,21 +26,43 @@ import { OVERVIEW_LIMITS, type OverviewFacts } from "./overview";
  */
 
 /** The person's own contributions, or null (recorded) when the service refuses or fails: the page says so. */
-async function ownJourney(locals: App.Locals, userId: string): Promise<CommunityJourney[] | null> {
+async function ownJourney(
+  locals: App.Locals,
+  userId: string,
+): Promise<CommunityJourney[] | null> {
   try {
-    const service = createCommunityService(env.DB, userId, locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
+    const service = createCommunityService(
+      env.DB,
+      userId,
+      locals.stagingFixture,
+      env.DEPLOYMENT_ENVIRONMENT,
+      env.PLATFORM_FLAGS_OVERRIDE,
+      env,
+    );
     return await service.listJourney();
   } catch (error) {
     // recordError never throws; it reports its own ledger failures.
-    await recordError(env.DB, { source: "request", route: "/dashboard/me", error, level: "warning" });
+    await recordError(env.DB, {
+      source: "request",
+      route: "/dashboard/me",
+      error,
+      level: "warning",
+    });
     return null;
   }
 }
 
 /** The person's builder profile, as a subquery, so what hangs off it is read beside it. */
 function ownProfileId(db: Database, userId: string, status?: "PUBLISHED") {
-  return db.select({ id: schema.studentProfile.id }).from(schema.studentProfile)
-    .where(and(eq(schema.studentProfile.userId, userId), status && eq(schema.studentProfile.status, status)));
+  return db
+    .select({ id: schema.studentProfile.id })
+    .from(schema.studentProfile)
+    .where(
+      and(
+        eq(schema.studentProfile.userId, userId),
+        status && eq(schema.studentProfile.status, status),
+      ),
+    );
 }
 
 /**
@@ -49,20 +74,39 @@ async function profileFacts(db: Database, userId: string) {
   const [profile, leads, drafts, opportunities] = await Promise.all([
     db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, userId),
-      extras: { onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite") },
+      extras: {
+        onPublicSite:
+          sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as(
+            "onPublicSite",
+          ),
+      },
       columns: {
-        id: true, status: true, handle: true, headline: true, bio: true, location: true, country: true, skills: true,
-        publicName: true, publicAvatarUrl: true,
+        id: true,
+        status: true,
+        handle: true,
+        headline: true,
+        bio: true,
+        location: true,
+        country: true,
+        skills: true,
+        publicName: true,
+        publicAvatarUrl: true,
       },
     }),
     db.query.profileContact.findMany({
-      where: and(inArray(schema.profileContact.profileId, ownProfileId(db, userId)), eq(schema.profileContact.status, "NEW")),
+      where: and(
+        inArray(schema.profileContact.profileId, ownProfileId(db, userId)),
+        eq(schema.profileContact.status, "NEW"),
+      ),
       columns: { id: true, fromName: true, organization: true },
       orderBy: [desc(schema.profileContact.createdAt)],
       limit: OVERVIEW_LIMITS.leads,
     }),
     db.query.blogPost.findMany({
-      where: and(inArray(schema.blogPost.profileId, ownProfileId(db, userId)), eq(schema.blogPost.status, "DRAFT")),
+      where: and(
+        inArray(schema.blogPost.profileId, ownProfileId(db, userId)),
+        eq(schema.blogPost.status, "DRAFT"),
+      ),
       columns: { id: true, title: true },
       orderBy: [desc(schema.blogPost.updatedAt)],
       limit: OVERVIEW_LIMITS.drafts,
@@ -87,18 +131,30 @@ async function profileFacts(db: Database, userId: string) {
 export async function opportunityFacts(db: Database, userId: string) {
   const [projects, interests] = await Promise.all([
     db.query.clientProject.findMany({
-      where: and(eq(schema.clientProject.status, "APPROVED"), exists(ownProfileId(db, userId, "PUBLISHED"))),
+      where: and(
+        eq(schema.clientProject.status, "APPROVED"),
+        exists(ownProfileId(db, userId, "PUBLISHED")),
+      ),
       columns: { id: true, title: true, organization: true },
       orderBy: [desc(schema.clientProject.createdAt)],
       limit: OVERVIEW_LIMITS.opportunities + 1,
     }),
     db.query.projectInterest.findMany({
-      where: and(inArray(schema.projectInterest.profileId, ownProfileId(db, userId, "PUBLISHED")), eq(schema.projectInterest.status, "INTERESTED")),
+      where: and(
+        inArray(
+          schema.projectInterest.profileId,
+          ownProfileId(db, userId, "PUBLISHED"),
+        ),
+        eq(schema.projectInterest.status, "INTERESTED"),
+      ),
       columns: { projectId: true },
     }),
   ]);
   const raised = new Set(interests.map((interest) => interest.projectId));
-  return projects.map((project) => ({ ...project, interested: raised.has(project.id) }));
+  return projects.map((project) => ({
+    ...project,
+    interested: raised.has(project.id),
+  }));
 }
 
 /**
@@ -106,7 +162,11 @@ export async function opportunityFacts(db: Database, userId: string) {
  * per request). It needs only the person's id, so the page starts it beside the space context: every
  * read here is one round trip.
  */
-export async function readProfileOverview(locals: App.Locals, db: Database, userId: string) {
+export async function readProfileOverview(
+  locals: App.Locals,
+  db: Database,
+  userId: string,
+) {
   const [journey, own, contributions, certificates] = await Promise.all([
     getStudentJourney(db, userId),
     profileFacts(db, userId),
@@ -118,14 +178,21 @@ export async function readProfileOverview(locals: App.Locals, db: Database, user
 
 /** The Overview's facts, from its reads and the page's space context. */
 export function profileOverviewFacts(
-  { journey, own, contributions, certificates }: Awaited<ReturnType<typeof readProfileOverview>>,
+  {
+    journey,
+    own,
+    contributions,
+    certificates,
+  }: Awaited<ReturnType<typeof readProfileOverview>>,
   context: SpacePageContext,
 ): OverviewFacts {
   const { me } = context;
   const profile = own.profile;
   // The journey unlocks the Opportunities link on the same published-profile gate opportunityFacts
   // applies; if the two reads of the profile ever disagree, the locked side wins.
-  const opportunities = journey.visibleLinkIds.includes("opportunities") ? own.opportunities : { gate: own.opportunities.gate, items: [] };
+  const opportunities = journey.visibleLinkIds.includes("opportunities")
+    ? own.opportunities
+    : { gate: own.opportunities.gate, items: [] };
   return {
     person: { id: me.user.id, name: me.user.name, image: me.user.avatarUrl },
     journeyState: journey.state,
@@ -133,7 +200,7 @@ export function profileOverviewFacts(
     // The journey shows the profile editor to whoever has completed a cohort (hasCompletedCohort).
     eligible: journey.visibleLinkIds.includes("profile"),
     profile: profile && {
-      onPublicSite:profile.onPublicSite,
+      onPublicSite: profile.onPublicSite,
       status: profile.status,
       handle: profile.handle,
       headline: profile.headline,

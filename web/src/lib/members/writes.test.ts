@@ -72,9 +72,14 @@ describe("member publish-then-check", () => {
   });
   it("saves a single profile, generates distinct valid handles, and fails open", async () => {
     const { db, database } = fixture();
-    await saveMemberText(db, "member", text);
-    await saveMemberText(db, "member", { ...text, headline: "Updated" });
-    await saveMemberText(db, "admin", text);
+    await saveMemberText(db, "member", text, {} as Env);
+    await saveMemberText(
+      db,
+      "member",
+      { ...text, headline: "Updated" },
+      {} as Env,
+    );
+    await saveMemberText(db, "admin", text, {} as Env);
     const rows = database
       .prepare(
         "SELECT handle,contentVersion,moderationOutcome FROM studentProfile ORDER BY userId",
@@ -106,9 +111,7 @@ describe("member publish-then-check", () => {
     const { handle } = database
       .prepare("SELECT handle FROM studentProfile")
       .get() as { handle: string };
-    expect(
-      await readMember(db, { id: "member", isAdmin: false }, handle),
-    ).toBeNull();
+    expect(await readMember(db, { id: "member" }, handle)).toBeNull();
     expect(
       database
         .prepare("SELECT headline,moderationReviewRequired FROM studentProfile")
@@ -130,9 +133,9 @@ describe("member publish-then-check", () => {
   });
   it("lets only admins decide current work holds, preserving the work revision", async () => {
     const { db, database } = fixture();
-    await saveMemberText(db, "member", text);
+    await saveMemberText(db, "member", text, {} as Env);
     database.exec(
-      "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('work','member','Work','Evidence','2026-11-09','institution')",
+      "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,moderationReviewRequired) VALUES ('work','member','Work','Evidence','2026-11-09','institution',1)",
     );
     vi.spyOn(clef, "checkProfileContent").mockResolvedValue({
       outcome: "hold",
@@ -160,9 +163,9 @@ describe("member publish-then-check", () => {
   });
 });
 
-it("saves a published name before checking and holds exactly that revision", async () => {
+it("screens a published name before saving and retains the previous public identity", async () => {
   const { db, database } = fixture();
-  await saveMemberText(db, "member", text);
+  await saveMemberText(db, "member", text, {} as Env);
   database.exec("UPDATE studentProfile SET status='PUBLISHED'");
   const orm = drizzle(db, { schema });
   await saveProfileIdentity(
@@ -172,7 +175,7 @@ it("saves a published name before checking and holds exactly that revision", asy
     async () => {
       expect(
         database.prepare("SELECT publicName FROM studentProfile").get(),
-      ).toEqual({ publicName: "Changed Name" });
+      ).toEqual({ publicName: "Synthetic Wanjiku" });
       return { outcome: "hold", flags: [], scores: {} };
     },
   );
@@ -180,7 +183,7 @@ it("saves a published name before checking and holds exactly that revision", asy
     database
       .prepare("SELECT publicName,moderationOutcome FROM studentProfile")
       .get(),
-  ).toEqual({ publicName: "Changed Name", moderationOutcome: "hold" });
+  ).toEqual({ publicName: "Synthetic Wanjiku", moderationOutcome: "hold" });
 });
 
 it("allocates readable handles across duplicate names, reserved names and empty slugs", async () => {
@@ -188,10 +191,10 @@ it("allocates readable handles across duplicate names, reserved names and empty 
   database.exec(
     "INSERT INTO user(id,name,email) VALUES ('same','Synthetic Wanjiku','same@example.test'),('reserved','Admin','reserved@example.test'),('symbols','!!!','symbols@example.test')",
   );
-  await saveMemberText(db, "member", text);
-  await saveMemberText(db, "same", text);
-  await saveMemberText(db, "reserved", text);
-  await saveMemberText(db, "symbols", text);
+  await saveMemberText(db, "member", text, {} as Env);
+  await saveMemberText(db, "same", text, {} as Env);
+  await saveMemberText(db, "reserved", text, {} as Env);
+  await saveMemberText(db, "symbols", text, {} as Env);
   expect(
     database.prepare("SELECT handle FROM studentProfile ORDER BY userId").all(),
   ).toEqual([
@@ -200,4 +203,136 @@ it("allocates readable handles across duplicate names, reserved names and empty 
     { handle: "synthetic-wanjiku-2" },
     { handle: "member-1" },
   ]);
+});
+
+it("keeps an existing profile hold during a recheck and after a Clef outage", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  database.exec("UPDATE studentProfile SET moderationOutcome='hold'");
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(async () => {
+    expect(
+      database
+        .prepare(
+          "SELECT moderationOutcome,moderationReviewRequired FROM studentProfile",
+        )
+        .get(),
+    ).toEqual({ moderationOutcome: "hold", moderationReviewRequired: 1 });
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  await saveMemberText(
+    db,
+    "member",
+    { ...text, headline: "Edited while held" },
+    env,
+  );
+  expect(
+    database
+      .prepare(
+        "SELECT moderationOutcome,moderationReviewRequired FROM studentProfile",
+      )
+      .get(),
+  ).toEqual({ moderationOutcome: "hold", moderationReviewRequired: 1 });
+});
+
+it("queues an unfinished check and lets only an admin restore hidden work", async () => {
+  const { db, database } = fixture();
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  vi.spyOn(clef, "checkProfileContent").mockImplementation(async () => {
+    expect(
+      database
+        .prepare("SELECT moderationReviewRequired FROM communityJourney")
+        .get(),
+    ).toEqual({ moderationReviewRequired: 1 });
+    return { outcome: "error", flags: [], scores: {} };
+  });
+  const work = await service.createJourney({
+    title: "Work",
+    description: "Evidence",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(await reviewWork(db, "admin", work.id, 1, "hide")).toBe(true);
+  await expect(
+    service.setJourneyStatus(work.id, { status: "posted" }),
+  ).rejects.toMatchObject({ status: 404 });
+  expect(
+    database
+      .prepare(
+        "SELECT state,moderatorHidden,moderationOutcome FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({ state: "DRAFT", moderatorHidden: 1, moderationOutcome: "hold" });
+  expect(await reviewWork(db, "admin", work.id, 1, "keep")).toBe(true);
+  expect(
+    database
+      .prepare("SELECT state,moderatorHidden FROM communityJourney")
+      .get(),
+  ).toEqual({ state: "POSTED", moderatorHidden: 0 });
+});
+
+it("ignores overflowing and mixed handle suffixes", async () => {
+  const { db, database } = fixture();
+  database.exec(
+    "INSERT INTO studentProfile(id,userId,handle) VALUES ('p','admin','member-999999999999999999999999')",
+  );
+  database.exec("UPDATE user SET name='!!!' WHERE id='member'");
+  await saveMemberText(db, "member", text, {} as Env);
+  expect(
+    database
+      .prepare("SELECT handle FROM studentProfile WHERE userId='member'")
+      .get(),
+  ).toEqual({ handle: "member-1" });
+});
+
+it("identifies repository work and refuses contribution-form edits without changing it", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  database.exec(
+    "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,kind,repoFullName) VALUES ('repo','member','member/repo','Snapshot','2026-11-09','institution','repo','member/repo')",
+  );
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  expect((await service.listJourney())[0]).toMatchObject({
+    kind: "repo",
+    repoFullName: "member/repo",
+  });
+  await expect(
+    service.updateJourney("repo", {
+      title: "Changed",
+      description: "Changed",
+      occurredAt: "2026-11-09",
+      status: "posted",
+    }),
+  ).rejects.toMatchObject({
+    status: 409,
+    message: "Edit repositories in GitHub highlights",
+  });
+  await expect(
+    service.setJourneyStatus("repo", { status: "draft" }),
+  ).rejects.toMatchObject({ status: 409 });
+  expect(
+    database
+      .prepare("SELECT title,description,state,version FROM communityJourney")
+      .get(),
+  ).toEqual({
+    title: "member/repo",
+    description: "Snapshot",
+    state: "POSTED",
+    version: 1,
+  });
 });

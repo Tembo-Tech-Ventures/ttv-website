@@ -1,11 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import type {
-  ProfileModerationResult,
-  ProfileModerationState,
-} from "@/lib/moderation/clef";
+import type { ProfileModerationState } from "@/lib/moderation/clef";
 import { parseTopicsJson } from "@/lib/talent/profile";
 
 export interface ProfileHighlightValues {
@@ -41,7 +38,7 @@ export interface HighlightProfileState {
 }
 
 export type ProfileHighlightWriteResult =
-  | { outcome: "saved" }
+  | { outcome: "saved"; revisions: { id: string; version: number }[] }
   | { outcome: "hold" }
   | { outcome: "conflict" }
   | { outcome: "suspended" };
@@ -82,12 +79,9 @@ export async function replaceProfileHighlights(
   db: Database,
   profile: HighlightProfileState,
   highlights: readonly ProfileHighlightValues[],
-  moderation?: ProfileModerationResult,
+  repostSelectedDrafts = false,
 ): Promise<ProfileHighlightWriteResult> {
   if (profile.status === "SUSPENDED") return { outcome: "suspended" };
-  if (profile.status === "PUBLISHED" && !moderation) {
-    throw new Error("Published profile highlights require moderation");
-  }
 
   const expectedProfile = and(
     eq(schema.studentProfile.id, profile.id),
@@ -99,28 +93,65 @@ export async function replaceProfileHighlights(
     select 1 from ${schema.studentProfile}
     where ${expectedProfile}
   )`;
-  const result = moderation ?? { outcome: "error" as const, flags: [], scores: {} };
-  const selected = JSON.stringify(highlights.map(h => h.repoFullName));
-  const retire = db.update(schema.communityJourney).set({ state: "DRAFT" }).where(and(
-    eq(schema.communityJourney.userId,profile.userId),eq(schema.communityJourney.kind,"repo"),profileIsCurrent,
-    sql`${schema.communityJourney.repoFullName} NOT IN (SELECT value FROM json_each(${selected}))`,
-  ));
-  const upserts = highlights.map(h => db.insert(schema.communityJourney).select(sql`
+  const selected = JSON.stringify(highlights.map((h) => h.repoFullName));
+  const retire = db
+    .update(schema.communityJourney)
+    .set({ state: "DRAFT" })
+    .where(
+      and(
+        eq(schema.communityJourney.userId, profile.userId),
+        eq(schema.communityJourney.kind, "repo"),
+        profileIsCurrent,
+        sql`${schema.communityJourney.repoFullName} NOT IN (SELECT value FROM json_each(${selected}))`,
+      ),
+    );
+  const upserts = highlights.map((h) =>
+    db.insert(schema.communityJourney).select(sql`
     SELECT ${createId()},${profile.userId},${h.repoFullName},${h.blurb ?? h.description ?? ""},${h.repoUrl},
-      ${new Date(h.pushedAt ?? h.snapshotAt).toISOString().slice(0,10)},'institution','POSTED','repo',
+      ${new Date(h.pushedAt ?? h.snapshotAt).toISOString().slice(0, 10)},'institution','POSTED','repo',
       ${h.repoFullName},${h.repoUrl},${h.description},${h.language},${h.topics},${h.stars},${epochSeconds(h.pushedAt)},
-      ${h.blurb},${h.sortOrder},${epochSeconds(h.snapshotAt)},${result.outcome},${JSON.stringify(result.flags)},
-      ${JSON.stringify(result.scores)},unixepoch(),${Number(result.outcome!=="pass")},1,unixepoch(),unixepoch()
+      ${h.blurb},${h.sortOrder},${epochSeconds(h.snapshotAt)},0,NULL,'[]','{}',NULL,1,1,unixepoch(),unixepoch()
     WHERE ${profileIsCurrent}
     ON CONFLICT(userId,repoFullName) DO UPDATE SET title=excluded.title,description=excluded.description,
-      evidenceUrl=excluded.evidenceUrl,occurredAt=excluded.occurredAt,state='POSTED',repoUrl=excluded.repoUrl,
+      evidenceUrl=excluded.evidenceUrl,occurredAt=excluded.occurredAt,state=CASE WHEN ${Number(repostSelectedDrafts)}=1 AND communityJourney.moderatorHidden=0 THEN 'POSTED' ELSE communityJourney.state END,repoUrl=excluded.repoUrl,
       repoDescription=excluded.repoDescription,language=excluded.language,topics=excluded.topics,stars=excluded.stars,
       pushedAt=excluded.pushedAt,blurb=excluded.blurb,sortOrder=excluded.sortOrder,snapshotAt=excluded.snapshotAt,
-      moderationOutcome=excluded.moderationOutcome,moderationFlags=excluded.moderationFlags,
+      moderationOutcome=CASE WHEN communityJourney.moderationOutcome='hold' THEN 'hold' ELSE NULL END,moderationFlags=excluded.moderationFlags,
       moderationScores=excluded.moderationScores,moderationCheckedAt=excluded.moderationCheckedAt,
-      moderationReviewRequired=excluded.moderationReviewRequired,version=communityJourney.version+1,updatedAt=unixepoch()
-  `));
-  const update = db.update(schema.studentProfile).set({ contentVersion: sql`${schema.studentProfile.contentVersion}+1` }).where(expectedProfile);
-  const results = await db.batch([retire,...upserts,update]);
-  return results.at(-1)?.meta.changes ? { outcome: result.outcome === "hold" ? "hold" : "saved" } : { outcome:"conflict" };
+      moderationReviewRequired=excluded.moderationReviewRequired,version=communityJourney.version+CASE WHEN
+        communityJourney.title IS NOT excluded.title OR communityJourney.description IS NOT excluded.description OR
+        communityJourney.evidenceUrl IS NOT excluded.evidenceUrl OR communityJourney.repoDescription IS NOT excluded.repoDescription OR
+        communityJourney.language IS NOT excluded.language OR communityJourney.topics IS NOT excluded.topics OR
+        communityJourney.blurb IS NOT excluded.blurb THEN 1 ELSE 0 END,updatedAt=unixepoch()
+  `),
+  );
+  const update = db
+    .update(schema.studentProfile)
+    .set({ contentVersion: sql`${schema.studentProfile.contentVersion}+1` })
+    .where(expectedProfile);
+  const revisionsQuery = db
+    .select({
+      id: schema.communityJourney.id,
+      version: schema.communityJourney.version,
+    })
+    .from(schema.communityJourney)
+    .where(
+      and(
+        eq(schema.communityJourney.userId, profile.userId),
+        eq(schema.communityJourney.state, "POSTED"),
+        eq(schema.communityJourney.moderatorHidden, false),
+        inArray(
+          schema.communityJourney.repoFullName,
+          highlights.map((h) => h.repoFullName),
+        ),
+      ),
+    );
+  const results = await db.batch([retire, ...upserts, update, revisionsQuery]);
+  const changed = results.at(-2) as D1Result;
+  return changed?.meta.changes
+    ? {
+        outcome: "saved",
+        revisions: results.at(-1) as { id: string; version: number }[],
+      }
+    : { outcome: "conflict" };
 }

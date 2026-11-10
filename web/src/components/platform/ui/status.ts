@@ -56,7 +56,7 @@ export const STATUSES = {
   },
   /** studentProfile.status, and a blog post's. */
   profile: {
-    DRAFT: { label: "Draft", tone: "neutral" },
+    DRAFT: { label: "Not on public website", tone: "neutral" },
     PUBLISHED: { label: "Published", tone: "success" },
     SUSPENDED: { label: "Suspended", tone: "danger" },
   },

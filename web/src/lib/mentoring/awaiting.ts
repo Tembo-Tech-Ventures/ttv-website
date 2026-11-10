@@ -1,6 +1,6 @@
 import { communityActor, requireBrowser } from "@/lib/community/actor";
 import { CommunityError } from "@/lib/community/model";
-import { createCommunityService } from "@/lib/community/service";
+import { createCommunityReadService } from "@/lib/community/service";
 import { recordErrorInBackground } from "@/lib/observability/errors";
 
 export interface AwaitingConfirmationContext {
@@ -28,7 +28,7 @@ export async function awaitingConfirmation({ db, env, locals }: AwaitingConfirma
   if (!actor) return null;
   try {
     requireBrowser(actor);
-    const service = createCommunityService(db, actor.id, actor.fixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
+    const service = createCommunityReadService(db, actor.id, actor.fixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
     return await service.countAwaitingConfirmation();
   } catch (error) {
     if (!(error instanceof CommunityError)) {

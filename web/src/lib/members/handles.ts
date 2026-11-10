@@ -27,9 +27,16 @@ export async function nextMemberHandle(
     .prepare(
       `SELECT count(*) AS count,
     max(CASE WHEN handle=? THEN 1 ELSE CAST(substr(handle,?) AS INTEGER) END) AS suffix
-    FROM studentProfile WHERE handle=? OR handle GLOB ?`,
+    FROM studentProfile WHERE handle=? OR (handle GLOB ? AND length(substr(handle,?))<=9 AND substr(handle,?) NOT GLOB '*[^0-9]*')`,
     )
-    .bind(base, base.length + 2, base, `${base}-[0-9]*`)
+    .bind(
+      base,
+      base.length + 2,
+      base,
+      `${base}-[0-9]*`,
+      base.length + 2,
+      base.length + 2,
+    )
     .first<{ count: number; suffix: number | null }>();
   if (!occupied?.count && base !== "member") return base;
   return `${base}-${Math.max(base === "member" ? 0 : 1, occupied?.suffix ?? 0) + 1}`;

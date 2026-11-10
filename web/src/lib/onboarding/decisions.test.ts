@@ -236,7 +236,7 @@ describe("setAccess, through grantCommunityRole and revokeCommunityRole", () => 
   it("answers the pending request when an administrator grants the role directly", async () => {
     const s = setup();
     const id = await createAccessRequest(s.db, "wairimu", mentor, T);
-    const service = createCommunityService(s.db, "amina", null, "production");
+    const service = createCommunityService(s.db, "amina", null, "production", undefined, {} as Env);
     expect(await service.setAccess({ userId: "wairimu", role: "MENTOR", granted: true }))
       .toEqual({ userId: "wairimu", role: "MENTOR", granted: true });
     expect(s.rows("SELECT status, decidedBy FROM access_request WHERE id = ?", id)).toEqual([{ status: "APPROVED", decidedBy: "amina" }]);

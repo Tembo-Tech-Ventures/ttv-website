@@ -62,7 +62,7 @@ function world() {
   `);
   return { db, database };
 }
-const caller = { id: "member-29", isAdmin: false };
+const caller = { id: "member-29" };
 describe("directory eligibility and bounded reads", () => {
   it("paginates all eligible profiles in daily order, with stable totals and one batch", async () => {
     const { db } = world();
@@ -116,9 +116,7 @@ describe("directory eligibility and bounded reads", () => {
         await listMembers(db, caller, { cursor: first.nextCursor! }),
       ).toEqual(rest);
       expect((await readOwnMemberCard(db, caller))?.handle).toBe(caller.id);
-      expect(
-        await readOwnMemberCard(db, { id: "member-01", isAdmin: false }),
-      ).toBeNull();
+      expect(await readOwnMemberCard(db, { id: "member-01" })).toBeNull();
       expect(
         [...first.members, ...rest.members].map((m) => m.handle),
       ).not.toContain(caller.id);
@@ -154,17 +152,13 @@ describe("directory eligibility and bounded reads", () => {
   });
   it("uses the same list for admins and ordinary signed-in callers", async () => {
     const { db } = world();
-    expect(await listMembers(db, { ...caller, isAdmin: true })).toEqual(
+    expect(await listMembers(db, { ...caller })).toEqual(
       await listMembers(db, caller),
     );
     expect(await readMember(db, caller, "member-01")).toBeNull();
     expect(await readMember(db, caller, "unknown")).toBeNull();
-    expect(
-      await readMember(db, { id: "member-01", isAdmin: false }, "member-01"),
-    ).toBeNull();
-    expect(
-      await readMember(db, { ...caller, isAdmin: true }, "member-01"),
-    ).toBeNull();
+    expect(await readMember(db, { id: "member-01" }, "member-01")).toBeNull();
+    expect(await readMember(db, { ...caller }, "member-01")).toBeNull();
   });
   it("hides held work and drafts from other readers, and marks current confirmations", async () => {
     const { db } = world();
@@ -178,20 +172,44 @@ describe("directory eligibility and bounded reads", () => {
     });
     expect(profile?.publicUrl).toBeNull();
     expect(
-      (await readMember(db, { id: "member-00", isAdmin: false }, "member-00"))
-        ?.work,
+      (await readMember(db, { id: "member-00" }, "member-00"))?.work,
     ).toHaveLength(1);
   });
   it("refuses anonymous reads and malformed cursors", async () => {
     const { db } = world();
-    await expect(
-      listMembers(db, { id: "", isAdmin: false }),
-    ).rejects.toMatchObject({ status: 401 });
-    await expect(
-      readMember(db, { id: "", isAdmin: false }, "member-00"),
-    ).rejects.toMatchObject({ status: 401 });
+    await expect(listMembers(db, { id: "" })).rejects.toMatchObject({
+      status: 401,
+    });
+    await expect(readMember(db, { id: "" }, "member-00")).rejects.toMatchObject(
+      { status: 401 },
+    );
     expect(await listMembers(db, caller, { cursor: "not base64" })).toEqual(
       await listMembers(db, caller),
     );
   });
+});
+
+it("uses the account name only in the member view when the public identity is absent", async () => {
+  const { db, database } = world();
+  database.exec(
+    "UPDATE studentProfile SET publicName=NULL WHERE userId='member-00'",
+  );
+  const own = await readOwnMemberCard(db, { id: "member-00" });
+  expect(own?.displayName).toBe("Synthetic Wanjiku");
+  expect((await readMember(db, caller, "member-00"))?.displayName).toBe(
+    "Synthetic Wanjiku",
+  );
+  expect(
+    (
+      await listMembers(db, caller, {
+        q: "Synthetic Wanjiku",
+        skills: [" ", "Rust"],
+      })
+    ).total,
+  ).toBe(26);
+  expect(
+    database
+      .prepare("SELECT publicName FROM studentProfile WHERE userId='member-00'")
+      .get(),
+  ).toEqual({ publicName: null });
 });

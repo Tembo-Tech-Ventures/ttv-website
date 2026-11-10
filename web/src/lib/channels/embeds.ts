@@ -145,18 +145,18 @@ export const sameRefs = (a: readonly EmbedRef[], b: readonly EmbedRef[]) =>
 
 interface ResolvedRow {
   position: number;
-  ownerId: string | null; visibility: string | null; currentVersion: number | null;
+  ownerId: string | null; posted: number | null; currentVersion: number | null;
   journeyTitle: string | null; description: string | null; evidenceUrl: string | null;
   programId: string | null; processingStatus: string | null; recordingTitle: string | null;
   recordingSeconds: number | null; segments: unknown;
 }
 
-type ProjectRow = Pick<ResolvedRow, "ownerId" | "visibility" | "currentVersion" | "journeyTitle" | "description" | "evidenceUrl">;
+type ProjectRow = Pick<ResolvedRow, "ownerId" | "posted" | "currentVersion" | "journeyTitle" | "description" | "evidenceUrl">;
 
 function resolveProject(ownerId: string, ref: ProjectEmbedRef, row: ProjectRow): ProjectEmbed {
   // A missing project and another person's give the same answer, so neither is confirmed to exist.
   if (row.ownerId !== ownerId) throw new ChannelError("validation", PROJECT_REFUSED, 400);
-  if (row.visibility !== "institution") {
+  if (!row.posted) {
     throw new ChannelError("validation", "This project is a private draft. Publish it before you share it.", 400);
   }
   if (row.currentVersion !== ref.version) {
@@ -209,7 +209,7 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
   }
   const ref = (path: string) => `json_extract(e.value, '$.${path}')`;
   const { results } = await ctx.db.prepare(`SELECT e.key AS position,
-      j.userId AS ownerId, CASE WHEN ${postedWorkEligibility("j")} THEN 'institution' ELSE 'private' END AS visibility, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
+      j.userId AS ownerId, ${postedWorkEligibility("j")} AS posted, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
       r.programId, r.processingStatus, r.title AS recordingTitle, r.durationSeconds AS recordingSeconds,
       CASE WHEN r.id IS NULL THEN NULL ELSE ${segmentsIn("r.id", ref("startSeconds"), `${ref("startSeconds")} + ${ref("durationSeconds")}`)} END AS segments
     FROM json_each(?1) e
@@ -229,9 +229,9 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
  * rule: still the owner's, still published).
  */
 export async function resolveOwnProject(db: D1Database, ownerId: string, ref: ProjectEmbedRef): Promise<ProjectEmbed> {
-  const row = await db.prepare(`SELECT userId AS ownerId, CASE WHEN ${postedWorkEligibility("j")} THEN 'institution' ELSE 'private' END AS visibility, version AS currentVersion, title AS journeyTitle, description, evidenceUrl
+  const row = await db.prepare(`SELECT userId AS ownerId, ${postedWorkEligibility("j")} AS posted, version AS currentVersion, title AS journeyTitle, description, evidenceUrl
     FROM communityJourney j WHERE id = ?1`).bind(ref.journeyId).first<ProjectRow>();
-  return resolveProject(ownerId, ref, row ?? { ownerId: null, visibility: null, currentVersion: null, journeyTitle: null, description: null, evidenceUrl: null });
+  return resolveProject(ownerId, ref, row ?? { ownerId: null, posted: null, currentVersion: null, journeyTitle: null, description: null, evidenceUrl: null });
 }
 
 /**

@@ -173,7 +173,7 @@ test.describe("shared work and its confirmations", () => {
     const alumna = await newPage(browser, baseURL!, "alumna");
     const mentor = await newPage(browser, baseURL!, "mentor");
     const title = `T01 ledger ${Date.now()}`;
-    const fields = { title, description: "Fictional: M-Pesa receipts into a shared ledger.", occurredAt: "2026-10-12", visibility: "institution" };
+    const fields = { title, description: "Fictional: M-Pesa receipts into a shared ledger.", occurredAt: "2026-10-12", status: "posted" };
     const { entry } = await write(alumna, baseURL!, "POST", "journey", fields);
     try {
       await write(mentor, baseURL!, "POST", `journey/${entry!.id}/confirmations`, {

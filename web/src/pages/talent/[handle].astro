@@ -1,5 +1,5 @@
 ---
-import { publicProfileEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
+import { publicProfileEligibility, postedWorkColumnsEligibility } from "@/lib/community/eligibility";
 import { sql as eligibilitySql } from "drizzle-orm";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -50,7 +50,7 @@ const profileRead = handle
           ),
           with: {
             user: { columns: { id: true } },
-            highlights: { where: eligibilitySql.raw(postedWorkEligibility("studentProfile_highlights")), orderBy: [asc(schema.communityJourney.sortOrder)] },
+            work: { where: (work) => postedWorkColumnsEligibility(work), orderBy: [asc(schema.communityJourney.sortOrder)], with: {confirmations: {with:{mentor:{columns:{name:true}}}}} },
           },
         });
         const candidateCohorts = candidateProfile
@@ -340,34 +340,34 @@ const personJsonLd =
       )}
 
       {/* Highlighted work */}
-      {profile.highlights.length > 0 && (
+      {profile.work.length > 0 && (
         <section class="mt-12" aria-label="Highlighted work">
           <h2 class="mb-6 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
             Highlighted work
           </h2>
           <div class="space-y-6">
-            {profile.highlights.map((h) => {
+            {profile.work.map((h) => {
               const topics = parseTopicsJson(h.topics);
               return (
                 <div class="rounded-lg border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] p-5">
                   <div class="flex flex-wrap items-start justify-between gap-2">
-                    <a
-                      href={h.evidenceUrl ?? undefined}
+                    {h.evidenceUrl ? <a
+                      href={h.evidenceUrl}
                       target="_blank"
                       rel="noopener noreferrer nofollow"
                       class="font-body text-base font-semibold text-ink-primary transition-colors hover:text-primary"
                     >
                       {h.title}
-                    </a>
+                    </a> : <span class="font-body text-base font-semibold text-ink-primary">{h.title}</span>}
                     <div class="flex items-center gap-3 font-body text-xs text-ink-muted">
                       {h.language && <span>{h.language}</span>}
                       {h.stars > 0 && <span>&starf; {h.stars}</span>}
                     </div>
                   </div>
 
-                  {h.description && (
+                  {(h.kind === "repo" ? h.repoDescription : h.description) && (
                     <p class="mt-2 font-body text-sm text-ink-secondary">
-                      {h.description}
+                      {h.kind === "repo" ? h.repoDescription : h.description}
                     </p>
                   )}
 
@@ -377,6 +377,11 @@ const personJsonLd =
                     </blockquote>
                   )}
 
+                  {h.confirmations.filter(c=>c.journeyVersion===h.version).map(c=>(
+                    <blockquote class="mt-3 border-l-2 border-primary/40 pl-4 font-body text-sm">
+                      <p>{c.statement}</p><footer>{c.mentor.name} · {c.method}</footer>
+                    </blockquote>
+                  ))}
                   <div class="mt-3 flex flex-wrap items-center gap-2">
                     {topics.map((topic) => (
                       <span class="inline-flex rounded-full border border-[color:var(--color-rule)] px-2 py-0.5 font-body text-xs text-ink-muted">

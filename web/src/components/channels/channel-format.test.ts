@@ -327,8 +327,8 @@ describe("the composer", () => {
   });
 
   it("says the same reach everywhere, only what B-3.1 reads, and the same for an answer's stored scope", () => {
-    const community = "this channel, projects shared in it and public builder profiles";
-    expect(temboScope(channels.showYourWork)).toBe(`This channel, projects shared in it and public builder profiles. Never cohort recordings or private conversations.`);
+    const community = "this channel, saved member profiles and their posted work";
+    expect(temboScope(channels.showYourWork)).toBe(`This channel, saved member profiles and their posted work. Never cohort recordings or private conversations.`);
     expect(temboReach(channels.showYourWork)).toBe(community);
     expect(temboSees("COMMUNITY")).toBe(community);
     expect(temboReach(channels.cohort04)).toBe(temboSees("COHORT"));

@@ -11,6 +11,11 @@ export interface EditableCommunityProfile {
   opportunityGoals: string;
 }
 
+export interface WorkIdentity {
+  kind: import("@/lib/platform/contracts").WorkKind;
+  repoFullName: string | null;
+}
+
 export interface ClaimDraft {
   title: string;
   description: string;

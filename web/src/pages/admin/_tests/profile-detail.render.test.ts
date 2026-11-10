@@ -40,7 +40,7 @@ function profile(overrides: Record<string, unknown> = {}) {
     githubLogin: "achieng", contentVersion: 3, moderationOutcome: null, moderationFlags: null, moderationCheckedAt: null,
     moderationReviewRequired: false, publishedAt: AT, createdAt: AT, updatedAt: AT,
     user: { id: "achieng", name: "Achieng Otieno", email: "achieng@example.test" },
-    highlights: [{ id: "h1", repoFullName: "achieng/ledger", repoUrl: "https://github.com/achieng/ledger", stars: 3, language: "TypeScript", description: "A ledger.", blurb: "My best work.", sortOrder: 0 }],
+    work: [{ id: "h1", repoFullName: "achieng/ledger", repoUrl: "https://github.com/achieng/ledger", stars: 3, language: "TypeScript", description: "A ledger.", blurb: "My best work.", sortOrder: 0 }],
     posts: [
       { id: "post-1", title: "Notes on ledgers", slug: "ledgers", status: "PUBLISHED", adminNote: null, updatedAt: AT },
       { id: "post-2", title: "A draft", slug: "draft", status: "DRAFT", adminNote: null, updatedAt: AT },
@@ -146,7 +146,7 @@ describe("a builder profile on the style guide", () => {
   });
 
   it("says plainly when there is nothing to list", async () => {
-    store.find.mockResolvedValue(profile({ highlights: [], posts: [] }));
+    store.find.mockResolvedValue(profile({ work: [], posts: [] }));
     store.cohorts.mockResolvedValue([]);
     const { body } = await visit();
     expect(body).toContain("None yet. A cohort shows here once its application is marked completed.");

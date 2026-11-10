@@ -69,8 +69,7 @@ const refused = Astro.response.status >= 400;
 
     {allowed === false && (
       <Notice tone="info" title="Institutional access needs approval">
-        Signing in gives you a community profile. An administrator must approve institutional access before you can
-        discover people here.
+        All signed-in members can read saved profiles and posted work. Administrator approval adds the AI tools on this page.
       </Notice>
     )}
     {allowed === null && (

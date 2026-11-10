@@ -36,7 +36,7 @@ export function assertSavedEntry(entry, userId, title) {
   assert.equal(entry?.title, title);
   assert.equal(entry?.description, "Synthetic contribution: I built and tested keyboard navigation for a fictional community library.");
   assert.equal(entry?.evidenceUrl, source);
-  assert.equal(entry?.visibility, "institution");
+  assert.equal(entry?.status, "posted");
   assert.equal(entry?.occurredAt, "2026-10-24");
   assert.equal(entry?.version, 1);
   assert.ok(typeof entry?.id === "string" && entry.id.length > 0);
@@ -165,7 +165,7 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
       await expect(institution.getByRole("link", { name: "Open profile link", exact: true })).toHaveAttribute("href", `/dashboard/discover?profile=${encodeURIComponent(memberId)}`);
       const detail = await read(contextsByRole.institution, profilePath);
       assert.equal(detail.profile.userId, memberId);
-      assert.ok(detail.entries.every(item => item.userId === memberId && item.visibility === "institution"));
+      assert.ok(detail.entries.every(item => item.userId === memberId && item.status === "posted"));
       const retrieved = detail.entries.find(item => item.id === entry.id);
       assertSavedEntry(retrieved, memberId, title);
       assertSavedConfirmation(retrieved, users.mentor.userId);

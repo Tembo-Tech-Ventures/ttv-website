@@ -28,7 +28,7 @@ const profile = {
   version: 2,
   updatedAt: 123,
 };
-const entry = {
+const entry = { kind:"contribution" as const, repoFullName:null,
   id: "entry",
   userId: "member",
   title: "Library",

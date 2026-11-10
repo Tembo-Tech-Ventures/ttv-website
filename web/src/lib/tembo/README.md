@@ -1,48 +1,6 @@
 # Tembo in channels
 
-## Member visibility (2026-11-09)
-
-`studentProfile` is the single saved profile for every signed-in person. `communityProfile`
-has been migrated and dropped. A saved profile is discoverable while it is neither
-SUSPENDED nor held by moderation; MENTOR and ADMIN owners are excluded. All signed-in
-readers, including institutions, see the same directory. Institutions add AI discovery
-and assessment tools, not access to more people or evidence.
-
-`communityJourney` stores both contributions and repository work. `profileHighlight`
-has been migrated and dropped; repository snapshots and chosen order live on work rows.
-POSTED work follows the profile's visibility. DRAFT work is author-only; old private
-rows became drafts. The retired NOT NULL `visibility` column always receives the legacy
-constant `institution` and is never used for authorization. REST work requests and responses use `status: "posted" | "draft"`. PATCH
-`/api/community/journey/:id` changes that status. The old `visibility` input
-is deprecated and normalized once at validation; responses never emit it.
-
-Clef checks saved profile text and posted work, fails open on errors, and can hold an
-item for a human. Shared reads never include held items. Author/editor and admin reads
-can inspect them. The shared predicates live in `src/lib/community/eligibility.ts`.
-Public surfaces additionally require PUBLISHED and a valid cohort completion;
-PUBLISHED means opting into the public website, not becoming visible to members.
-
-`src/lib/members/directory.ts` provides cursor-paginated cards and profile reads in
-one D1 batch each. The directory always shows the shared view, even to the author.
-
-
-Tembo answers questions inside channels (B-3.1). Shipped dark behind the
-`tembo_channels` flag; every route also needs `channels`. Plan: SAM idea
-01M68GQAP1DCSVMRJMZS771ZRB, §3 "Tembo in channels". Wire contracts:
-`TemboAsk`, `TemboResponse`, `TemboFeedback`, `TemboUsage` and `Citation` in
-`src/lib/platform/contracts.ts`. Migration `0035_tembo.sql`.
-
-The private Ask Tembo page (`/api/chat`, B-3.2) is the same assistant, named
-"Ask Tembo privately" apart from a channel's "Ask Tembo here" button, which
-posts for the channel (QA3-03): `private-ask.ts` builds its prompt, and its
-scope comes from `capabilitiesFor` once, like channel access: the sessions of
-the person's cohorts (`cohortIds`), every cohort's for staff, or none yet. The
-prompt says which, so Tembo can say what it cannot see, and the page says it too
-(`PRIVATE_ASK_SEES`, `src/components/chat/AboutAskTembo.tsx`), with who can see
-a conversation, that conversations are kept with the account with no deleting
-yet, and that its requests go through the AI Gateway without opting out of its
-logs (unlike channel Tembo's `collectLog: false`). The `/api/chat` contract is
-unchanged.
+See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
 
 ## Routes
 

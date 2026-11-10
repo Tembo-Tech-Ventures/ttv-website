@@ -38,7 +38,7 @@ const DEFAULT_PROFILE = {
   publicName: null,
   publicAvatarUrl: null,
   user: { name: "Builder", image: null },
-  highlights: [],
+  work: [],
 };
 
 vi.mock("drizzle-orm/d1", () => ({
@@ -48,14 +48,15 @@ vi.mock("drizzle-orm/d1", () => ({
         findFirst: async (...args: unknown[]) => {
           const profile = await mockFindProfile(...args);
           if (!profile) return profile;
-          const highlights =
-            profile.highlights ?? (await mockFindHighlights()) ?? [];
-          return { ...DEFAULT_PROFILE, ...profile, highlights };
+          const work =
+            profile.work ?? (await mockFindHighlights()) ?? [];
+          return { ...DEFAULT_PROFILE, ...profile, work };
         },
       },
       account: { findFirst: mockFindAccount },
       communityJourney: { findMany: mockFindHighlights },
     },
+    select: () => ({ from: () => ({where: async () => (await mockFindHighlights()) ?? []}) }),
     delete: () => ({ where: mockDeleteWhere }),
     insert: () => ({ select: mockInsertSelect }),
     update: () => ({
@@ -134,7 +135,7 @@ beforeEach(() => {
   mockDeleteWhere.mockReturnValue({ meta: { changes: 1 } });
   mockInsertSelect.mockReturnValue({ meta: { changes: 1 } });
   mockUpdateSetWhere.mockReturnValue({ meta: { changes: 1 } });
-  mockBatch.mockImplementation(async (queries: unknown[]) => queries);
+  mockBatch.mockImplementation(async (queries: unknown[]) => Promise.all(queries));
   mockCheckProfileContent.mockResolvedValue({
     outcome: "pass",
     flags: [],
@@ -376,7 +377,7 @@ describe("POST /api/portfolio/highlights", () => {
     mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
     mockBatch.mockImplementationOnce(async (queries: unknown[]) =>
       queries.map((query, index) =>
-        index === queries.length - 1 ? { meta: { changes: 0 } } : query,
+        index === queries.length - 2 ? { meta: { changes: 0 } } : query,
       ),
     );
 
@@ -479,7 +480,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
-        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/repo-a",
         blurb: "My project",
         sortOrder: 0,
@@ -504,14 +505,14 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-old",
-        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/old-renamed-repo",
         blurb: "Carefully written blurb",
         sortOrder: 0,
       },
       {
         id: "hl-match",
-        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/repo-a",
         blurb: "Another project",
         sortOrder: 1,
@@ -538,7 +539,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
-        kind: "repo", repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
         repoFullName: "user/deleted-repo",
         blurb: "Keep this blurb",
         sortOrder: 0,

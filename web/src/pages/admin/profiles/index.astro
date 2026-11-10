@@ -1,5 +1,5 @@
 ---
-import { reviewWork } from "@/lib/members/moderation";
+import { reviewWork, listWorkReviews } from "@/lib/members/moderation";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import AdminLayout from "@/layouts/AdminLayout.astro";
@@ -85,9 +85,8 @@ if (Astro.request.method === "POST") {
 const statusFilter = parseProfileStatus(Astro.url.searchParams.get("status"));
 const page = parsePage(Astro.url.searchParams.get("page"));
 const flash = takeFlash(Astro);
-const [{results:workReview}, { rows, total, review }, spaces] = await Promise.all([
-  env.DB.prepare(`SELECT id,title,description,version,moderationOutcome FROM communityJourney
-  WHERE moderationReviewRequired=1 ORDER BY moderationCheckedAt,id LIMIT 50`).all<{id:string;title:string;description:string;version:number;moderationOutcome:string}>(),
+const [workReview, { rows, total, review }, spaces] = await Promise.all([
+  listWorkReviews(env.DB),
   readProfilesPage(db, { status: statusFilter, page }),
   resolveSpacePage(Astro.locals, "adminProfiles"),
 ]);
@@ -134,7 +133,10 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
       <h2 id="work-review-heading" class="text-lg">Work awaiting a human review</h2>
       {workReview.map(work => <article>
         <h3 class="text-base">{work.title}</h3>
+        <p>By {work.authorName}</p>
         <p>{work.description}</p>
+        {work.blurb && work.blurb !== work.description && <p>{work.blurb}</p>}
+        {work.topics && <p>Topics: {work.topics}</p>}
         <p>{work.moderationOutcome === "hold" ? "Hidden from other readers until reviewed." : "Posted while the content check was unavailable."}</p>
         <form method="POST" action={here} class="flex flex-wrap gap-2">
           <input type="hidden" name="form" value="work" />

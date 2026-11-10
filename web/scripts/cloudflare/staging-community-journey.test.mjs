@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { assertJourneyScope, assertSavedEntry, assertSavedConfirmation, verifyStagingCommunityJourney, COMMUNITY_EVIDENCE_DIRECTORY } from "./staging-community-journey.mjs";
 const member = "ttv-staging-fixture-aaaaaaaaaaaaaaaaaaaaaaaa-member";
 const mentor = "ttv-staging-fixture-aaaaaaaaaaaaaaaaaaaaaaaa-mentor";
-const entry = () => ({ id: "synthetic-entry", userId: member, title: "Fictional keyboard navigation · desktop", description: "Synthetic contribution: I built and tested keyboard navigation for a fictional community library.", evidenceUrl: "https://example.com/fictional-library", visibility: "institution", occurredAt: "2026-10-24", version: 1, confirmations: [{ journeyId: "synthetic-entry", mentorId: mentor, mentorRole: "MENTOR", journeyVersion: 1, statement: "Synthetic review: I checked the fictional keyboard navigation contribution; this is not a real endorsement.", method: "Synthetic walkthrough of the fictional library example" }] });
+const entry = () => ({ id: "synthetic-entry", userId: member, title: "Fictional keyboard navigation · desktop", description: "Synthetic contribution: I built and tested keyboard navigation for a fictional community library.", evidenceUrl: "https://example.com/fictional-library", status: "posted", occurredAt: "2026-10-24", version: 1, confirmations: [{ journeyId: "synthetic-entry", mentorId: mentor, mentorRole: "MENTOR", journeyVersion: 1, statement: "Synthetic review: I checked the fictional keyboard navigation contribution; this is not a real endorsement.", method: "Synthetic walkthrough of the fictional library example" }] });
 function scope() {
   return { baseUrl: "https://staging.tembotechventures.com", contextsByRole: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, {}])), users: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, { userId: `ttv-staging-fixture-aaaaaaaaaaaaaaaaaaaaaaaa-${role}` }])) };
 }
@@ -16,9 +16,9 @@ describe("synthetic journey provenance gates", () => {
       expect(() => assertJourneyScope(candidate)).toThrow(/.*/);
     }
   });
-  it("requires persisted exact contribution content, visibility, owner and version", () => {
+  it("requires persisted exact contribution content, status, owner and version", () => {
     expect(() => assertSavedEntry(entry(), member, entry().title)).not.toThrow(/.*/);
-    for (const change of [{ userId: "another-user" }, { visibility: "private" }, { version: 2 }, { evidenceUrl: "https://example.com/wrong" }, { title: "wrong" }, { description: "unsaved" }, { id: "" }]) expect(() => assertSavedEntry({ ...entry(), ...change }, member, entry().title)).toThrow(/.*/);
+    for (const change of [{ userId: "another-user" }, { status: "draft" }, { version: 2 }, { evidenceUrl: "https://example.com/wrong" }, { title: "wrong" }, { description: "unsaved" }, { id: "" }]) expect(() => assertSavedEntry({ ...entry(), ...change }, member, entry().title)).toThrow(/.*/);
   });
   it("rejects stale, misattributed, duplicate or weakened confirmations", () => {
     expect(() => assertSavedConfirmation(entry(), mentor)).not.toThrow(/.*/);
@@ -45,7 +45,7 @@ describe("synthetic journey provenance gates", () => {
     expect(pages.every(page => page.close.mock.calls.length === 1)).toBe(true);
     const manifest = await readFile(`${COMMUNITY_EVIDENCE_DIRECTORY}/manifest.json`, "utf8");
     expect(JSON.parse(manifest)).toMatchObject({ status: "failed", failureStage: "page-cleanup" });
-    expect(manifest).not.toContain("private");
+    expect(manifest).not.toContain("draft");
     await rm(COMMUNITY_EVIDENCE_DIRECTORY, { recursive: true, force: true });
   });
   it("writes only a fixed failure code for sensitive API errors, never screenshots", async () => {

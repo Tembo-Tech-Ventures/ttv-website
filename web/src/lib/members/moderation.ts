@@ -23,11 +23,33 @@ export async function reviewWork(
     throw new CommunityError("Choose a current work item and decision.");
   const result = await db
     .prepare(
-      `UPDATE communityJourney SET moderationOutcome='pass',moderationReviewRequired=0,
-    state=CASE WHEN ?='hide' THEN 'DRAFT' ELSE state END,moderationCheckedAt=unixepoch()
-    WHERE id=? AND version=? AND moderationReviewRequired=1`,
+      `UPDATE communityJourney SET moderationOutcome=CASE WHEN ?='hide' THEN 'hold' ELSE 'pass' END,moderationReviewRequired=0,
+    state=CASE WHEN ?='hide' THEN 'DRAFT' WHEN moderatorHidden=1 THEN 'POSTED' ELSE state END,moderatorHidden=(?='hide'),moderationCheckedAt=unixepoch()
+    WHERE id=? AND version=? AND (moderationReviewRequired=1 OR moderatorHidden=1)`,
     )
-    .bind(decision, id, revision)
+    .bind(decision, decision, decision, id, revision)
     .run();
   return result.meta.changes > 0;
+}
+
+/** Includes human-hidden work so only an admin can reverse that decision. */
+export async function listWorkReviews(db: D1Database) {
+  const { results } = await db
+    .prepare(
+      `SELECT w.id,w.title,w.description,w.blurb,w.topics,w.version,w.moderationOutcome,
+    coalesce(p.publicName,u.name) AS authorName FROM communityJourney w JOIN user u ON u.id=w.userId
+    LEFT JOIN studentProfile p ON p.userId=w.userId
+    WHERE w.moderationReviewRequired=1 OR w.moderatorHidden=1 ORDER BY w.updatedAt,w.id LIMIT 50`,
+    )
+    .all<{
+      id: string;
+      title: string;
+      description: string;
+      blurb: string | null;
+      topics: string | null;
+      version: number;
+      moderationOutcome: string | null;
+      authorName: string;
+    }>();
+  return results;
 }

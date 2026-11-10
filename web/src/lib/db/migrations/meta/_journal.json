@@ -281,6 +281,13 @@
       "when": 1794267943727,
       "tag": "0039_member_profiles_and_work",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1794273600000,
+      "tag": "0040_member_review_safety",
+      "breakpoints": true
     }
   ]
 }

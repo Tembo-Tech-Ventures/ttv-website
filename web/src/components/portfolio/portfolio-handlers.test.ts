@@ -82,7 +82,7 @@ function mockDb(
       publicAvatarUrl?: string | null;
       contentVersion?: number;
       user?: { name: string; image?: string | null };
-      highlights?: Array<{
+      work?: Array<{
         repoFullName: string;
         description: string | null;
         blurb: string | null;
@@ -363,7 +363,7 @@ describe("saveProfile", () => {
       const result = await saveProfile(db as never, "user-1", fd, "profile-1");
 
       expect(result.success).toBe(true);
-      expect(updateFn).toHaveBeenCalledTimes(2);
+      expect(updateFn).toHaveBeenCalledTimes(1);
     });
 
     it("treats a differently-cased submission of the same handle as unchanged", async () => {
@@ -385,7 +385,7 @@ describe("saveProfile", () => {
 
       expect(result.success).toBe(true);
       expect(result.handleError).toBeUndefined();
-      expect(updateFn).toHaveBeenCalledTimes(2);
+      expect(updateFn).toHaveBeenCalledTimes(1);
     });
 
     it("allows a handle change while the profile is still unpublished", async () => {
@@ -623,7 +623,7 @@ describe("publishProfile", () => {
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "PUBLISHED",
-        moderationOutcome: "error",
+        moderationOutcome: expect.any(Object),
         moderationReviewRequired: true,
       }),
     );
@@ -661,13 +661,13 @@ describe("published profile edits", () => {
     user: { name: "Mutable Account Name", image: null },
   };
 
-  it("saves the submitted fields before holding the profile for human review", async () => {
+  it("screens public edits before writing and holds the previous public text for review", async () => {
     const setProfile = vi.fn();
     const updateProfile = vi.fn();
     const db = mockDb({
       findProfileForLock: {
         ...current,
-        highlights: [
+        work: [
           {
             repoFullName: "builder/project",
             description: "A public description",
@@ -701,8 +701,8 @@ describe("published profile edits", () => {
         moderationReviewRequired: true,
       }),
     );
-    expect(setProfile.mock.calls[0]?.[0]).toHaveProperty("bio", "email me@example.com");
-    expect(setProfile.mock.invocationCallOrder[0]).toBeLessThan(checkContent.mock.invocationCallOrder[0]);
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
+    expect(setProfile.mock.invocationCallOrder[0]).toBeGreaterThan(checkContent.mock.invocationCallOrder[0]);
     expect(checkContent).toHaveBeenCalledWith(
       expect.objectContaining({
         displayName: "Checked Public Name",
@@ -755,7 +755,7 @@ describe("published profile edits", () => {
       expect(setProfile).toHaveBeenCalledWith(
         expect.objectContaining({
           headline: "Updated headline",
-          moderationOutcome: outcome,
+          moderationOutcome: outcome === "error" ? expect.any(Object) : outcome,
           moderationReviewRequired: reviewRequired,
         }),
       );

@@ -634,7 +634,6 @@ export async function seedAgentPreviewFixtures({
       ["programRole", "userId"],
       ["programApplication", "userId"],
       ["studentProfile", "userId"],
-
       ["communityJourney", "userId"],
       ["communityConfirmation", "mentorId"],
       ["attention_item", "userId"],
@@ -957,10 +956,11 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','amina-fixture/savanna-api','https://github.com/amina-fixture/savanna-api',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
+       "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",
@@ -971,9 +971,11 @@ export async function seedAgentPreviewFixtures({
        "snapshotAt" = excluded."snapshotAt",
        "updatedAt" = excluded."updatedAt"`,
     [
+      createdAt,
       "ttv-fixture-highlight-amina-1",
       "amina-fixture/savanna-api",
       "https://github.com/amina-fixture/savanna-api",
+      "REST API for logistics tracking",
       "REST API for logistics tracking",
       "TypeScript",
       '["api","rest","cloudflare"]',
@@ -987,10 +989,11 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','amina-fixture/react-dashboard','https://github.com/amina-fixture/react-dashboard',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
+       "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",
@@ -1001,9 +1004,11 @@ export async function seedAgentPreviewFixtures({
        "snapshotAt" = excluded."snapshotAt",
        "updatedAt" = excluded."updatedAt"`,
     [
+      createdAt,
       "ttv-fixture-highlight-amina-2",
       "amina-fixture/react-dashboard",
       "https://github.com/amina-fixture/react-dashboard",
+      "Admin dashboard with D1 backend",
       "Admin dashboard with D1 backend",
       "TypeScript",
       '["react","dashboard","d1"]',

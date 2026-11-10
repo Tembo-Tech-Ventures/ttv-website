@@ -19,7 +19,7 @@ function database() {
   sql.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT NOT NULL, image TEXT);
     CREATE TABLE Roles (id TEXT PRIMARY KEY, name TEXT UNIQUE, createdAt INTEGER DEFAULT (unixepoch()), updatedAt INTEGER DEFAULT (unixepoch()));
     CREATE TABLE UserRoles (id TEXT PRIMARY KEY, userId TEXT, roleId TEXT, UNIQUE(userId, roleId));
-    INSERT INTO user VALUES ('wanjiru', 'Wanjiru Kamau', null), ('otieno', 'Otieno Ouma', null), ('akinyi', 'Akinyi Njeri', null);`);
+    INSERT INTO user VALUES ('wanjiru', 'Wanjiru Kamau', '/api/avatar/avatars/wanjiru/checked.webp'), ('otieno', 'Otieno Ouma', null), ('akinyi', 'Akinyi Njeri', null);`);
   for (const name of ["0017_community_discovery.sql", "0018_confirmation_role_snapshot.sql", "0021_feature_flags.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql"]) sql.exec(readMigration(name));
   addMemberSchema(sql);
   for (const [user, role] of [["otieno", "MENTOR"], ["akinyi", "INSTITUTION"]]) sql.prepare("INSERT INTO UserRoles VALUES (?, ?, (SELECT id FROM Roles WHERE name = ?))").run(user, user, role);
@@ -52,7 +52,7 @@ beforeEach(async () => {
   const fixture = database();
   sql = fixture.sql;
   runtime.env.DB = fixture.db;
-  const member = createCommunityService(fixture.db, "wanjiru");
+  const member = createCommunityService(fixture.db, "wanjiru", undefined, undefined, undefined, {} as Env);
   await member.updateOwnProfile({ headline: "Builder", bio: "Builds M-Pesa reconciliation tools", skills: ["TypeScript"], opportunityGoals: "First developer role" });
   await member.createJourney({ title: "Chama savings ledger", description: "Built and tested a fictional ledger", evidenceUrl: "https://github.com/example/ledger", occurredAt: "2026-10-24", status: "posted" });
 });
@@ -74,7 +74,7 @@ describe("the Community page's own data", () => {
   it("carries the member's own profile, photo and journey", async () => {
     sql.exec("UPDATE user SET image = 'https://avatars.example.test/wanjiru.png' WHERE id = 'wanjiru'");
     const home = await loadCommunityHome(new Request(PAGE), locals("wanjiru"), runtime.env);
-    expect(home).toMatchObject({ id: "wanjiru", name: "Wanjiru Kamau", image: null, headline: "Builder", evidenceLoaded: true });
+    expect(home).toMatchObject({ id: "wanjiru", name: "Wanjiru Kamau", image: "/api/avatar/avatars/wanjiru/checked.webp", headline: "Builder", evidenceLoaded: true });
     expect(home?.claims.map((claim) => claim.title)).toEqual(["Chama savings ledger"]);
   });
 

@@ -1,3 +1,4 @@
+import type { WorkIdentity } from "../community/community-types";
 export interface EvidenceSource {
   id: string;
   title: string;
@@ -5,7 +6,7 @@ export interface EvidenceSource {
   kind: string;
 }
 
-export interface JourneyClaim {
+export interface JourneyClaim extends WorkIdentity {
   id: string;
   title: string;
   description: string;

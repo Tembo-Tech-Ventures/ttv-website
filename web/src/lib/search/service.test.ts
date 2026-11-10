@@ -112,11 +112,11 @@ describe("authorized source retrieval", () => {
     expect((await searchPlatform(s.db, s.actor, { q: "Final evidence", scope: "sessionMoments" })).sessionMoments[0]?.quote).toContain("Final evidence");
   });
 
-  it("keeps display fallback names out of retrieval and matches only skill values", async () => {
+  it("uses account-name fallbacks for members and matches only skill values", async () => {
     const s = setup();
     s.database.exec(`UPDATE studentProfile SET publicName=NULL,bio='Unrelated',skills='["TypeScript","SQL"]'`);
     for (const q of ["builder", "ttv", '"', "[", ","]) expect((await searchPlatform(s.db, s.actor, { q, scope: "people" })).people).toEqual([]);
-    expect((await searchPlatform(s.db, s.actor, { q: "TypeScript", scope: "people" })).people[0]?.person.name).toBe("TTV Builder");
+    expect((await searchPlatform(s.db, s.actor, { q: "TypeScript", scope: "people" })).people[0]?.person.name).toBe("Private auth name");
     s.database.exec("UPDATE studentProfile SET skills='malformed JSON'");
     expect((await searchPlatform(s.db, s.actor, { q: "malformed", scope: "people" })).people).toEqual([]);
   });

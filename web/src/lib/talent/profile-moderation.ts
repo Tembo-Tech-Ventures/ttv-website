@@ -83,7 +83,7 @@ export function splitModerationReviewLists<T extends ModerationListRow>(
     held: flagged.filter((profile) => profile.moderationOutcome === "hold"),
     unavailable: flagged.filter(
       (profile) =>
-        profile.moderationOutcome === "error",
+        profile.moderationOutcome !== "hold",
     ),
   };
 }

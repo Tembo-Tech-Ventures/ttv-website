@@ -124,7 +124,7 @@ const [profile, leadsResult, spaces] = await Promise.all([
     where: eq(schema.studentProfile.id, id),
     with: {
       user: true,
-      highlights: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
+      work: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
       posts: { orderBy: (post, { desc }) => [desc(post.updatedAt)] },
     },
   }),
@@ -273,16 +273,16 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
       </div>
     </Card>
 
-    {profile.highlights.length > 0 && (
+    {profile.work.length > 0 && (
       <Card>
         <div class="grid gap-2">
           <h2 class="text-lg text-ink-primary">Highlighted projects</h2>
           <ul class="divide-y divide-hairline" data-highlights>
-            {profile.highlights.map((h) => (
+            {profile.work.map((h) => (
               <li class="grid gap-1 py-3 first:pt-0 last:pb-0">
                 <div class="flex flex-wrap items-center justify-between gap-x-4">
                   <a href={h.repoUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
-                    {h.repoFullName}<span class="sr-only">{NEW_TAB}</span>
+                    {h.repoFullName ?? h.title}<span class="sr-only">{NEW_TAB}</span>
                   </a>
                   <span class="text-xs text-ink-muted">
                     {[h.stars > 0 ? `${h.stars} ${h.stars === 1 ? "star" : "stars"}` : null, h.language].filter(Boolean).join(" · ")}

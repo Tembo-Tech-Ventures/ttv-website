@@ -21,7 +21,7 @@ function fixture() {
     const role=({mentor:"MENTOR",institution:"INSTITUTION",admin:"ADMIN"} as Record<string,string>)[persona];
     if(role) f.database.prepare('INSERT INTO UserRoles(id,userId,roleId) SELECT ?,?,id FROM Roles WHERE name=?').run(`grant-${userId}`,userId,role);
     const identity:StagingFixtureIdentity={userId,runId:run,persona,expiresAt,...(probe?{assessmentProbe:true as const}:{})};
-    return {identity,service:createCommunityService(f.db,userId,identity,"staging")};
+    return {identity,service:createCommunityService(f.db, userId, identity, "staging", undefined, {} as Env)};
   }
   return {...f,add};
 }
@@ -124,8 +124,8 @@ describe("synthetic assessment durable claim", () => {
 describe("registered synthetic service confinement",()=>{
  it("scouts only same-run synthetic people and never real or other-run records",async()=>{
    const f=fixture();const member=f.add("member"),institution=f.add("institution"),other=f.add("member","b".repeat(24));
-   for(const service of [member.service,other.service,createCommunityService(f.db,"real")]){await service.updateOwnProfile(saved);await service.createJourney(entry);}
-   expect(()=>createCommunityService(f.db,member.identity.userId)).toThrow("Verified staging fixture context");
+   for(const service of [member.service,other.service,createCommunityService(f.db, "real", undefined, undefined, undefined, {} as Env)]){await service.updateOwnProfile(saved);await service.createJourney(entry);}
+   expect(()=>createCommunityService(f.db, member.identity.userId, undefined, undefined, undefined, {} as Env)).toThrow("Verified staging fixture context");
    const found=await institution.service.searchProfiles({});
    expect(found.map(p=>p.userId)).toEqual([member.identity.userId]);
    expect(found.every(p=>p.userId.startsWith(`ttv-staging-fixture-${runId}-`))).toBe(true);
@@ -135,7 +135,7 @@ describe("registered synthetic service confinement",()=>{
  });
  it("limits mentor review and confirmations to the same run",async()=>{
    const f=fixture();const member=f.add("member"),mentor=f.add("mentor"),other=f.add("member","b".repeat(24));
-   const claim=await member.service.createJourney(entry),foreign=await other.service.createJourney(entry),real=await createCommunityService(f.db,"real").createJourney(entry);
+   const claim=await member.service.createJourney(entry),foreign=await other.service.createJourney(entry),real=await createCommunityService(f.db, "real", undefined, undefined, undefined, {} as Env).createJourney(entry);
    expect((await mentor.service.listMentorship()).map(j=>j.id)).toEqual([claim.id]);
    const body={expectedRevision:1,statement:"I inspected this synthetic artifact",method:"Fixture review"};
    await expect(mentor.service.confirmJourney(real.id,body)).rejects.toMatchObject({status:404});

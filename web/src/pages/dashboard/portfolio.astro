@@ -180,7 +180,7 @@ const [landing, eligible, profile, github] = await Promise.all([
   eligibility,
   db.query.studentProfile.findFirst({
     where: eq(schema.studentProfile.userId, user.id),
-    with: { highlights: true },
+    with: { work: true },
   }),
   db.query.account.findFirst({
     where: and(eq(schema.account.userId, user.id), eq(schema.account.providerId, "github")),
@@ -224,7 +224,7 @@ const fieldErrors = Object.keys(errors).length > 0;
 const moderationMessages = result?.moderationMessages ?? [];
 const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
 
-const existingHighlights = (profile?.highlights ?? []).filter(h=>h.kind === "repo" && h.state === "POSTED" && h.repoFullName)
+const existingHighlights = (profile?.work ?? []).filter(h=>h.kind === "repo" && h.state === "POSTED" && h.repoFullName)
   .toSorted((a, b) => a.sortOrder - b.sortOrder)
   .map((h) => ({ repoFullName: h.repoFullName!, blurb: h.blurb ?? "", sortOrder: h.sortOrder }));
 const draft = profile?.status === "DRAFT";
@@ -255,8 +255,8 @@ const draft = profile?.status === "DRAFT";
     {partnerLocked && <PartnerProfileNote />}
 
     {!eligible && !partnerLocked && (
-      <EmptyState title="Your public profile opens when you complete a cohort" headingLevel={2}>
-        Then you can build it, choose your best projects, and be found for opportunities across the community.
+      <EmptyState title="Public website listing opens when you complete a cohort" headingLevel={2}>
+        You can already save a profile and post work for signed-in members in Community. A completed cohort also lets you list your profile on the public website.
         <Fragment slot="action"><ButtonLink href={SPACE_PAGE_PATHS.apply} variant="primary">Browse cohorts</ButtonLink></Fragment>
       </EmptyState>
     )}
@@ -264,8 +264,8 @@ const draft = profile?.status === "DRAFT";
     {eligible && profile && (
       <div data-profile-status={profile.status}>
         {profile.status === "DRAFT" && (
-          <Notice tone="info" title="Your profile is a draft">
-            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> Only you can see it. Publish it when you're ready.</span>
+          <Notice tone="info" title="Your profile is not on the public website">
+            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> Signed-in members can see your saved profile. Graduates can also list it on the public website.</span>
             <Fragment slot="actions">
               <form method="POST">
                 <input type="hidden" name="_action" value="publish" />
@@ -327,7 +327,7 @@ const draft = profile?.status === "DRAFT";
       <Card as="section" aria-labelledby="highlights-title" className="flex flex-col gap-4">
         <div>
           <h2 id="highlights-title" class="text-xl leading-snug text-ink-primary">GitHub highlights</h2>
-          <p class={`m-0 mt-1 ${HINT}`}>Choose up to six repositories to show on your public profile, each with a line about your part in it.</p>
+          <p class={`m-0 mt-1 ${HINT}`}>Choose up to six repositories to post as work, each with a line about your part in it.</p>
         </div>
         <RepoPicker
           client:visible

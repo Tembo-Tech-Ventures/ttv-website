@@ -82,7 +82,7 @@ describe("Writing", () => {
     expect(sections.map((section) => section.querySelector("h2")?.textContent)).toEqual(["Drafts", "Published"]);
     const [drafts, published] = sections;
     expect(drafts?.querySelector("[data-card] h3")?.textContent).toBe("What ledgers taught me");
-    expect(drafts?.querySelector("[data-status]")?.textContent).toBe("Draft");
+    expect(drafts?.querySelector("[data-status]")?.textContent).toBe("Not on public website");
     const edit = drafts?.querySelector("[data-row-action]");
     expect(edit?.getAttribute("href")).toBe("/dashboard/me/writing/draft");
     expect(edit?.textContent).toBe("Edit What ledgers taught me");

@@ -8,7 +8,7 @@ function confirmation(journeyVersion: number, mentorName: string, id = `${mentor
 }
 
 function work(id: string, overrides: Partial<CommunityJourney> = {}): CommunityJourney {
-  return {
+  return { kind:"contribution" as const, repoFullName:null,
     id, userId: "achieng", title: `Project ${id}`, description: "Fictional work.", evidenceUrl: null, occurredAt: "2026-10-01",
     status: "posted", version: 1, createdAt: 1, updatedAt: 1, confirmations: [], ...overrides,
   };
@@ -123,7 +123,7 @@ describe("profileOverview for an alumna", () => {
     const model = profileOverview({
       ...ALUMNA,
       journey: [
-        work("ledger", { title: "Chama ledger", version: 3, confirmations: [confirmation(2, "David")] }),
+        work("ledger", { kind:"contribution" as const, repoFullName:null, title: "Chama ledger", version: 3, confirmations: [confirmation(2, "David")] }),
         work("notes", { title: "Callback notes", status: "draft" }),
         work("stock", { confirmations: [confirmation(1, "Mercy")] }),
       ],

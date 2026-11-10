@@ -1,7 +1,8 @@
+import { checkedModerationColumns } from "@/lib/members/moderation-state";
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -51,7 +52,7 @@ async function getUserProfile(db: Database, userId: string) {
     where: eq(schema.studentProfile.userId, userId),
     with: {
       user: { columns: { name: true, image: true } },
-      highlights: {
+      work: {
         orderBy: (highlight, { asc }) => [asc(highlight.sortOrder)],
       },
     },
@@ -124,13 +125,9 @@ async function persistHighlights(
   profile: HighlightProfileState,
   sessionUserAgent: string | null | undefined,
   highlights: readonly ProfileHighlightValues[],
+  repostSelectedDrafts = false,
 ): Promise<Response | null> {
-  const result = await replaceProfileHighlights(
-    db,
-    profile,
-    highlights,
-    {outcome:"error",flags:[],scores:{}},
-  );
+  const result = await replaceProfileHighlights(db, profile, highlights,repostSelectedDrafts);
 
   if (result.outcome === "suspended") {
     return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
@@ -145,16 +142,37 @@ async function persistHighlights(
     );
   }
   if (highlights.length === 0) return null;
-  const revisions = await db.query.communityJourney.findMany({where:and(
-    eq(schema.communityJourney.userId,profile.userId),eq(schema.communityJourney.kind,"repo"),
-    inArray(schema.communityJourney.repoFullName,highlights.map(h=>h.repoFullName))),columns:{id:true,version:true}});
-  const moderation = await moderateHighlights(request,sessionUserAgent,profile,highlights);
-  const updates = revisions.map(row=>db.update(schema.communityJourney).set({
-    moderationOutcome:moderation.outcome,moderationFlags:JSON.stringify(moderation.flags),moderationScores:JSON.stringify(moderation.scores),
-    moderationCheckedAt:new Date(),moderationReviewRequired:moderation.outcome!=="pass",
-  }).where(and(eq(schema.communityJourney.id,row.id),eq(schema.communityJourney.version,row.version),eq(schema.communityJourney.moderationReviewRequired,true))));
-  if (updates.length > 0) await db.batch([updates[0],...updates.slice(1)]);
-  if (moderation.outcome === "hold") return jsonResponse({error:"Your work is saved and waiting for a human review."},422);
+  const revisions = result.outcome === "saved" ? result.revisions : [];
+  const moderation = await moderateHighlights(
+    request,
+    sessionUserAgent,
+    profile,
+    highlights,
+  );
+  const updates = revisions.map((row) =>
+    db
+      .update(schema.communityJourney)
+      .set({
+        ...checkedModerationColumns(
+          moderation,
+          schema.communityJourney.moderationOutcome,
+        ),
+      })
+      .where(
+        and(
+          eq(schema.communityJourney.id, row.id),
+          eq(schema.communityJourney.version, row.version),
+          eq(schema.communityJourney.moderationReviewRequired, true),
+          eq(schema.communityJourney.moderatorHidden, false),
+        ),
+      ),
+  );
+  if (updates.length > 0) await db.batch([updates[0], ...updates.slice(1)]);
+  if (moderation.outcome === "hold")
+    return jsonResponse(
+      { error: "Your work is saved and waiting for a human review." },
+      422,
+    );
   return null;
 }
 
@@ -222,6 +240,7 @@ export const POST: APIRoute = async ({ request }) => {
     profile,
     session.session?.userAgent,
     rows,
+    true,
   );
   return errorResponse ?? jsonResponse({ ok: true });
 };
@@ -236,7 +255,7 @@ export const PUT: APIRoute = async ({ request }) => {
   if (profile.status === "SUSPENDED") {
     return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
   }
-  if (profile.highlights.length === 0) {
+  if (profile.work.length === 0) {
     return jsonResponse({ ok: true, refreshed: 0 });
   }
 
@@ -257,29 +276,39 @@ export const PUT: APIRoute = async ({ request }) => {
 
   const repoMap = new Map(repos.map((repo) => [repo.full_name, repo]));
   let refreshed = 0;
-  const rows: ProfileHighlightValues[] = profile.highlights.filter(h => h.kind === "repo" && h.repoFullName && h.repoUrl && h.snapshotAt).map((highlight) => {
-    const repo = repoMap.get(highlight.repoFullName!);
-    if (!repo) {
+  const rows: ProfileHighlightValues[] = profile.work
+    .filter(
+      (h) =>
+        h.kind === "repo" &&
+        h.state === "POSTED" &&
+        !h.moderatorHidden &&
+        h.repoFullName &&
+        h.repoUrl &&
+        h.snapshotAt,
+    )
+    .map((highlight) => {
+      const repo = repoMap.get(highlight.repoFullName!);
+      if (!repo) {
+        return {
+          repoFullName: highlight.repoFullName!,
+          repoUrl: highlight.repoUrl!,
+          description: highlight.repoDescription,
+          language: highlight.language,
+          topics: highlight.topics ?? "[]",
+          stars: highlight.stars,
+          pushedAt: highlight.pushedAt,
+          blurb: highlight.blurb,
+          sortOrder: highlight.sortOrder,
+          snapshotAt: highlight.snapshotAt!,
+        };
+      }
+      refreshed += 1;
       return {
-        repoFullName: highlight.repoFullName!,
-        repoUrl: highlight.repoUrl!,
-        description: highlight.description,
-        language: highlight.language,
-        topics: highlight.topics ?? "[]",
-        stars: highlight.stars,
-        pushedAt: highlight.pushedAt,
+        ...toHighlightSnapshot(repo),
         blurb: highlight.blurb,
         sortOrder: highlight.sortOrder,
-        snapshotAt: highlight.snapshotAt!,
       };
-    }
-    refreshed += 1;
-    return {
-      ...toHighlightSnapshot(repo),
-      blurb: highlight.blurb,
-      sortOrder: highlight.sortOrder,
-    };
-  });
+    });
 
   if (refreshed === 0) {
     return jsonResponse({ ok: true, refreshed: 0 });

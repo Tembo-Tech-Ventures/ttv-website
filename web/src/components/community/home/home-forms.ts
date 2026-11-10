@@ -36,7 +36,7 @@ export function editorFromUrl(url: URL, claims: readonly JourneyClaim[]): HomeEd
   const edit = url.searchParams.get(EDIT_PARAM);
   if (edit !== null) {
     const claim = claims.find((item) => item.id === edit);
-    return claim ? { kind: "edit", claim } : null;
+    return claim && claim.kind !== "repo" ? { kind: "edit", claim } : null;
   }
   if (url.searchParams.get(PROFILE_PARAM) === "edit") return { kind: "profile" };
   if (url.searchParams.has(ADD_PARAM)) return { kind: "add" };

@@ -51,7 +51,7 @@ export async function verifyStagingAssessment({ target, personas, fetchImpl = fe
   const profile = await request(member, "profile", "PUT", { headline: "", bio: "", skills: [], opportunityGoals: "Synthetic hiring demonstration" });
   if (profile.status !== 200 || profile.data?.profile?.userId !== member.userId) fail();
   enter("journey-write");
-  const created = await request(member, "journey", "POST", { title: "Fictional TypeScript contribution", description: "Synthetic example: implemented typed input validation and unit tests for a TypeScript library. Self-reported contribution; external artifact not reviewed.", occurredAt: "2026-10-24", visibility: "institution" });
+  const created = await request(member, "journey", "POST", { title: "Fictional TypeScript contribution", description: "Synthetic example: implemented typed input validation and unit tests for a TypeScript library. Self-reported contribution; external artifact not reviewed.", occurredAt: "2026-10-24", status: "posted" });
   const entry = created.data?.entry;
   if (created.status !== 201 || !entry?.id || entry.userId !== member.userId || entry.version !== 1) fail();
   const path = `profiles/${member.userId}/assessment`;

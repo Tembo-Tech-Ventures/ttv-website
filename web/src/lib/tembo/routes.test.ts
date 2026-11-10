@@ -597,17 +597,17 @@ describe("what an answer can cite (QA-3)", () => {
         type: "project", journeyId: "journey-ledger", version: 1, title, summary: "Tracks chama savings", confirmations: [],
       }]), id);
     };
-    // The two sharing messages come first, as the conversation (S1, S2); the project is S3.
+    // The two sharing messages come first, as the conversation (S1, S2); the saved profile is S3 and project is S4.
     share("synthetic-otieno", "Chama ledger");
     // Shared by someone who doesn't own it: never a source, so never named as its builder.
     share("synthetic-achieng", "Chama ledger copy");
     const question = s.question("help", "@tembo who built the chama ledger?");
-    const { model, calls } = scriptedModel([{ search: [["search_projects", "chama ledger"]] }, { answer: "Otieno built it [S3]." }]);
+    const { model, calls } = scriptedModel([{ search: [["search_projects", "chama ledger"]] }, { answer: "Otieno built it [S4]." }]);
     await s.ask("help", question, { temboModel: model });
     await s.afterResponse();
-    expect(toolResults(calls)[0]!.results).toEqual([expect.objectContaining({
+    expect(toolResults(calls)[0]!.results).toEqual(expect.arrayContaining([expect.objectContaining({
       kind: "project", title: "Chama ledger by Otieno Ouma", text: "Chama ledger, built by Otieno Ouma, who shared it here: Tracks chama savings",
-    })]);
+    })]));
     expect(JSON.stringify(toolResults(calls))).not.toContain("Achieng");
     expect(JSON.parse(answerTo(s, question)[0]!.citations)).toMatchObject([{ type: "project", title: "Chama ledger by Otieno Ouma" }]);
   });

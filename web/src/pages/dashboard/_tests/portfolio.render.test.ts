@@ -94,7 +94,7 @@ describe("Public profile", () => {
     const page = main((await visit()).body);
     expect(page.querySelector("h1")?.textContent).toBe("Public profile");
     const empty = page.querySelector("[data-empty-state]")!;
-    expect(empty.querySelector("h2")?.textContent).toBe("Your public profile opens when you complete a cohort");
+    expect(empty.querySelector("h2")?.textContent).toBe("Public website listing opens when you complete a cohort");
     expect([...page.querySelectorAll("[data-variant='primary']")].map((link) => link.getAttribute("href"))).toEqual(["/dashboard/cohort/apply"]);
     expect(page.querySelector("#profile-editor")).toBeNull();
   });
@@ -146,8 +146,8 @@ describe("Public profile", () => {
     seeded(COMPLETED + PROFILE("DRAFT"));
     const page = main((await visit()).body);
     const state = page.querySelector("[data-profile-status='DRAFT']")!;
-    expect(state.querySelector("[data-notice='info']")?.textContent).toContain("Your profile is a draft");
-    expect(state.textContent).toContain("Draft");
+    expect(state.querySelector("[data-notice='info']")?.textContent).toContain("Your profile is not on the public website");
+    expect(state.textContent).toContain("Not on public website");
     expect([...page.querySelectorAll("[data-variant='primary']")].map((b) => b.textContent)).toEqual(["Publish profile"]);
     expect(page.querySelector("#profile-editor button[type='submit']")?.textContent).toBe("Save draft");
     expect(page.querySelector("#highlights-title")?.textContent).toBe("GitHub highlights");

@@ -1,3 +1,4 @@
+import { WorkKind } from "@/lib/platform/contracts";
 import { matchSchema } from "@/lib/community/discovery-contract";
 import { z } from "zod";
 import type {
@@ -32,6 +33,8 @@ const confirmationSchema = z.object({
   createdAt: z.number(),
 });
 const entrySchema = z.object({
+  kind:WorkKind.default("contribution"),
+  repoFullName:z.string().nullable().default(null),
   id: z.string(),
   userId: z.string(),
   title: z.string(),
@@ -64,6 +67,8 @@ export function mapJourney(entry: EntryDto): JourneyClaim {
     date: entry.occurredAt,
     version: entry.version,
     status: entry.status,
+    kind:entry.kind,
+    repoFullName:entry.repoFullName,
     moderationHold:entry.moderationHold,
     skills: [],
     evidence: entry.evidenceUrl

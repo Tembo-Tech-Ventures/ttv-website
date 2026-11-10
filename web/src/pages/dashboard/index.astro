@@ -21,7 +21,7 @@ const user = Astro.locals.user!;
 // sidebar reuses, starts beside onboarding (PERF-2).
 const [journey, access, landing] = await Promise.all([
   getStudentJourney(drizzle(env.DB, { schema }), user.id),
-  createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access(),
+  createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE, env).access(),
   resolveSpacePageWith(Astro.locals, "cohort", (me) =>
     loadChannelShortcuts({ me, space: pickSpace(me, "cohort")!, page: "cohort" })),
 ]);

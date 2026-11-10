@@ -78,10 +78,10 @@ const profileIds = (sources: { kind: string; userId: string }[]) => [...new Set(
 function mcp(db: D1Database, caller: string, name: string, args: Record<string, unknown>) {
   const request = new Request("https://ttv.test/api/mcp", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
-  return handleCommunityMcp(request, { userId: caller, scopes: ["community:read", "institution:read"] }, createCommunityService(db, caller));
+  return handleCommunityMcp(request, { userId: caller, scopes: ["community:read", "institution:read"] }, createCommunityService(db, caller, undefined, undefined, undefined, {} as Env));
 }
 function rest(db: D1Database, caller: string, path: string, init?: RequestInit) {
-  return handleCommunityRequest(new Request(`https://ttv.test/api/community/${path}`, init), path.split("?")[0], { id: caller, scopes: null }, db);
+  return handleCommunityRequest(new Request(`https://ttv.test/api/community/${path}`, init), path.split("?")[0], { id: caller, scopes: null }, db, {} as Env);
 }
 
 /** Deterministic stand-ins for the criteria model, embeddings and Clef. */
@@ -102,11 +102,11 @@ const LIST_SURFACES: Record<string, (db: D1Database, caller: string) => Promise<
     return body.profiles.map(p => p.userId);
   },
   "REST Discover": async (db, caller) => {
-    const result = await discoverProfiles(createCommunityService(db, caller), { context: "Webhooks", skills: "", query: "" }, discoveryDeps);
+    const result = await discoverProfiles(createCommunityService(db, caller, undefined, undefined, undefined, {} as Env), { context: "Webhooks", skills: "", query: "" }, discoveryDeps);
     return result.profiles.map(p => p.profile.userId);
   },
   "chat search tool": async (db, caller) => {
-    const result = await runCommunityChat(chatEnvironment({ name: "search_profiles", args: { query: "webhook" } }), createCommunityService(db, caller), { message: "Who builds webhooks?" });
+    const result = await runCommunityChat(chatEnvironment({ name: "search_profiles", args: { query: "webhook" } }), createCommunityService(db, caller, undefined, undefined, undefined, {} as Env), { message: "Who builds webhooks?" });
     expect(result.execution.toolNames).toEqual(["search_profiles"]);
     return profileIds(result.retrievedSources);
   },
@@ -141,13 +141,13 @@ const READ_SURFACES: Record<string, (db: D1Database, caller: string, target: str
   },
   "chat selected profile": async (db, caller, target) => {
     try {
-      const result = await runCommunityChat(chatEnvironment(), createCommunityService(db, caller), { message: "Summarise", profileId: target });
+      const result = await runCommunityChat(chatEnvironment(), createCommunityService(db, caller, undefined, undefined, undefined, {} as Env), { message: "Summarise", profileId: target });
       expect(profileIds(result.retrievedSources)).toEqual([target]);
       return "allowed";
     } catch (error) { return { status: (error as { status?: number }).status, message: (error as Error).message }; }
   },
   "chat get_profile tool": async (db, caller, target) => {
-    const result = await runCommunityChat(chatEnvironment({ name: "get_profile", args: { userId: target } }), createCommunityService(db, caller), { message: "Read them" });
+    const result = await runCommunityChat(chatEnvironment({ name: "get_profile", args: { userId: target } }), createCommunityService(db, caller, undefined, undefined, undefined, {} as Env), { message: "Read them" });
     return profileIds(result.retrievedSources).includes(target) ? "allowed" : { retrievedSources: result.retrievedSources };
   },
   ...Object.fromEntries(["get_profile", "list_journey", "assess_profile"].map(tool => [`MCP ${tool}`, async (db: D1Database, caller: string, target: string) => {
@@ -210,30 +210,30 @@ describe.each(Object.keys(READ_SURFACES))("%s keeps an admin's reach", surface =
 
 describe("discoverableMember", () => {
   it("binds the caller and refuses anything but a qualified column", () => {
-    expect(discoverableMember("u.id", { id: "caller", isAdmin: false })).toMatchObject({ values: ["caller"] });
-    expect(discoverableMember("u.id", { id: "caller", isAdmin: true })).toMatchObject({ values: ["caller"] });
+    expect(discoverableMember("u.id", { id: "caller" })).toMatchObject({ values: ["caller"] });
+    expect(discoverableMember("u.id", { id: "caller" })).toMatchObject({ values: ["caller"] });
     for (const column of ["id", "u.id;--", "u.id OR 1", "(select 1).id", ""]) {
-      expect(() => discoverableMember(column, { id: "caller", isAdmin: false })).toThrow("qualified column name");
-      expect(() => discoverableMember(column, { id: "caller", isAdmin: true })).toThrow("qualified column name");
+      expect(() => discoverableMember(column, { id: "caller" })).toThrow("qualified column name");
+      expect(() => discoverableMember(column, { id: "caller" })).toThrow("qualified column name");
     }
   });
   it("treats a saved profile with empty fields as saved", async () => {
     const db = world();
     // Lucy saves an empty profile: she becomes discoverable on every surface.
-    await createCommunityService(db, id("lucy")).updateOwnProfile({ headline: "", bio: "", skills: [], opportunityGoals: "" });
-    const service = createCommunityService(db, id("joseph"));
+    await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).updateOwnProfile({ headline: "", bio: "", skills: [], opportunityGoals: "" });
+    const service = createCommunityService(db, id("joseph"), undefined, undefined, undefined, {} as Env);
     expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1 });
     expect((await service.searchProfiles({ query: "lucy" })).map(p => p.userId)).toEqual([id("lucy")]);
   });
   it("still lets everyone read their own profile without saving one", async () => {
     const db = world();
-    expect(await createCommunityService(db, id("lucy")).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0 });
-    expect(await createCommunityService(db, id("lucy")).listJourney(id("lucy"))).toHaveLength(1);
+    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0 });
+    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).listJourney(id("lucy"))).toHaveLength(1);
   });
   it("keeps non-institution callers out before any eligibility lookup", async () => {
     const db = world();
-    expect(await createCommunityService(db, id("achieng")).getProfile(id("kevin"))).toMatchObject({userId:id("kevin")});
-    await expect(createCommunityService(db, id("achieng")).getProfile(GHOST)).rejects.toMatchObject({ status: 404 });
+    expect(await createCommunityService(db, id("achieng"), undefined, undefined, undefined, {} as Env).getProfile(id("kevin"))).toMatchObject({userId:id("kevin")});
+    await expect(createCommunityService(db, id("achieng"), undefined, undefined, undefined, {} as Env).getProfile(GHOST)).rejects.toMatchObject({ status: 404 });
   });
   it.each(["achieng", "amina"] as const)("leaves the public talent directory unchanged for %s", async caller => {
     const db = world();

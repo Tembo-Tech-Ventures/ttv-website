@@ -52,35 +52,54 @@ CREATE INDEX IF NOT EXISTS studentProfile_directory_idx ON studentProfile(status
 -- Existing cohort values win ties. Reconcile each overlapping field separately;
 -- opportunityGoals has no cohort equivalent and is always copied.
 UPDATE studentProfile SET
- headline=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN c.headline ELSE studentProfile.headline END,
- bio=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN c.bio ELSE studentProfile.bio END,
- skills=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN c.skills ELSE studentProfile.skills END,
- opportunityGoals=c.opportunityGoals,
- contentVersion=max(studentProfile.contentVersion,c.version),
+ headline=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN coalesce(nullif(c.headline,''),studentProfile.headline) ELSE studentProfile.headline END,
+ bio=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN coalesce(nullif(c.bio,''),studentProfile.bio) ELSE studentProfile.bio END,
+ skills=CASE WHEN c.updatedAt>studentProfile.updatedAt THEN coalesce(nullif(nullif(c.skills,''),'[]'),studentProfile.skills) ELSE studentProfile.skills END,
+ opportunityGoals=coalesce(nullif(c.opportunityGoals,''),studentProfile.opportunityGoals),
+ contentVersion=max(studentProfile.contentVersion,c.version)+1,
+ moderationReviewRequired=1,
  updatedAt=max(studentProfile.updatedAt,c.updatedAt)
-FROM communityProfile c WHERE c.userId=studentProfile.userId;
+FROM communityProfile c WHERE c.userId=studentProfile.userId AND studentProfile.status<>'PUBLISHED'
+ AND ((c.updatedAt>studentProfile.updatedAt AND
+   (nullif(c.headline,'') IS NOT NULL OR nullif(c.bio,'') IS NOT NULL OR nullif(nullif(c.skills,''),'[]') IS NOT NULL))
+   OR (nullif(c.opportunityGoals,'') IS NOT NULL AND c.opportunityGoals IS NOT studentProfile.opportunityGoals));
 --> statement-breakpoint
 -- Numbered fallback handles are allocated beyond every occupied member-N handle.
 -- This handles duplicate names, reserved words, and existing generated handles.
 WITH numbered AS (
  SELECT c.*, row_number() OVER (ORDER BY c.userId) + coalesce((
  SELECT max(CAST(substr(handle,8) AS INTEGER)) FROM studentProfile
- WHERE handle GLOB 'member-[0-9]*'),0) AS handleNumber
+ WHERE handle LIKE 'member-%' AND substr(handle,8)<>'' AND length(substr(handle,8))<=9 AND substr(handle,8) NOT GLOB '*[^0-9]*'),0) AS handleNumber
  FROM communityProfile c WHERE NOT EXISTS (SELECT 1 FROM studentProfile p WHERE p.userId=c.userId)
 )
-INSERT INTO studentProfile(id,userId,handle,headline,bio,skills,opportunityGoals,contentVersion,publicName,createdAt,updatedAt)
-SELECT 'member-profile-'||c.userId,c.userId,'member-'||c.handleNumber,c.headline,c.bio,c.skills,c.opportunityGoals,c.version,u.name,c.createdAt,c.updatedAt
+INSERT INTO studentProfile(id,userId,handle,headline,bio,skills,opportunityGoals,contentVersion,publicName,moderationReviewRequired,createdAt,updatedAt)
+SELECT 'member-profile-'||c.userId,c.userId,'member-'||c.handleNumber,c.headline,c.bio,c.skills,c.opportunityGoals,c.version,u.name,1,c.createdAt,c.updatedAt
 FROM numbered c JOIN user u ON u.id=c.userId WHERE true
 ON CONFLICT(userId) DO NOTHING;
 --> statement-breakpoint
 INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,
- repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,createdAt,updatedAt)
+ repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,moderationReviewRequired,createdAt,updatedAt)
 SELECT 'repo-'||h.id,p.userId,h.repoFullName,coalesce(h.blurb,h.description,''),h.repoUrl,
  strftime('%Y-%m-%d',coalesce(h.pushedAt,h.createdAt),'unixepoch'),'institution','POSTED','repo',
- h.repoFullName,h.repoUrl,h.description,h.language,h.topics,h.stars,h.pushedAt,h.blurb,h.sortOrder,h.snapshotAt,h.createdAt,h.updatedAt
+ h.repoFullName,h.repoUrl,h.description,h.language,h.topics,h.stars,h.pushedAt,h.blurb,h.sortOrder,h.snapshotAt,p.status<>'PUBLISHED',h.createdAt,h.updatedAt
 FROM profileHighlight h JOIN studentProfile p ON p.id=h.profileId WHERE true
 ON CONFLICT(userId,repoFullName) DO NOTHING;
 --> statement-breakpoint
 DROP TABLE IF EXISTS profileHighlight;
 --> statement-breakpoint
 DROP TABLE IF EXISTS communityProfile;
+
+
+--> statement-breakpoint
+-- TODO: remove these compatibility triggers only after every Worker predating 0039
+-- is retired, including rollback versions. D1 migrations precede Worker deployment.
+CREATE TRIGGER IF NOT EXISTS communityJourney_legacy_private_insert AFTER INSERT ON communityJourney
+WHEN NEW.visibility='private' BEGIN
+ UPDATE communityJourney SET state='DRAFT',visibility='institution' WHERE id=NEW.id;
+END;
+--> statement-breakpoint
+CREATE TRIGGER IF NOT EXISTS communityJourney_legacy_private_update AFTER UPDATE OF visibility ON communityJourney
+WHEN NEW.visibility='private' BEGIN
+ UPDATE communityJourney SET state='DRAFT',visibility='institution' WHERE id=NEW.id;
+END;
+--> statement-breakpoint

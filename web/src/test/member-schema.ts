@@ -55,12 +55,11 @@ export function addMemberSchema(database: DatabaseSync) {
       }[]
     ).map((c) => c.name),
   );
-  for (const statement of readMigration(
-    "0039_member_profiles_and_work.sql",
-  ).split(";")) {
+  for (const statement of (readMigration("0039_member_profiles_and_work.sql")+readMigration("0040_member_review_safety.sql")).split(";")) {
     const add = statement.match(
       /ALTER TABLE communityJourney ADD COLUMN (\w+)[\s\S]*/,
     );
     if (add && !columns.has(add[1])) database.exec(add[0]);
   }
+  database.exec("CREATE UNIQUE INDEX IF NOT EXISTS communityJourney_user_repo_unique ON communityJourney(userId,repoFullName)");
 }

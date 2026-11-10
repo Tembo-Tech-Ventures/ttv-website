@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkStatus } from "@/lib/platform/contracts";
+import { WorkStatus, type WorkKind } from "@/lib/platform/contracts";
 
 export class CommunityError extends Error {
   constructor(message: string, public readonly status = 400) { super(message); }
@@ -71,7 +71,14 @@ export interface CommunityConfirmation {
   statement: string; method: string; journeyVersion: number; mentorRole: "MENTOR" | "ADMIN" | "UNKNOWN"; createdAt: number;
 }
 export interface CommunityJourney extends CommunityJourneyInput {
+  kind:WorkKind;
+  repoFullName:string|null;
   moderationHold?: boolean;
   id: string; userId: string; version: number; createdAt: number; updatedAt: number;
   confirmations: CommunityConfirmation[];
+}
+
+/** The wire contract is lowercase; the additive D1 storage uses uppercase state. */
+export function workState(status:"posted"|"draft"):"POSTED"|"DRAFT" {
+  return status === "draft" ? "DRAFT" : "POSTED";
 }

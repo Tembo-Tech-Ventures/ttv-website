@@ -10,7 +10,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  */
 const store = vi.hoisted(() => ({ read: vi.fn(), moderate: vi.fn(), work:vi.fn(),reviewWork:vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: { DB: {prepare:()=>({all:store.work})} } }));
-vi.mock("@/lib/members/moderation",()=>({reviewWork:store.reviewWork}));
+vi.mock("@/lib/members/moderation",()=>({reviewWork:store.reviewWork,listWorkReviews:async()=>(await store.work()).results}));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: () => ({}) }));
 vi.mock("@/layouts/AdminLayout.astro", () => import("@/test/StubLayout.astro"));
 vi.mock("@/components/platform/spaces/space-page", () => ({ resolveSpacePage: async () => null }));
@@ -77,7 +77,7 @@ describe("the profiles list on the style guide", () => {
   it("filters by status with links, the current one marked", async () => {
     const { body } = await visit("/admin/profiles?status=DRAFT");
     expect(store.read).toHaveBeenCalledWith(expect.anything(), { status: "DRAFT", page: 1 });
-    expect(body).toMatch(/<nav aria-label="Profile status"[\s\S]*?<a href="\/admin\/profiles\?status=DRAFT"[^>]*aria-current="page"[^>]*>[\s\S]*?Draft/);
+    expect(body).toMatch(/<nav aria-label="Profile status"[\s\S]*?<a href="\/admin\/profiles\?status=DRAFT"[^>]*aria-current="page"[^>]*>[\s\S]*?Not on public website/);
     await visit("/admin/profiles?status=nonsense");
     expect(store.read).toHaveBeenLastCalledWith(expect.anything(), { status: null, page: 1 });
   });

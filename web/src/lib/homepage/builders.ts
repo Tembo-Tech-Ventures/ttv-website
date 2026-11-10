@@ -1,4 +1,4 @@
-import { publicProfileEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
+import { publicProfileEligibility, postedWorkColumnsEligibility } from "@/lib/community/eligibility";
 import { sql as eligibilitySql } from "drizzle-orm";
 import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
@@ -29,7 +29,7 @@ export interface BuilderProfileRow extends PublicIdentitySnapshot {
   headline: string | null;
   country: string | null;
   skills: string | null;
-  highlights: Array<{ repoFullName: string | null; title?: string; description: string | null; language: string | null }>;
+  work: Array<{ repoFullName: string | null; title?: string; description: string | null; language: string | null }>;
   user: {
     programApplications: Array<CompletionState & { program: { name: string } | null }>;
   };
@@ -42,7 +42,7 @@ export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder |
   const completion = profile.user.programApplications.find(isValidCompletion);
   if (!completion) return null;
   const identity = resolvePublicProfileIdentity(profile);
-  const highlight = profile.highlights[0];
+  const highlight = profile.work[0];
   return {
     handle: profile.handle,
     href: `/talent/${profile.handle}`,
@@ -81,8 +81,8 @@ export async function loadHomepageBuilders(db: Database, limit = 8): Promise<Hom
       publicAvatarUrl: true,
     },
     with: {
-      highlights: {
-        where: eligibilitySql.raw(postedWorkEligibility("studentProfile_highlights")),
+      work: {
+        where: (work) => postedWorkColumnsEligibility(work),
         orderBy: asc(schema.communityJourney.sortOrder),
         limit: 1,
         columns: { title: true, repoFullName: true, description: true, language: true },

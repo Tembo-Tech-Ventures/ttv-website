@@ -31,7 +31,7 @@ function setup() {
   const items = async (user: string = PEOPLE.david) => WorthAnotherLook.parse((await look(user)).body).items;
   /** The ids the Confirm page lists for `user`, where every item's link sends them. */
   const confirmPage = async (user: string = PEOPLE.david) =>
-    (await createCommunityService(s.d1, user).listMentorship()).map((entry) => entry.id);
+    (await createCommunityService(s.d1, user, undefined, undefined, undefined, {} as Env).listMentorship()).map((entry) => entry.id);
   return { s, confirm, look, items, confirmPage };
 }
 

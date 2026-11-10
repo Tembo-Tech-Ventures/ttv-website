@@ -48,7 +48,7 @@ describe("groundAnswer: citations are validated on the server", () => {
 
   it("words the refusal by what Tembo can see in each kind of channel", () => {
     expect(refusal("COHORT")).toBe("I don't know. I couldn't find this in this cohort's recorded sessions and this channel's messages. Someone here may know.");
-    expect(refusal("COMMUNITY")).toContain("public builder profiles");
+    expect(refusal("COMMUNITY")).toContain("saved member profiles and their posted work");
     expect(refusal("DIRECT")).toBe("I don't know. I couldn't find this in this conversation.");
   });
 

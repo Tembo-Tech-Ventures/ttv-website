@@ -39,7 +39,7 @@ function setup() {
   for (const [userId, role] of [["mentor", "MENTOR"], ["mentor2", "MENTOR"], ["institution", "INSTITUTION"], ["admin", "ADMIN"]]) {
     database.prepare(`INSERT INTO "UserRoles"(id,userId,roleId) VALUES (?,?,(SELECT id FROM "Roles" WHERE name=?))`).run(`${userId}-${role}`, userId, role);
   }
-  const as = (id: string) => createCommunityService(db, id);
+  const as = (id: string) => createCommunityService(db, id, undefined, undefined, undefined, {} as Env);
   return { database, db, as, member: as("member"), mentor: as("mentor"), mentor2: as("mentor2"), institution: as("institution"), admin: as("admin") };
 }
 
@@ -145,8 +145,8 @@ describe("mentor private set-aside", () => {
     for (const id of [demoMentor, demoMember]) f.database.prepare(`INSERT INTO "user"(id,name,email) VALUES (?,?,?)`).run(id, id, `${id}@invalid.ttv`);
     f.database.prepare(`INSERT INTO "UserRoles"(id,userId,roleId) VALUES ('demo-mentor',?,(SELECT id FROM "Roles" WHERE name='MENTOR'))`).run(demoMentor);
     const real = await f.member.createJourney(contribution);
-    const demo = await createCommunityService(f.db, demoMember, null, "staging").createJourney(contribution);
-    const mentor = createCommunityService(f.db, demoMentor, null, "staging");
+    const demo = await createCommunityService(f.db, demoMember, null, "staging", undefined, {} as Env).createJourney(contribution);
+    const mentor = createCommunityService(f.db, demoMentor, null, "staging", undefined, {} as Env);
     await expect(mentor.setAsideJourney(real.id, { expectedRevision: 1 })).rejects.toMatchObject({ status: 404 });
     await mentor.setAsideJourney(demo.id, { expectedRevision: 1 });
     expect(await mentor.countAwaitingConfirmation()).toBe(0);

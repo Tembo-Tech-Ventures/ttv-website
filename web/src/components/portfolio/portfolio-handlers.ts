@@ -1,3 +1,8 @@
+import {
+  pendingProfileModeration,
+  checkedModerationColumns,
+  workModerationHighlights,
+} from "@/lib/members/moderation-state";
 import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
@@ -9,7 +14,6 @@ import {
 } from "@/lib/talent/handles";
 import {
   parseSkillsJson,
-  parseTopicsJson,
   profileEditorSchema,
   serializeSkills,
 } from "@/lib/talent/profile";
@@ -18,10 +22,7 @@ import {
   type ProfileModerationResult,
   type ProfileModerationState,
 } from "@/lib/moderation/clef";
-import {
-  moderationColumns,
-  publishesAfterModeration,
-} from "@/lib/talent/profile-moderation";
+import { publishesAfterModeration } from "@/lib/talent/profile-moderation";
 import { safePublicProfileAvatarUrl } from "@/lib/avatar";
 
 const HANDLE_ERROR_MESSAGES: Record<HandleValidationError, string> = {
@@ -67,7 +68,7 @@ async function runContentCheck(
 }
 
 interface ProfileValues {
-  opportunityGoals?:string;
+  opportunityGoals?: string;
   handle: string;
   headline: string | null;
   bio: string | null;
@@ -88,7 +89,7 @@ interface CurrentProfile {
   githubLogin: string | null;
   publicName: string | null;
   publicAvatarUrl: string | null;
-  highlights?: Array<{
+  work?: Array<{
     repoFullName: string | null;
     description: string | null;
     blurb: string | null;
@@ -96,20 +97,6 @@ interface CurrentProfile {
     topics: string | null;
   }>;
   user: { name: string; image: string | null };
-}
-
-function moderationHighlights(
-  highlights: CurrentProfile["highlights"],
-): NonNullable<ProfileModerationState["highlights"]> {
-  return (highlights ?? []).map(
-    ({ repoFullName, description, blurb, language, topics }) => ({
-      repoFullName: repoFullName ?? "Work",
-      description,
-      blurb,
-      language,
-      topics: parseTopicsJson(topics),
-    }),
-  );
 }
 
 function collectFieldErrors(
@@ -158,6 +145,7 @@ async function updateDraftProfile(
     .update(schema.studentProfile)
     .set({
       ...values,
+      ...pendingProfileModeration(),
       contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
     })
     .where(
@@ -219,33 +207,28 @@ async function savePublishedProfileEdit(
     githubLogin: current.githubLogin,
     portfolioUrl: values.portfolioUrl,
     linkedinUrl: values.linkedinUrl,
-    highlights: moderationHighlights(current.highlights),
+    highlights: workModerationHighlights(current.work),
   };
-  const saved = await db.update(schema.studentProfile).set({...values,moderationOutcome:null,
-    contentVersion:sql`${schema.studentProfile.contentVersion}+1`}).where(and(
-      eq(schema.studentProfile.id,profileId),eq(schema.studentProfile.userId,userId),
-      eq(schema.studentProfile.status,"PUBLISHED"),eq(schema.studentProfile.contentVersion,current.contentVersion)));
-  if (!saved.meta.changes) return profileChangedDuringCheck();
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
     current.publicAvatarUrl,
   );
-  const moderationValues = moderationColumns(moderation);
+  const moderationValues = checkedModerationColumns(moderation);
 
   if (!publishesAfterModeration(moderation)) {
     const updateResult = await db
       .update(schema.studentProfile)
       .set({
         ...moderationValues,
-
+        contentVersion: sql`${schema.studentProfile.contentVersion}+1`,
       })
       .where(
         and(
           eq(schema.studentProfile.id, profileId),
           eq(schema.studentProfile.userId, userId),
           eq(schema.studentProfile.status, "PUBLISHED"),
-          eq(schema.studentProfile.contentVersion, current.contentVersion + 1),
+          eq(schema.studentProfile.contentVersion, current.contentVersion),
         ),
       );
     if (!updateResult.meta.changes) return profileChangedDuringCheck();
@@ -261,20 +244,20 @@ async function savePublishedProfileEdit(
     .update(schema.studentProfile)
     .set({
       ...values,
+      contentVersion: sql`${schema.studentProfile.contentVersion}+1`,
       ...moderationValues,
       ...publicIdentityColumns(
         moderation,
         moderationState,
         current.publicAvatarUrl,
       ),
-
     })
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "PUBLISHED"),
-        eq(schema.studentProfile.contentVersion, current.contentVersion + 1),
+        eq(schema.studentProfile.contentVersion, current.contentVersion),
       ),
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
@@ -296,7 +279,9 @@ export function extractProfileFormData(formData: FormData) {
     handle: (formData.get("handle") as string) || "",
     headline: (formData.get("headline") as string) || undefined,
     bio: (formData.get("bio") as string) || undefined,
-    opportunityGoals:formData.has("opportunityGoals") ? String(formData.get("opportunityGoals")) : undefined,
+    opportunityGoals: formData.has("opportunityGoals")
+      ? String(formData.get("opportunityGoals"))
+      : undefined,
     location: (formData.get("location") as string) || undefined,
     country: (formData.get("country") as string) || undefined,
     skills: skills.length > 0 ? skills : undefined,
@@ -366,7 +351,7 @@ export async function saveProfile(
       },
       with: {
         user: { columns: { name: true, image: true } },
-        highlights: {
+        work: {
           columns: {
             repoFullName: true,
             description: true,
@@ -413,7 +398,7 @@ export async function saveProfile(
     handle: handleResult.normalized,
     headline: parsed.data.headline ?? null,
     bio: parsed.data.bio ?? null,
-    opportunityGoals:parsed.data.opportunityGoals,
+    opportunityGoals: parsed.data.opportunityGoals,
     location: parsed.data.location ?? null,
     country: parsed.data.country ?? null,
     skills: serializeOptionalSkills(parsed.data.skills),
@@ -448,28 +433,60 @@ export async function saveProfile(
       values,
     );
     if (!saved.success) return saved;
-    return moderateSavedProfile(db,userId,checkContent);
+    return moderateSavedProfile(db, userId, checkContent);
   }
 
   await db.insert(schema.studentProfile).values({
     ...values,
     userId,
     status: "DRAFT",
+    moderationReviewRequired: true,
   });
-  return moderateSavedProfile(db,userId,checkContent);
+  return moderateSavedProfile(db, userId, checkContent);
 }
 
-async function moderateSavedProfile(db: Database,userId: string,checkContent?: ProfileContentCheck): Promise<ProfileFormResult> {
-  const p = await db.query.studentProfile.findFirst({where:eq(schema.studentProfile.userId,userId),with:{user:true}});
-  if (!p) return {success:false,error:"Profile not found"};
-  const state: ProfileModerationState = {displayName:p.user.name,handle:p.handle,headline:p.headline,bio:`${p.bio ?? ""}\n${p.opportunityGoals}`,
-    location:p.location,country:p.country,skills:parseSkillsJson(p.skills),githubLogin:p.githubLogin,
-    portfolioUrl:p.portfolioUrl,linkedinUrl:p.linkedinUrl};
-  const result = await runContentCheck(checkContent,state,p.user.image);
-  await db.update(schema.studentProfile).set({...moderationColumns(result),...publicIdentityColumns(result,state,p.user.image)})
-    .where(and(eq(schema.studentProfile.id,p.id),eq(schema.studentProfile.contentVersion,p.contentVersion)));
-  return {success:result.outcome!=="hold",moderationOutcome:result.outcome,
-    ...(result.outcome==="hold" ? {error:"Your profile is saved and waiting for a human review."} : {})};
+async function moderateSavedProfile(
+  db: Database,
+  userId: string,
+  checkContent?: ProfileContentCheck,
+): Promise<ProfileFormResult> {
+  const p = await db.query.studentProfile.findFirst({
+    where: eq(schema.studentProfile.userId, userId),
+    with: { user: true },
+  });
+  if (!p) return { success: false, error: "Profile not found" };
+  const state: ProfileModerationState = {
+    displayName: p.user.name,
+    handle: p.handle,
+    headline: p.headline,
+    bio: `${p.bio ?? ""}\n${p.opportunityGoals}`,
+    location: p.location,
+    country: p.country,
+    skills: parseSkillsJson(p.skills),
+    githubLogin: p.githubLogin,
+    portfolioUrl: p.portfolioUrl,
+    linkedinUrl: p.linkedinUrl,
+  };
+  const result = await runContentCheck(checkContent, state, p.user.image);
+  await db
+    .update(schema.studentProfile)
+    .set({
+      ...checkedModerationColumns(result),
+      ...publicIdentityColumns(result, state, p.user.image),
+    })
+    .where(
+      and(
+        eq(schema.studentProfile.id, p.id),
+        eq(schema.studentProfile.contentVersion, p.contentVersion),
+      ),
+    );
+  return {
+    success: result.outcome !== "hold",
+    moderationOutcome: result.outcome,
+    ...(result.outcome === "hold"
+      ? { error: "Your profile is saved and waiting for a human review." }
+      : {}),
+  };
 }
 
 export async function publishProfile(
@@ -478,7 +495,12 @@ export async function publishProfile(
   profileId: string,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
-  if (!await hasCompletedCohort(db,userId)) return { success:false,error:"Complete a cohort before listing your profile on the public website." };
+  if (!(await hasCompletedCohort(db, userId)))
+    return {
+      success: false,
+      error:
+        "Complete a cohort before listing your profile on the public website.",
+    };
   const profile = await db.query.studentProfile.findFirst({
     where: and(
       eq(schema.studentProfile.id, profileId),
@@ -500,7 +522,7 @@ export async function publishProfile(
     },
     with: {
       user: { columns: { name: true, image: true } },
-      highlights: {
+      work: {
         columns: {
           repoFullName: true,
           description: true,
@@ -534,14 +556,14 @@ export async function publishProfile(
     githubLogin: profile.githubLogin,
     portfolioUrl: profile.portfolioUrl,
     linkedinUrl: profile.linkedinUrl,
-    highlights: moderationHighlights(profile.highlights),
+    highlights: workModerationHighlights(profile.work),
   };
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
     profile.user.image,
   );
-  const moderationValues = moderationColumns(moderation);
+  const moderationValues = checkedModerationColumns(moderation);
   const identityValues = publicIdentityColumns(
     moderation,
     moderationState,

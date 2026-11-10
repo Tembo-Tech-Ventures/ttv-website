@@ -116,14 +116,14 @@ async function dynamicRoute(ctx: RouteContext) {
   }
   return communityJson({error:"Route not found."},404);
 }
-export async function handleCommunityRequest(request: Request, path: string, actor: Actor | null, db: D1Database, env?: Env) {
+export async function handleCommunityRequest(request: Request, path: string, actor: Actor | null, db: D1Database, env: Env) {
   if (!actor) return communityJson({error:"Sign in to continue."},401);
   if (request.headers.has("Authorization") && actor.scopes === null) return communityJson({error:"Scoped personal access token required."},401);
   try {
     authorizeRequest(request,path,actor);
     const body = await readBody(request);
     if (actor.fixture?.retainedReadProbe) authorizeRetainedProbe(request.method,path,actor.scopes,body);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT,env?.PLATFORM_FLAGS_OVERRIDE,env),body,db,env};
+    const ctx = {request,path,actor,service:createCommunityService(db, actor.id, actor.fixture, env?.DEPLOYMENT_ENVIRONMENT, env?.PLATFORM_FLAGS_OVERRIDE, env),body,db,env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

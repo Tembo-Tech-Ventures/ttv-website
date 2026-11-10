@@ -12,8 +12,6 @@ export const SEARCH_RESULT_LIMIT = 10;
 
 export class SearchScopeError extends Error {}
 
-// Match the public talent page: publication alone does not confer eligibility. `p` is studentProfile.
-export const PUBLIC_PROFILE = publicProfileEligibility("p");
 
 interface PublicPersonRow {
   onPublicSite:number;
@@ -43,7 +41,7 @@ export async function searchPlatform(
   if (!userId) throw new SearchScopeError("Authentication required.");
   const query = SearchQuery.parse(input);
   const db = drizzle(d1, { schema });
-  const caps = await capabilitiesFor(db, { id: userId });
+  const caps = await searchCapabilities(db,userId,query,messages);
   if (query.programId && !["all", "cohort", "sessionMoments"].includes(query.scope)) {
     throw new SearchScopeError("This scope does not accept a cohort.");
   }
@@ -56,20 +54,20 @@ export async function searchPlatform(
   // Demo identities may never use their global roles to discover real records.
   const publicScope = demo ? ` AND p.userId IN (SELECT value FROM json_each(?))` : "";
   const publicValues = demo ? [JSON.stringify(DEMO_USER_IDS)] : [];
-  const publicColumns = `p.userId,p.handle,p.publicName,p.publicAvatarUrl,${publicProfileEligibility("p")} AS onPublicSite`;
+  const publicColumns = `p.userId,p.handle,coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId)) AS publicName,p.publicAvatarUrl,${publicProfileEligibility("p")} AS onPublicSite`;
   const includePublic = !query.programId && ["all", "community"].includes(query.scope);
 
 
   if (includePublic || query.scope === "people") {
     const { results: rows } = await d1.prepare(`SELECT ${publicColumns},substr(coalesce(p.bio,''),1,500) AS bio
       FROM studentProfile p WHERE ${memberEligibility("p.userId")}${publicScope}
-      AND (instr(lower(coalesce(p.publicName,'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
+      AND (instr(lower(coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId),'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
         OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill
           WHERE skill.type='text' AND instr(lower(skill.value),lower(?))>0))
       ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term, term)
       .all<PublicPersonRow & { bio: string }>();
     results.people = rows.map(row => ({ person: person(row), bio: row.bio,
-      href: memberProfileHref(row), visibility: { kind: "PRIVATE", label: "Signed-in members" } }));
+      href: memberProfileHref(row), visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 
   if (includePublic || query.scope === "projects") {
@@ -85,7 +83,7 @@ export async function searchPlatform(
     results.projects = rows.map(row => ({ journeyId: row.id, version: row.version, title: row.title,
       summary: row.summary, owner: person(row),
       href: memberProfileHref(row),
-      visibility: { kind: "PRIVATE", label: "Signed-in members" } }));
+      visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 
   if (["all", "cohort", "sessionMoments"].includes(query.scope) && caps.cohortIds.length > 0) {
@@ -112,4 +110,8 @@ export async function searchPlatform(
     results.messages = await searchMessages(d1, db, { userId, capabilities: caps, query, limit: SEARCH_RESULT_LIMIT });
   }
   return SearchResults.parse(results);
+}
+
+async function searchCapabilities(db:schema.Database,userId:string,query:SearchQuery,messages:boolean) {
+  return messages || query.programId || ["all","cohort","sessionMoments"].includes(query.scope) ? capabilitiesFor(db,{id:userId}) : capabilitiesFor(db,null);
 }

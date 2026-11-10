@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
@@ -23,7 +23,7 @@ function productionSeed() {
     ).run(`p${i}`, `u${i}`, `member-${i}`);
   for (let i = 0; i < 16; i++)
     db.prepare(
-      "INSERT INTO profileHighlight(id,profileId,repoFullName,repoUrl,description,language,topics,stars,sortOrder,snapshotAt) VALUES (?,?,?,?,'Snapshot','TypeScript','[\"web\"]',7,?,123)",
+      "INSERT INTO profileHighlight(id,profileId,repoFullName,repoUrl,description,language,topics,stars,sortOrder,snapshotAt,pushedAt,blurb) VALUES (?,?,?,?,'Snapshot','TypeScript','[\"web\"]',7,?,123,1700000000,'Author blurb')",
     ).run(
       `h${i}`,
       `p${i % 5}`,
@@ -51,6 +51,7 @@ describe("one-profile additive D1 migration", () => {
     const db = productionSeed();
     try {
       db.exec(readMigration(migration));
+      db.exec(readMigration("0040_member_review_safety.sql"));
       for (const [table, count] of Object.entries({
         studentProfile: 5,
         communityJourney: 17,
@@ -82,6 +83,29 @@ describe("one-profile additive D1 migration", () => {
           )
           .all(),
       ).toEqual(Array.from({ length: 16 }, (_, sortOrder) => ({ sortOrder })));
+      for (let i = 0; i < 16; i++)
+        expect(
+          db
+            .prepare(
+              "SELECT userId,title,description,evidenceUrl,repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt FROM communityJourney WHERE id=?",
+            )
+            .get(`repo-h${i}`),
+        ).toEqual({
+          userId: `u${i % 5}`,
+          title: `synthetic/repo${i}`,
+          description: "Author blurb",
+          evidenceUrl: `https://github.com/synthetic/repo${i}`,
+          repoFullName: `synthetic/repo${i}`,
+          repoUrl: `https://github.com/synthetic/repo${i}`,
+          repoDescription: "Snapshot",
+          language: "TypeScript",
+          topics: '["web"]',
+          stars: 7,
+          pushedAt: 1700000000,
+          blurb: "Author blurb",
+          sortOrder: i,
+          snapshotAt: 123,
+        });
       expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(
         db
@@ -99,9 +123,11 @@ describe("one-profile additive D1 migration", () => {
     const db = productionSeed();
     try {
       db.exec(`UPDATE communityJourney SET visibility='private';
+        UPDATE studentProfile SET status='DRAFT' WHERE userId='u0';
         INSERT INTO communityProfile(userId,headline,skills,opportunityGoals,updatedAt) VALUES
         ('u0','New headline','["Rust"]','Collaborate',200),('u5','New member','[]','Learn',200),('u6','New member','[]','Build',200);`);
       db.exec(readMigration(migration));
+      db.exec(readMigration("0040_member_review_safety.sql"));
       expect(
         db
           .prepare(
@@ -133,52 +159,109 @@ describe("one-profile additive D1 migration", () => {
     }
   });
 
-  it("is a no-op when D1 applies its migration ledger a second time", () => {
+  it("keeps legacy writes private during migration-before-deploy and supports repeated guarded backfills", () => {
     const db = productionSeed();
     try {
+      db.exec(readMigration(migration));
+      db.exec(readMigration("0040_member_review_safety.sql"));
       db.exec(
-        "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+        "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('legacy','u0','Private','Evidence','2026-11-09','private')",
       );
-      const apply = () => {
-        if (
-          db.prepare("SELECT 1 FROM d1_migrations WHERE name=?").get(migration)
-        )
-          return;
-        db.exec("BEGIN");
-        try {
-          db.exec(readMigration(migration));
-          db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(
-            migration,
-          );
-          db.exec("COMMIT");
-        } catch (error) {
-          db.exec("ROLLBACK");
-          throw error;
-        }
-      };
-      apply();
-      const before = db
-        .prepare("SELECT * FROM communityJourney ORDER BY id")
-        .all();
-      apply();
       expect(
-        db.prepare("SELECT * FROM communityJourney ORDER BY id").all(),
-      ).toEqual(before);
+        db
+          .prepare(
+            "SELECT state,visibility FROM communityJourney WHERE id='legacy'",
+          )
+          .get(),
+      ).toEqual({ state: "DRAFT", visibility: "institution" });
+      db.exec(
+        "UPDATE communityJourney SET visibility='private' WHERE id='original'",
+      );
+      expect(
+        db
+          .prepare(
+            "SELECT state,visibility FROM communityJourney WHERE id='original'",
+          )
+          .get(),
+      ).toEqual({ state: "DRAFT", visibility: "institution" });
       expect(
         db.prepare("SELECT count(*) n FROM communityConfirmation").get(),
       ).toEqual({ n: 2 });
-      expect(db.prepare("SELECT count(*) n FROM d1_migrations").get()).toEqual({
-        n: 1,
+      const guarded = readFileSync(
+        new URL("0040_member_review_safety.sql", import.meta.url),
+        "utf8",
+      )
+        .split("--> statement-breakpoint")
+        .filter((s) =>
+          /CREATE (?:UNIQUE INDEX|INDEX|TRIGGER) IF NOT EXISTS|UPDATE studentProfile SET publicName=/.test(
+            s,
+          ),
+        );
+      for (const statement of guarded) db.exec(statement);
+      expect(
+        db
+          .prepare("SELECT publicName FROM studentProfile WHERE userId='u0'")
+          .get(),
+      ).toEqual({ publicName: null });
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("protects published text and nonempty draft fields, queues draft repos, and ignores malformed handle suffixes", () => {
+    const db = productionSeed();
+    try {
+      db.exec(`UPDATE studentProfile SET headline='Checked public text',bio='Retain biography',skills='["SQL"]';
+        UPDATE studentProfile SET status='DRAFT',handle='member-999999999999999999999999999' WHERE userId='u1';
+        UPDATE studentProfile SET handle='member-99junk' WHERE userId='u2';
+        INSERT INTO communityProfile(userId,headline,bio,skills,opportunityGoals,updatedAt) VALUES
+          ('u0','Unscreeened public edit','','[]','',200),('u1','','','[]','Collaborate',200),('u5','Member','','[]','',200);`);
+      db.exec(readMigration(migration));
+      db.exec(readMigration("0040_member_review_safety.sql"));
+      expect(
+        db
+          .prepare(
+            "SELECT headline,moderationReviewRequired FROM studentProfile WHERE userId='u0'",
+          )
+          .get(),
+      ).toEqual({
+        headline: "Checked public text",
+        moderationReviewRequired: 0,
       });
+      expect(
+        db
+          .prepare(
+            "SELECT headline,bio,skills,opportunityGoals,moderationReviewRequired FROM studentProfile WHERE userId='u1'",
+          )
+          .get(),
+      ).toEqual({
+        headline: "Checked public text",
+        bio: "Retain biography",
+        skills: '["SQL"]',
+        opportunityGoals: "Collaborate",
+        moderationReviewRequired: 1,
+      });
+      expect(
+        db.prepare("SELECT handle FROM studentProfile WHERE userId='u5'").get(),
+      ).toEqual({ handle: "member-5" });
+      expect(
+        db
+          .prepare(
+            "SELECT count(*) n FROM communityJourney WHERE userId='u1' AND moderationReviewRequired=1",
+          )
+          .get(),
+      ).toEqual({ n: 3 });
     } finally {
       db.close();
     }
   });
 
   it("never rebuilds referenced tables or disables foreign keys", () => {
-    const sql = readMigration(migration);
+    const sql =
+      readMigration(migration) + readMigration("0040_member_review_safety.sql");
     expect(sql).not.toMatch(
-      /CREATE TABLE.*__new_|DROP TABLE\s+[`"]?(studentProfile|communityJourney)\b|foreign_keys\s*=\s*OFF/i,
+      /CREATE TABLE.*__new_|DROP TABLE\s+(?:IF\s+EXISTS\s+)?[`"]?(studentProfile|communityJourney)\b|ALTER TABLE[^;]*RENAME|foreign_keys\s*=\s*OFF/i,
     );
   });
 });

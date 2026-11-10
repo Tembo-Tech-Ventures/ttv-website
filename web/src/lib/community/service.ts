@@ -1,4 +1,4 @@
-import { saveMemberText, checkPostedWork, type MemberModerationEnv } from "@/lib/members/writes";
+import { saveMemberText, ensureMemberProfile, checkPostedWork, type MemberModerationEnv } from "@/lib/members/writes";
 import { WORTH_ANOTHER_LOOK_LIMIT } from "@/lib/platform/contracts";
 import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
@@ -12,7 +12,7 @@ import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { requestScopeActive } from "@/lib/platform/server/request-scope";
 import { discoverableMember, postedWorkEligibility } from "./eligibility";
 import {
-  CommunityError, profileInput, journeyInput, journeyUpdateInput, journeyStatusInput, confirmationInput, setAsideInput, searchInput, parseInput,
+  CommunityError, workState, profileInput, journeyInput, journeyUpdateInput, journeyStatusInput, confirmationInput, setAsideInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
 } from "./model";
 
@@ -33,7 +33,11 @@ const MENTORSHIP_WINDOW = 50;
 const PROFILE_SELECT = `SELECT u.id AS userId,coalesce(p.publicName,u.name) AS name,p.publicAvatarUrl AS image,p.headline,p.bio,p.skills,p.opportunityGoals,p.contentVersion AS version,p.updatedAt,coalesce(p.moderationOutcome='hold',0) AS moderationHold
   FROM user u LEFT JOIN studentProfile p ON p.userId=u.id`;
 
-export function createCommunityService(db: D1Database, actorId: string, fixture?: StagingFixtureIdentity | null, environment?: string, flagsOverride?: string, moderationEnv?: MemberModerationEnv) {
+function communityService(db: D1Database, actorId: string, fixture: StagingFixtureIdentity | null | undefined, environment: string | undefined, flagsOverride: string | undefined, moderationEnv: MemberModerationEnv | undefined) {
+  function requireModerationEnv() {
+    if(!moderationEnv) throw new CommunityError("This service is read-only.",403);
+    return moderationEnv;
+  }
   if (!actorId) throw new CommunityError("Sign in to continue.", 401);
   if (!fixture && actorId.startsWith("ttv-staging-fixture-")) throw new CommunityError("Verified staging fixture context required.",403);
   if (fixture && fixture.userId !== actorId) throw new CommunityError("Synthetic staging identity mismatch.",403);
@@ -79,10 +83,8 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   async function requireProfileAccess(target: string) {
     await requireFixtureTarget(target);
     if (target === actorId) return;
-    // The institution's eligibility read starts beside the role check rather than after it. It decides
-    // nothing on its own: a caller without institutional access is refused whatever it finds, and staff
-    // keep their reach, so for an admin its answer is unused.
-    const eligible = discoverableMember("u.id", { id: actorId, isAdmin: false });
+    // Signed-in readers share one eligibility rule; admins retain moderation access.
+    const eligible = discoverableMember("u.id", { id: actorId });
     const [caller, row] = await Promise.all([
       access(),
       db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first(),
@@ -102,11 +104,15 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     if (!row) throw new CommunityError("Profile not found.", 404);
     return profile(row);
   }
+  async function requireContribution(id:string) {
+    const row=await db.prepare("SELECT kind FROM communityJourney WHERE id=? AND userId=?").bind(id,actorId).first<{kind:string}>();
+    if(row?.kind === "repo") throw new CommunityError("Edit repositories in GitHub highlights",409);
+  }
   async function readJourney(target: string): Promise<CommunityJourney[]> {
     const mentorScope = fixtureScope("c.mentorId");
     // The confirmations are read beside the entries rather than after them: one round trip, not two.
     const [{ results }, { results: confirmations }] = await Promise.all([
-      db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt FROM communityJourney j
+      db.prepare(`SELECT id,userId,kind,repoFullName,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt FROM communityJourney j
         WHERE userId=? AND (?=userId OR ${postedWorkEligibility("j")}) ORDER BY occurredAt DESC,id DESC LIMIT 100`).bind(target, actorId).all<Omit<CommunityJourney, "confirmations">>(),
       db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
@@ -170,7 +176,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(profileInput, input);
-      await saveMemberText(db, actorId, p, moderationEnv);
+      await saveMemberText(db, actorId, p, requireModerationEnv());
       return getProfile(actorId);
     },
     async searchProfiles(input: unknown) {
@@ -199,7 +205,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         ORDER BY u.id LIMIT 501`).bind(...eligible.values,...scope.values).all<ProfileRow>();
       if (results.length > 500) throw new CommunityError("Discovery capacity reached. Please try again later.",503);
       const ids = JSON.stringify(results.map(row => row.userId));
-      const { results: entries } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt
+      const { results: entries } = await db.prepare(`SELECT id,userId,kind,repoFullName,title,description,evidenceUrl,occurredAt,lower(state) AS status,coalesce(moderationOutcome='hold',0) AS moderationHold,version,createdAt,updatedAt
         FROM communityJourney j WHERE ${postedWorkEligibility("j")} AND userId IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 2001`).bind(ids).all<Omit<CommunityJourney,"confirmations">>();
       const mentor = fixtureScope("c.mentorId");
       const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
@@ -285,32 +291,34 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyInput, input);
       const saved = await db.prepare("SELECT id FROM studentProfile WHERE userId=?").bind(actorId).first();
-      if (!saved) await saveMemberText(db,actorId,{headline:"",bio:"",skills:[],opportunityGoals:""},moderationEnv);
+      if (!saved) await ensureMemberProfile(db,actorId);
       const id = createId();
-      await db.prepare(`INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility,state) VALUES (?,?,?,?,?,?,'institution',?)`)
-        .bind(id,actorId,p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.status === "draft" ? "DRAFT" : "POSTED").run();
-      await checkPostedWork(db,id,moderationEnv);
+      await db.prepare(`INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility,state,moderationReviewRequired) VALUES (?,?,?,?,?,?,'institution',?,1)`)
+        .bind(id,actorId,p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,workState(p.status)).run();
+      await checkPostedWork(db,id,requireModerationEnv());
       const stored = await db.prepare(`SELECT createdAt,moderationOutcome FROM communityJourney WHERE id=?`).bind(id).first<{createdAt:number;moderationOutcome:string|null}>();
-      return { id, ...p, moderationHold:stored?.moderationOutcome==="hold", userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
+      return { id, ...p, kind:"contribution" as const,repoFullName:null, moderationHold:stored?.moderationOutcome==="hold", userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
     },
     async updateJourney(id: string,input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyUpdateInput,input);
-      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility='institution',state=?,moderationOutcome=NULL,moderationReviewRequired=0,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND (? IS NULL OR version=?)`)
-        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.status === "draft" ? "DRAFT" : "POSTED",id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
+      await requireContribution(id);
+      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility='institution',state=?,moderationOutcome=CASE WHEN moderationOutcome='hold' THEN 'hold' ELSE NULL END,moderationReviewRequired=1,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND moderatorHidden=0 AND kind='contribution' AND (? IS NULL OR version=?)`)
+        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,workState(p.status),id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
       if (!result.meta.changes) throw new CommunityError(p.expectedRevision ? "Contribution changed or is no longer available. Reload before editing." : "Contribution not found.",p.expectedRevision?409:404);
-      await checkPostedWork(db,id,moderationEnv);
+      await checkPostedWork(db,id,requireModerationEnv());
       return {id,updated:true};
     },
     async setJourneyStatus(id: string, input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyStatusInput,input);
-      const result = await db.prepare(`UPDATE communityJourney SET visibility='institution',state=?,moderationOutcome=NULL,moderationReviewRequired=0,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
-        .bind(p.status === "draft" ? "DRAFT" : "POSTED",id,actorId).run();
+      await requireContribution(id);
+      const result = await db.prepare(`UPDATE communityJourney SET visibility='institution',state=?,moderationOutcome=CASE WHEN moderationOutcome='hold' THEN 'hold' ELSE NULL END,moderationReviewRequired=1,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND moderatorHidden=0 AND kind='contribution'`)
+        .bind(workState(p.status),id,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
-      await checkPostedWork(db,id,moderationEnv);
+      await checkPostedWork(db,id,requireModerationEnv());
       return {id,status:p.status};
     },
     async deleteJourney(id: string) {
@@ -377,3 +385,13 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   };
 }
 export type CommunityService = ReturnType<typeof createCommunityService>;
+
+
+/** Writing callers must explicitly supply the moderation binding. */
+export function createCommunityService(db:D1Database,actorId:string,fixture:StagingFixtureIdentity|null|undefined,environment:string|undefined,flagsOverride:string|undefined,moderationEnv:MemberModerationEnv) {
+  return communityService(db,actorId,fixture,environment,flagsOverride,moderationEnv);
+}
+/** Read-only counts need no AI binding and expose no write methods. */
+export function createCommunityReadService(db:D1Database,actorId:string,fixture?:StagingFixtureIdentity|null,environment?:string,flagsOverride?:string): Pick<CommunityService,"countAwaitingConfirmation"|"listWorthAnotherLook"> {
+  return communityService(db,actorId,fixture,environment,flagsOverride,undefined);
+}

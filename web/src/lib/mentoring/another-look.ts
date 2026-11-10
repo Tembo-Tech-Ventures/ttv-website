@@ -1,6 +1,6 @@
 import { communityActor, requireBrowser } from "@/lib/community/actor";
 import { CommunityError } from "@/lib/community/model";
-import { createCommunityService } from "@/lib/community/service";
+import { createCommunityReadService } from "@/lib/community/service";
 import { ChannelError } from "@/lib/channels/errors";
 import type { ErrorCode, WorthAnotherLook } from "@/lib/platform/contracts";
 import { SPACE_REDIRECTS } from "@/lib/platform/server/space-routes";
@@ -19,7 +19,7 @@ const CODES: Partial<Record<number, ErrorCode>> = { 401: "forbidden", 403: "forb
 
 /**
  * GET /api/mentoring/another-look (B-4.2, README.md beside this file): the caller's confirmed work
- * that has changed revision since, through the Confirm page's own checks (createCommunityService):
+ * that has changed revision since, through the Confirm page's own checks (createCommunityReadService):
  * the browser gate, mentor or admin roles from the database, and the synthetic-identity scopes. The
  * caller owns the `mentor_requests` flag. Owners carry no badges: the list is about the work.
  */
@@ -28,7 +28,7 @@ export async function worthAnotherLook({ db, env, locals }: WorthAnotherLookCont
   if (!actor) throw new ChannelError("forbidden", "Not permitted.", 403);
   try {
     requireBrowser(actor);
-    const service = createCommunityService(db, actor.id, actor.fixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
+    const service = createCommunityReadService(db, actor.id, actor.fixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
     const rows = await service.listWorthAnotherLook();
     return {
       items: rows.map((row) => ({

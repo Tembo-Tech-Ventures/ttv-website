@@ -1,3 +1,4 @@
+import { temboDay } from "@/lib/tembo/quota";
 import {
   memberEligibility,
   postedWorkEligibility,
@@ -89,12 +90,12 @@ interface CardRow {
   completedCohorts: string;
   onPublicSite: number;
 }
-const CARD_COLUMNS = `p.userId,p.handle,p.publicName,p.publicAvatarUrl,p.headline,p.bio,p.skills,p.opportunityGoals,
+const CARD_COLUMNS = `p.userId,p.handle,coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId)) AS publicName,p.publicAvatarUrl,p.headline,p.bio,p.skills,p.opportunityGoals,
   p.openToFreelance,p.openToRoles,
   (SELECT count(*) FROM communityJourney w WHERE w.userId=p.userId AND ${postedWorkEligibility("w")}) AS postedWorkCount,
   (SELECT count(*) FROM communityJourney w WHERE w.userId=p.userId AND ${postedWorkEligibility("w")}
     AND EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=w.id AND c.journeyVersion=w.version)) AS confirmedWorkCount,
-  (SELECT json_group_array(program.name) FROM programApplication a JOIN program ON program.id=a.programId
+  (SELECT json_group_array(DISTINCT program.name) FROM programApplication a JOIN program ON program.id=a.programId
     WHERE a.userId=p.userId AND a.status='COMPLETED' AND a.completedAt IS NOT NULL) AS completedCohorts,
   ${publicProfileEligibility("p")} AS onPublicSite`;
 function card(row: CardRow): MemberCard {
@@ -116,9 +117,6 @@ function card(row: CardRow): MemberCard {
 function requireCaller(caller: DiscoveryCaller) {
   if (!caller.id) throw new CommunityError("Sign in to continue.", 401);
 }
-function nairobiDay() {
-  return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
 interface Cursor {
   day: string;
   rank: number;
@@ -127,7 +125,7 @@ interface Cursor {
 function pageCursor(value: string | undefined): Cursor | null {
   try {
     const c = JSON.parse(atob(value ?? "")) as Cursor;
-    const age = Date.parse(nairobiDay()) - Date.parse(c.day);
+    const age = Date.parse(temboDay(Date.now())) - Date.parse(c.day);
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(c.day) ||
       !Number.isFinite(age) ||
@@ -154,19 +152,16 @@ export async function listMembers(
   const q = (filters.q ?? "").trim().slice(0, 100);
   const skills = (filters.skills ?? [])
     .slice(0, 5)
-    .map((s) => s.trim().slice(0, 40));
+    .map((s) => s.trim().slice(0, 40))
+    .filter(Boolean);
   const cursor = pageCursor(filters.cursor);
-  const day = cursor?.day ?? nairobiDay();
+  const day = cursor?.day ?? temboDay(Date.now());
   // Same signed 32-bit DJB2 and multiplication as fairSort, evaluated in SQLite before LIMIT.
   let factor = 5381;
   for (const char of day) factor = (factor * 33 + char.charCodeAt(0)) | 0;
-  const rotation = `WITH RECURSIVE hashes(id,pos,h) AS (
-    SELECT id,0,5381 FROM studentProfile UNION ALL
-    SELECT id,pos+1,(h*33+unicode(substr(id,pos+1,1))) & 4294967295 FROM hashes WHERE pos<length(id)
-  ), ranks AS (SELECT id,(((h*${factor | 1}) & 4294967295)+2147483648) % 4294967296-2147483648 AS rank
-    FROM hashes WHERE pos=length(id))`;
+  const rotation = `WITH ranks AS (SELECT id,(((rotationSeed*${factor | 1}) & 4294967295)+2147483648) % 4294967296-2147483648 AS rank FROM studentProfile)`;
   const where = `${memberEligibility("p.userId")} AND p.userId<>?
-    AND instr(lower(coalesce(p.publicName,'')||' '||coalesce(p.headline,'')||' '||coalesce(p.bio,'')||' '||coalesce(p.skills,'')||' '||p.opportunityGoals),lower(?))>0
+    AND instr(lower(coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId),'')||' '||coalesce(p.headline,'')||' '||coalesce(p.bio,'')||' '||coalesce(p.skills,'')||' '||p.opportunityGoals),lower(?))>0
     AND NOT EXISTS (SELECT 1 FROM json_each(?) wanted WHERE NOT EXISTS (
       SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill WHERE lower(skill.value)=lower(wanted.value)))
     ${filters.openTo === "freelance" ? "AND p.openToFreelance=1" : filters.openTo === "roles" ? "AND p.openToRoles=1" : ""}`;

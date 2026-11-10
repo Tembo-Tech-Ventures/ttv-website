@@ -17,7 +17,7 @@ import { mentionsTembo } from "./mention";
  * | Channel   | Sources |
  * |-----------|---------|
  * | COHORT    | That program's session transcripts, and this channel's messages |
- * | COMMUNITY | Public builder profiles, projects their owners shared in this channel, and this channel's messages. Never recordings |
+ * | COMMUNITY | Saved member profiles and their posted work, projects their owners shared in this channel, and this channel's messages. Never recordings |
  * | DIRECT    | This conversation's messages only |
  *
  * Messages are read as a reader without privileges reads them: nobody's deleted or hidden messages,
@@ -249,18 +249,17 @@ interface SharedRow {
 }
 
 /**
- * Public builder profiles (the /talent pages: published, after a completed cohort) with their
- * highlighted repositories, and projects their owners shared in this channel as the channel saw them,
+ * Saved member profiles and their posted work, and projects their owners shared in this channel as the channel saw them,
  * while the owner still shares them, with the builder's name as the channel shows it on the sharing
  * message (QA3-06): only the owner's own share counts, so the name is never more than readers see.
- * Institution-shared projects nobody shared here stay out.
+ * Held work and drafts stay out.
  */
 const searchProjects: Search = async ({ db, book, channel }, terms) => {
   if (channel.kind !== "COMMUNITY") return [];
   const json = JSON.stringify(terms);
-  const { results: profiles } = await db.prepare(`WITH profiles AS (SELECT p.userId, p.handle, p.publicName, p.publicAvatarUrl, ${publicProfileEligibility("p")} AS onPublicSite,
+  const { results: profiles } = await db.prepare(`WITH profiles AS (SELECT p.userId, p.handle, coalesce(p.publicName,(SELECT name FROM user WHERE id=p.userId)) AS publicName, p.publicAvatarUrl, ${publicProfileEligibility("p")} AS onPublicSite,
       coalesce(p.headline, '') || ' ' || coalesce(p.bio, '') || ' ' || coalesce(p.skills, '') || ' ' || coalesce((
-        SELECT group_concat(h.repoFullName || ' ' || coalesce(h.blurb, h.description, '') || ' ' || coalesce(h.language, ''), '; ')
+        SELECT group_concat(coalesce(h.repoFullName,h.title) || ' ' || coalesce(h.blurb, h.description, '') || ' ' || coalesce(h.language, ''), '; ')
         FROM communityJourney h WHERE h.userId = p.userId AND ${postedWorkEligibility("h")}), '') AS doc
       FROM studentProfile p WHERE ${memberEligibility("p.userId")})
     SELECT userId, handle, publicName, publicAvatarUrl, onPublicSite, substr(doc, 1, ?2) AS doc FROM profiles
@@ -319,7 +318,7 @@ const TOOLS = {
     search: searchSessions,
   },
   search_projects: {
-    definition: tool("search_projects", "Search public builder profiles and the projects people shared in this channel. Returns tagged summaries you can cite."),
+    definition: tool("search_projects", "Search saved member profiles and their posted work and the projects people shared in this channel. Returns tagged summaries you can cite."),
     search: searchProjects,
   },
 } as const satisfies Record<string, { definition: ToolDefinition; search: Search }>;
@@ -335,7 +334,7 @@ export const TOOLS_FOR: Readonly<Record<TemboScope, readonly TemboToolName[]>> =
 /** What Tembo can see here, in the words the prompt and the refusal use. */
 export const SCOPE_WORDS: Readonly<Record<TemboScope, string>> = Object.freeze({
   COHORT: "this cohort's recorded sessions and this channel's messages",
-  COMMUNITY: "this channel's messages, public builder profiles and projects shared here",
+  COMMUNITY: "this channel's messages, saved member profiles and their posted work and projects shared here",
   DIRECT: "this conversation",
 });
 

@@ -24,7 +24,7 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
 <DataListItem title={claim.title} headingLevel={3}>
   <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
   {(claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip>{claim.moderationHold ? "Awaiting review" : "Draft"}</Chip></Fragment>}
-  <Fragment slot="actions"><RowAction href={editHref(claim)} row={claim.title}>Edit</RowAction></Fragment>
+  <Fragment slot="actions"><RowAction href={claim.kind === "repo" ? "/dashboard/me/portfolio#highlights-title" : editHref(claim)} row={claim.title}>Edit</RowAction></Fragment>
   <div class="flex flex-col gap-3">
     {claim.moderationHold ? <p>Your work is saved and waiting for a human review. Only you and admins can see it.</p> : claim.status === "draft" && <p>Unpublished draft. Only you can see this contribution.</p>}
     <p class="whitespace-pre-line break-words">{claim.description}</p>

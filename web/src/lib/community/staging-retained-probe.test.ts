@@ -56,7 +56,7 @@ describe("retained read probe boundary",()=>{
   f.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES('published',?,'Public','Kotlin','2026-10-25','institution'),('private',?,'Hidden','Hidden','2026-10-25','private')").run(id,id);
   f.database.exec("UPDATE communityJourney SET state='DRAFT' WHERE id='private'");
   f.database.prepare("INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES('real-confirm','published','real','PRIVATE REAL MENTOR','review',1,'MENTOR')").run();
-  const service=createCommunityService(f.db,f.id,actor,'staging');
+  const service=createCommunityService(f.db, f.id, actor, 'staging', undefined, {} as Env);
   expect((await service.searchProfiles({query:'Kotlin'})).map(p=>p.userId)).toEqual([id]);
   const journey=await service.listJourney(id);expect(journey).toHaveLength(1);expect(journey[0].confirmations).toEqual([]);
   await expect(service.getProfile('real')).rejects.toMatchObject({status:403});

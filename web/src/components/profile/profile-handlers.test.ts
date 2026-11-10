@@ -19,7 +19,7 @@ const publishedProfile = {
   linkedinUrl: null,
   publicName: "Old Name",
   publicAvatarUrl: "/api/avatar/avatars/user-1/old.webp",
-  highlights: [],
+  work: [],
   user: {
     name: "Old Name",
     image: "/api/avatar/avatars/user-1/old.webp",
@@ -163,7 +163,7 @@ describe("saveProfileIdentity", () => {
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         publicName: "New Name",
-        moderationOutcome: "error",
+        moderationOutcome: expect.any(Object),
         moderationReviewRequired: true,
       }),
     );
@@ -315,8 +315,8 @@ describe("saveProfileIdentity", () => {
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         publicName: "Draft Name",
-        moderationOutcome: null,
-        moderationReviewRequired: false,
+        moderationOutcome: expect.any(Object),
+        moderationReviewRequired: true,
       }),
     );
     expect(setUser).toHaveBeenCalledWith({ name: "Draft Name" });
