@@ -110,7 +110,7 @@ it('guards QA own-entry edits by loaded revision without widening ownership',asy
  expect((await f.call('member-noncohort','journey/'+id,'PUT',{...entry,description:'Updated fictional work',expectedRevision:1})).status).toBe(200);
  expect((await f.call('member-noncohort','journey/'+id,'PUT',{...entry,expectedRevision:1})).status).toBe(409);
  expect((await f.call('institution','journey/'+id,'PUT',{...entry,expectedRevision:2})).status).toBe(403);
- expect(f.sql.prepare('SELECT version,visibility FROM communityJourney WHERE id=?').get(id)).toMatchObject({version:2,visibility:'private'});
+ expect(f.sql.prepare('SELECT version,state,visibility FROM communityJourney WHERE id=?').get(id)).toMatchObject({version:2,state:'DRAFT',visibility:'institution'});
 });
 
 it('rejects cohort and old-run credentials even when their source rows exist',async()=>{

@@ -1,5 +1,6 @@
 import {drizzle} from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
+import {saveProfileIdentity} from "@/components/profile/profile-handlers";
 import {saveProfile,publishProfile} from "@/components/portfolio/portfolio-handlers";
 import { readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -68,4 +69,15 @@ describe("member publish-then-check",()=>{
   expect(await reviewWork(db,"admin","work",1,"keep")).toBe(true);
   expect(database.prepare("SELECT version,state,moderationOutcome,moderationReviewRequired FROM communityJourney").get()).toEqual({version:1,state:"POSTED",moderationOutcome:"pass",moderationReviewRequired:0});
  });
+});
+
+it("saves a published name before checking and holds exactly that revision",async()=>{
+ const {db,database}=fixture();await saveMemberText(db,"member",text);
+ database.exec("UPDATE studentProfile SET status='PUBLISHED'");
+ const orm=drizzle(db,{schema});
+ await saveProfileIdentity(orm,"member",{name:"Changed Name"},async()=>{
+  expect(database.prepare("SELECT publicName FROM studentProfile").get()).toEqual({publicName:"Changed Name"});
+  return {outcome:"hold",flags:[],scores:{}};
+ });
+ expect(database.prepare("SELECT publicName,moderationOutcome FROM studentProfile").get()).toEqual({publicName:"Changed Name",moderationOutcome:"hold"});
 });

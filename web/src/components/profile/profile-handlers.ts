@@ -21,16 +21,6 @@ export interface ProfileIdentityInput {
   avatarUrl?: string;
 }
 
-const clearedModeration = {
-  publicName: null,
-  publicAvatarUrl: null,
-  moderationOutcome: null,
-  moderationFlags: null,
-  moderationScores: null,
-  moderationCheckedAt: null,
-  moderationReviewRequired: false,
-} as const;
-
 function changedDuringCheck(): ProfileFormResult {
   return {
     success: false,
@@ -49,7 +39,7 @@ async function applyVersionedIdentityUpdate(
   db: Database,
   userId: string,
   profile: { id: string; contentVersion: number },
-  expectedStatus: "DRAFT" | "PUBLISHED",
+  expectedStatus: typeof schema.studentProfile.$inferSelect.status,
   input: ProfileIdentityInput,
   profileValues: Record<string, unknown>,
 ): Promise<boolean> {
@@ -103,6 +93,7 @@ export async function saveProfileIdentity(
       handle: true,
       headline: true,
       bio: true,
+      opportunityGoals: true,
       location: true,
       country: true,
       skills: true,
@@ -134,19 +125,6 @@ export async function saveProfileIdentity(
     return { success: true };
   }
 
-  if (profile.status === "DRAFT") {
-    const updated = await applyVersionedIdentityUpdate(
-      db,
-      userId,
-      profile,
-      "DRAFT",
-      input,
-      clearedModeration,
-    );
-    if (!updated) return changedDuringCheck();
-    return { success: true };
-  }
-
   if (profile.status === "SUSPENDED") {
     await db
       .update(schema.user)
@@ -161,7 +139,7 @@ export async function saveProfileIdentity(
     displayName: proposedName,
     handle: profile.handle,
     headline: profile.headline,
-    bio: profile.bio,
+    bio: [profile.bio,profile.opportunityGoals].filter(Boolean).join("\n"),
     location: profile.location,
     country: profile.country,
     skills: parseSkillsJson(profile.skills),
@@ -178,6 +156,15 @@ export async function saveProfileIdentity(
       }),
     ),
   };
+  const saveTextFirst = profile.status === "DRAFT" || input.name !== undefined;
+  // Saved profiles are visible to members. Save text first, then check
+  // the exact new revision. Keep the previous safe avatar until its check ends.
+  if (saveTextFirst) {
+    const saved = await applyVersionedIdentityUpdate(db,userId,profile,profile.status,input,{
+      publicName: proposedName, moderationOutcome:null, moderationReviewRequired:false,
+    });
+    if (!saved) return changedDuringCheck();
+  }
   let moderation: Awaited<ReturnType<ProfileContentCheck>>;
   try {
     moderation = await (checkContent?.(moderationState, proposedAvatarUrl) ??
@@ -187,6 +174,7 @@ export async function saveProfileIdentity(
   }
 
   const moderationValues = moderationColumns(moderation);
+  if (saveTextFirst) return finishSavedIdentity(db,userId,profile,proposedName,proposedAvatarUrl,moderation);
   const profileValues = publishesAfterModeration(moderation)
     ? {
         ...moderationValues,
@@ -234,4 +222,17 @@ export async function saveProfileIdentity(
     moderationOutcome: moderation.outcome,
     published: true,
   };
+}
+
+async function finishSavedIdentity(
+  db: Database, userId:string, profile:{id:string;status:typeof schema.studentProfile.$inferSelect.status;contentVersion:number},
+  proposedName:string, proposedAvatarUrl:string|null, moderation:Awaited<ReturnType<ProfileContentCheck>>,
+):Promise<ProfileFormResult> {
+  const result=await db.update(schema.studentProfile).set({
+    publicName:proposedName,...moderationColumns(moderation),
+    ...(publishesAfterModeration(moderation) ? {publicAvatarUrl:Object.hasOwn(moderation,"publicAvatarUrl") ? moderation.publicAvatarUrl ?? null : proposedAvatarUrl} : {}),
+  }).where(and(eq(schema.studentProfile.id,profile.id),eq(schema.studentProfile.userId,userId),
+    eq(schema.studentProfile.status,profile.status),eq(schema.studentProfile.contentVersion,profile.contentVersion+1)));
+  if (!result.meta.changes) return changedDuringCheck();
+  return {success:true,moderationOutcome:moderation.outcome,...(profile.status === "PUBLISHED" ? {published:true} : {})};
 }
