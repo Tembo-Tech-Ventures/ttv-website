@@ -132,7 +132,7 @@ describe("space sidebars", () => {
       const model = spaceSidebar("community", facts(me, "journey"));
       const entries = model.groups[0]!.items.map(({ key }) => key);
       // In the app, right after the person's own journey.
-      expect(entries.slice(0, 2), me.user.name).toEqual(["journey", "members"]);
+      expect(entries.slice(0, 2), `${me.user.name}`).toEqual(["journey", "members"]);
       expect(current(spaceSidebar("community", facts(me, "members")))).toEqual(["Members"]);
     }
     expect(PAGE_SPACES.members).toEqual(["community"]);

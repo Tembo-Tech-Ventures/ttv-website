@@ -33,19 +33,19 @@ INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,bio,loca
 -- Posted work, a draft only its author sees, and a confirmation at the current revision.
 DELETE FROM communityConfirmation WHERE journeyId LIKE 'ttv-local-member-work-%';
 DELETE FROM communityJourney WHERE id LIKE 'ttv-local-member-work-%';
-INSERT INTO communityJourney (id,userId,profileId,title,description,evidenceUrl,occurredAt,visibility,state,kind,version,createdAt,updatedAt) VALUES
- ('ttv-local-member-work-achieng-ledger','ttv-local-persona-alumna','ttv-local-persona-profile-alumna','Chama savings ledger',
+INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,version,createdAt,updatedAt) VALUES
+ ('ttv-local-member-work-achieng-ledger','ttv-local-persona-alumna','Chama savings ledger',
   'Built the contribution ledger and the monthly reminder for our savings group of twelve.','https://example.com/chama-ledger','2026-06-14','institution','POSTED','contribution',1,1793400000,1793400000),
- ('ttv-local-member-work-kevin-stock','ttv-local-member-kevin','ttv-local-member-profile-kevin','Shop stock counter',
+ ('ttv-local-member-work-kevin-stock','ttv-local-member-kevin','Shop stock counter',
   'A Django app that tells my family''s shop when maize flour is running low.','https://example.com/stock-counter','2026-09-02','institution','POSTED','contribution',1,1793400000,1793400000),
- ('ttv-local-member-work-faith-site','ttv-local-member-faith','ttv-local-member-profile-faith','Clinic booking page',
+ ('ttv-local-member-work-faith-site','ttv-local-member-faith','Clinic booking page',
   'Designed and built an accessible booking page for a community clinic in Kibera.','https://example.com/clinic-booking','2026-08-20','institution','POSTED','contribution',1,1793400000,1793400000),
- ('ttv-local-member-work-faith-draft','ttv-local-member-faith','ttv-local-member-profile-faith','Unfinished portfolio',
+ ('ttv-local-member-work-faith-draft','ttv-local-member-faith','Unfinished portfolio',
   'A draft only Faith can see.',NULL,'2026-10-01','private','DRAFT','contribution',1,1793400000,1793400000),
- ('ttv-local-member-work-daniel-dash','ttv-local-member-daniel','ttv-local-member-profile-daniel','Clinic visits dashboard',
+ ('ttv-local-member-work-daniel-dash','ttv-local-member-daniel','Clinic visits dashboard',
   'Weekly clinic visits by sub-county, from the county''s open data.','https://example.com/clinic-dashboard','2026-07-11','institution','POSTED','contribution',1,1793400000,1793400000);
-INSERT INTO communityJourney (id,userId,profileId,title,description,evidenceUrl,occurredAt,visibility,state,kind,repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,snapshotAt,sortOrder,version,createdAt,updatedAt) VALUES
- ('ttv-local-member-work-achieng-repo','ttv-local-persona-alumna','ttv-local-persona-profile-alumna','mpesa-callbacks',
+INSERT INTO communityJourney (id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,snapshotAt,sortOrder,version,createdAt,updatedAt) VALUES
+ ('ttv-local-member-work-achieng-repo','ttv-local-persona-alumna','mpesa-callbacks',
   'Handles payment callbacks that arrive twice.','https://github.com/achieng-otieno/mpesa-callbacks','2026-09-01','institution','POSTED','repo',
   'achieng-otieno/mpesa-callbacks','https://github.com/achieng-otieno/mpesa-callbacks','Idempotent payment callback handling','TypeScript','["payments","idempotency"]',12,1793318400,1793404800,0,1,1793400000,1793400000);
 INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole,createdAt) VALUES

@@ -118,9 +118,10 @@ const LIST_SURFACES: Record<string, (db: D1Database, caller: string) => Promise<
     const people = await searchPlatform(db, caller, { q: "Webhook", scope: "people" });
     const projects = await searchPlatform(db, caller, { q: "Webhook", scope: "projects" });
     // The caller's own shared work stays findable as their own, never as discovery.
-    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe(`/talent/${caller}`);
+    // Work leads to its place on its owner's member page (handles equal ids in this fixture).
+    for (const own of projects.projects.filter(p => p.owner.id === caller)) expect(own.href).toBe(`/dashboard/community/members/${caller}#work-${own.journeyId}`);
     const discovered = projects.projects.filter(p => p.owner.id !== caller);
-    for (const project of discovered) expect(project.href).toBe(`/talent/${project.owner.id}`);
+    for (const project of discovered) expect(project.href).toBe(`/dashboard/community/members/${project.owner.id}#work-${project.journeyId}`);
     return [...new Set([...people.people.filter(p=>p.person.id!==caller).map(p => p.person.id), ...discovered.map(p => p.owner.id)])];
   },
 };
