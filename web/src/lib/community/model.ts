@@ -65,6 +65,8 @@ export type CommunityJourneyInput = z.infer<typeof journeyInput>;
 export interface CommunityProfile extends CommunityProfileInput {
   moderationHold?:boolean;
   userId: string; name: string; image: string | null; version: number; updatedAt: number | null;
+  /** Their page's address in the Members directory (memberProfileHref); null before a profile is saved. */
+  handle?: string | null;
 }
 export interface CommunityConfirmation {
   id: string; journeyId: string; mentorId: string; mentorName: string;

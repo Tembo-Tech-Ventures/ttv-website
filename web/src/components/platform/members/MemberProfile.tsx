@@ -1,7 +1,7 @@
 import { PiArrowUpRight, PiBriefcase, PiGlobeSimple } from "react-icons/pi";
 import type { MemberProfileView } from "@/lib/members/directory";
 import { firstName } from "@/components/channels/channel-format";
-import { Avatar, BackLink, ButtonLink, Chip, EmptyState, Notice, PageHeader, PersonMarker, linkClass } from "@/components/platform/ui";
+import { Avatar, BackLink, ButtonLink, Chip, EmptyState, Notice, PageTitle, PersonMarker, linkClass } from "@/components/platform/ui";
 import WorkItem from "./WorkItem";
 import { confirmedSummary, MEMBERS_PATH, openToLabels, postWorkHref, profileEditorHref, workSummary } from "./member-display";
 
@@ -20,24 +20,27 @@ export default function MemberProfile({ member }: MemberProfileProps) {
     <article aria-labelledby="member-name" className="flex max-w-4xl flex-col gap-10" data-member-profile={member.handle}>
       <div className="flex flex-col gap-6">
         <BackLink href={MEMBERS_PATH} className="w-fit">Members</BackLink>
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-          <Avatar id={member.handle} name={member.displayName} src={member.avatarUrl ?? undefined} size="xl" decorative className="sm:mt-2" />
-          <PageHeader
-            className="min-w-0 flex-1"
-            title={member.displayName}
-            titleId="member-name"
-            action={member.isOwn ? <ButtonLink href={profileEditorHref()} variant="primary">Edit your profile</ButtonLink> : undefined}
-          >
-            {member.headline || undefined}
-          </PageHeader>
-        </div>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6" data-member-header>
+          <Avatar id={member.handle} name={member.displayName} src={member.avatarUrl ?? undefined} size="xl" decorative className="sm:mt-1" />
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="flex min-w-0 flex-col">
+              <PageTitle id="member-name" className="mb-0">{member.displayName}</PageTitle>
+              {member.headline && <p className="max-w-prose text-lg leading-snug break-words text-ink-secondary" data-member-headline>{member.headline}</p>}
+            </div>
+            <Standing member={member} />
+          </div>
+          {member.isOwn && (
+            <div className="shrink-0 sm:mt-2" data-page-action>
+              <ButtonLink href={profileEditorHref()} variant="primary">Edit your profile</ButtonLink>
+            </div>
+          )}
+        </header>
         {member.isOwn && (
           <Notice tone="info" title="This is your page as others see it">
             Everyone signed in to TTV can see your profile and everything you post.
             {member.onPublicSite ? " It's also on the public website, where anyone can see it." : ""}
           </Notice>
         )}
-        <Standing member={member} />
       </div>
       <About member={member} />
       <Work member={member} />
@@ -52,9 +55,9 @@ function Standing({ member }: MemberProfileProps) {
   const chips = member.completedCohorts.length > 0 || openTo.length > 0;
   if (!chips && !member.publicUrl) return null;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {chips && (
-        <ul className="flex flex-wrap gap-2" aria-label={`About ${first}`}>
+        <ul className="flex flex-wrap gap-2" aria-label={member.isOwn ? "Your cohorts and what you're open to" : `${first}'s cohorts and what they're open to`}>
           {member.completedCohorts.map((cohort) => (
             <li key={cohort} className="flex min-w-0"><Chip icon={<PersonMarker kind="builder" />}>{`Completed ${cohort}`}</Chip></li>
           ))}
@@ -116,7 +119,7 @@ function Work({ member }: MemberProfileProps) {
       </div>
       {member.work.length > 0 ? (
         <ul className="flex flex-col">
-          {member.work.map((work) => <WorkItem key={work.id} work={work} />)}
+          {member.work.map((work) => <WorkItem key={work.id} work={work} isOwn={member.isOwn} />)}
         </ul>
       ) : (
         <EmptyState

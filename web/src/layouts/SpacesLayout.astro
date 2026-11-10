@@ -45,6 +45,8 @@ interface Props {
   title: string;
   /** Prepended to the tab title only, never the visible bar: "Error: " after a rejected form. */
   titlePrefix?: string;
+  /** Appended to the title in the tab only, never the visible bar: ": 3 members match" on a search. */
+  titleSuffix?: string;
   /** A page of its own, shown in `space` without belonging to it (Attention): the phone's bar marks no space current (T12). */
   outsideSpaces?: boolean;
   /** Overlay islands the page mounts in the `overlays` slot; their triggers appear in the top bar. */
@@ -53,7 +55,7 @@ interface Props {
   harness?: { account: ShellAccount; spaceHrefs: Readonly<Record<SpaceId, string>> };
 }
 
-const { me, space, outsideSpaces = false, title, titlePrefix = "", overlays = [], harness } = Astro.props;
+const { me, space, outsideSpaces = false, title, titlePrefix = "", titleSuffix = "", overlays = [], harness } = Astro.props;
 
 if (!canRenderSpace(me, space)) {
   throw new Error(`SpacesLayout: the ${space} space is not open to this person. Check canRenderSpace before rendering.`);
@@ -84,7 +86,7 @@ const shell = {
     <FontPreload />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
+    <title>{pageTitle(titlePrefix + title + titleSuffix + (title === SPACE_LABEL[space] ? "" : ` · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
     <SheetTransition sheet={`space:${space}`} />
   </head>

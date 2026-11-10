@@ -226,6 +226,8 @@ export type ProjectConfirmation = z.infer<typeof ProjectConfirmation>;
 export const ProjectEmbed = z.object({
   type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText,
   summary: z.string(), skills: z.array(NonEmptyText), link: WebLink.nullable(), confirmations: z.array(ProjectConfirmation),
+  /** The work on its owner's member page, added on each read while it is still posted; never stored. */
+  memberHref: InternalPath.optional(),
 });
 export type ProjectEmbed = z.infer<typeof ProjectEmbed>;
 export const SessionClipEmbed = z.object({

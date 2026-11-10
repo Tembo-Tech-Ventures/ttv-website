@@ -6,6 +6,8 @@ import { formatCalendarDate } from "@/lib/display-date";
 
 interface WorkItemProps {
   work: WorkView;
+  /** On the author's own page, where an unconfirmed piece is worth saying, since they can ask for a review. */
+  isOwn?: boolean;
 }
 
 const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00Z`));
@@ -14,23 +16,31 @@ const KIND = { contribution: "Contribution", repo: "GitHub repository" } as cons
 
 /**
  * One piece of posted work on a member's page: what it is, when, where it lives and what its author
- * wrote, then what each mentor checked. A repository adds the facts GitHub gave when it was added
- * (language, stars, topics, last push), dated, since they are a snapshot and not live.
+ * wrote, then what each mentor checked. A repository is dated by its last push, and adds the facts
+ * GitHub gave when it was added (language, stars, topics), with the day they were read in small print,
+ * since they are a snapshot and not live.
  *
  * A confirmation belongs to the revision it reviewed. Once the work changes, it reads as an earlier
- * version's, never as a confirmation of the new text. No confirmation is an open question, not a mark
- * against anyone, so it is said plainly and quietly.
+ * version's, never as a confirmation of the new text. No confirmation is not evidence against anyone,
+ * so only the author is told, on their own page, where they can do something about it.
  */
-export default function WorkItem({ work }: WorkItemProps) {
+export default function WorkItem({ work, isOwn = false }: WorkItemProps) {
   const headingId = `work-${work.id}`;
   const href = work.link ? evidenceHref(work.link) : null;
   const { repo } = work;
+  const pushed = repo?.pushedAt ?? null;
 
   return (
     <li className="member-work" aria-labelledby={headingId} data-member-work={work.kind}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <Chip icon={work.kind === "repo" ? <PiGithubLogo className="size-3.5" /> : undefined}>{KIND[work.kind]}</Chip>
-        <time dateTime={work.occurredAt} className="text-[0.8125rem] text-ink-secondary">{calendar(work.occurredAt)}</time>
+        {pushed === null ? (
+          <time dateTime={work.occurredAt} className="text-[0.8125rem] text-ink-secondary">{calendar(work.occurredAt)}</time>
+        ) : (
+          <span className="text-[0.8125rem] text-ink-secondary">
+            Last pushed <time dateTime={new Date(pushed * 1000).toISOString()}>{fromSeconds(pushed)}</time>
+          </span>
+        )}
       </div>
       <h3 id={headingId} className="mt-2 text-lg leading-snug break-words text-ink-primary">
         {href ? (
@@ -49,7 +59,6 @@ export default function WorkItem({ work }: WorkItemProps) {
             <PiStar aria-hidden className="size-3.5" />
             {repo.stars === 1 ? "1 star" : `${repo.stars} stars`}
           </span>
-          {repo.pushedAt !== null && <span>Last pushed {fromSeconds(repo.pushedAt)}</span>}
         </p>
       )}
       {work.description && <p className="mt-3 max-w-prose text-[0.9375rem] leading-relaxed break-words whitespace-pre-line text-ink-primary/90">{work.description}</p>}
@@ -61,10 +70,10 @@ export default function WorkItem({ work }: WorkItemProps) {
           {repo.topics.map((topic) => <li key={topic} className="flex min-w-0"><Chip>{topic}</Chip></li>)}
         </ul>
       )}
-      {repo && <p className="mt-2 text-[0.8125rem] text-ink-muted">From GitHub on {fromSeconds(repo.snapshotAt)}</p>}
+      {repo && <p className="mt-2 text-[0.8125rem] text-ink-muted">Stars and topics as GitHub showed them on {fromSeconds(repo.snapshotAt)}</p>}
 
       {work.confirmations.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-secondary" data-member-confirmation="none">No mentor has confirmed this yet.</p>
+        isOwn && <p className="mt-4 text-sm text-ink-secondary" data-member-confirmation="none">No mentor has confirmed this yet.</p>
       ) : (
         <ul className="mt-4 flex flex-col gap-3" aria-label={`Confirmations of ${work.title}`}>
           {work.confirmations.map((confirmation) => (

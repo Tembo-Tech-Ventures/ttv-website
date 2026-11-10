@@ -97,9 +97,13 @@ describe("sharing a project", () => {
         { mentorId: "synthetic-faith", mentorName: "Faith Njeri", version: 2 },
         { mentorId: "synthetic-achieng", mentorName: "Achieng Atieno", version: 1 },
       ],
+      // Read back with the way to the work on its owner's member page; never stored with the message.
+      memberHref: expect.stringMatching(/^\/dashboard\/community\/members\/[a-z0-9-]+#work-ledger$/),
     };
     expect(message.embeds).toEqual([expected]);
     expect(await s.seen("show-your-work", message.id, "synthetic-otieno")).toEqual([expected]);
+    // The link is the reader's view of the owner's page today, so it is never part of what is stored.
+    expect(s.database.prepare("SELECT embeds FROM channel_message WHERE id = ?").get(message.id)).toEqual({ embeds: expect.not.stringContaining("memberHref") });
   });
 
   it("links only to an https evidence page, never to one a reader shouldn't open", async () => {
@@ -428,7 +432,10 @@ describe("shareables", () => {
       ...clips.map(({ recordingId, startSeconds, durationSeconds }) => ({ type: "sessionClip" as const, recordingId, startSeconds, durationSeconds })),
     ];
     expect(refs).toHaveLength(2);
-    expect(sent(await s.share("cohort-04", refs)).embeds).toEqual([...projects, ...clips]);
+    // Each posts as offered; read back, a project also leads to its owner's member page.
+    expect(sent(await s.share("cohort-04", refs)).embeds).toEqual([
+      ...projects.map((project) => ({ ...project, memberHref: expect.stringMatching(/#work-ledger$/) })), ...clips,
+    ]);
   });
 
   it("offers nothing where the caller cannot post", async () => {

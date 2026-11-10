@@ -92,17 +92,23 @@ export function directoryHref(filters: MemberDirectoryFilters, page: MemberDirec
   return query ? `${MEMBERS_PATH}?${query}` : MEMBERS_PATH;
 }
 
-/** A member's page. Handles are lowercase letters, digits and hyphens, so they need no escaping, but are escaped anyway. */
-export function memberHref(handle: string): string {
-  return `${MEMBERS_PATH}/${encodeURIComponent(handle)}`;
-}
-
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /** The results heading: how many people, and whether the filters chose them. */
 export function resultsHeading(total: number, filtered: boolean): string {
   if (!filtered) return plural(total, "member", "members");
   return total === 1 ? "1 member matches" : `${total} members match`;
+}
+
+/**
+ * What follows "Members" in the tab's title, so a tab, the history and a screen reader arriving on a
+ * search or a later page say which: ": 3 members match", ": 25–48 of 57" or ": 25–30 of 30 matching".
+ * Nothing on the first page of everyone.
+ */
+export function tabTitleDetail(total: number, filtered: boolean, later: { seen: number; shown: number } | null): string {
+  const page = later ? pageSummary(later.seen, later.shown, total) : "";
+  if (page) return `: ${page}${filtered ? " matching" : ""}`;
+  return filtered ? `: ${resultsHeading(total, true)}` : "";
 }
 
 /** Where this page sits in the list: "1–24 of 57", or "57 of 57" for a page of one. */

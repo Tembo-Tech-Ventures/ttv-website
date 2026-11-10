@@ -3,7 +3,7 @@ import type { MessageEmbedView, ProjectConfirmation, ProjectEmbed, SessionClipEm
 import Chip from "@/components/platform/ui/Chip";
 import { cx } from "@/components/platform/ui/cx";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
-import { buttonClass } from "@/components/platform/ui/recipes";
+import { buttonClass, linkClass } from "@/components/platform/ui/recipes";
 import { RAISED } from "@/components/platform/ui/tones";
 import { clipTime, firstName } from "./channel-format";
 
@@ -58,7 +58,10 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
         <PiFolderSimple aria-hidden="true" className="size-4 shrink-0" />
         Project · revision {embed.version}
       </p>
-      <p className="channel-embed__title">{embed.title}</p>
+      <p className="channel-embed__title">
+        {/* The work on its owner's member page, where every confirmation and the rest of their work are. */}
+        {embed.memberHref ? <a href={embed.memberHref} className={linkClass()}>{embed.title}</a> : embed.title}
+      </p>
       {!compact && embed.summary && <p className="channel-embed__summary">{embed.summary}</p>}
       {!compact && embed.skills.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Skills">

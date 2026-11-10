@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { validateHandle } from "@/lib/talent/handles";
 import { existsSync } from "node:fs";
 import {
   canonicalSpacePath, channelPagePath, channelRoute, CONDUCT_PATH, conversationRoute, isAvailableSpacePath, isChannelPagePath,
@@ -155,8 +156,8 @@ describe("member directory pages", () => {
   it.each([
     ["/dashboard/community/members/wanjiku-mwangi", "wanjiku-mwangi"],
     ["/dashboard/community/members/achieng/", "achieng"],
-    ["/dashboard/community/members/a", "a"],
-    ["/dashboard/community/members/" + "a".repeat(64), "a".repeat(64)],
+    ["/dashboard/community/members/abc", "abc"],
+    ["/dashboard/community/members/" + "a".repeat(39), "a".repeat(39)],
   ])("serves %s as a member's page", (path, handle) => {
     expect(memberRoute(path)).toEqual({ handle });
     expect(isMemberPagePath(path)).toBe(true);
@@ -169,11 +170,21 @@ describe("member directory pages", () => {
   it.each([
     "/dashboard/community/members/Wanjiku", "/dashboard/community/members/-wanjiku", "/dashboard/community/members/wanjiku-",
     "/dashboard/community/members/wan_jiku", "/dashboard/community/members/wanjiku/work", "/dashboard/community/members/%77anjiku",
-    "/dashboard/community/members/a%2f..", "/dashboard/community/members/" + "a".repeat(65), "/dashboard/community/member",
+    "/dashboard/community/members/a%2f..", "/dashboard/community/members/" + "a".repeat(40),
+    "/dashboard/community/members/ab", "/dashboard/community/members/wan--jiku", "/dashboard/community/member",
     "/dashboard/community/members-x", "/dashboard/cohort/members", "/dashboard/cohort/members/wanjiku", "/dashboard/members/wanjiku",
   ])("does not serve %s", (path) => {
     expect(memberRoute(path)).toBeNull();
     expect(isMemberPagePath(path)).toBe(false);
     expect(isAvailableSpacePath(path)).toBe(false);
+  });
+
+  it("serves exactly the handles a profile can have", () => {
+    const shapes = ["ab", "abc", "a-b", "-ab", "ab-", "a--b", "a_b", "AB1", "x".repeat(39), "x".repeat(40), "wanjiku-2", "9to5"];
+    for (const handle of shapes) {
+      const valid = validateHandle(handle);
+      const shaped = valid.ok || valid.error === "reserved";
+      expect(memberRoute(`${MEMBERS_PATH}/${handle}`) !== null, `${handle}`).toBe(shaped);
+    }
   });
 });

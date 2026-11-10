@@ -6,6 +6,7 @@
  * Both are forms that post here, so they work without a script; the search
  * this came from travels with them in hidden fields, never in the address.
  */
+import { memberProfileHref } from "@/lib/members/links";
 import { PiArrowLeft } from "react-icons/pi";
 import {
   Avatar, BackLink, Button, Card, Chip, DataList, DataListItem, EmptyState, Notice, TextAreaField, TextField, linkClass,
@@ -63,6 +64,11 @@ const STATUS_TEXT = (criterion: EvidenceAssessment["criteria"][number]) =>
       <BackLink href={DISCOVER_PATH}>Discover</BackLink>
     )}
     <p class="text-sm text-ink-muted">
+      {profile.handle && (
+        <>
+          <a href={memberProfileHref({ handle: profile.handle })} class={linkClass()} data-discover-member-page>Their member page</a>, as every member sees it ·{" "}
+        </>
+      )}
       <a href={profileHref(profile.id)} class={linkClass()}>Link to this profile</a> · Requires approved institutional access
     </p>
   </div>

@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 import { personaSession, signIn, type PersonaKey } from "./platform-personas";
 
@@ -93,11 +93,16 @@ test("a member's page reads on a phone, axe clean at 320", async ({ page, baseUR
   await runAxe(page, test.info(), "member profile 320");
 });
 
-test("a handle nobody has, and one out of shape, are the same 404", async ({ page, baseURL }) => {
+test("a handle nobody has, one held by a check, and one out of shape, are the same 404", async ({ page, baseURL }) => {
   await signedIn(page, baseURL);
-  for (const path of [`${PATH}/nobody-by-this-name`, `${PATH}/Achieng-Otieno`]) {
-    expect((await page.request.get(path)).status(), path).toBe(404);
+  const answers: Array<Record<string, unknown>> = [];
+  for (const path of [`${PATH}/nobody-by-this-name`, `${PATH}/ruth-chepkemoi`, `${PATH}/Achieng-Otieno`]) {
+    const response = await page.request.get(path);
+    const headers = response.headers();
+    answers.push({ status: response.status(), body: await response.text(), cache: headers["cache-control"], vary: headers.vary, type: headers["content-type"] });
   }
+  expect(answers[0]).toMatchObject({ status: 404, cache: "no-store" });
+  for (const answer of answers.slice(1)) expect(answer).toEqual(answers[0]);
 });
 
 test("focus on a card shows on the whole card, and nothing moves under reduced motion", async ({ page, baseURL }) => {
@@ -114,14 +119,28 @@ test("focus on a card shows on the whole card, and nothing moves under reduced m
 test.describe("on a touch screen", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-  test("every control in the search and the pager is at least 44px tall", async ({ page, baseURL }) => {
-    await signedIn(page, baseURL);
-    await open(page, PATH);
-    const controls = main(page).locator("[data-member-filters] :is(input, select, button, a), [data-member-pager] a, [data-member-you] a");
+  const tallEnough = async (controls: Locator) => {
+    expect(await controls.count()).toBeGreaterThan(0);
     for (const control of await controls.all()) {
       const box = await control.boundingBox();
       expect(box?.height ?? 0, await control.evaluate((element) => element.outerHTML.slice(0, 80))).toBeGreaterThanOrEqual(44);
     }
+  };
+
+  test("the search folds away on a phone, and every control in it and the pager is at least 44px tall", async ({ page, baseURL }) => {
+    await signedIn(page, baseURL);
+    await open(page, PATH);
+    const search = main(page).getByRole("search", { name: "Find members" });
+    await expect(search.getByLabel("Skills")).toBeHidden();
+    await search.locator("summary").click();
+    await expect(search.getByLabel("Skills")).toBeVisible();
+    await tallEnough(main(page).locator(".member-search > summary, [data-member-filters] :is(input, select, button, a), [data-pager] a, [data-member-you] a"));
+  });
+
+  test("every link on a member's page is at least 44px tall", async ({ page, baseURL }) => {
+    await signedIn(page, baseURL);
+    await open(page, ACHIENG);
+    await tallEnough(main(page).locator("[data-member-profile] a"));
   });
 });
 
@@ -144,6 +163,8 @@ test.describe("without JavaScript", () => {
     await signedIn(page, baseURL);
     await open(page, PATH, { script: false });
     const search = main(page).getByRole("search", { name: "Find members" });
+    // Folded on a phone; a disclosure opens without JavaScript.
+    await search.locator("summary").click();
     await search.getByLabel("Skills").fill("TypeScript");
     await search.getByRole("button", { name: "Show members" }).click();
     await expect(page).toHaveURL(/[?&]skills=TypeScript(&|#|$)/);

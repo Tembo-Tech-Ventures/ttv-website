@@ -52,6 +52,32 @@
   }
 }
 
+/*
+ * On a wide sheet the search is always open: the disclosure loses its summary and frame. Only where the
+ * browser can open a closed disclosure's content; anywhere else it stays a disclosure, which still works.
+ */
+@supports selector(::details-content) {
+  @container (min-width: 38rem) {
+    .member-search {
+      border: 0;
+    }
+
+    .member-search > summary {
+      display: none;
+    }
+
+    .member-search::details-content {
+      content-visibility: visible;
+      block-size: auto;
+    }
+
+    .member-search > div {
+      border: 0;
+      padding: 0;
+    }
+  }
+}
+
 .member-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -104,9 +130,21 @@
   text-underline-offset: 0.2em;
 }
 
-.member-card:has(.member-card__link:focus-visible) {
+/* Without :has(), the name itself shows focus. */
+.member-card__link:focus-visible {
   outline: 2px solid var(--color-peach-ink);
   outline-offset: 2px;
+}
+
+@supports selector(:has(*)) {
+  .member-card__link:focus-visible {
+    outline: none;
+  }
+
+  .member-card:has(.member-card__link:focus-visible) {
+    outline: 2px solid var(--color-peach-ink);
+    outline-offset: 2px;
+  }
 }
 
 /* What they are looking for, in their words: three lines on the card, all of it on their page. */
@@ -163,6 +201,7 @@
 }
 
 @media (forced-colors: active) {
+  .member-card__link:focus-visible,
   .member-card:has(.member-card__link:focus-visible) {
     outline-color: Highlight;
   }

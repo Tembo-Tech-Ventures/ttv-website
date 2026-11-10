@@ -221,12 +221,12 @@ describe("discoverableMember", () => {
     // Lucy saves an empty profile: she becomes discoverable on every surface.
     await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).updateOwnProfile({ headline: "", bio: "", skills: [], opportunityGoals: "" });
     const service = createCommunityService(db, id("joseph"), undefined, undefined, undefined, {} as Env);
-    expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1 });
+    expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1, handle: expect.stringMatching(/^[a-z0-9-]+$/) });
     expect((await service.searchProfiles({ query: "lucy" })).map(p => p.userId)).toEqual([id("lucy")]);
   });
   it("still lets everyone read their own profile without saving one", async () => {
     const db = world();
-    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0 });
+    expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0, handle: null });
     expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).listJourney(id("lucy"))).toHaveLength(1);
   });
   it("keeps non-institution callers out before any eligibility lookup", async () => {

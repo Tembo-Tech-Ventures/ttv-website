@@ -2,13 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import MemberCard from "./MemberCard";
 import MemberFilters from "./MemberFilters";
-import MemberPager from "./MemberPager";
 import MemberProfile from "./MemberProfile";
 import WorkItem from "./WorkItem";
 import YouCard, { youStanding } from "./YouCard";
 import { memberCards, memberProfiles } from "./fixtures";
 import {
-  cardSkills, confirmedSummary, directoryHref, isFiltered, memberHref, openToLabels, pageSummary, parseMemberUrl, readFilters, resultsHeading, workSummary,
+  cardSkills, confirmedSummary, directoryHref, isFiltered, openToLabels, profileEditorHref, pageSummary, parseMemberUrl, readFilters, resultsHeading, tabTitleDetail, workSummary,
 } from "./member-display";
 
 const NO_FILTERS = { q: "", skills: [], openTo: null };
@@ -47,7 +46,6 @@ describe("the directory's address", () => {
     expect(parseMemberUrl(new URL(href, "https://ttv.invalid").searchParams)).toEqual({ filters, cursor: "next", seen: 24 });
     expect(isFiltered(NO_FILTERS)).toBe(false);
     expect(isFiltered({ ...NO_FILTERS, openTo: "roles" })).toBe(true);
-    expect(memberHref("achieng-otieno")).toBe("/dashboard/community/members/achieng-otieno");
   });
 
   it("says how many, where the page is, and what each person has posted, in words", () => {
@@ -55,6 +53,9 @@ describe("the directory's address", () => {
       .toEqual(["1 member", "57 members", "1 member matches", "0 members match"]);
     expect([pageSummary(0, 24, 57), pageSummary(48, 9, 57), pageSummary(56, 1, 57), pageSummary(0, 0, 0)])
       .toEqual(["1–24 of 57", "49–57 of 57", "57 of 57", ""]);
+    expect([tabTitleDetail(57, false, null), tabTitleDetail(3, true, null), tabTitleDetail(57, false, { seen: 24, shown: 24 }),
+      tabTitleDetail(30, true, { seen: 24, shown: 6 }), tabTitleDetail(0, true, null)])
+      .toEqual(["", ": 3 members match", ": 25–48 of 57", ": 25–30 of 30 matching", ": 0 members match"]);
     expect([workSummary(0), workSummary(1), workSummary(3)]).toEqual(["No work posted yet", "1 piece of work", "3 pieces of work"]);
     expect([confirmedSummary(0), confirmedSummary(2)]).toEqual([null, "2 confirmed by a mentor"]);
     expect(openToLabels(memberCards.achieng)).toEqual(["Open to freelance", "Open to roles"]);
@@ -69,7 +70,7 @@ describe("a member's card", () => {
     expect(html.match(/<a /g)).toHaveLength(1);
     expect(html).toMatch(/<a href="\/dashboard\/community\/members\/achieng-otieno" class="member-card__link">Achieng Otieno<\/a>/);
     const item = /^<li [^>]*>/.exec(html)![0];
-    for (const attribute of ['aria-labelledby="member-achieng-otieno"', 'data-member-card="achieng-otieno"', "data-card"]) expect(item).toContain(attribute);
+    for (const attribute of ['aria-labelledby="member-card-achieng-otieno"', 'data-member-card="achieng-otieno"', "data-card"]) expect(item).toContain(attribute);
     const words = text(html);
     for (const fact of ["Full-stack developer", "TypeScript", "+2 more", "2 pieces of work", "1 confirmed by a mentor", "Completed Cohort 04",
       "Open to freelance · Open to roles", "On the public website"]) {
@@ -89,7 +90,10 @@ describe("a member's card", () => {
 describe("the search", () => {
   it("is a GET form that lands on the results, keeps the view, and offers a way back only when filtered", () => {
     const empty = renderToStaticMarkup(<MemberFilters filters={NO_FILTERS} />);
-    expect(empty).toMatch(/^<search aria-label="Find members"><form method="get" action="\/dashboard\/community\/members#member-results"/);
+    expect(empty).toMatch(/^<search aria-label="Find members"><details data-disclosure="true" class="[^"]*member-search[^"]*">/);
+    expect(empty).toMatch(/<form method="get" action="\/dashboard\/community\/members#member-results"/);
+    // Folded on a phone until a filter is on; open with one, so the search shows what it found by.
+    expect(empty).not.toMatch(/<details[^>]* open=""/);
     expect(empty).not.toContain('name="cursor"');
     expect(empty).not.toContain("Clear filters");
     const filtered = renderToStaticMarkup(<MemberFilters filters={{ q: "chama", skills: ["TypeScript", "React"], openTo: "roles" }} />);
@@ -97,20 +101,8 @@ describe("the search", () => {
     expect(filtered).toMatch(/value="TypeScript, React"/);
     expect(filtered).toMatch(/<option value="roles" selected="">Open to roles<\/option>/);
     expect(filtered).toContain(">Clear filters</a>");
+    expect(filtered).toMatch(/<details[^>]* open=""/);
     for (const id of ["member-search", "member-skills", "member-open"]) expect(filtered).toMatch(new RegExp(`<label[^>]*for="${id}"`));
-  });
-});
-
-describe("the pager", () => {
-  it("goes to the next page and back to the first, never to a guessed previous one", () => {
-    expect(renderToStaticMarkup(<MemberPager firstHref={null} nextHref={null} summary="1–3 of 3" />)).toBe("");
-    const html = renderToStaticMarkup(<MemberPager firstHref="/first" nextHref="/next" summary="25–48 of 57" />);
-    expect(html).toMatch(/<nav aria-label="More members"/);
-    expect(html).toMatch(/<a [^>]*rel="first"[^>]*>/);
-    expect(/<a [^>]*rel="first"[^>]*>/.exec(html)![0]).toContain('href="/first"');
-    expect(/<a [^>]*rel="next"[^>]*>/.exec(html)![0]).toContain('href="/next"');
-    expect(text(html)).toBe("First page Next 25–48 of 57");
-    expect(html).not.toContain("Previous");
   });
 });
 
@@ -124,10 +116,12 @@ describe("the caller's own card", () => {
     expect(youStanding(null, { isAdmin: true, isMentor: true })).toEqual({ kind: "staff" });
   });
 
-  it("links a listed caller to their page as others see it, with no peach action", () => {
+  it("shows a listed caller their own card, exactly as others see it, with no peach action", () => {
     const listed = renderToStaticMarkup(<YouCard standing={youStanding(memberCards.faith, plain)} />);
     expect(text(listed)).toContain("You're in the directory");
-    expect(listed).toMatch(/href="\/dashboard\/community\/members\/faith-njoki"[^>]*>See your page/);
+    expect(listed).toContain(renderToStaticMarkup(<MemberCard member={memberCards.faith} />));
+    expect(listed).toContain(`href="${profileEditorHref()}"`);
+    expect(text(listed)).toContain("Edit your profile");
     expect(listed).not.toContain('data-variant="primary"');
   });
 
@@ -156,9 +150,20 @@ describe("a member's page", () => {
     const words = text(html);
     for (const fact of ["Completed Cohort 04", "About", "Looking for", "Skills", "Work", "2 pieces of work · 1 confirmed by a mentor",
       "Confirmed by David Kamau", "An earlier version was confirmed by Grace Wanjiru", "The work has changed since (now revision 2)",
-      "How they checked: Watched a demo", "No mentor has confirmed this yet.", "achieng-otieno/mpesa-callbacks", "12 stars", "payments"]) {
+      "How they checked: Watched a demo", "achieng-otieno/mpesa-callbacks", "12 stars", "payments"]) {
       expect(words).toContain(fact);
     }
+    // No confirmation is not evidence against anyone: someone else's page says nothing about it.
+    expect(words).not.toContain("No mentor has confirmed");
+    // A repository has one date, its last push, and the day GitHub's facts were read in small print.
+    const repo = html.slice(html.indexOf('data-member-work="repo"'));
+    expect(text(repo)).toContain("Last pushed 30 Oct 2026");
+    expect(text(repo)).toContain("Stars and topics as GitHub showed them on 1 Nov 2026");
+    expect(text(repo)).not.toContain("1 Sept 2026");
+    expect(repo.match(/<time/g)).toHaveLength(1);
+    // The name, headline and chips are one block in the header.
+    const header = html.slice(html.indexOf("data-member-header"), html.indexOf("</header>"));
+    for (const part of ['id="member-name"', "data-member-headline", "Completed Cohort 04"]) expect(header).toContain(part);
     expect(html).toMatch(/href="\/talent\/achieng-otieno"[^>]*data-member-public/);
     expect(words).toContain("Achieng's page on the public website");
     // Links to work open elsewhere, say so, and never carry an opener.
@@ -167,6 +172,12 @@ describe("a member's page", () => {
     // Someone else's page has no editor and no peach action.
     expect(html).not.toContain("Edit your profile");
     expect(html).not.toContain('data-variant="primary"');
+  });
+
+  it("tells only the author that a piece of their work has no confirmation yet", () => {
+    const work = memberProfiles.achieng.work.find((item) => item.confirmations.length === 0)!;
+    expect(text(renderToStaticMarkup(<WorkItem work={work} isOwn />))).toContain("No mentor has confirmed this yet.");
+    expect(text(renderToStaticMarkup(<WorkItem work={work} />))).not.toContain("No mentor has confirmed");
   });
 
   it("never links a work link that is not http(s)", () => {

@@ -45,8 +45,8 @@ describe("ProfileOverview", () => {
     expect(html).toMatch(/<h1[^>]*data-page-title[^>]*>Your profile<\/h1>/);
     expect(html).toMatch(/<a[^>]*href="\/talent\/achieng-otieno"[^>]*data-variant="quiet"[^>]*data-size="lg"[^>]*>[\s\S]*?View public page/);
     // Her page in the Members directory, as everyone signed in sees it, comes first.
-    expect(html).toMatch(/<a[^>]*href="\/dashboard\/community\/members\/achieng-otieno"[^>]*data-variant="quiet"[^>]*>[\s\S]*?See your page/);
-    expect(html.indexOf("See your page")).toBeLessThan(html.indexOf("View public page"));
+    expect(html).toMatch(/<a[^>]*href="\/dashboard\/community\/members\/achieng-otieno"[^>]*data-variant="quiet"[^>]*>[\s\S]*?See your member page/);
+    expect(html.indexOf("See your member page")).toBeLessThan(html.indexOf("View public page"));
     expect(html).toMatch(/<a[^>]*data-variant="primary"[^>]*data-size="lg"[^>]*>[\s\S]*?Edit/);
     expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
   });

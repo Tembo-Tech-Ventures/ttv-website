@@ -83,6 +83,8 @@ async function visit(path: string, init: { method?: string; user?: string } = {}
 }
 
 const count = (body: string, pattern: RegExp) => body.match(pattern)?.length ?? 0;
+/** The results list alone, after the caller's own card. */
+const results = (html: string) => html.slice(html.indexOf("data-member-grid"));
 const islands = (body: string) => [...body.matchAll(/<astro-island[^>]*component-url="([^"]+)"/g)].map(([, url]) => url).toSorted();
 /** The page's own part: from its directory wrapper to the end of the main region. */
 const page = (body: string) => /<div class="member-directory[\s\S]*?(?=<\/main>)/.exec(body)?.[0] ?? "";
@@ -101,10 +103,12 @@ describe("the Members directory", () => {
     expect(own).toMatch(/data-member-you="listed"/);
     expect(own).toMatch(/<h2 id="member-results"[^>]*>2 members<\/h2>/);
     expect(own).toContain("The order changes every day, so no one is always first.");
-    expect(count(own, /data-member-card=/g)).toBe(2);
+    expect(count(results(own), /data-member-card=/g)).toBe(2);
+    // The caller's own card, as the list draws it, above the search.
+    expect(own.slice(0, own.indexOf("data-member-filters"))).toContain('data-member-card="faith-njoki"');
     expect(own.indexOf('data-member-card="achieng-otieno"')).toBeLessThan(own.indexOf('data-member-card="kevin-omondi"'));
     // One page: no pager. Nothing peach, since the caller is listed already.
-    expect(own).not.toContain("data-member-pager");
+    expect(own).not.toContain("data-pager");
     expect(count(own, /data-variant="primary"/g)).toBe(0);
     // The Members entry is current in the Community sidebar.
     expect(body).toMatch(/<a[^>]*href="\/dashboard\/community\/members"[^>]*aria-current="page"/);
@@ -112,6 +116,17 @@ describe("the Members directory", () => {
     expect(mocks.listMembers).toHaveBeenCalledOnce();
     expect(mocks.listMembers.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT }, {}]);
     expect(mocks.readOwnMemberCard.mock.calls[0]!.slice(1)).toEqual([{ id: STUDENT }]);
+  });
+
+  it("keeps every id on the page its own, whatever a member's handle is", async () => {
+    seeded();
+    // Handles are free text within their rule, so some match ids the page uses for itself.
+    const named = (handle: string) => ({ ...memberCards.kevin, handle, displayName: `Handle ${handle}` });
+    mocks.listMembers.mockResolvedValue({ members: ["results", "you-title", "search", "open"].map(named), nextCursor: null, total: 4 });
+    const own = page((await visit(PATH)).body);
+    const ids = [...own.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+    expect(own).toContain('aria-labelledby="member-card-results"');
   });
 
   it("asks the way to be listed when the caller is not, as the page's one peach action", async () => {
@@ -138,6 +153,8 @@ describe("the Members directory", () => {
     expect(link("first")).toContain(`href="${PATH}?q=backend&amp;skills=Python%2C+django&amp;open=roles#member-results"`);
     expect(link("next")).toContain(`href="${PATH}?q=backend&amp;skills=Python%2C+django&amp;open=roles&amp;cursor=after-kevin&amp;seen=25#member-results"`);
     expect(own).toContain("25 of 30");
+    // The tab says which page of which search; the phone's top bar keeps the page's name.
+    expect(body).toMatch(/<title>Members: 25 of 30 matching · Community/);
   });
 
   it("says when a search finds no one, and the way back to everyone", async () => {
@@ -147,6 +164,13 @@ describe("the Members directory", () => {
     expect(own).toMatch(/data-empty-state[\s\S]*No members match this search/);
     expect(own).toMatch(new RegExp(`href="${PATH}#member-results"[^>]*>Show everyone`));
     expect(own).not.toContain("The order changes every day");
+  });
+
+  it("puts nothing after the name in the tab on the first page of everyone", async () => {
+    seeded();
+    expect((await visit(PATH)).body).toMatch(/<title>Members · Community/);
+    mocks.listMembers.mockResolvedValue({ members: [memberCards.kevin], nextCursor: null, total: 1 });
+    expect((await visit(`${PATH}?skills=Python`)).body).toMatch(/<title>Members: 1 member matches · Community/);
   });
 
   it("says when no one is listed yet", async () => {
@@ -174,7 +198,7 @@ describe("the Members directory", () => {
   it("shows institutions the same list, with a quiet way to Discover's tools that others don't get", async () => {
     seeded();
     const institution = page((await visit(PATH, { user: INSTITUTION })).body);
-    expect(count(institution, /data-member-card=/g)).toBe(2);
+    expect(count(results(institution), /data-member-card=/g)).toBe(2);
     expect(institution).toMatch(/data-member-discover[\s\S]*href="\/dashboard\/discover"/);
     expect(page((await visit(PATH)).body)).not.toContain("data-member-discover");
     expect(mocks.listMembers.mock.calls.map((call) => call[1])).toEqual([{ id: INSTITUTION }, { id: STUDENT }]);

@@ -80,7 +80,8 @@ export function isMentorPagePath(pathname: string): boolean {
  * page answers 404 alike for a handle nobody has, a person who is not listed and one the caller can't see.
  */
 export const MEMBERS_PATH = `${SPACE_PATHS.community}/members`;
-const MEMBER_HANDLE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+// The rule handles are made by (`validateHandle`): 3–39 characters, no hyphen at either end or two in a row.
+const MEMBER_HANDLE = /^(?!.*--)[a-z0-9][a-z0-9-]{1,37}[a-z0-9]$/;
 
 /** The member a canonical member path names, or null for the directory and anything else. */
 export function memberRoute(pathname: string): { handle: string } | null {

@@ -43,6 +43,8 @@ interface Props {
   title: string;
   /** Prepended to the tab title only, never the visible bar: "Error: " after a rejected form. */
   titlePrefix?: string;
+  /** Appended to the tab title only, never the visible bar: ": 3 members match" on a search. */
+  titleSuffix?: string;
   journey?: StudentJourney;
   /** A full-height view (a chat, a workspace) that sizes itself to the sheet instead of scrolling in it. */
   fill?: boolean;
@@ -55,7 +57,7 @@ interface Props {
 }
 
 const {
-  context, title, titlePrefix = "", journey: suppliedJourney, fill = false, channels: suppliedChannels, channelId,
+  context, title, titlePrefix = "", titleSuffix = "", journey: suppliedJourney, fill = false, channels: suppliedChannels, channelId,
   admin: suppliedAdmin,
 } = Astro.props;
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
@@ -101,7 +103,7 @@ if (context) {
 
 {
   context && sidebar ? (
-    <SpacesLayout me={context.me} space={context.space} title={title} titlePrefix={titlePrefix} overlays={overlays}>
+    <SpacesLayout me={context.me} space={context.space} title={title} titlePrefix={titlePrefix} titleSuffix={titleSuffix} overlays={overlays}>
       <SpaceSidebar slot="sidebar" model={sidebar} />
       {fill ? (
         <div data-space-fill class="flex min-h-0 flex-1 flex-col">
@@ -113,7 +115,7 @@ if (context) {
       <PlatformOverlays slot="overlays" client:idle me={context.me} cohortLabel={cohortLabel} />
     </SpacesLayout>
   ) : (
-    <PlainFrame title={title} titlePrefix={titlePrefix} fill={fill}>
+    <PlainFrame title={title} titlePrefix={titlePrefix} titleSuffix={titleSuffix} fill={fill}>
       <slot />
     </PlainFrame>
   )

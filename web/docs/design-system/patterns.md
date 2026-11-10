@@ -192,6 +192,13 @@ Views worth linking to are addresses: a `PillNav` of links, current view
 what is on screen are `Pill` toggles. More than five or six options: a
 `SelectField`.
 
+A search with several fields is a GET form in a `<search>`, so the results are
+an address. On a phone it folds into a `Disclosure`, open when a filter is on,
+so people come before the fields; on a wide sheet it stays open (the Members
+directory does this in `members.css`). A search or a later page says which in
+the tab, after the page's name, with `titleSuffix` on `SpacePage`
+("Members: 3 members match"); the visible title does not change.
+
 ## Overlays
 
 For quick tasks that keep their context (search, attention, a short drawer).

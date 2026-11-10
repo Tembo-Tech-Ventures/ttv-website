@@ -1,4 +1,5 @@
 import { postedWorkEligibility } from "@/lib/community/eligibility";
+import { memberWorkHref } from "@/lib/members/links";
 import {
   ExternalLink, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
@@ -256,16 +257,29 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * channel decides for all of them. Deleted messages carry no embeds and cost nothing here.
  */
 export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
-    WHEN 'project' THEN (SELECT ${confirmationsOf("j.id", "json_extract(e.value, '$.version')")} FROM communityJourney j
+    WHEN 'project' THEN (SELECT json_object('confirmations', json(${confirmationsOf("j.id", "json_extract(e.value, '$.version')")}),
+        'handle', (SELECT p.handle FROM studentProfile p WHERE p.userId = j.userId)) FROM communityJourney j
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j", true)})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ${program} AND r.processingStatus = 'complete')
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**
+ * A project's access check: its confirmations, and its owner's handle where the check carries one
+ * (embedAccessColumn's object). A bare list of confirmations (a mentor request's) has no handle.
+ */
+function projectAccess(check: unknown): { rows: unknown; handle: string | null } {
+  if (check && typeof check === "object" && !Array.isArray(check) && "confirmations" in check) {
+    const { confirmations: rows, handle } = check as { confirmations: unknown; handle?: unknown };
+    return { rows, handle: typeof handle === "string" && handle ? handle : null };
+  }
+  return { rows: check, handle: null };
+}
+
+/**
  * The embeds as this reader sees them: stored work they may still see (a project with its current
- * confirmations), and a neutral "unavailable" card in place of anything they no longer may.
- * Malformed stored entries are dropped.
+ * confirmations, and the way to it on its owner's member page), and a neutral "unavailable" card in
+ * place of anything they no longer may. Malformed stored entries are dropped.
  */
 export function embedsForReader(stored: unknown[], access: string | null): MessageEmbedView[] {
   const checks = jsonList(access);
@@ -274,7 +288,12 @@ export function embedsForReader(stored: unknown[], access: string | null): Messa
     if (!embed.success) return [];
     const check = checks[i];
     if (check === null || check === undefined) return [{ type: "unavailable", was: embed.data.type }];
-    return [embed.data.type === "project" ? { ...embed.data, confirmations: confirmations(check) } : embed.data];
+    if (embed.data.type !== "project") return [embed.data];
+    const { rows, handle } = projectAccess(check);
+    return [{
+      ...embed.data, confirmations: confirmations(rows),
+      ...(handle ? { memberHref: memberWorkHref({ handle }, embed.data.journeyId) } : {}),
+    }];
   });
 }
 

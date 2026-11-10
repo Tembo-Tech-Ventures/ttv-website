@@ -1,7 +1,8 @@
 import { PiBriefcase, PiCheckCircle, PiGlobeSimple, PiStack } from "react-icons/pi";
 import type { MemberCard as MemberCardData } from "@/lib/members/directory";
 import { Avatar, Card, Chip, PersonMarker } from "@/components/platform/ui";
-import { cardSkills, confirmedSummary, memberHref, openToLabels, workSummary } from "./member-display";
+import { memberProfileHref } from "@/lib/members/links";
+import { cardSkills, confirmedSummary, openToLabels, workSummary } from "./member-display";
 
 interface MemberCardProps {
   member: MemberCardData;
@@ -18,7 +19,8 @@ interface MemberCardProps {
  * counts say what is there to read, in words.
  */
 export default function MemberCard({ member }: MemberCardProps) {
-  const headingId = `member-${member.handle}`;
+  // Namespaced, so no handle ("results", "you-title") can collide with an id the page itself uses.
+  const headingId = `member-card-${member.handle}`;
   const { shown, more } = cardSkills(member.skills);
   const openTo = openToLabels(member);
   const confirmed = confirmedSummary(member.confirmedWorkCount);
@@ -30,7 +32,7 @@ export default function MemberCard({ member }: MemberCardProps) {
         <Avatar id={member.handle} name={member.displayName} src={member.avatarUrl ?? undefined} size="lg" decorative />
         <div className="min-w-0 flex-1">
           <h3 id={headingId} className="text-lg leading-snug font-bold break-words text-ink-primary">
-            <a href={memberHref(member.handle)} className="member-card__link">{member.displayName}</a>
+            <a href={memberProfileHref(member)} className="member-card__link">{member.displayName}</a>
           </h3>
           {member.headline && <p className="mt-0.5 text-[0.9375rem] leading-snug break-words text-ink-secondary">{member.headline}</p>}
         </div>

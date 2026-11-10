@@ -18,13 +18,12 @@ import { listMembers, readOwnMemberCard } from "@/lib/members/directory";
 import { recordError } from "@/lib/observability/errors";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
-import { ButtonLink, EmptyState, Notice, PageHeader, cx, FOCUS_RING, linkClass } from "@/components/platform/ui";
+import { ButtonLink, EmptyState, Notice, PageHeader, Pager, cx, FOCUS_RING, linkClass } from "@/components/platform/ui";
 import MemberCard from "@/components/platform/members/MemberCard";
 import MemberFilters from "@/components/platform/members/MemberFilters";
-import MemberPager from "@/components/platform/members/MemberPager";
 import YouCard, { youStanding } from "@/components/platform/members/YouCard";
 import {
-  directoryHref, isFiltered, MEMBER_RESULTS_ID, MEMBERS_PATH, pageSummary, parseMemberUrl, readFilters, resultsHeading,
+  directoryHref, isFiltered, MEMBER_RESULTS_ID, MEMBERS_PATH, pageSummary, parseMemberUrl, readFilters, resultsHeading, tabTitleDetail,
 } from "@/components/platform/members/member-display";
 // oxlint-disable-next-line import/no-unassigned-import -- The directory's grid, cards and search.
 import "@/components/platform/members/members.css";
@@ -59,7 +58,7 @@ const discover = context.me.spaces.includes("discover");
 Astro.response.headers.set("Cache-Control", "no-store");
 ---
 
-<SpacePage context={context} title="Members" titlePrefix={loaded ? "" : "Error: "}>
+<SpacePage context={context} title="Members" titleSuffix={loaded ? tabTitleDetail(total, filtered, cursor ? { seen, shown: members.length } : null) : ""} titlePrefix={loaded ? "" : "Error: "}>
   <div class="member-directory flex flex-col gap-8" data-member-directory>
     <PageHeader title="Members">
       Everyone with a saved profile on TTV, and the work they've posted. Only people signed in to TTV can see this page.
@@ -102,7 +101,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
             </EmptyState>
           )}
 
-          <MemberPager firstHref={firstHref} nextHref={nextHref} summary={pageSummary(seen, members.length, total)} />
+          <Pager label="More members" firstHref={firstHref} nextHref={nextHref} summary={pageSummary(seen, members.length, total)} />
         </section>
 
         {discover && (

@@ -32,10 +32,14 @@ the caller). The pages decide nothing about who is listed.
 - **Search** (`MemberFilters`): a GET form, `q`, `skills` (comma-separated, up to five) and
   `open` (`freelance` or `roles`), bounded in `parseMemberUrl` before the read. It lands on the
   results heading (`#member-results`), so a keyboard carries on from the results. It sends no
-  cursor, so a new search starts from the first page.
+  cursor, so a new search starts from the first page. On a phone the fields fold into a kit
+  `Disclosure` ("Search and filter"), open when a filter is on; on a sheet 38rem or wider it
+  stays open with no summary, where the browser supports `::details-content` (`members.css`).
+  The tab's title says which search and page it is ("Members: 3 members match",
+  "Members: 25–48 of 57"), through `SpacePage`'s `titleSuffix`; the phone's top bar keeps "Members".
 - **Order**: the day's fair rotation (Africa/Nairobi), pinned in the cursor. Nothing ranks
   anyone: no scores, no "top", no views, no upvotes (policy af60b59b).
-- **Pages** (`MemberPager`): a cursor only knows what comes after it, so there is Next and
+- **Pages** (the kit `Pager` with `firstHref`): a cursor only knows what comes after it, so there is Next and
   "First page", never a guessed Previous. `seen` in the address words "25–48 of 57" and
   changes nothing else.
 - **You** (`YouCard`): the caller is never in the list, so the top of the first, unfiltered page
@@ -48,8 +52,13 @@ the caller). The pages decide nothing about who is listed.
   only (foundations: Motion), and reduced motion makes even that a cut.
 - **A member** (`MemberProfile`, `WorkItem`): who they are, what they are looking for, their
   skills, then every piece of posted work. A confirmation reads as its revision's: once the
-  work changes, it says an earlier version was confirmed. Work links open in a new tab, only
-  for `http(s)`. The `/talent` link shows only when `publicUrl` is set.
+  work changes, it says an earlier version was confirmed. Unconfirmed work says so only on the
+  author's own page: missing evidence is not evidence against anyone. A repository is dated by
+  its last push; the day GitHub's stars and topics were read is in small print. Work links open
+  in a new tab, only for `http(s)`. The `/talent` link shows only when `publicUrl` is set.
+- **Links to a member**: every in-app surface uses `memberProfileHref` or `memberWorkHref`
+  (`src/lib/members/links.ts`): cards, search, the Profile overview, channel project embeds
+  (`memberHref`, added on read, never stored) and Discover.
 
 ## Tests
 
@@ -59,4 +68,19 @@ the caller). The pages decide nothing about who is listed.
 | `src/pages/dashboard/community/_tests/members.render.test.ts` | Both pages through the real middleware: what they ask the reads for, every answer (a page, none, later pages, failure, 404), methods and the flag |
 | `src/lib/platform/server/space-routes.test.ts` | Which paths are member pages, and which never are |
 | `src/test/perf/round-trips.render.test.ts` | D1 round trips per page |
-| `e2e/platform-members.spec.ts` | axe at 1440, 768, 390 and 320, no sideways scroll, 44px targets, focus on the whole card, reduced motion, the search without JavaScript, institutions |
+| `e2e/platform-members.spec.ts` | axe at 1440, 768, 390 and 320, no sideways scroll, 44px targets on the directory and a member's page, the search folded on a phone, focus on the whole card, reduced motion, the search without JavaScript, the same 404 for unknown, held and out-of-shape handles, institutions |
+
+## Local data
+
+`e2e/platform-members.local.sql` adds seven fictional members (profiles, posted work, a repository,
+confirmations at current and earlier revisions, and one profile held by a check) on top of
+`e2e/platform-personas.local.sql`. The e2e spec and the screenshots expect both. Local D1 only:
+
+```bash
+cd web
+npm run db:migrate:local
+npx wrangler d1 execute ttv-database --local --file e2e/platform-personas.local.sql
+npx wrangler d1 execute ttv-database --local --file e2e/platform-members.local.sql
+```
+
+Re-running either puts everything back. Every name, handle and project in it is made up.
