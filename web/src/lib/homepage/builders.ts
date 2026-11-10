@@ -1,29 +1,15 @@
-import {
-  publicProfileEligibility,
-  postedWorkColumnsEligibility,
-} from "@/lib/community/eligibility";
-import {
-  sql as eligibilitySql,
-  and,
-  asc,
-  desc,
-  eq,
-  isNotNull,
+import { publicProfileEligibility, postedWorkColumnsEligibility } from "@/lib/community/eligibility";
+import { sql as eligibilitySql ,
+  and, asc, desc, eq, isNotNull ,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { getInitials } from "@/components/talent/directory-helpers";
 import { loadPublicPageData } from "@/lib/public-page-data";
-import {
-  isValidCompletion,
-  type CompletionState,
-} from "@/lib/talent/eligibility";
+import { isValidCompletion, type CompletionState } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
-import {
-  resolvePublicProfileIdentity,
-  type PublicIdentitySnapshot,
-} from "@/lib/talent/public-identity";
+import { resolvePublicProfileIdentity, type PublicIdentitySnapshot } from "@/lib/talent/public-identity";
 
 /** What a homepage builder showcase needs to know about one public profile. */
 export interface HomepageBuilder {
@@ -36,11 +22,7 @@ export interface HomepageBuilder {
   cohort: string | null;
   country: string | null;
   skills: string[];
-  project: {
-    name: string;
-    description: string | null;
-    language: string | null;
-  } | null;
+  project: { name: string; description: string | null; language: string | null } | null;
 }
 
 export interface BuilderProfileRow extends PublicIdentitySnapshot {
@@ -48,25 +30,16 @@ export interface BuilderProfileRow extends PublicIdentitySnapshot {
   headline: string | null;
   country: string | null;
   skills: string | null;
-  work: Array<{
-    repoFullName: string | null;
-    title?: string;
-    description: string | null;
-    language: string | null;
-  }>;
+  work: Array<{ repoFullName: string | null; title?: string; description: string | null; language: string | null }>;
   user: {
-    programApplications: Array<
-      CompletionState & { program: { name: string } | null }
-    >;
+    programApplications: Array<CompletionState & { program: { name: string } | null }>;
   };
 }
 
 const MAX_SKILLS = 3;
 
 /** Profiles without a completed cohort are not public builders, so they map to null. */
-export function toHomepageBuilder(
-  profile: BuilderProfileRow,
-): HomepageBuilder | null {
+export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder | null {
   const completion = profile.user.programApplications.find(isValidCompletion);
   if (!completion) return null;
   const identity = resolvePublicProfileIdentity(profile);
@@ -87,8 +60,7 @@ export function toHomepageBuilder(
       .slice(0, MAX_SKILLS),
     project: highlight
       ? {
-          name:
-            highlight.repoFullName?.split("/").pop() ?? highlight.title ?? "",
+          name: highlight.repoFullName?.split("/").pop() ?? highlight.title ?? "",
           description: highlight.description?.trim() || null,
           language: highlight.language,
         }
@@ -97,10 +69,7 @@ export function toHomepageBuilder(
 }
 
 /** Most recently published public builders first. */
-export async function loadHomepageBuilders(
-  db: Database,
-  limit = 8,
-): Promise<HomepageBuilder[]> {
+export async function loadHomepageBuilders(db: Database, limit = 8): Promise<HomepageBuilder[]> {
   const profiles = await db.query.studentProfile.findMany({
     where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     orderBy: desc(schema.studentProfile.publishedAt),
@@ -117,12 +86,7 @@ export async function loadHomepageBuilders(
         where: (work) => postedWorkColumnsEligibility(work, true),
         orderBy: asc(schema.communityJourney.sortOrder),
         limit: 1,
-        columns: {
-          title: true,
-          repoFullName: true,
-          description: true,
-          language: true,
-        },
+        columns: { title: true, repoFullName: true, description: true, language: true },
       },
       user: {
         columns: { id: true },
@@ -140,9 +104,7 @@ export async function loadHomepageBuilders(
       },
     },
   });
-  return profiles
-    .flatMap((profile) => toHomepageBuilder(profile) ?? [])
-    .slice(0, limit);
+  return profiles.flatMap((profile) => toHomepageBuilder(profile) ?? []).slice(0, limit);
 }
 
 /** Loads the showcase without letting a D1 overload take the homepage down. */

@@ -23,7 +23,7 @@ let publicHandle = "preview-graduate";
  */
 test.describe.serial("talent platform integration journey", () => {
   test.skip(
-    !token || !adminToken,
+    !token|| !adminToken,
     "No agent bearer token is configured for this environment.",
   );
   test.use({
@@ -51,9 +51,7 @@ test.describe.serial("talent platform integration journey", () => {
         .fill("Profile exercised end-to-end by the integration suite.");
       await createButton.click();
       // A new profile is a draft: publishing it is the primary, saving it again the quiet button.
-      await expect(
-        page.getByRole("button", { name: "Save draft" }),
-      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
     }
     publicHandle = await page.locator('input[name="handle"]').inputValue();
     await page.screenshot({
@@ -192,9 +190,7 @@ test.describe.serial("talent platform integration journey", () => {
     await page.getByRole("button", { name: "Save name" }).click();
     // A 303 to the canonical page, which says it once.
     await expect(page).toHaveURL(/\/dashboard\/account$/);
-    await expect(
-      page.getByRole("status").filter({ hasText: "Name saved" }),
-    ).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Name saved" })).toBeVisible();
     await page.goto(`/talent/${publicHandle}`);
     await expect(
       page.getByRole("heading", { name: checkedName }),
@@ -283,8 +279,7 @@ test.describe.serial("talent platform integration journey", () => {
       fullPage: true,
     });
 
-    await page
-      .context()
+    await page.context()
       .setExtraHTTPHeaders({ Authorization: `Bearer ${adminToken}` });
     await page.goto("/admin/projects");
     await page

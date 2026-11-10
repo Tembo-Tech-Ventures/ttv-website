@@ -31,13 +31,13 @@ which turns every flag on for every signed-in person; production ignores it.
 Flags are read once per request (`src/lib/platform/server/flags.ts`), so a
 change takes effect on the next request.
 
-| Flag              | Turns on                                                                                                                                                                                                                                                                         | Depends on                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `spaces`          | The spaces shell (`SpacesLayout`): the space tabs, the attention bell and panel, search (⌘K / Ctrl K), `/api/platform/me`, `/api/attention*`, `/api/search`, and the canonical `/dashboard/{cohort,community,mentoring,discover,me,account}` routes, with 301s from the old URLs | none                                                                                                            |
-| `onboarding`      | `/dashboard/welcome` ("How will you take part?"), the landing choice for new accounts, `/api/platform/onboarding` and `/api/platform/access-requests`                                                                                                                            | `spaces` (enforced in `flags.ts`)                                                                               |
-| `channels`        | Channel and conversation pages, the code of conduct, the channel and message APIs, moderation (`/admin/moderation`, `/api/moderation/*`, the MCP moderation tools) and channel messages in search                                                                                | The APIs need only `channels`. The pages are spaces pages, so they also need `spaces`                           |
-| `tembo_channels`  | Tembo in channels: `@tembo` mentions, "Ask Tembo here", `/api/channels/:id/tembo`, `/api/messages/:id/tembo-feedback` and the daily allowance in `/me`                                                                                                                           | `channels`. Every Tembo route checks both flags, and `/me` reports `tembo_channels` off while `channels` is off |
-| `mentor_requests` | The mentor directory, asking for time, the Mentoring space's Requests and Availability pages, "Worth another look", request-note checks and the "Request notes" tab                                                                                                              | `channels` (enforced in `flags.ts`), because accepting a request opens a direct conversation                    |
+| Flag | Turns on | Depends on |
+|---|---|---|
+| `spaces` | The spaces shell (`SpacesLayout`): the space tabs, the attention bell and panel, search (⌘K / Ctrl K), `/api/platform/me`, `/api/attention*`, `/api/search`, and the canonical `/dashboard/{cohort,community,mentoring,discover,me,account}` routes, with 301s from the old URLs | none |
+| `onboarding` | `/dashboard/welcome` ("How will you take part?"), the landing choice for new accounts, `/api/platform/onboarding` and `/api/platform/access-requests` | `spaces` (enforced in `flags.ts`) |
+| `channels` | Channel and conversation pages, the code of conduct, the channel and message APIs, moderation (`/admin/moderation`, `/api/moderation/*`, the MCP moderation tools) and channel messages in search | The APIs need only `channels`. The pages are spaces pages, so they also need `spaces` |
+| `tembo_channels` | Tembo in channels: `@tembo` mentions, "Ask Tembo here", `/api/channels/:id/tembo`, `/api/messages/:id/tembo-feedback` and the daily allowance in `/me` | `channels`. Every Tembo route checks both flags, and `/me` reports `tembo_channels` off while `channels` is off |
+| `mentor_requests` | The mentor directory, asking for time, the Mentoring space's Requests and Availability pages, "Worth another look", request-note checks and the "Request notes" tab | `channels` (enforced in `flags.ts`), because accepting a request opens a direct conversation |
 
 Not flag-gated on purpose: `/admin/access-requests` and `/api/admin/access-requests`,
 so pending access requests are never stranded when `onboarding` is off.
@@ -51,17 +51,17 @@ The old dashboard sidebar stays in the code until `spaces` is at `ALL`.
 
 ## Domain model
 
-| Concept                              | Tables                                                                                                                  | Module                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Rollout flags                        | `feature_flag`                                                                                                          | `src/lib/platform/server/flags.ts`                    |
-| Spaces                               | none (derived by `capabilitiesFor`)                                                                                     | `src/lib/platform/server/` (`space-routes.README.md`) |
-| Attention: things that need a person | `attention_item`                                                                                                        | `src/lib/attention/README.md`                         |
-| Search                               | `channel_message_search`, `channel_message_fts` (FTS5) and existing sources                                             | `src/lib/search/README.md`                            |
-| Channels and messages                | `channel`, `channel_member`, `channel_message`, `channel_read`, `message_reaction`, `channel_action`, `channel_conduct` | `src/lib/channels/README.md`                          |
-| Moderation                           | `message_report`, `moderation_event`, `moderation_case`, `channel_message_version`, `moderation_allowlist`              | `src/lib/channels/README.md`, "Moderation"            |
-| Tembo in channels                    | `tembo_ask`, `tembo_usage`, `tembo_feedback`                                                                            | `src/lib/tembo/README.md`                             |
-| Mentor connections                   | `mentor_profile`, `mentor_request`, `mentor_request_case`, `mentor_request_report`                                      | `src/lib/mentoring/README.md`                         |
-| Onboarding                           | `member_intent`, `member_onboarding`, `access_request`                                                                  | `src/lib/onboarding/README.md`                        |
+| Concept | Tables | Module |
+|---|---|---|
+| Rollout flags | `feature_flag` | `src/lib/platform/server/flags.ts` |
+| Spaces | none (derived by `capabilitiesFor`) | `src/lib/platform/server/` (`space-routes.README.md`) |
+| Attention: things that need a person | `attention_item` | `src/lib/attention/README.md` |
+| Search | `channel_message_search`, `channel_message_fts` (FTS5) and existing sources | `src/lib/search/README.md` |
+| Channels and messages | `channel`, `channel_member`, `channel_message`, `channel_read`, `message_reaction`, `channel_action`, `channel_conduct` | `src/lib/channels/README.md` |
+| Moderation | `message_report`, `moderation_event`, `moderation_case`, `channel_message_version`, `moderation_allowlist` | `src/lib/channels/README.md`, "Moderation" |
+| Tembo in channels | `tembo_ask`, `tembo_usage`, `tembo_feedback` | `src/lib/tembo/README.md` |
+| Mentor connections | `mentor_profile`, `mentor_request`, `mentor_request_case`, `mentor_request_report` | `src/lib/mentoring/README.md` |
+| Onboarding | `member_intent`, `member_onboarding`, `access_request` | `src/lib/onboarding/README.md` |
 
 Timestamps in these tables are epoch milliseconds written by the domain code,
 unlike the older tables' `unixepoch()` seconds.
@@ -103,22 +103,22 @@ shows only while it still applies (the message is still visible, the request
 still waits, the case is still open), so stale notices disappear without
 cleanup.
 
-| Kind                                                      | Who gets it                                                                           | When                                                                          |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `application_status`                                      | The applicant                                                                         | An admin changes their application's status                                   |
-| `recording_ready`                                         | The cohort's members, instructors, TAs and mentors                                    | A session recording in their cohort finishes processing                       |
-| `work_confirmed`                                          | The builder                                                                           | A mentor confirms their shared work                                           |
-| `visitor_message`                                         | The profile owner                                                                     | Someone writes through their public profile                                   |
-| `mention`                                                 | Each person named as `@Full Name` who can read the channel                            | A message mentions them                                                       |
-| `tembo_answer`                                            | The person who asked                                                                  | Tembo answers their question                                                  |
-| `message_hidden`                                          | The author                                                                            | Their message is hidden (never naming who hid it)                             |
-| `moderation_decided`                                      | The author                                                                            | An admin decides a case the author knew of                                    |
-| `moderation_pending`                                      | Admins, except the author, the request's parties, and a direct conversation's members | A moderation case or a request-note check opens, or an author asks for review |
-| `mentor_request`, `mentor_withdrawn`                      | The mentor                                                                            | A request arrives (or is released by a check), or is withdrawn                |
-| `mentor_accepted`, `mentor_redirected`, `mentor_declined` | The person asking                                                                     | The mentor answers                                                            |
-| `mentor_checked`                                          | The person asking                                                                     | A check holds, sends or closes their request                                  |
-| `access_request`                                          | Admins, except the requester                                                          | Someone asks for mentor or institution access                                 |
-| `access_decided`                                          | The requester                                                                         | An admin decides their access request (never naming the admin)                |
+| Kind | Who gets it | When |
+|---|---|---|
+| `application_status` | The applicant | An admin changes their application's status |
+| `recording_ready` | The cohort's members, instructors, TAs and mentors | A session recording in their cohort finishes processing |
+| `work_confirmed` | The builder | A mentor confirms their shared work |
+| `visitor_message` | The profile owner | Someone writes through their public profile |
+| `mention` | Each person named as `@Full Name` who can read the channel | A message mentions them |
+| `tembo_answer` | The person who asked | Tembo answers their question |
+| `message_hidden` | The author | Their message is hidden (never naming who hid it) |
+| `moderation_decided` | The author | An admin decides a case the author knew of |
+| `moderation_pending` | Admins, except the author, the request's parties, and a direct conversation's members | A moderation case or a request-note check opens, or an author asks for review |
+| `mentor_request`, `mentor_withdrawn` | The mentor | A request arrives (or is released by a check), or is withdrawn |
+| `mentor_accepted`, `mentor_redirected`, `mentor_declined` | The person asking | The mentor answers |
+| `mentor_checked` | The person asking | A check holds, sends or closes their request |
+| `access_request` | Admins, except the requester | Someone asks for mentor or institution access |
+| `access_decided` | The requester | An admin decides their access request (never naming the admin) |
 
 `reply` and `opportunity_match` are contract kinds that nothing produces yet.
 Replies reach people through mentions and thread summaries. An opportunity
@@ -178,14 +178,14 @@ server-only `teachingCohortIds`). Pages, the REST APIs, search, MCP and Tembo
 all derive access from it, read once per request through
 `requestCapabilities(db, Astro.locals)`.
 
-| Space     | Who has it                                                                                                                                                                              |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cohort    | Applicants (any status), cohort members (APPROVED, AUDIT, COMPLETED), the program's INSTRUCTOR, TA and MENTOR assignments, and admins. An applicant has the space but no cohort content |
-| Community | Every signed-in person, institutions included                                                                                                                                           |
-| Mentoring | The global MENTOR role                                                                                                                                                                  |
-| Discover  | The INSTITUTION role, and admins                                                                                                                                                        |
-| Admin     | The ADMIN role                                                                                                                                                                          |
-| Profile   | Every signed-in person                                                                                                                                                                  |
+| Space | Who has it |
+|---|---|
+| Cohort | Applicants (any status), cohort members (APPROVED, AUDIT, COMPLETED), the program's INSTRUCTOR, TA and MENTOR assignments, and admins. An applicant has the space but no cohort content |
+| Community | Every signed-in person, institutions included |
+| Mentoring | The global MENTOR role |
+| Discover | The INSTITUTION role, and admins |
+| Admin | The ADMIN role |
+| Profile | Every signed-in person |
 
 `cohortIds` lists the cohorts whose content the person can read: their
 APPROVED, AUDIT and COMPLETED applications (so alumni keep access) and their
@@ -201,11 +201,11 @@ access request.
 `capabilities.fixtures.ts` is the parameterised role matrix the tests run
 across every surface.
 
-| Channel   | Reads and posts                                                                                                       | Moderates (hides)                                  |
-| --------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| COMMUNITY | Every signed-in person, institutions included                                                                         | Admins and global mentors                          |
-| COHORT    | That program's members (alumni included, after the cohort ends), its instructors, TAs and invited mentors, and admins | Its instructors, TAs and mentors, and admins       |
-| DIRECT    | Its two members only                                                                                                  | Nobody in place (see "Direct conversations" below) |
+| Channel | Reads and posts | Moderates (hides) |
+|---|---|---|
+| COMMUNITY | Every signed-in person, institutions included | Admins and global mentors |
+| COHORT | That program's members (alumni included, after the cohort ends), its instructors, TAs and invited mentors, and admins | Its instructors, TAs and mentors, and admins |
+| DIRECT | Its two members only | Nobody in place (see "Direct conversations" below) |
 
 - **DIRECT is members-only, with no exceptions.** An admin, or any mentor,
   who is not one of the two members cannot open the conversation, its
@@ -258,7 +258,6 @@ an item for a human, and fails open (2026-10-06).
    A finding stores the message as FLAGGED with a plain-language reason, in
    the same batch as the write. The message stays visible. Findings on the
    allowlist are dropped.
-
 2. **Masking** (`moderation/mask.ts`, `bodyForReader`). In a FLAGGED message
    whose reasons include a phone number, an email address or a chat
    invitation, only the detected spans are replaced with a marker. The rest of
@@ -288,15 +287,15 @@ admins only.
 
 ### Actions and who takes them
 
-| Action              | Who                                                                | Effect                                                                                                                  |
-| ------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| Report              | Any reader of the message, except its author                       | Once per person and message, at most 20 a day. Opens or joins the case. The author sees no change                       |
-| Hide                | The channel's moderators and admins, with a reason the author sees | HIDDEN. Other readers no longer see the message. The author is told (never who hid it) and may ask for a review         |
-| Undo a hide         | The moderator who hid it, while no admin has decided               | The message goes back to the state the hide found. The case keeps its other signals, or closes if none are left         |
-| Ask for review      | The author of a hidden message, once per case                      | The case shows the request, and admins are told again                                                                   |
-| Hide, uphold a hide | Admins                                                             | Closes the case as decided. The hide is final: no review, no undo                                                       |
-| Restore             | Admins, for a hidden message                                       | VISIBLE, reasons cleared, and the text and its findings are allowlisted                                                 |
-| Keep ("fine as is") | Admins, for a message that is not hidden                           | VISIBLE and unmasked, reasons cleared, allowlisted. On a deleted message, keep closes the case and changes nothing else |
+| Action | Who | Effect |
+|---|---|---|
+| Report | Any reader of the message, except its author | Once per person and message, at most 20 a day. Opens or joins the case. The author sees no change |
+| Hide | The channel's moderators and admins, with a reason the author sees | HIDDEN. Other readers no longer see the message. The author is told (never who hid it) and may ask for a review |
+| Undo a hide | The moderator who hid it, while no admin has decided | The message goes back to the state the hide found. The case keeps its other signals, or closes if none are left |
+| Ask for review | The author of a hidden message, once per case | The case shows the request, and admins are told again |
+| Hide, uphold a hide | Admins | Closes the case as decided. The hide is final: no review, no undo |
+| Restore | Admins, for a hidden message | VISIBLE, reasons cleared, and the text and its findings are allowlisted |
+| Keep ("fine as is") | Admins, for a message that is not hidden | VISIBLE and unmasked, reasons cleared, allowlisted. On a deleted message, keep closes the case and changes nothing else |
 
 **Admin decisions are final.** After an admin hides or upholds a hide, the
 author cannot ask for a review and the moderator cannot undo it. After an
@@ -377,11 +376,11 @@ Tembo is the AI assistant, named the same everywhere. In channels
   posted where every reader of the channel sees it, so an admin asking in a
   cohort channel reaches no more than its members do.
 
-  | Channel   | Tembo reads                                                                                                                              |
-  | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-  | COHORT    | That program's session transcripts and this channel's messages                                                                           |
+  | Channel | Tembo reads |
+  |---|---|
+  | COHORT | That program's session transcripts and this channel's messages |
   | COMMUNITY | Saved member profiles and their posted work, projects their owners shared in this channel, and this channel's messages. Never recordings |
-  | DIRECT    | This conversation only, and only when one of its members asks                                                                            |
+  | DIRECT | This conversation only, and only when one of its members asks |
 
 - **Unprivileged reads.** Tembo reads messages as a reader without moderator
   rights (`bodyForReader(…, false)`): no deleted or hidden messages, nothing
@@ -441,7 +440,8 @@ time, with their work attached.
   asking. Accepting opens (or reuses) the direct conversation between the two,
   and the note becomes its first message, with the work attached at the
   requested revision.
-- **Only the two parties** see a request. Everyone else, admins included, gets 404. Admins see a request only through a check (above).
+- **Only the two parties** see a request. Everyone else, admins included, gets
+  404. Admins see a request only through a check (above).
 - **Worth another look** (`/api/mentoring/another-look`) lists work a mentor
   confirmed at an earlier revision that has changed since.
 

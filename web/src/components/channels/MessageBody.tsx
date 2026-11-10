@@ -19,9 +19,7 @@ const NO_CITATIONS: readonly Citation[] = [];
 type Keyed<T> = T & { key: string };
 
 /** Key every piece by where it starts in the body, so React matches pieces by content position, not list index. */
-function keyed(
-  paragraphs: BodySegment[][],
-): Keyed<{ segments: Keyed<BodySegment>[] }>[] {
+function keyed(paragraphs: BodySegment[][]): Keyed<{ segments: Keyed<BodySegment>[] }>[] {
   let offset = 0;
   return paragraphs.map((segments) => {
     const start = offset;
@@ -35,37 +33,19 @@ function keyed(
   });
 }
 
-function Segment({
-  segment,
-  citations,
-}: {
-  segment: BodySegment;
-  citations: readonly Citation[];
-}) {
+function Segment({ segment, citations }: { segment: BodySegment; citations: readonly Citation[] }) {
   switch (segment.kind) {
     case "mention":
       return (
-        <span
-          className="channel-mention"
-          data-mention={segment.tembo ? "tembo" : "person"}
-        >
+        <span className="channel-mention" data-mention={segment.tembo ? "tembo" : "person"}>
           <Masked text={segment.text} citations={NO_CITATIONS} />
         </span>
       );
     case "code":
-      return (
-        <code className="channel-code">
-          <Masked text={segment.text} citations={NO_CITATIONS} />
-        </code>
-      );
+      return <code className="channel-code"><Masked text={segment.text} citations={NO_CITATIONS} /></code>;
     case "link":
       return (
-        <a
-          href={segment.href}
-          rel="nofollow ugc noopener noreferrer"
-          target="_blank"
-          className={cx("channel-link", FOCUS_RING)}
-        >
+        <a href={segment.href} rel="nofollow ugc noopener noreferrer" target="_blank" className={cx("channel-link", FOCUS_RING)}>
           {segment.text}
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
@@ -86,13 +66,7 @@ const MARKER = /(?<=\s|\])\[(\d{1,2})\](?=\[\d|[.!?…"”’)]*(?:\s|$))/gu;
  * Text with each `[n]` naming one of `citations` as a link to that source, labelled with it, so a
  * reader can tell which source supports which sentence (QA3-02). Other brackets stay text.
  */
-function Cited({
-  text,
-  citations,
-}: {
-  text: string;
-  citations: readonly Citation[];
-}) {
+function Cited({ text, citations }: { text: string; citations: readonly Citation[] }) {
   if (citations.length === 0) return text;
   const pieces: ReactNode[] = [];
   let last = 0;
@@ -101,29 +75,14 @@ function Cited({
     const citation = citations[n - 1];
     if (!citation) continue;
     // The space before a sentence's first marker doesn't break, so a marker never wraps alone onto a line.
-    if (match.index > last)
-      pieces.push(text.slice(last, match.index).replace(/ $/u, "\u00A0"));
+    if (match.index > last) pieces.push(text.slice(last, match.index).replace(/ $/u, "\u00A0"));
     if (!citation.href) {
-      pieces.push(
-        <span
-          key={match.index}
-          data-cite={n}
-          aria-label={`Source ${n}: ${citation.title} · on TTV`}
-        >
-          <sup>{n}</sup>
-        </span>,
-      );
-      last = match.index + match[0].length;
+      pieces.push(<span key={match.index} data-cite={n} aria-label={`Source ${n}: ${citation.title} · on TTV`}><sup>{n}</sup></span>);
+      last=match.index+match[0].length;
       continue;
     }
     pieces.push(
-      <a
-        key={match.index}
-        href={citation.href}
-        className={cx("channel-cite-ref", FOCUS_RING)}
-        data-cite={n}
-        aria-label={`Source ${n}: ${citation.title}`}
-      >
+      <a key={match.index} href={citation.href} className={cx("channel-cite-ref", FOCUS_RING)} data-cite={n} aria-label={`Source ${n}: ${citation.title}`}>
         <sup aria-hidden="true">{n}</sup>
       </a>,
     );
@@ -138,45 +97,22 @@ function Cited({
  * Text with the server's MASKED_CONTACT markers shown as a note, not as the member's words: contact
  * details a moderator has not checked yet (QA2-08).
  */
-function Masked({
-  text,
-  citations,
-}: {
-  text: string;
-  citations: readonly Citation[];
-}) {
-  return (
-    <MaskedText
-      text={text}
-      render={(words) => <Cited text={words} citations={citations} />}
-    />
-  );
+function Masked({ text, citations }: { text: string; citations: readonly Citation[] }) {
+  return <MaskedText text={text} render={(words) => <Cited text={words} citations={citations} />} />;
 }
 
 /**
  * A member's words: paragraphs, mentions, inline code and plain links. React
  * escapes every piece of text, and no markup in a message ever renders.
  */
-export default function MessageBody({
-  body,
-  names,
-  citations = NO_CITATIONS,
-  className,
-}: MessageBodyProps) {
-  const paragraphs = useMemo(
-    () => keyed(parseBody(body, names)),
-    [body, names],
-  );
+export default function MessageBody({ body, names, citations = NO_CITATIONS, className }: MessageBodyProps) {
+  const paragraphs = useMemo(() => keyed(parseBody(body, names)), [body, names]);
   return (
     <div className={cx("channel-body", className)}>
       {paragraphs.map((paragraph) => (
         <p key={paragraph.key}>
           {paragraph.segments.map((segment) => (
-            <Segment
-              key={segment.key}
-              segment={segment}
-              citations={citations}
-            />
+            <Segment key={segment.key} segment={segment} citations={citations} />
           ))}
         </p>
       ))}

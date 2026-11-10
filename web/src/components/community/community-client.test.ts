@@ -28,9 +28,7 @@ const profile = {
   version: 2,
   updatedAt: 123,
 };
-const entry = {
-  kind: "contribution" as const,
-  repoFullName: null,
+const entry = { kind:"contribution" as const, repoFullName:null,
   id: "entry",
   userId: "member",
   title: "Library",
@@ -168,72 +166,33 @@ describe("community API boundary", () => {
   it("reads the mentor's own set-aside, which a confirmation outranks, and defaults it off", async () => {
     respond({
       entries: [
-        {
-          ...entry,
-          id: "aside",
-          memberName: "Fictional Member",
-          reviewedByCurrentMentor: false,
-          setAsideByCurrentMentor: true,
-        },
-        {
-          ...entry,
-          id: "both",
-          memberName: "Fictional Member",
-          reviewedByCurrentMentor: true,
-          setAsideByCurrentMentor: true,
-        },
-        {
-          ...entry,
-          id: "older",
-          memberName: "Fictional Member",
-          reviewedByCurrentMentor: false,
-        },
+        { ...entry, id: "aside", memberName: "Fictional Member", reviewedByCurrentMentor: false, setAsideByCurrentMentor: true },
+        { ...entry, id: "both", memberName: "Fictional Member", reviewedByCurrentMentor: true, setAsideByCurrentMentor: true },
+        { ...entry, id: "older", memberName: "Fictional Member", reviewedByCurrentMentor: false },
       ],
     });
     const requests = await loadMentorship();
-    expect(
-      requests.map((request) => [request.id, request.status, request.setAside]),
-    ).toEqual([
+    expect(requests.map((request) => [request.id, request.status, request.setAside])).toEqual([
       ["aside", "pending", true],
       ["both", "confirmed", false],
       ["older", "pending", false],
     ]);
   });
   it("sets aside the revision the mentor saw, and undoes it", async () => {
-    const fetcher = respond({
-      setAside: { journeyId: "entry", journeyVersion: 3, setAside: true },
-    });
+    const fetcher = respond({ setAside: { journeyId: "entry", journeyVersion: 3, setAside: true } });
     await setAsideContribution("entry", 3);
-    expect(fetcher.mock.calls[0][0]).toBe(
-      "/api/community/journey/entry/set-aside",
-    );
-    expect(fetcher.mock.calls[0][1]).toMatchObject({
-      method: "POST",
-      credentials: "same-origin",
-    });
-    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
-      expectedRevision: 3,
-    });
-    respond({
-      setAside: { journeyId: "entry", journeyVersion: 4, setAside: true },
-    });
-    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({
-      status: 502,
-    });
+    expect(fetcher.mock.calls[0][0]).toBe("/api/community/journey/entry/set-aside");
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "POST", credentials: "same-origin" });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ expectedRevision: 3 });
+    respond({ setAside: { journeyId: "entry", journeyVersion: 4, setAside: true } });
+    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({ status: 502 });
     respond({}, 409);
-    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({
-      status: 409,
-    });
+    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({ status: 409 });
 
     const undo = respond({ setAside: { journeyId: "entry", setAside: false } });
     await undoSetAside("entry");
-    expect(undo.mock.calls[0][0]).toBe(
-      "/api/community/journey/entry/set-aside",
-    );
-    expect(undo.mock.calls[0][1]).toMatchObject({
-      method: "DELETE",
-      body: undefined,
-    });
+    expect(undo.mock.calls[0][0]).toBe("/api/community/journey/entry/set-aside");
+    expect(undo.mock.calls[0][1]).toMatchObject({ method: "DELETE", body: undefined });
     respond({ setAside: { journeyId: "other", setAside: false } });
     await expect(undoSetAside("entry")).rejects.toMatchObject({ status: 502 });
   });
@@ -397,41 +356,20 @@ describe("community API boundary", () => {
   });
 });
 
+
 describe("chat request deadline", () => {
   it("allows a valid multi-step chat response after the ordinary request deadline", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
     const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
       signal = init?.signal ?? undefined;
-      return new Promise<Response>((resolve) => {
-        setTimeout(
-          () =>
-            resolve(
-              Response.json({
-                answer: "Published contribution",
-                aiGenerated: true,
-                grounded: true,
-                limited: false,
-                citations: [
-                  {
-                    kind: "journey",
-                    id: "entry",
-                    userId: "member",
-                    version: 3,
-                  },
-                ],
-              }),
-            ),
-          60_000,
-        );
-      });
+      return new Promise<Response>(resolve => { setTimeout(() => resolve(Response.json({
+        answer: "Published contribution", aiGenerated: true, grounded: true, limited: false,
+        citations: [{ kind: "journey", id: "entry", userId: "member", version: 3 }],
+      })), 60_000); });
     });
     vi.stubGlobal("fetch", fetcher);
-    const pending = askProfile(
-      mapProfile(profile, [entry]),
-      "Explain this work",
-      { query: "", context: "", skills: "" },
-    );
+    const pending = askProfile(mapProfile(profile, [entry]), "Explain this work", { query: "", context: "", skills: "" });
     await vi.advanceTimersByTimeAsync(25_000);
     expect(signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(35_000);
@@ -439,32 +377,14 @@ describe("chat request deadline", () => {
     expect(fetcher).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
-  it.each([
-    ["chat", "POST", 70_000],
-    ["profile", "GET", 25_000],
-    ["profile", "PUT", 25_000],
-  ])(
-    "still aborts %s %s at its bounded deadline without retry",
-    async (path, method, deadline) => {
+  it.each([["chat", "POST", 70_000], ["profile", "GET", 25_000], ["profile", "PUT", 25_000]])(
+    "still aborts %s %s at its bounded deadline without retry", async (path, method, deadline) => {
       vi.useFakeTimers();
-      const fetcher = vi.fn(
-        (_url: RequestInfo | URL, init?: RequestInit) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(new Error("Private transport details")),
-              { once: true },
-            );
-          }),
-      );
-      const pending = communityRequest(
-        path as string,
-        z.object({ ok: z.boolean() }),
-        method as string,
-        undefined,
-        fetcher,
-      );
-      const settled = pending.catch((error) => error);
+      const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("Private transport details")), { once: true });
+      }));
+      const pending = communityRequest(path as string, z.object({ ok: z.boolean() }), method as string, undefined, fetcher);
+      const settled = pending.catch(error => error);
       await vi.advanceTimersByTimeAsync((deadline as number) - 1);
       expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
@@ -475,72 +395,21 @@ describe("chat request deadline", () => {
   );
 });
 
-it("updates the loaded own revision without republishing private work or dropping historical confirmations", async () => {
-  const current = { ...entry, status: "draft" as const };
-  const fetcher = vi
-    .fn()
-    .mockResolvedValueOnce(Response.json({ id: entry.id, updated: true }))
-    .mockResolvedValueOnce(
-      Response.json({
-        entries: [{ ...current, version: 4, title: "Updated title" }],
-      }),
-    );
-  vi.stubGlobal("fetch", fetcher);
-  const saved = await updateContribution(mapJourney(current), {
-    title: "Updated title",
-    description: "Updated contribution details",
-    date: "2026-10-20",
-    sourceUrl: "",
-  });
-  expect(fetcher.mock.calls[0][0]).toBe(
-    "/api/community/journey/" + encodeURIComponent(entry.id),
-  );
-  expect(fetcher.mock.calls[0][1].method).toBe("PUT");
-  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({
-    status: "draft",
-    expectedRevision: 3,
-  });
-  expect(saved.version).toBe(4);
-  expect(saved.confirmations[0].journeyVersion).toBe(2);
+it('updates the loaded own revision without republishing private work or dropping historical confirmations',async()=>{
+ const current={...entry,status:'draft' as const};const fetcher=vi.fn().mockResolvedValueOnce(Response.json({id:entry.id,updated:true})).mockResolvedValueOnce(Response.json({entries:[{...current,version:4,title:'Updated title'}]}));vi.stubGlobal('fetch',fetcher);
+ const saved=await updateContribution(mapJourney(current),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''});
+ expect(fetcher.mock.calls[0][0]).toBe('/api/community/journey/'+encodeURIComponent(entry.id));expect(fetcher.mock.calls[0][1].method).toBe('PUT');expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({status:'draft',expectedRevision:3});expect(saved.version).toBe(4);expect(saved.confirmations[0].journeyVersion).toBe(2);
 });
-it("surfaces a stale-edit conflict before any refresh read", async () => {
-  const fetcher = respond({}, 409);
-  await expect(
-    updateContribution(mapJourney(entry), {
-      title: "Updated title",
-      description: "Updated contribution details",
-      date: "2026-10-20",
-      sourceUrl: "",
-    }),
-  ).rejects.toMatchObject({ status: 409 });
-  expect(fetcher).toHaveBeenCalledOnce();
+it('surfaces a stale-edit conflict before any refresh read',async()=>{
+ const fetcher=respond({},409);await expect(updateContribution(mapJourney(entry),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''})).rejects.toMatchObject({status:409});expect(fetcher).toHaveBeenCalledOnce();
 });
 
-it("submits the complete opportunity to AI discovery and preserves evidence statuses", async () => {
-  const criteria = {
-    context:
-      "Elephant field projects need Python and should have first-aid training.",
-    skills: "python, first-aid",
-    query: "",
-  };
-  const fetcher = respond({
-    profiles: [
-      {
-        profile,
-        matches: [
-          {
-            criterion: { text: "first-aid training", importance: "requested" },
-            status: "supported",
-          },
-        ],
-      },
-    ],
-    evaluated: 20,
-    searched: 149,
-  });
-  const result = await discoverPeople(criteria);
+it("submits the complete opportunity to AI discovery and preserves evidence statuses",async()=>{
+  const criteria={context:"Elephant field projects need Python and should have first-aid training.",skills:"python, first-aid",query:""};
+  const fetcher=respond({profiles:[{profile,matches:[{criterion:{text:"first-aid training",importance:"requested"},status:"supported"}]}],evaluated:20,searched:149});
+  const result=await discoverPeople(criteria);
   expect(fetcher.mock.calls[0][0]).toBe("/api/community/profiles/discover");
   expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(criteria);
   expect(result[0].matches[0].status).toBe("supported");
-  expect(result[0].discovery).toEqual({ evaluated: 20, searched: 149 });
+  expect(result[0].discovery).toEqual({evaluated:20,searched:149});
 });

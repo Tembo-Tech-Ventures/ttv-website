@@ -1,41 +1,11 @@
 import { describe, expect, it } from "vitest";
-import {
-  channels,
-  FIXTURE_NOW,
-  messages,
-  meByPersona,
-  people,
-} from "@/lib/platform/fixtures";
-import {
-  MASKED_CONTACT,
-  type Channel,
-  type Message,
-} from "@/lib/platform/contracts";
+import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/platform/fixtures";
+import { MASKED_CONTACT, type Channel, type Message } from "@/lib/platform/contracts";
 import { CONTACT_REASONS } from "@/lib/channels/moderation/detectors";
 import {
   messageActionsLabel,
-  ago,
-  channelTitle,
-  clipTime,
-  clock,
-  composerTools,
-  dayKey,
-  dayLabel,
-  fullTime,
-  groupByDay,
-  mentionsTembo,
-  MASKING_REASONS,
-  masksContactDetails,
-  moderationNotice,
-  openingDivider,
-  parseBody,
-  postingFor,
-  reviewState,
-  temboReach,
-  temboResetsIn,
-  temboScope,
-  temboSees,
-  threadSummary,
+  ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, fullTime, groupByDay, mentionsTembo, MASKING_REASONS, masksContactDetails, moderationNotice,
+  openingDivider, parseBody, postingFor, reviewState, temboReach, temboResetsIn, temboScope, temboSees, threadSummary,
 } from "./channel-format";
 
 const MINUTE = 60_000;
@@ -56,18 +26,14 @@ describe("days and times", () => {
     expect(dayLabel(now - DAY, now)).toBe("Yesterday");
     expect(dayLabel(now - 3 * DAY, now)).toBe("Saturday");
     expect(dayLabel(now - 9 * DAY, now)).toBe("Sunday 25 October");
-    expect(dayLabel(Date.parse("2025-12-24T09:00:00Z"), now)).toBe(
-      "24 December 2025",
-    );
+    expect(dayLabel(Date.parse("2025-12-24T09:00:00Z"), now)).toBe("24 December 2025");
   });
 
   it("writes the 24-hour clock in Nairobi time", () => {
     expect(clock(now)).toBe("10:00");
     expect(clock(Date.parse("2026-11-03T13:40:00Z"))).toBe("16:40");
     // The full moment names its zone (QA2-13).
-    expect(fullTime(Date.parse("2026-11-03T13:40:00Z"))).toMatch(
-      /^Tuesday,? 3 November 2026 at 16:40 EAT$/,
-    );
+    expect(fullTime(Date.parse("2026-11-03T13:40:00Z"))).toMatch(/^Tuesday,? 3 November 2026 at 16:40 EAT$/);
   });
 
   it("says how long ago a reply was", () => {
@@ -81,13 +47,8 @@ describe("days and times", () => {
   });
 
   it("groups messages under one heading per day, keeping their order", () => {
-    const groups = groupByDay(
-      [messages.projectPost, messages.firstPr, messages.mentorOffer],
-      now,
-    );
-    expect(
-      groups.map((group) => [group.label, group.messages.map((m) => m.id)]),
-    ).toEqual([
+    const groups = groupByDay([messages.projectPost, messages.firstPr, messages.mentorOffer], now);
+    expect(groups.map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
       ["Yesterday", [messages.projectPost.id]],
       ["Today", [messages.firstPr.id, messages.mentorOffer.id]],
     ]);
@@ -97,9 +58,7 @@ describe("days and times", () => {
   it("keeps one group per day wherever the New divider falls, so each day has one heading (QA4-18)", () => {
     const list = [messages.projectPost, messages.firstPr, messages.mentorOffer];
     const groups = groupByDay(list, now);
-    expect(
-      groups.map((group) => [group.label, group.messages.map((m) => m.id)]),
-    ).toEqual([
+    expect(groups.map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
       ["Yesterday", [messages.projectPost.id]],
       ["Today", [messages.firstPr.id, messages.mentorOffer.id]],
     ]);
@@ -116,10 +75,7 @@ describe("days and times", () => {
 
 describe("message bodies", () => {
   it("finds @tembo and the longest known name, and stops at word ends", () => {
-    const [paragraph] = parseBody(
-      "@tembo ask @David Kamau, not @Davidson or @temboX.",
-      ["David", "David Kamau"],
-    );
+    const [paragraph] = parseBody("@tembo ask @David Kamau, not @Davidson or @temboX.", ["David", "David Kamau"]);
     expect(paragraph).toEqual([
       { kind: "mention", text: "@tembo", tembo: true },
       { kind: "text", text: " ask " },
@@ -133,40 +89,23 @@ describe("message bodies", () => {
   });
 
   it("leaves email addresses and lone at-signs as text", () => {
-    expect(parseBody("mail synthetic@example.com @ noon")).toEqual([
-      [{ kind: "text", text: "mail synthetic@example.com @ noon" }],
-    ]);
+    expect(parseBody("mail synthetic@example.com @ noon")).toEqual([[{ kind: "text", text: "mail synthetic@example.com @ noon" }]]);
   });
 
   it("links bare web addresses without the sentence's punctuation, and nothing else", () => {
-    expect(
-      parseBody(
-        "See https://example.com/synthetic/a?b=1. Or javascript:alert(1)",
-      ),
-    ).toEqual([
-      [
-        { kind: "text", text: "See " },
-        {
-          kind: "link",
-          text: "https://example.com/synthetic/a?b=1",
-          href: "https://example.com/synthetic/a?b=1",
-        },
-        { kind: "text", text: ". Or javascript:alert(1)" },
-      ],
-    ]);
+    expect(parseBody("See https://example.com/synthetic/a?b=1. Or javascript:alert(1)")).toEqual([[
+      { kind: "text", text: "See " },
+      { kind: "link", text: "https://example.com/synthetic/a?b=1", href: "https://example.com/synthetic/a?b=1" },
+      { kind: "text", text: ". Or javascript:alert(1)" },
+    ]]);
   });
 
   it("ends a link at a masked contact marker, so the marker stays whole text (#297 follow-up)", () => {
-    const [paragraph] = parseBody(
-      `Chat on https://wa.me/${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today`,
-    );
+    const [paragraph] = parseBody(`Chat on https://wa.me/${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today`);
     expect(paragraph).toEqual([
       { kind: "text", text: "Chat on " },
       { kind: "link", text: "https://wa.me/", href: "https://wa.me/" },
-      {
-        kind: "text",
-        text: `${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today`,
-      },
+      { kind: "text", text: `${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today` },
     ]);
   });
 
@@ -174,31 +113,19 @@ describe("message bodies", () => {
     const [paragraph] = parseBody("[your bank](https://evil.example)");
     expect(paragraph).toEqual([
       { kind: "text", text: "[your bank](" },
-      {
-        kind: "link",
-        text: "https://evil.example",
-        href: "https://evil.example",
-      },
+      { kind: "link", text: "https://evil.example", href: "https://evil.example" },
       { kind: "text", text: ")" },
     ]);
-    expect(
-      paragraph.every(
-        (segment) => segment.kind !== "link" || segment.text === segment.href,
-      ),
-    ).toBe(true);
+    expect(paragraph.every((segment) => segment.kind !== "link" || segment.text === segment.href)).toBe(true);
   });
 
   it("keeps inline code literal, including at-signs inside it", () => {
-    expect(parseBody("Run `npm test @tembo` first")).toEqual([
-      [
-        { kind: "text", text: "Run " },
-        { kind: "code", text: "npm test @tembo" },
-        { kind: "text", text: " first" },
-      ],
-    ]);
-    expect(parseBody("an `unclosed tick")).toEqual([
-      [{ kind: "text", text: "an `unclosed tick" }],
-    ]);
+    expect(parseBody("Run `npm test @tembo` first")).toEqual([[
+      { kind: "text", text: "Run " },
+      { kind: "code", text: "npm test @tembo" },
+      { kind: "text", text: " first" },
+    ]]);
+    expect(parseBody("an `unclosed tick")).toEqual([[{ kind: "text", text: "an `unclosed tick" }]]);
   });
 
   it("splits paragraphs on blank lines and keeps single line breaks in the text", () => {
@@ -216,131 +143,49 @@ describe("message bodies", () => {
 });
 
 describe("the New divider", () => {
-  const list = [
-    messages.recordingPost,
-    messages.duplicateQuestion,
-    messages.cohortAsk,
-    messages.sessionTime,
-    messages.sessionTimeReply,
-    messages.mention,
-  ];
+  const list = [messages.recordingPost, messages.duplicateQuestion, messages.cohortAsk, messages.sessionTime, messages.sessionTimeReply, messages.mention];
   const wanjikuId = people.wanjiku.id;
 
   it("sits before the first message by someone else after the marker", () => {
-    expect(
-      openingDivider(
-        list,
-        { markerId: messages.recordingPost.id, unreadCount: 4 },
-        wanjikuId,
-      ),
-    ).toBe(messages.duplicateQuestion.id);
+    expect(openingDivider(list, { markerId: messages.recordingPost.id, unreadCount: 4 }, wanjikuId)).toBe(messages.duplicateQuestion.id);
     // Wanjiku's own question after the marker is not news to her.
-    expect(
-      openingDivider(
-        list,
-        { markerId: messages.duplicateQuestion.id, unreadCount: 3 },
-        wanjikuId,
-      ),
-    ).toBe(messages.sessionTime.id);
+    expect(openingDivider(list, { markerId: messages.duplicateQuestion.id, unreadCount: 3 }, wanjikuId)).toBe(messages.sessionTime.id);
   });
 
   it("has nowhere to go when everything is read", () => {
-    expect(
-      openingDivider(
-        list,
-        { markerId: messages.mention.id, unreadCount: 0 },
-        wanjikuId,
-      ),
-    ).toBeNull();
-    expect(
-      openingDivider(list, { markerId: null, unreadCount: 0 }, wanjikuId),
-    ).toBeNull();
-    expect(
-      openingDivider([], { markerId: null, unreadCount: 3 }, wanjikuId),
-    ).toBeNull();
+    expect(openingDivider(list, { markerId: messages.mention.id, unreadCount: 0 }, wanjikuId)).toBeNull();
+    expect(openingDivider(list, { markerId: null, unreadCount: 0 }, wanjikuId)).toBeNull();
+    expect(openingDivider([], { markerId: null, unreadCount: 3 }, wanjikuId)).toBeNull();
   });
 
   it("counts back from the end when the marker is older than anything loaded, or there is none", () => {
-    expect(
-      openingDivider(
-        list,
-        { markerId: "older-than-the-page", unreadCount: 2 },
-        wanjikuId,
-      ),
-    ).toBe(messages.sessionTimeReply.id);
-    expect(
-      openingDivider(list, { markerId: null, unreadCount: 99 }, wanjikuId),
-    ).toBe(messages.recordingPost.id);
+    expect(openingDivider(list, { markerId: "older-than-the-page", unreadCount: 2 }, wanjikuId)).toBe(messages.sessionTimeReply.id);
+    expect(openingDivider(list, { markerId: null, unreadCount: 99 }, wanjikuId)).toBe(messages.recordingPost.id);
   });
 
   it("skips messages hidden from members, which a moderator still receives (N1)", () => {
-    const hidden: Message = {
-      ...messages.duplicateQuestion,
-      moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"] },
-    };
-    const flagged: Message = {
-      ...messages.sessionTime,
-      moderation: { state: "FLAGGED", reasons: ["Contact details"] },
-    };
-    const moderated = [
-      messages.recordingPost,
-      hidden,
-      messages.cohortAsk,
-      flagged,
-      messages.sessionTimeReply,
-      messages.mention,
-    ];
-    expect(
-      openingDivider(
-        moderated,
-        { markerId: messages.recordingPost.id, unreadCount: 3 },
-        wanjikuId,
-      ),
-    ).toBe(flagged.id);
+    const hidden: Message = { ...messages.duplicateQuestion, moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"] } };
+    const flagged: Message = { ...messages.sessionTime, moderation: { state: "FLAGGED", reasons: ["Contact details"] } };
+    const moderated = [messages.recordingPost, hidden, messages.cohortAsk, flagged, messages.sessionTimeReply, messages.mention];
+    expect(openingDivider(moderated, { markerId: messages.recordingPost.id, unreadCount: 3 }, wanjikuId)).toBe(flagged.id);
     // Counting back from the end skips it too: the unread count never included it.
-    expect(
-      openingDivider(moderated, { markerId: null, unreadCount: 4 }, wanjikuId),
-    ).toBe(messages.recordingPost.id);
-    expect(
-      openingDivider(
-        [messages.recordingPost, hidden],
-        { markerId: messages.recordingPost.id, unreadCount: 0 },
-        wanjikuId,
-      ),
-    ).toBeNull();
+    expect(openingDivider(moderated, { markerId: null, unreadCount: 4 }, wanjikuId)).toBe(messages.recordingPost.id);
+    expect(openingDivider([messages.recordingPost, hidden], { markerId: messages.recordingPost.id, unreadCount: 0 }, wanjikuId)).toBeNull();
   });
 });
 
 describe("threads", () => {
   it("summarises replies and the last one", () => {
-    expect(threadSummary(messages.projectPost, now)).toEqual({
-      replies: "5 replies",
-      last: "last 1 h ago",
-    });
-    const one: Message = {
-      ...messages.firstPr,
-      thread: {
-        replyCount: 1,
-        participantIds: [],
-        lastReplyAt: now - 12 * MINUTE,
-      },
-    };
-    expect(threadSummary(one, now)).toEqual({
-      replies: "1 reply",
-      last: "last 12 min ago",
-    });
+    expect(threadSummary(messages.projectPost, now)).toEqual({ replies: "5 replies", last: "last 1 h ago" });
+    const one: Message = { ...messages.firstPr, thread: { replyCount: 1, participantIds: [], lastReplyAt: now - 12 * MINUTE } };
+    expect(threadSummary(one, now)).toEqual({ replies: "1 reply", last: "last 12 min ago" });
     expect(threadSummary(messages.firstPr, now).last).toBeNull();
   });
 });
 
 describe("where a hidden message's review stands", () => {
-  const hidden = (
-    moderation: Partial<NonNullable<Message["moderation"]>>,
-    deleted = false,
-  ): Message => ({
-    ...messages.hidden,
-    deleted,
-    moderation: { state: "HIDDEN", reasons: ["Harsh"], ...moderation },
+  const hidden = (moderation: Partial<NonNullable<Message["moderation"]>>, deleted = false): Message => ({
+    ...messages.hidden, deleted, moderation: { state: "HIDDEN", reasons: ["Harsh"], ...moderation },
   });
 
   it.each([
@@ -360,18 +205,8 @@ describe("where a hidden message's review stands", () => {
 
   it("is nothing for a deleted, visible, flagged or unmoderated message", () => {
     expect(reviewState(hidden({ reviewable: true }, true))).toBeNull();
-    expect(
-      reviewState({
-        ...messages.hidden,
-        moderation: { state: "FLAGGED", reasons: [], reviewable: true },
-      }),
-    ).toBeNull();
-    expect(
-      reviewState({
-        ...messages.hidden,
-        moderation: { state: "VISIBLE", reasons: [] },
-      }),
-    ).toBeNull();
+    expect(reviewState({ ...messages.hidden, moderation: { state: "FLAGGED", reasons: [], reviewable: true } })).toBeNull();
+    expect(reviewState({ ...messages.hidden, moderation: { state: "VISIBLE", reasons: [] } })).toBeNull();
     expect(reviewState(messages.firstPr)).toBeNull();
   });
 });
@@ -381,135 +216,77 @@ describe("moderation notices", () => {
     expect(moderationNotice(messages.flagged, people.peter.id)).toEqual({
       state: "FLAGGED",
       title: "Flagged for a moderator: Contact details",
-      detail:
-        "Your message stays up until a person looks at it. Only you can see this note.",
+      detail: "Your message stays up until a person looks at it. Only you can see this note.",
     });
   });
 
   it("tells the author their hidden message is theirs alone now", () => {
-    expect(moderationNotice(messages.hidden, people.dennis.id)?.title).toBe(
-      "Hidden from the channel: Harsh, not about the work",
-    );
-    expect(moderationNotice(messages.hidden, people.dennis.id)?.detail).toBe(
-      "Only you can see this message now.",
-    );
+    expect(moderationNotice(messages.hidden, people.dennis.id)?.title).toBe("Hidden from the channel: Harsh, not about the work");
+    expect(moderationNotice(messages.hidden, people.dennis.id)?.detail).toBe("Only you can see this message now.");
   });
 
   it("in a direct conversation, names the conversation and TTV admins, since it has no moderators (QA4-01)", () => {
-    expect(
-      moderationNotice(messages.hidden, people.dennis.id, { direct: true })
-        ?.title,
-    ).toBe("Hidden from the conversation: Harsh, not about the work");
-    expect(
-      moderationNotice(messages.flagged, people.peter.id, { direct: true })
-        ?.title,
-    ).toBe("Flagged for TTV admins: Contact details");
+    expect(moderationNotice(messages.hidden, people.dennis.id, { direct: true })?.title).toBe("Hidden from the conversation: Harsh, not about the work");
+    expect(moderationNotice(messages.flagged, people.peter.id, { direct: true })?.title).toBe("Flagged for TTV admins: Contact details");
   });
 
   it("tells a moderator who is not an admin what happens after a hide, and an admin only that it is hidden (QA2-11)", () => {
     expect(moderationNotice(messages.hidden, people.david.id)?.detail).toBe(
       "Moderators can still see it. An admin looks at every hide, and Dennis can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
     );
-    expect(
-      moderationNotice(messages.hidden, people.amina.id, { admin: true })
-        ?.detail,
-    ).toBe("Moderators can still see it.");
+    expect(moderationNotice(messages.hidden, people.amina.id, { admin: true })?.detail).toBe("Moderators can still see it.");
   });
 
   it("words the same states for a moderator who is not the author", () => {
-    expect(moderationNotice(messages.hidden, people.amina.id)?.title).toBe(
-      "Hidden from members: Harsh, not about the work",
-    );
-    expect(moderationNotice(messages.flagged, null)?.title).toBe(
-      "Flagged: Contact details",
-    );
+    expect(moderationNotice(messages.hidden, people.amina.id)?.title).toBe("Hidden from members: Harsh, not about the work");
+    expect(moderationNotice(messages.flagged, null)?.title).toBe("Flagged: Contact details");
   });
 
   it("says nothing for visible, unmoderated or deleted messages", () => {
     expect(moderationNotice(messages.reported, people.collins.id)).toBeNull();
     expect(moderationNotice(messages.firstPr, people.brian.id)).toBeNull();
-    const deleted: Message = {
-      ...messages.deleted,
-      moderation: { state: "HIDDEN", reasons: ["Spam"] },
-    };
+    const deleted: Message = { ...messages.deleted, moderation: { state: "HIDDEN", reasons: ["Spam"] } };
     expect(moderationNotice(deleted, people.brian.id)).toBeNull();
   });
 
   it("does without reasons the server left out", () => {
-    const flagged: Message = {
-      ...messages.flagged,
-      moderation: { state: "FLAGGED", reasons: [] },
-    };
-    expect(moderationNotice(flagged, people.peter.id)?.title).toBe(
-      "Flagged for a moderator",
-    );
+    const flagged: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: [] } };
+    expect(moderationNotice(flagged, people.peter.id)?.title).toBe("Flagged for a moderator");
   });
 
   describe("flagged contact details, masked for other readers (QA2-08)", () => {
-    const phone: Message = {
-      ...messages.flagged,
-      moderation: { state: "FLAGGED", reasons: ["Shares a phone number"] },
-    };
+    const phone: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: ["Shares a phone number"] } };
 
     it("tells the author the message is up with their details hidden, never that everyone sees them", () => {
       expect(moderationNotice(phone, people.peter.id)?.detail).toBe(
         "Your message stays up until a person looks at it, with your contact details hidden from other members. Only you can see this note.",
       );
-      expect(
-        moderationNotice(phone, people.peter.id, { direct: true })?.detail,
-      ).toBe(
+      expect(moderationNotice(phone, people.peter.id, { direct: true })?.detail).toBe(
         "Your message stays up until a person looks at it, with your contact details hidden from the other person. Only you can see this note.",
       );
     });
 
     it("tells a moderator that members see the message with the details hidden", () => {
-      expect(moderationNotice(phone, people.david.id)?.detail).toBe(
-        "Members see it with the contact details hidden until a moderator decides.",
-      );
-      expect(moderationNotice(phone, people.david.id)?.detail).not.toMatch(
-        /visible to everyone/i,
-      );
+      expect(moderationNotice(phone, people.david.id)?.detail).toBe("Members see it with the contact details hidden until a moderator decides.");
+      expect(moderationNotice(phone, people.david.id)?.detail).not.toMatch(/visible to everyone/i);
     });
 
     it("keeps saying a flag for anything else is visible to everyone", () => {
-      const spam: Message = {
-        ...messages.flagged,
-        moderation: { state: "FLAGGED", reasons: ["Uses a shortened link"] },
-      };
-      expect(moderationNotice(spam, people.david.id)?.detail).toBe(
-        "Still visible to everyone until a moderator decides.",
-      );
+      const spam: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: ["Uses a shortened link"] } };
+      expect(moderationNotice(spam, people.david.id)?.detail).toBe("Still visible to everyone until a moderator decides.");
     });
   });
 });
 
 describe("masksContactDetails", () => {
   it("names the detectors' contact reasons exactly, without loading the detectors in the browser", () => {
-    expect([...MASKING_REASONS].toSorted()).toEqual(
-      [...CONTACT_REASONS].toSorted(),
-    );
+    expect([...MASKING_REASONS].toSorted()).toEqual([...CONTACT_REASONS].toSorted());
   });
 
   it("is true only for a FLAGGED message with a contact reason", () => {
-    for (const reason of CONTACT_REASONS)
-      expect(
-        masksContactDetails({
-          state: "FLAGGED",
-          reasons: ["Uses a shortened link", reason],
-        }),
-      ).toBe(true);
-    expect(
-      masksContactDetails({
-        state: "FLAGGED",
-        reasons: ["May share contact details"],
-      }),
-    ).toBe(false);
-    expect(
-      masksContactDetails({
-        state: "HIDDEN",
-        reasons: ["Shares a phone number"],
-      }),
-    ).toBe(false);
+    for (const reason of CONTACT_REASONS) expect(masksContactDetails({ state: "FLAGGED", reasons: ["Uses a shortened link", reason] })).toBe(true);
+    expect(masksContactDetails({ state: "FLAGGED", reasons: ["May share contact details"] })).toBe(false);
+    expect(masksContactDetails({ state: "HIDDEN", reasons: ["Shares a phone number"] })).toBe(false);
     expect(masksContactDetails({ state: "VISIBLE", reasons: [] })).toBe(false);
     expect(masksContactDetails(null)).toBe(false);
   });
@@ -520,67 +297,38 @@ describe("the composer", () => {
 
   it("offers a session clip only in a cohort channel that allows one", () => {
     expect(composerTools(channels.cohort04, flags).sessionClip).toBe(true);
-    expect(composerTools(channels.cohortAnnouncements, flags).sessionClip).toBe(
-      false,
-    );
+    expect(composerTools(channels.cohortAnnouncements, flags).sessionClip).toBe(false);
     expect(composerTools(channels.showYourWork, flags).sessionClip).toBe(false);
   });
 
   it("never offers a session clip in community, even if a capability says so", () => {
-    const community: Channel = {
-      ...channels.showYourWork,
-      capabilities: {
-        canPost: true,
-        canModerate: true,
-        canShareSessionClip: true,
-      },
-    };
+    const community: Channel = { ...channels.showYourWork, capabilities: { canPost: true, canModerate: true, canShareSessionClip: true } };
     expect(composerTools(community, flags).sessionClip).toBe(false);
-    const direct: Channel = {
-      ...channels.davidConversation,
-      capabilities: { ...community.capabilities },
-    };
+    const direct: Channel = { ...channels.davidConversation, capabilities: { ...community.capabilities } };
     expect(composerTools(direct, flags).sessionClip).toBe(false);
   });
 
   it("hides Ask Tembo while tembo_channels is off", () => {
     expect(composerTools(channels.cohort04, flags).askTembo).toBe(true);
-    expect(
-      composerTools(channels.cohort04, { ...flags, tembo_channels: false })
-        .askTembo,
-    ).toBe(false);
+    expect(composerTools(channels.cohort04, { ...flags, tembo_channels: false }).askTembo).toBe(false);
   });
 
   it("says why a person cannot post", () => {
     expect(postingFor(channels.cohort04)).toBe("open");
     expect(postingFor(channels.cohortAnnouncements)).toBe("staff");
-    expect(
-      postingFor({
-        ...channels.help,
-        capabilities: { ...channels.help.capabilities, canPost: false },
-      }),
-    ).toBe("closed");
+    expect(postingFor({ ...channels.help, capabilities: { ...channels.help.capabilities, canPost: false } })).toBe("closed");
     expect(postingFor({ ...channels.help, archivedAt: now })).toBe("archived");
   });
 
   it("states Tembo's reach for each kind of channel", () => {
-    expect(temboScope(channels.cohort04)).toMatch(
-      /^This cohort's recordings and this channel\. Never private/,
-    );
-    expect(temboScope(channels.showYourWork)).toMatch(
-      /Never cohort recordings/,
-    );
-    expect(temboScope(channels.davidConversation)).toBe(
-      "Only this conversation, and only when you ask.",
-    );
+    expect(temboScope(channels.cohort04)).toMatch(/^This cohort's recordings and this channel\. Never private/);
+    expect(temboScope(channels.showYourWork)).toMatch(/Never cohort recordings/);
+    expect(temboScope(channels.davidConversation)).toBe("Only this conversation, and only when you ask.");
   });
 
   it("says the same reach everywhere, only what B-3.1 reads, and the same for an answer's stored scope", () => {
-    const community =
-      "this channel, saved member profiles and their posted work";
-    expect(temboScope(channels.showYourWork)).toBe(
-      `This channel, saved member profiles and their posted work. Never cohort recordings or private conversations.`,
-    );
+    const community = "this channel, saved member profiles and their posted work";
+    expect(temboScope(channels.showYourWork)).toBe(`This channel, saved member profiles and their posted work. Never cohort recordings or private conversations.`);
     expect(temboReach(channels.showYourWork)).toBe(community);
     expect(temboSees("COMMUNITY")).toBe(community);
     expect(temboReach(channels.cohort04)).toBe(temboSees("COHORT"));
@@ -603,41 +351,22 @@ describe("the composer", () => {
 
 describe("a message's actions button (QA2-05)", () => {
   const at = Date.UTC(2026, 10, 2, 6, 5);
-  const from = (body: string, extra: Partial<Message> = {}): Message => ({
-    ...messages.mentorOffer,
-    body,
-    createdAt: at,
-    ...extra,
-  });
+  const from = (body: string, extra: Partial<Message> = {}): Message => ({ ...messages.mentorOffer, body, createdAt: at, ...extra });
 
   it("says whose message, when, and how it starts, so one person's messages have different names", () => {
-    const first = messageActionsLabel(
-      from("Anyone free to pair on the **webhook** retries?"),
-    );
+    const first = messageActionsLabel(from("Anyone free to pair on the **webhook** retries?"));
     const second = messageActionsLabel(from("Thanks, that fixed it."));
-    expect(first).toBe(
-      `Actions for ${messages.mentorOffer.author.name}'s message at 09:05: “Anyone free to pair on the webhook retries?”`,
-    );
+    expect(first).toBe(`Actions for ${messages.mentorOffer.author.name}'s message at 09:05: “Anyone free to pair on the webhook retries?”`);
     expect(second).not.toBe(first);
   });
 
   it("quotes only the opening words, cut at a word", () => {
-    const label = messageActionsLabel(
-      from(
-        "If the provider sends the same callback twice, the second one should change nothing at all.",
-      ),
-    );
-    expect(label).toMatch(
-      /: “If the provider sends the same callback twice,…”$/,
-    );
+    const label = messageActionsLabel(from("If the provider sends the same callback twice, the second one should change nothing at all."));
+    expect(label).toMatch(/: “If the provider sends the same callback twice,…”$/);
   });
 
   it("names shared work when there are no words, and a deleted message by its time", () => {
-    expect(
-      messageActionsLabel(from("", { embeds: messages.projectPost.embeds })),
-    ).toMatch(/: “.+”$/);
-    expect(messageActionsLabel(from("", { deleted: true, embeds: [] }))).toBe(
-      "Actions for the deleted message at 09:05",
-    );
+    expect(messageActionsLabel(from("", { embeds: messages.projectPost.embeds }))).toMatch(/: “.+”$/);
+    expect(messageActionsLabel(from("", { deleted: true, embeds: [] }))).toBe("Actions for the deleted message at 09:05");
   });
 });

@@ -1,17 +1,5 @@
-import {
-  memo,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import type {
-  AuthorSummary,
-  Message,
-  ReactionKind,
-} from "@/lib/platform/contracts";
+import { memo, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import type { AuthorSummary, Message, ReactionKind } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
 import { cx } from "@/components/platform/ui/cx";
 import { buttonClass } from "@/components/platform/ui/recipes";
@@ -19,25 +7,13 @@ import RoleBadge from "@/components/platform/ui/RoleBadge";
 import TemboMark from "@/components/platform/ui/TemboMark";
 import TextReaction, { REACTIONS } from "@/components/platform/ui/TextReaction";
 import type { ChannelActions } from "./actions";
-import {
-  clock,
-  dayKey,
-  dayLabel,
-  fullTime,
-  threadSummary,
-} from "./channel-format";
+import { clock, dayKey, dayLabel, fullTime, threadSummary } from "./channel-format";
 import EmbedCard from "./EmbedCard";
 import MessageBody from "./MessageBody";
 import { DeleteConfirm, EditForm } from "./MessageEdit";
 import MessageMenu, { hasMenu } from "./MessageMenu";
 import {
-  ModerationNote,
-  ModerationPanel,
-  moderationRights,
-  useModeration,
-  useUndoHide,
-  type ModerationMode,
-  type ReturnFocus,
+  ModerationNote, ModerationPanel, moderationRights, useModeration, useUndoHide, type ModerationMode, type ReturnFocus,
 } from "./MessageModeration";
 import { citationIcon, TemboAnswerFoot } from "./TemboAnswer";
 
@@ -67,19 +43,8 @@ type MessageItemProps = {
 const MAX_FACES = 3;
 
 /** The time as the list shows it, and in full for a screen reader: never only in a tooltip. */
-function TimeStamp({
-  at,
-  now,
-  withDay,
-}: {
-  at: number;
-  now: number;
-  withDay: boolean;
-}) {
-  const text =
-    withDay && dayKey(at) !== dayKey(now)
-      ? `${dayLabel(at, now)} ${clock(at)}`
-      : clock(at);
+function TimeStamp({ at, now, withDay }: { at: number; now: number; withDay: boolean }) {
+  const text = withDay && dayKey(at) !== dayKey(now) ? `${dayLabel(at, now)} ${clock(at)}` : clock(at);
   return (
     <time dateTime={new Date(at).toISOString()} className="tabular-nums">
       <span aria-hidden="true">{text}</span>
@@ -90,67 +55,28 @@ function TimeStamp({
 
 function MessageAvatar({ message }: { message: Message }) {
   if (message.authorKind === "TEMBO") return <TemboMark size="md" decorative />;
-  if (message.deleted || message.author.id === null)
-    return <span aria-hidden="true" className="channel-avatar-blank" />;
-  const mentor = message.author.roleBadges.some(
-    (badge) => badge.kind === "MENTOR",
-  );
-  return (
-    <Avatar
-      id={message.author.id}
-      name={message.author.name}
-      src={message.author.avatarUrl ?? undefined}
-      mentor={mentor}
-      decorative
-    />
-  );
+  if (message.deleted || message.author.id === null) return <span aria-hidden="true" className="channel-avatar-blank" />;
+  const mentor = message.author.roleBadges.some((badge) => badge.kind === "MENTOR");
+  return <Avatar id={message.author.id} name={message.author.name} src={message.author.avatarUrl ?? undefined} mentor={mentor} decorative />;
 }
 
-function TemboContent({
-  message,
-  names,
-}: {
-  message: Message;
-  names: readonly string[];
-}) {
+function TemboContent({ message, names }: { message: Message; names: readonly string[] }) {
   return (
     <div className="channel-tembo">
-      <MessageBody
-        body={message.body}
-        names={names}
-        citations={message.citations}
-      />
+      <MessageBody body={message.body} names={names} citations={message.citations} />
       {message.citations.length > 0 && (
         // Numbered as the answer's markers are, so each sentence's [n] names its chip (QA3-02).
         <ol className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
           {message.citations.map((citation, index) => (
-            <li
-              key={
-                citation.href ??
-                (citation.type === "profile" ? citation.userId : citation.title)
-              }
-            >
+            <li key={citation.href ?? (citation.type === "profile" ? citation.userId : citation.title)}>
               {citation.href ? (
-                <a
-                  href={citation.href}
-                  className={buttonClass({
-                    variant: "quiet",
-                    size: "sm",
-                    className: "channel-cite",
-                  })}
-                  data-cite={index + 1}
-                >
-                  <span className="channel-cite__n" aria-hidden="true">
-                    {index + 1}
-                  </span>
+                <a href={citation.href} className={buttonClass({ variant: "quiet", size: "sm", className: "channel-cite" })} data-cite={index + 1}>
+                  <span className="channel-cite__n" aria-hidden="true">{index + 1}</span>
                   <span className="sr-only">Source {index + 1}: </span>
-                  {citationIcon(citation)}
-                  {citation.title}
+                  {citationIcon(citation)}{citation.title}
                 </a>
               ) : (
-                <span className="channel-cite" data-cite={index + 1}>
-                  {index + 1}. {citation.title} · on TTV
-                </span>
+                <span className="channel-cite" data-cite={index + 1}>{index + 1}. {citation.title} · on TTV</span>
               )}
             </li>
           ))}
@@ -161,28 +87,15 @@ function TemboContent({
   );
 }
 
-function MemberContent({
-  message,
-  names,
-  compact,
-}: {
-  message: Message;
-  names: readonly string[];
-  compact: boolean;
-}) {
+function MemberContent({ message, names, compact }: { message: Message; names: readonly string[]; compact: boolean }) {
   const hidden = message.moderation?.state === "HIDDEN";
   return (
     <div className={cx(hidden && "channel-message__hidden")}>
       {message.body && <MessageBody body={message.body} names={names} />}
       {message.embeds.map((embed, index) => (
         <EmbedCard
-          key={
-            embed.type === "project"
-              ? `p-${embed.journeyId}-${embed.version}`
-              : embed.type === "sessionClip"
-                ? `c-${embed.recordingId}-${embed.startSeconds}`
-                : `u-${index}`
-          }
+          key={embed.type === "project" ? `p-${embed.journeyId}-${embed.version}`
+            : embed.type === "sessionClip" ? `c-${embed.recordingId}-${embed.startSeconds}` : `u-${index}`}
           embed={embed}
           compact={compact}
         />
@@ -192,63 +105,29 @@ function MemberContent({
 }
 
 /** Faces of the people in a thread, as far as this view has met them. */
-function ThreadFaces({
-  message,
-  people,
-}: {
-  message: Message;
-  people: ReadonlyMap<string, AuthorSummary>;
-}) {
+function ThreadFaces({ message, people }: { message: Message; people: ReadonlyMap<string, AuthorSummary> }) {
   const faces = message.thread.participantIds
     .map((id) => people.get(id))
-    .filter(
-      (person): person is AuthorSummary & { id: string } =>
-        person !== undefined && person.id !== null,
-    )
+    .filter((person): person is AuthorSummary & { id: string } => person !== undefined && person.id !== null)
     .slice(0, MAX_FACES);
   if (faces.length === 0) return null;
   return (
     <span aria-hidden="true" className="channel-faces">
       {faces.map((person) => (
-        <Avatar
-          key={person.id}
-          id={person.id}
-          name={person.name}
-          src={person.avatarUrl ?? undefined}
-          size="md"
-          decorative
-        />
+        <Avatar key={person.id} id={person.id} name={person.name} src={person.avatarUrl ?? undefined} size="md" decorative />
       ))}
     </span>
   );
 }
 
-function ThreadLink({
-  message,
-  now,
-  people,
-  open,
-  href,
-  onOpen,
-}: {
-  message: Message;
-  now: number;
-  people: ReadonlyMap<string, AuthorSummary>;
-  open: boolean;
-  href: string;
+function ThreadLink({ message, now, people, open, href, onOpen }: {
+  message: Message; now: number; people: ReadonlyMap<string, AuthorSummary>; open: boolean; href: string;
   onOpen?: (messageId: string, trigger: HTMLElement) => void;
 }) {
   const summary = threadSummary(message, now);
   function click(event: MouseEvent<HTMLAnchorElement>) {
     // Let a new tab or window open the thread's own URL.
-    if (
-      !onOpen ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.button !== 0
-    )
-      return;
+    if (!onOpen || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
     event.preventDefault();
     onOpen(message.id, event.currentTarget);
   }
@@ -258,28 +137,16 @@ function ThreadLink({
       data-thread-trigger={message.id}
       aria-current={open ? "true" : undefined}
       onClick={click}
-      className={buttonClass({
-        variant: "ghost",
-        size: "sm",
-        className: "channel-thread-link",
-      })}
+      className={buttonClass({ variant: "ghost", size: "sm", className: "channel-thread-link" })}
     >
       <ThreadFaces message={message} people={people} />
       <span className="channel-thread-link__count">{summary.replies}</span>
-      {summary.last && (
-        <span className="channel-thread-link__last">· {summary.last}</span>
-      )}
+      {summary.last && <span className="channel-thread-link__last">· {summary.last}</span>}
     </a>
   );
 }
 
-function Reactions({
-  message,
-  onReact,
-}: {
-  message: Message;
-  onReact?: (kind: ReactionKind, active: boolean) => void;
-}) {
+function Reactions({ message, onReact }: { message: Message; onReact?: (kind: ReactionKind, active: boolean) => void }) {
   if (message.deleted || message.reactions.length === 0) return null;
   return (
     <ul className="channel-reactions" aria-label="Reactions">
@@ -289,9 +156,7 @@ function Reactions({
             kind={reaction.kind}
             count={reaction.count}
             mine={reaction.mine}
-            onChange={
-              onReact ? (active) => onReact(reaction.kind, active) : undefined
-            }
+            onChange={onReact ? (active) => onReact(reaction.kind, active) : undefined}
           />
         </li>
       ))}
@@ -300,31 +165,15 @@ function Reactions({
 }
 
 /** Name, role badges (only those the server sent), time and "(edited)"; then the actions button. */
-function MessageMeta({
-  message,
-  nameId,
-  now,
-  withDay,
-  children,
-}: {
-  message: Message;
-  nameId: string;
-  now: number;
-  withDay: boolean;
-  children: ReactNode;
+function MessageMeta({ message, nameId, now, withDay, children }: {
+  message: Message; nameId: string; now: number; withDay: boolean; children: ReactNode;
 }) {
   return (
     <div className="channel-meta">
-      <span
-        id={nameId}
-        className={cx("channel-author", message.deleted && "text-ink-muted")}
-      >
+      <span id={nameId} className={cx("channel-author", message.deleted && "text-ink-muted")}>
         {message.deleted ? "Deleted message" : message.author.name}
       </span>
-      {!message.deleted &&
-        message.author.roleBadges.map((badge) => (
-          <RoleBadge key={`${badge.kind}-${badge.label}`} badge={badge} />
-        ))}
+      {!message.deleted && message.author.roleBadges.map((badge) => <RoleBadge key={`${badge.kind}-${badge.label}`} badge={badge} />)}
       <TimeStamp at={message.createdAt} now={now} withDay={withDay} />
       {message.edited && !message.deleted && <span>(edited)</span>}
       {children}
@@ -332,38 +181,15 @@ function MessageMeta({
   );
 }
 
-function MessageContent({
-  message,
-  names,
-  compact,
-}: {
-  message: Message;
-  names: readonly string[];
-  compact: boolean;
-}) {
-  if (message.deleted)
-    return (
-      <p className="channel-body text-ink-muted italic">
-        This message was deleted.
-      </p>
-    );
-  if (message.authorKind === "TEMBO")
-    return <TemboContent message={message} names={names} />;
+function MessageContent({ message, names, compact }: { message: Message; names: readonly string[]; compact: boolean }) {
+  if (message.deleted) return <p className="channel-body text-ink-muted italic">This message was deleted.</p>;
+  if (message.authorKind === "TEMBO") return <TemboContent message={message} names={names} />;
   return <MemberContent message={message} names={names} compact={compact} />;
 }
 
 /** Who may do what to a message, from the viewer, the message and the available actions. */
-function permissions(
-  message: Message,
-  viewerId: string | null,
-  actions: ChannelActions | null,
-  variant: MessageVariant,
-  canOpen: boolean,
-) {
-  const own =
-    message.authorKind === "USER" &&
-    viewerId !== null &&
-    message.author.id === viewerId;
+function permissions(message: Message, viewerId: string | null, actions: ChannelActions | null, variant: MessageVariant, canOpen: boolean) {
+  const own = message.authorKind === "USER" && viewerId !== null && message.author.id === viewerId;
   const root = variant === "channel" && message.parentId === null;
   const live = actions !== null && !message.deleted;
   const hidden = message.moderation?.state === "HIDDEN";
@@ -386,34 +212,15 @@ type Mode = "read" | "edit" | "delete" | ModerationMode;
  * reactions, the way into its thread, and the author's own edit and delete.
  */
 function MessageItem({
-  message,
-  viewerId,
-  now,
-  names,
-  people,
-  variant = "channel",
-  withDay = false,
-  actions,
-  threadOpen = false,
-  threadHref,
-  onOpenThread,
-  announce,
+  message, viewerId, now, names, people, variant = "channel", withDay = false, actions, threadOpen = false,
+  threadHref, onOpenThread, announce,
 }: MessageItemProps) {
   const [mode, setMode] = useState<Mode>("read");
   const menuButton = useRef<HTMLButtonElement | null>(null);
   const article = useRef<HTMLElement>(null);
   const nameId = useId();
   const moderation = useModeration();
-  const can = {
-    ...permissions(
-      message,
-      viewerId,
-      actions,
-      variant,
-      onOpenThread !== undefined,
-    ),
-    ...moderationRights(message, viewerId, moderation),
-  };
+  const can = { ...permissions(message, viewerId, actions, variant, onOpenThread !== undefined), ...moderationRights(message, viewerId, moderation) };
 
   // Where focus goes once the message is back to reading, applied after that render commits: the
   // actions button, or a part of the moderation note. Falls back to the actions button, and when the
@@ -422,14 +229,8 @@ function MessageItem({
   const [returnFocus, setReturnFocus] = useState<ReturnFocus | null>(null);
   useEffect(() => {
     if (returnFocus === null || mode !== "read") return;
-    const target =
-      returnFocus === "menu"
-        ? null
-        : article.current?.querySelector<HTMLElement>(returnFocus);
-    const focused =
-      target ??
-      menuButton.current ??
-      article.current?.querySelector<HTMLElement>("[data-moderation]");
+    const target = returnFocus === "menu" ? null : article.current?.querySelector<HTMLElement>(returnFocus);
+    const focused = target ?? menuButton.current ?? article.current?.querySelector<HTMLElement>("[data-moderation]");
     focused?.focus({ preventScroll: true });
     focused?.scrollIntoView({ block: "nearest" });
     setReturnFocus(null);
@@ -446,9 +247,7 @@ function MessageItem({
     try {
       await actions?.react(message.id, kind, active);
     } catch {
-      announce(
-        `Couldn't ${active ? "add" : "remove"} “${REACTIONS[kind]}”. Try again.`,
-      );
+      announce(`Couldn't ${active ? "add" : "remove"} “${REACTIONS[kind]}”. Try again.`);
     }
   }
 
@@ -461,9 +260,7 @@ function MessageItem({
     }
   }
 
-  const undo = useUndoHide(message, viewerId, mode === "read", announce, () =>
-    setReturnFocus("menu"),
-  );
+  const undo = useUndoHide(message, viewerId, mode === "read", announce, () => setReturnFocus("menu"));
 
   async function remove() {
     try {
@@ -486,29 +283,19 @@ function MessageItem({
       data-variant={variant}
       data-own={can.own || undefined}
       data-deleted={message.deleted || undefined}
-      className={cx(
-        "channel-message",
-        variant !== "channel" && "channel-message--compact",
-      )}
+      className={cx("channel-message", variant !== "channel" && "channel-message--compact")}
     >
       <div className="channel-avatar">
         <MessageAvatar message={message} />
       </div>
       <div className="min-w-0">
-        <MessageMeta
-          message={message}
-          nameId={nameId}
-          now={now}
-          withDay={withDay}
-        >
+        <MessageMeta message={message} nameId={nameId} now={now} withDay={withDay}>
           {mode === "read" && hasMenu(can) && (
             <MessageMenu
               message={message}
               buttonRef={menuButton}
               can={can}
-              onReply={() =>
-                onOpenThread?.(message.id, menuButton.current ?? document.body)
-              }
+              onReply={() => onOpenThread?.(message.id, menuButton.current ?? document.body)}
               onReact={(kind, active) => void react(kind, active)}
               onEdit={() => setMode("edit")}
               onDelete={() => setMode("delete")}
@@ -519,17 +306,9 @@ function MessageItem({
         </MessageMeta>
 
         {mode === "edit" && !message.deleted ? (
-          <EditForm
-            initial={message.body}
-            onSave={save}
-            onCancel={backToMenu}
-          />
+          <EditForm initial={message.body} onSave={save} onCancel={backToMenu} />
         ) : (
-          <MessageContent
-            message={message}
-            names={names}
-            compact={variant === "parent"}
-          />
+          <MessageContent message={message} names={names} compact={variant === "parent"} />
         )}
 
         {/*
@@ -543,37 +322,20 @@ function MessageItem({
           <ModerationNote
             message={message}
             viewerId={viewerId}
-            onAskReview={
-              can.review && mode === "read"
-                ? () => setMode("review")
-                : undefined
-            }
+            onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined}
             onUndo={undo.run}
             undoing={undo.pending}
           />
         )}
-        <ModerationPanel
-          mode={mode}
-          message={message}
-          announce={announce}
-          onBack={back}
-        />
-        <Reactions
-          message={message}
-          onReact={
-            can.react ? (kind, active) => void react(kind, active) : undefined
-          }
-        />
+        <ModerationPanel mode={mode} message={message} announce={announce} onBack={back} />
+        <Reactions message={message} onReact={can.react ? (kind, active) => void react(kind, active) : undefined} />
         {can.thread && (
           <ThreadLink
             message={message}
             now={now}
             people={people}
             open={threadOpen}
-            href={
-              threadHref?.(message.id) ??
-              `?thread=${encodeURIComponent(message.id)}`
-            }
+            href={threadHref?.(message.id) ?? `?thread=${encodeURIComponent(message.id)}`}
             onOpen={onOpenThread}
           />
         )}

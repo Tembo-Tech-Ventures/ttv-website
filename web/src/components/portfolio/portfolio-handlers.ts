@@ -12,7 +12,9 @@ import {
   validateHandle,
   type HandleValidationError,
 } from "@/lib/talent/handles";
-import { profileEditorSchema, serializeSkills } from "@/lib/talent/profile";
+import {
+  profileEditorSchema,
+  serializeSkills} from "@/lib/talent/profile";
 import {
   profileModerationMessages,
   type ProfileModerationResult,
@@ -192,10 +194,11 @@ async function savePublishedProfileEdit(
   current: CurrentProfile,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
-  const moderationState = profileModerationState(
-    { ...current, ...values },
+  const moderationState= profileModerationState(
+    {
+    ...current, ...values },
     { skills },
-  );
+    );
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -376,7 +379,8 @@ export async function saveProfile(
     };
   }
 
-  const values = editorValues(handleResult.normalized, parsed.data);
+  const values = editorValues(handleResult.normalized,
+    parsed.data);
 
   if (existingProfileId) {
     if (!current) {
@@ -442,7 +446,7 @@ async function moderateSavedProfile(
     with: { user: true },
   });
   if (!p) return { success: false, error: "Profile not found" };
-  const state = profileModerationState(p);
+  const state= profileModerationState(p);
   const result = await runContentCheck(checkContent, state, p.user.image);
   await db
     .update(schema.studentProfile)
@@ -526,7 +530,7 @@ export async function publishProfile(
     };
   }
 
-  const moderationState = profileModerationState(profile);
+  const moderationState= profileModerationState(profile);
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -566,8 +570,7 @@ export async function publishProfile(
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
 
-  if (
-    !publishesAfterModeration(moderation) ||
+  if (!publishesAfterModeration(moderation)||
     (moderation.outcome === "error" && profile.moderationOutcome === "hold")
   ) {
     return {
@@ -585,7 +588,6 @@ export async function publishProfile(
     published: true,
   };
 }
-
 function unchangedProfileText(current: CurrentProfile, values: ProfileValues) {
   const textKeys = [
     "handle",

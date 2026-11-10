@@ -1,10 +1,4 @@
-import type {
-  Channel,
-  EffectiveFlags,
-  Message,
-  ModerationState,
-  TemboScope,
-} from "@/lib/platform/contracts";
+import type { Channel, EffectiveFlags, Message, ModerationState, TemboScope } from "@/lib/platform/contracts";
 import { MASKED_CONTACT } from "./masked-contact";
 
 /*
@@ -21,39 +15,12 @@ const DAY = 24 * HOUR;
  * render the same day names and hydration agrees. Most TTV members are in Kenya.
  */
 const ZONE = "Africa/Nairobi";
-const dayKeyFormat = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  timeZone: ZONE,
-});
-const clockFormat = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: ZONE,
-});
-const weekdayFormat = new Intl.DateTimeFormat("en-GB", {
-  weekday: "long",
-  timeZone: ZONE,
-});
-const dateFormat = new Intl.DateTimeFormat("en-GB", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: ZONE,
-});
-const datedYearFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: ZONE,
-});
-const fullFormat = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "full",
-  timeStyle: "short",
-  timeZone: ZONE,
-});
+const dayKeyFormat = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: ZONE });
+const clockFormat = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: ZONE });
+const weekdayFormat = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: ZONE });
+const dateFormat = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: ZONE });
+const datedYearFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: ZONE });
+const fullFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: ZONE });
 
 /** The calendar day in Nairobi, "2026-11-03". */
 export function dayKey(timestamp: number): string {
@@ -67,9 +34,7 @@ export function dayLabel(timestamp: number, now: number): string {
   if (key === dayKey(now - DAY)) return "Yesterday";
   const age = now - timestamp;
   if (age >= 0 && age < 6 * DAY) return weekdayFormat.format(timestamp);
-  return key.slice(0, 4) === dayKey(now).slice(0, 4)
-    ? dateFormat.format(timestamp)
-    : datedYearFormat.format(timestamp);
+  return key.slice(0, 4) === dayKey(now).slice(0, 4) ? dateFormat.format(timestamp) : datedYearFormat.format(timestamp);
 }
 
 /** "16:40", in the 24-hour clock Kenya reads. */
@@ -90,8 +55,7 @@ export function ago(timestamp: number, now: number): string {
   const age = Math.max(0, now - timestamp);
   if (age < MINUTE) return "just now";
   if (age < HOUR) return `${Math.floor(age / MINUTE)} min ago`;
-  if (dayKey(timestamp) === dayKey(now))
-    return `${Math.floor(age / HOUR)} h ago`;
+  if (dayKey(timestamp) === dayKey(now)) return `${Math.floor(age / HOUR)} h ago`;
   const day = dayLabel(timestamp, now);
   return day === "Yesterday" ? "yesterday" : `on ${day}`;
 }
@@ -103,21 +67,13 @@ export type DayGroup = { key: string; label: string; messages: Message[] };
  * (QA4-18). Where the "New" divider falls mid-day, the list repeats the day under it as a plain label
  * (QA2-18), not as a second heading.
  */
-export function groupByDay(
-  messages: readonly Message[],
-  now: number,
-): DayGroup[] {
+export function groupByDay(messages: readonly Message[], now: number): DayGroup[] {
   const groups: DayGroup[] = [];
   for (const message of messages) {
     const key = dayKey(message.createdAt);
     const last = groups.at(-1);
     if (last?.key === key) last.messages.push(message);
-    else
-      groups.push({
-        key,
-        label: dayLabel(message.createdAt, now),
-        messages: [message],
-      });
+    else groups.push({ key, label: dayLabel(message.createdAt, now), messages: [message] });
   }
   return groups;
 }
@@ -156,13 +112,8 @@ const WORD = /^[\p{L}\p{N}_'’-]+/u;
  * A mention is `@tembo`, or `@` plus the longest name in `names` it starts
  * with ("@David Kamau"), or else `@` plus one word.
  */
-export function parseBody(
-  body: string,
-  names: readonly string[] = [],
-): BodySegment[][] {
-  const known = [
-    ...new Set(names.map((name) => name.trim()).filter(Boolean)),
-  ].toSorted((a, b) => b.length - a.length);
+export function parseBody(body: string, names: readonly string[] = []): BodySegment[][] {
+  const known = [...new Set(names.map((name) => name.trim()).filter(Boolean))].toSorted((a, b) => b.length - a.length);
   return body
     .replace(/\r\n?/g, "\n")
     .split(/\n{2,}/)
@@ -194,11 +145,7 @@ function parseInline(text: string, names: readonly string[]): BodySegment[] {
       const mention = matchMention(rest.slice(1), names);
       if (mention) {
         flush();
-        segments.push({
-          kind: "mention",
-          text: `@${mention}`,
-          tembo: mention.toLowerCase() === "tembo",
-        });
+        segments.push({ kind: "mention", text: `@${mention}`, tembo: mention.toLowerCase() === "tembo" });
         index += mention.length + 1;
         continue;
       }
@@ -227,28 +174,22 @@ function linkAt(rest: string): string | undefined {
   const raw = LINK.exec(rest)?.[0];
   if (!raw) return undefined;
   const marker = rest.indexOf(MASKED_CONTACT);
-  return (
-    marker >= 0 && marker < raw.length ? raw.slice(0, marker) : raw
-  ).replace(LINK_TAIL, "");
+  return (marker >= 0 && marker < raw.length ? raw.slice(0, marker) : raw).replace(LINK_TAIL, "");
 }
 
 function matchMention(rest: string, names: readonly string[]): string | null {
   const lower = rest.toLowerCase();
-  const ends = (length: number) =>
-    length === rest.length || !WORD.test(rest.slice(length, length + 1));
+  const ends = (length: number) => length === rest.length || !WORD.test(rest.slice(length, length + 1));
   if (lower.startsWith("tembo") && ends(5)) return rest.slice(0, 5);
   for (const name of names) {
-    if (lower.startsWith(name.toLowerCase()) && ends(name.length))
-      return rest.slice(0, name.length);
+    if (lower.startsWith(name.toLowerCase()) && ends(name.length)) return rest.slice(0, name.length);
   }
   return WORD.exec(rest)?.[0] ?? null;
 }
 
 /** Whether a body asks Tembo, as the composer and server read it. */
 export function mentionsTembo(body: string): boolean {
-  return parseBody(body).some((paragraph) =>
-    paragraph.some((segment) => segment.kind === "mention" && segment.tembo),
-  );
+  return parseBody(body).some((paragraph) => paragraph.some((segment) => segment.kind === "mention" && segment.tembo));
 }
 
 // ---- The "New" divider ----
@@ -266,14 +207,8 @@ export function openingDivider(
 ): string | null {
   // Unread counts skip deleted and hidden messages (B-2.3), so the divider does too: a moderator
   // receives hidden ones, and "New" must not open on a message members can't see.
-  const byOthers = (message: Message) =>
-    !message.deleted &&
-    message.moderation?.state !== "HIDDEN" &&
-    message.author.id !== viewerId;
-  const marker =
-    read.markerId === null
-      ? -1
-      : messages.findIndex((message) => message.id === read.markerId);
+  const byOthers = (message: Message) => !message.deleted && message.moderation?.state !== "HIDDEN" && message.author.id !== viewerId;
+  const marker = read.markerId === null ? -1 : messages.findIndex((message) => message.id === read.markerId);
   if (marker >= 0) return messages.slice(marker + 1).find(byOthers)?.id ?? null;
   const unread = read.unreadCount ?? 0;
   if (unread <= 0) return null;
@@ -284,24 +219,14 @@ export function openingDivider(
 // ---- Threads ----
 
 /** "5 replies · last 12 min ago". */
-export function threadSummary(
-  message: Message,
-  now: number,
-): { replies: string; last: string | null } {
+export function threadSummary(message: Message, now: number): { replies: string; last: string | null } {
   const { replyCount, lastReplyAt } = message.thread;
-  return {
-    replies: plural(replyCount, "reply", "replies"),
-    last: lastReplyAt === null ? null : `last ${ago(lastReplyAt, now)}`,
-  };
+  return { replies: plural(replyCount, "reply", "replies"), last: lastReplyAt === null ? null : `last ${ago(lastReplyAt, now)}` };
 }
 
 // ---- Moderation, as the author (or a moderator) sees it ----
 
-export type ModerationNotice = {
-  state: Exclude<ModerationState, "VISIBLE">;
-  title: string;
-  detail: string;
-};
+export type ModerationNotice = { state: Exclude<ModerationState, "VISIBLE">; title: string; detail: string };
 
 /**
  * The reasons the detectors store for contact details (CONTACT_REASONS in
@@ -318,13 +243,8 @@ export const MASKING_REASONS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether other readers see this message with its contact details masked. */
-export function masksContactDetails(
-  moderation: Message["moderation"],
-): boolean {
-  return (
-    moderation?.state === "FLAGGED" &&
-    moderation.reasons.some((reason) => MASKING_REASONS.has(reason))
-  );
+export function masksContactDetails(moderation: Message["moderation"]): boolean {
+  return moderation?.state === "FLAGGED" && moderation.reasons.some((reason) => MASKING_REASONS.has(reason));
 }
 
 /**
@@ -339,25 +259,15 @@ export function masksContactDetails(
  * In a direct conversation only the author is ever told (`direct`).
  */
 export function moderationNotice(
-  message: Message,
-  viewerId: string | null,
-  { admin = false, direct = false }: { admin?: boolean; direct?: boolean } = {},
+  message: Message, viewerId: string | null, { admin = false, direct = false }: { admin?: boolean; direct?: boolean } = {},
 ): ModerationNotice | null {
   const moderation = message.moderation;
-  if (!moderation || moderation.state === "VISIBLE" || message.deleted)
-    return null;
+  if (!moderation || moderation.state === "VISIBLE" || message.deleted) return null;
   const own = viewerId !== null && message.author.id === viewerId;
   const reasons = moderation.reasons.join(", ");
   // A direct conversation has no moderators: its checks go to TTV admins, and it is a conversation, not a channel.
   const checker = direct ? "TTV admins" : "a moderator";
-  if (moderation.state === "FLAGGED")
-    return flaggedNotice(
-      reasons,
-      own,
-      checker,
-      direct,
-      masksContactDetails(moderation),
-    );
+  if (moderation.state === "FLAGGED") return flaggedNotice(reasons, own, checker, direct, masksContactDetails(moderation));
   return own
     ? {
         state: "HIDDEN",
@@ -366,30 +276,18 @@ export function moderationNotice(
       }
     : {
         state: "HIDDEN",
-        title: reasons
-          ? `Hidden from members: ${reasons}`
-          : "Hidden from members",
-        detail: admin
-          ? "Moderators can still see it."
-          : `Moderators can still see it. ${afterHide(message)}`,
+        title: reasons ? `Hidden from members: ${reasons}` : "Hidden from members",
+        detail: admin ? "Moderators can still see it." : `Moderators can still see it. ${afterHide(message)}`,
       };
 }
 
 /** A flag keeps the message up; flagged contact details are masked for other readers meanwhile (QA2-08). */
-function flaggedNotice(
-  reasons: string,
-  own: boolean,
-  checker: string,
-  direct: boolean,
-  masked: boolean,
-): ModerationNotice {
+function flaggedNotice(reasons: string, own: boolean, checker: string, direct: boolean, masked: boolean): ModerationNotice {
   if (own) {
     const others = direct ? "the other person" : "other members";
     return {
       state: "FLAGGED",
-      title: reasons
-        ? `Flagged for ${checker}: ${reasons}`
-        : `Flagged for ${checker}`,
+      title: reasons ? `Flagged for ${checker}: ${reasons}` : `Flagged for ${checker}`,
       detail: masked
         ? `Your message stays up until a person looks at it, with your contact details hidden from ${others}. Only you can see this note.`
         : "Your message stays up until a person looks at it. Only you can see this note.",
@@ -398,9 +296,7 @@ function flaggedNotice(
   return {
     state: "FLAGGED",
     title: reasons ? `Flagged: ${reasons}` : "Flagged",
-    detail: masked
-      ? "Members see it with the contact details hidden until a moderator decides."
-      : "Still visible to everyone until a moderator decides.",
+    detail: masked ? "Members see it with the contact details hidden until a moderator decides." : "Still visible to everyone until a moderator decides.",
   };
 }
 
@@ -410,10 +306,9 @@ function flaggedNotice(
  * the review is offered with that exception, never promised.
  */
 export function afterHide(message: Message): string {
-  const review =
-    message.authorKind === "USER"
-      ? `, and ${firstName(message.author.name)} can ask for a review unless an admin made or upheld the hide`
-      : "";
+  const review = message.authorKind === "USER"
+    ? `, and ${firstName(message.author.name)} can ask for a review unless an admin made or upheld the hide`
+    : "";
   return `An admin looks at every hide${review}. If an admin restores it, members see it here again.`;
 }
 
@@ -447,10 +342,7 @@ export type ReportReasonKey = (typeof REPORT_REASONS)[number]["key"];
 export const MAX_REASON = 2_000;
 
 /** The report's reason as the moderators read it: the choice, then the reporter's words. "Something else" needs words. */
-export function reportReason(
-  key: ReportReasonKey,
-  details: string,
-): string | null {
+export function reportReason(key: ReportReasonKey, details: string): string | null {
   const words = details.trim();
   if (key === "other") return words ? words.slice(0, MAX_REASON) : null;
   const label = REPORT_REASONS.find((reason) => reason.key === key)!.label;
@@ -462,13 +354,8 @@ const EXCERPT_LENGTH = 48;
 
 /** A message's opening words, plain: markdown marks dropped, cut at a word. Shared work stands in for no words. */
 export function excerpt(message: Pick<Message, "body" | "embeds">): string {
-  const words = message.body
-    .replace(/[*_~`>#[\]]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const text =
-    words ||
-    (message.embeds.find((embed) => embed.type !== "unavailable")?.title ?? "");
+  const words = message.body.replace(/[*_~`>#[\]]/g, "").replace(/\s+/g, " ").trim();
+  const text = words || (message.embeds.find((embed) => embed.type !== "unavailable")?.title ?? "");
   if (text.length <= EXCERPT_LENGTH) return text;
   const cut = text.slice(0, EXCERPT_LENGTH);
   const space = cut.lastIndexOf(" ");
@@ -496,43 +383,24 @@ export function firstName(name: string): string {
  * Why a report, a hide or a restore did not go through, in words the person
  * can act on. Nothing was changed when this shows.
  */
-export function moderationFailure(
-  error: unknown,
-  kind: "report" | "moderate" | "review",
-): string {
-  const { code, status, retryAfterMs } = (error ?? {}) as {
-    code?: string;
-    status?: number;
-    retryAfterMs?: number;
-  };
+export function moderationFailure(error: unknown, kind: "report" | "moderate" | "review"): string {
+  const { code, status, retryAfterMs } = (error ?? {}) as { code?: string; status?: number; retryAfterMs?: number };
   if (status === 429 || code === "rate_limited") {
-    const seconds =
-      retryAfterMs === undefined
-        ? null
-        : Math.max(1, Math.ceil(retryAfterMs / 1_000));
-    return seconds === null
-      ? "That's a lot at once. Try again in a moment."
-      : `That's a lot at once. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+    const seconds = retryAfterMs === undefined ? null : Math.max(1, Math.ceil(retryAfterMs / 1_000));
+    return seconds === null ? "That's a lot at once. Try again in a moment." : `That's a lot at once. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
   }
-  if (status === 401)
-    return "Your session ended. Sign in again, then try again.";
+  if (status === 401) return "Your session ended. Sign in again, then try again.";
   if (status === 404) return "That message is no longer here.";
   if (status === 409) {
-    if (kind === "report")
-      return "That message has changed since you opened this. Close it and look again.";
+    if (kind === "report") return "That message has changed since you opened this. Close it and look again.";
     return kind === "moderate"
       ? "An admin has already decided on this message, or it has changed. Close this and look again."
       : "An admin has already decided on this message, or it is no longer hidden. Close this and look again.";
   }
   if (status === 403) {
-    return kind === "moderate"
-      ? "You can't moderate this channel."
-      : kind === "review"
-        ? "You can ask for a review of your own messages only."
-        : "You can't report this message.";
+    return kind === "moderate" ? "You can't moderate this channel." : kind === "review" ? "You can ask for a review of your own messages only." : "You can't report this message.";
   }
-  if (code === "network_error" || code === "aborted")
-    return "Couldn't reach TTV. Check your connection and try again.";
+  if (code === "network_error" || code === "aborted") return "Couldn't reach TTV. Check your connection and try again.";
   return "Something went wrong on our side. Try again.";
 }
 
@@ -547,11 +415,7 @@ export function postingFor(channel: Channel): Posting {
   return channel.postingPolicy === "STAFF" ? "staff" : "closed";
 }
 
-export type ComposerTools = {
-  shareProject: boolean;
-  sessionClip: boolean;
-  askTembo: boolean;
-};
+export type ComposerTools = { shareProject: boolean; sessionClip: boolean; askTembo: boolean };
 
 /**
  * The tools a composer offers. A session clip is offered only in a cohort
@@ -559,14 +423,10 @@ export type ComposerTools = {
  * recording), never in a community channel or a conversation, whatever the
  * capability says. Ask Tembo stays hidden until `tembo_channels` is on.
  */
-export function composerTools(
-  channel: Channel,
-  flags: EffectiveFlags,
-): ComposerTools {
+export function composerTools(channel: Channel, flags: EffectiveFlags): ComposerTools {
   return {
     shareProject: true,
-    sessionClip:
-      channel.kind === "COHORT" && channel.capabilities.canShareSessionClip,
+    sessionClip: channel.kind === "COHORT" && channel.capabilities.canShareSessionClip,
     askTembo: flags.tembo_channels === true,
   };
 }
@@ -590,20 +450,14 @@ export function temboReach(channel: Channel): string {
 /** "in about 3 hours": when today's questions to Tembo come back. */
 export function temboResetsIn(resetsAt: number, now: number): string {
   const minutes = Math.max(1, Math.ceil((resetsAt - now) / MINUTE));
-  return minutes < 60
-    ? `in ${plural(minutes, "minute")}`
-    : `in about ${plural(Math.round(minutes / 60), "hour")}`;
+  return minutes < 60 ? `in ${plural(minutes, "minute")}` : `in about ${plural(Math.round(minutes / 60), "hour")}`;
 }
 
 /** Tembo's reach as a sentence, with what it never reads, said before anyone asks. One source for every line that says it. */
 export function temboScope(channel: Channel): string {
-  if (channel.kind === "DIRECT")
-    return "Only this conversation, and only when you ask.";
+  if (channel.kind === "DIRECT") return "Only this conversation, and only when you ask.";
   const reach = temboReach(channel);
-  const never =
-    channel.kind === "COHORT"
-      ? "Never private conversations or other cohorts."
-      : "Never cohort recordings or private conversations.";
+  const never = channel.kind === "COHORT" ? "Never private conversations or other cohorts." : "Never cohort recordings or private conversations.";
   return `${reach.charAt(0).toUpperCase()}${reach.slice(1)}. ${never}`;
 }
 

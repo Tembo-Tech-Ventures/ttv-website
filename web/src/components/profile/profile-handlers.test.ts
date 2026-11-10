@@ -293,8 +293,8 @@ describe("saveProfileIdentity", () => {
       status: "DRAFT",
     });
     const check = vi.fn(async () => {
-      expect(setUser).toHaveBeenCalledWith({ name: "Draft Name" });
-      return { outcome: "hold" as const, flags: [], scores: {} };
+      expect(setUser).toHaveBeenCalledWith({name:"Draft Name"});
+      return {outcome:"hold" as const,flags:[],scores:{}};
     });
 
     const result = await saveProfileIdentity(
@@ -304,7 +304,7 @@ describe("saveProfileIdentity", () => {
       check,
     );
 
-    expect(result).toEqual({ success: true, moderationOutcome: "hold" });
+    expect(result).toEqual({ success: true,moderationOutcome:"hold" });
     expect(check).toHaveBeenCalledOnce();
     expect(setProfile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -315,11 +315,6 @@ describe("saveProfileIdentity", () => {
     );
     expect(setUser).toHaveBeenCalledWith({ name: "Draft Name" });
     expectVersionedStatusGuard(profileWhere, "DRAFT");
-    expect(setProfile).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        moderationOutcome: "hold",
-        moderationReviewRequired: true,
-      }),
-    );
+    expect(setProfile).toHaveBeenLastCalledWith(expect.objectContaining({moderationOutcome:"hold",moderationReviewRequired:true}));
   });
 });

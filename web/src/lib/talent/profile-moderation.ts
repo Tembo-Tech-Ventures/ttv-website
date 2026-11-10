@@ -82,7 +82,8 @@ export function splitModerationReviewLists<T extends ModerationListRow>(
   return {
     held: flagged.filter((profile) => profile.moderationOutcome === "hold"),
     unavailable: flagged.filter(
-      (profile) => profile.moderationOutcome !== "hold",
+      (profile) =>
+        profile.moderationOutcome !== "hold",
     ),
   };
 }
@@ -153,12 +154,8 @@ export async function applyAdminProfileAction(
 ): Promise<boolean> {
   if (current.contentVersion !== expectedVersion) return false;
   if (action === "publish") {
-    const profile = await db.query.studentProfile.findFirst({
-      where: eq(schema.studentProfile.id, profileId),
-      columns: { userId: true },
-    });
-    if (!profile || !(await hasCompletedCohort(db, profile.userId)))
-      return false;
+    const profile = await db.query.studentProfile.findFirst({ where: eq(schema.studentProfile.id,profileId), columns:{userId:true} });
+    if (!profile || !await hasCompletedCohort(db,profile.userId)) return false;
   }
   const result = await db
     .update(schema.studentProfile)

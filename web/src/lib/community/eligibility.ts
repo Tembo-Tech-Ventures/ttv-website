@@ -24,8 +24,7 @@ function assertQualifiedColumn(column: string) {
 function assertAlias(alias: string) {
   if (!ALIAS.test(alias)) throw new Error("Eligibility needs an SQL alias.");
 }
-export function memberEligibility(
-  column: string,
+export function memberEligibility(column: string,
   includeStaff = false,
 ): string {
   assertQualifiedColumn(column);
@@ -55,8 +54,7 @@ export function publicProfileEligibility(alias: string): string {
     AND completion.status='COMPLETED' AND completion.completedAt IS NOT NULL))`;
 }
 /** Shared work follows its saved profile; private drafts and holds never enter shared sources. */
-export function postedWorkEligibility(
-  alias: string,
+export function postedWorkEligibility(alias: string,
   includeStaff = false,
 ): string {
   assertAlias(alias);
@@ -65,13 +63,12 @@ export function postedWorkEligibility(
 }
 
 /** Drizzle relation callbacks supply their own aliased columns. */
-export function postedWorkColumnsEligibility(
-  work: {
-    state: SQLWrapper;
-    moderatorHidden: SQLWrapper;
-    moderationOutcome: SQLWrapper;
-    userId: SQLWrapper;
-  },
+export function postedWorkColumnsEligibility(work: {
+  state: SQLWrapper;
+  moderatorHidden: SQLWrapper;
+  moderationOutcome: SQLWrapper;
+  userId: SQLWrapper;
+},
   publicOnly = false,
 ) {
   return sql`${publicOnly ? sql`${work.moderationOutcome}='pass' AND` : sql``} ${work.state}='POSTED' AND ${work.moderatorHidden}=0 AND coalesce(${work.moderationOutcome},'pass')<>'hold'

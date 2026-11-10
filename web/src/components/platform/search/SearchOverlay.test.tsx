@@ -2,22 +2,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  MASKED_CONTACT,
-  ROUTES,
-  SearchQuery,
-  SearchResults,
-  type Me,
-} from "@/lib/platform/contracts";
+import { MASKED_CONTACT, ROUTES, SearchQuery, SearchResults, type Me } from "@/lib/platform/contracts";
 import { meByPersona, searchResults } from "@/lib/platform/fixtures";
-import {
-  createApiClient,
-  type ApiClient,
-} from "@/lib/platform/client/apiClient";
-import {
-  createMockTransport,
-  type MockReply,
-} from "@/lib/platform/client/mockTransport";
+import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
+import { createMockTransport, type MockReply } from "@/lib/platform/client/mockTransport";
 import { requestShellOverlay } from "@/components/platform/shell/overlays";
 import { MASKED_NOTE } from "@/components/channels/MaskedText";
 import { pillClass } from "@/components/platform/ui";
@@ -27,12 +15,7 @@ import SearchOverlay from "./SearchOverlay";
 
 const wanjiku = meByPersona.wanjiku;
 
-type Backend = {
-  calls: string[];
-  queries: string[];
-  fail: MockReply[];
-  latency: (q: string) => number;
-};
+type Backend = { calls: string[]; queries: string[]; fail: MockReply[]; latency: (q: string) => number };
 
 function backend(): { client: ApiClient; state: Backend } {
   const state: Backend = { calls: [], queries: [], fail: [], latency: () => 0 };
@@ -42,9 +25,7 @@ function backend(): { client: ApiClient; state: Backend } {
         method: ROUTES.search.method,
         path: ROUTES.search.path,
         reply: async ({ request }) => {
-          const query = SearchQuery.parse(
-            Object.fromEntries(new URL(request.url).searchParams),
-          );
+          const query = SearchQuery.parse(Object.fromEntries(new URL(request.url).searchParams));
           state.queries.push(query.q);
           await new Promise((resolve) => {
             setTimeout(resolve, state.latency(query.q));
@@ -54,14 +35,9 @@ function backend(): { client: ApiClient; state: Backend } {
             data: SearchResults.parse({
               ...searchResults,
               query,
-              messages: none
-                ? []
-                : /phone/.test(query.q)
-                  ? searchResults.messages.map((message) => ({
-                      ...message,
-                      excerpt: `My phone is ${MASKED_CONTACT}, text me`,
-                    }))
-                  : searchResults.messages,
+              messages: none ? [] : /phone/.test(query.q)
+                ? searchResults.messages.map((message) => ({ ...message, excerpt: `My phone is ${MASKED_CONTACT}, text me` }))
+                : searchResults.messages,
               people: none ? [] : searchResults.people,
               projects: none ? [] : searchResults.projects,
               sessionMoments: none ? [] : searchResults.sessionMoments,
@@ -77,10 +53,7 @@ function backend(): { client: ApiClient; state: Backend } {
       },
     },
   );
-  return {
-    client: createApiClient({ fetch, retry: { maxRetries: 0 } }),
-    state,
-  };
+  return { client: createApiClient({ fetch, retry: { maxRetries: 0 } }), state };
 }
 
 let root: Root;
@@ -116,39 +89,21 @@ async function settle(ms = 0) {
   });
 }
 
-const dialog = () =>
-  container.querySelector<HTMLDialogElement>("[data-search-overlay]")!;
-const input = () =>
-  container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
-const options = () =>
-  Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'));
-const polite = () =>
-  container.querySelector('[data-live-regions="search"] output')?.textContent ??
-  "";
+const dialog = () => container.querySelector<HTMLDialogElement>("[data-search-overlay]")!;
+const input = () => container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+const options = () => Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'));
+const polite = () => container.querySelector('[data-live-regions="search"] output')?.textContent ?? "";
 
-async function mount(
-  me: Me = wanjiku,
-  client = backend().client,
-  cohortLabel: string | null = null,
-) {
-  await act(async () =>
-    root.render(
-      <SearchOverlay me={me} client={client} cohortLabel={cohortLabel} />,
-    ),
-  );
-  await act(async () =>
-    requestShellOverlay({ overlay: "search", trigger, via: "shortcut" }),
-  );
+async function mount(me: Me = wanjiku, client = backend().client, cohortLabel: string | null = null) {
+  await act(async () => root.render(<SearchOverlay me={me} client={client} cohortLabel={cohortLabel} />));
+  await act(async () => requestShellOverlay({ overlay: "search", trigger, via: "shortcut" }));
   await settle(20);
 }
 
 async function type(text: string) {
   const field = input();
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     setter.call(field, text);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -156,80 +111,41 @@ async function type(text: string) {
 
 async function key(name: string) {
   await act(async () => {
-    input().dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: name,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    input().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
   });
 }
 
 describe("SearchOverlay", () => {
-  it("shows a member without a destination as text and never navigates on Enter or click", async () => {
-    const { client, state } = backend();
-    state.fail.push({
-      data: {
-        ...searchResults,
-        query: { q: "builder", scope: "all" },
-        messages: [],
-        projects: [],
-        sessionMoments: [],
-        people: [{ ...searchResults.people[0], href: null }],
-      },
-    });
-    await mount(wanjiku, client);
-    await type("builder");
-    await settle(300);
+  it("shows a member without a destination as text and never navigates on Enter or click",async()=>{
+    const {client,state}=backend();
+    state.fail.push({data:{...searchResults,query:{q:"builder",scope:"all"},messages:[],projects:[],sessionMoments:[],people:[{...searchResults.people[0],href:null}]}});
+    await mount(wanjiku,client);await type("builder");await settle(300);
     expect(options()).toHaveLength(1);
     expect(options()[0].textContent).toContain("on TTV");
-    await act(async () => options()[0].click());
-    await key("ArrowDown");
-    await key("Enter");
+    await act(async()=>options()[0].click());
+    await key("ArrowDown");await key("Enter");
     expect(assign).not.toHaveBeenCalled();
   });
   it("promises only what this person can find, and marks when it is listening", async () => {
-    const lucy = {
-      ...meByPersona.lucy,
-      flags: { ...meByPersona.lucy.flags, channels: false },
-    };
-    await act(async () =>
-      root.render(<SearchOverlay me={lucy} client={backend().client} />),
-    );
+    const lucy = { ...meByPersona.lucy, flags: { ...meByPersona.lucy.flags, channels: false } };
+    await act(async () => root.render(<SearchOverlay me={lucy} client={backend().client} />));
     expect(dialog().hasAttribute("data-ready")).toBe(true);
     expect(input().placeholder).toBe("Search people and projects");
-    expect(input().getAttribute("aria-label")).toBe(
-      "Search people and projects",
-    );
+    expect(input().getAttribute("aria-label")).toBe("Search people and projects");
     expect(container.querySelector("h2")?.textContent).toBe("Search");
     expect(container.textContent).toContain("Find people and projects.");
-    expect(
-      container.querySelector('[data-search-scope="messages"]'),
-    ).toBeNull();
-    await act(async () =>
-      root.render(<SearchOverlay me={wanjiku} client={backend().client} />),
-    );
-    expect(input().placeholder).toBe(
-      "Search messages, people, projects and your cohort's sessions",
-    );
-    expect(
-      container.querySelector('[data-search-scope="messages"]')?.textContent,
-    ).toBe("Messages");
+    expect(container.querySelector('[data-search-scope="messages"]')).toBeNull();
+    await act(async () => root.render(<SearchOverlay me={wanjiku} client={backend().client} />));
+    expect(input().placeholder).toBe("Search messages, people, projects and your cohort's sessions");
+    expect(container.querySelector('[data-search-scope="messages"]')?.textContent).toBe("Messages");
   });
 
   it("offers its scopes as the kit's pill toggles, one pressed", async () => {
     await mount();
-    const scopes = [
-      ...container.querySelectorAll<HTMLButtonElement>("[data-search-scope]"),
-    ];
+    const scopes = [...container.querySelectorAll<HTMLButtonElement>("[data-search-scope]")];
     expect(scopes.length).toBeGreaterThan(1);
     expect(scopes.every((scope) => scope.hasAttribute("data-pill"))).toBe(true);
-    expect(
-      scopes
-        .filter((scope) => scope.getAttribute("aria-pressed") === "true")
-        .map((scope) => scope.dataset.searchScope),
-    ).toEqual(["all"]);
+    expect(scopes.filter((scope) => scope.getAttribute("aria-pressed") === "true").map((scope) => scope.dataset.searchScope)).toEqual(["all"]);
     expect(scopes[0]!.className).toBe(pillClass(true));
     await act(async () => scopes[1]!.click());
     expect(scopes[1]!.getAttribute("aria-pressed")).toBe("true");
@@ -238,12 +154,8 @@ describe("SearchOverlay", () => {
 
   it("names its close button with the key it shows, and gives Escape as its shortcut (WCAG 2.5.3)", async () => {
     await mount();
-    const close = container.querySelector<HTMLButtonElement>(
-      "button.search-overlay__close",
-    )!;
-    expect(
-      close.querySelector(".search-overlay__esc")?.textContent?.trim(),
-    ).toBe("Esc");
+    const close = container.querySelector<HTMLButtonElement>("button.search-overlay__close")!;
+    expect(close.querySelector(".search-overlay__esc")?.textContent?.trim()).toBe("Esc");
     expect(close.getAttribute("aria-label")).toBe("Close search, Esc");
     expect(close.getAttribute("aria-keyshortcuts")).toBe("Escape");
   });
@@ -252,23 +164,17 @@ describe("SearchOverlay", () => {
     await mount();
     await type("phone");
     await settle(300);
-    const excerpt = container.querySelector<HTMLElement>(
-      "[role=option] .channel-masked",
-    )!;
+    const excerpt = container.querySelector<HTMLElement>("[role=option] .channel-masked")!;
     expect(excerpt.textContent).toBe(MASKED_NOTE);
     // Inside an option, whose children are presentational, it is a styled span and not a note.
     expect(excerpt.getAttribute("role")).toBeNull();
     expect(container.textContent).not.toContain(MASKED_CONTACT);
-    expect(excerpt.parentElement!.querySelector("mark")!.textContent).toBe(
-      "phone",
-    );
+    expect(excerpt.parentElement!.querySelector("mark")!.textContent).toBe("phone");
   });
 
   it("names the cohort scope for the person's one cohort (T07)", async () => {
     await mount(wanjiku, backend().client, "Cohort 04");
-    const scopes = Array.from(
-      dialog().querySelectorAll("[data-search-scope], [role=radio], button"),
-    ).map((element) => element.textContent?.trim());
+    const scopes = Array.from(dialog().querySelectorAll("[data-search-scope], [role=radio], button")).map((element) => element.textContent?.trim());
     expect(scopes).toContain("Cohort 04");
     expect(scopes).not.toContain("Your cohort");
   });
@@ -277,13 +183,8 @@ describe("SearchOverlay", () => {
     await mount();
     await type("SQL");
     await settle(300);
-    const why = Array.from(
-      container.querySelectorAll(".search-option__why"),
-    ).map((element) => element.textContent);
-    expect(why).toEqual([
-      "Matches “SQL” elsewhere in their public profile",
-      "Matches “SQL” in the project's full description",
-    ]);
+    const why = Array.from(container.querySelectorAll(".search-option__why")).map((element) => element.textContent);
+    expect(why).toEqual(["Matches “SQL” elsewhere in their public profile", "Matches “SQL” in the project's full description"]);
   });
 
   it("opens for Ctrl K with focus in the box, and Escape-closing gives focus back", async () => {
@@ -301,20 +202,11 @@ describe("SearchOverlay", () => {
     expect(state.calls).toHaveLength(0);
     await settle(300);
     expect(state.calls).toEqual(["/api/search"]);
-    const groups = Array.from(container.querySelectorAll('[role="group"]')).map(
-      (group) => group.getAttribute("aria-label"),
-    );
-    expect(groups).toEqual([
-      "Messages",
-      "People",
-      "Projects",
-      "Moments in your sessions",
-    ]);
+    const groups = Array.from(container.querySelectorAll('[role="group"]')).map((group) => group.getAttribute("aria-label"));
+    expect(groups).toEqual(["Messages", "People", "Projects", "Moments in your sessions"]);
     expect(polite()).toBe("5 results");
     // Visibility labels are the server's, shown as given.
-    expect(container.textContent).toContain(
-      "Cohort 04 · only you and your cohort see this",
-    );
+    expect(container.textContent).toContain("Cohort 04 · only you and your cohort see this");
 
     await key("ArrowDown");
     await key("ArrowDown");
@@ -323,9 +215,7 @@ describe("SearchOverlay", () => {
     await key("Enter");
     // A message opens where the server says it lives, in its channel or thread.
     expect(assign).toHaveBeenCalledWith(searchResults.messages[1].href);
-    expect(
-      JSON.parse(localStorage.getItem(recentSearchKey(wanjiku.user.id))!),
-    ).toEqual(["retry webhook"]);
+    expect(JSON.parse(localStorage.getItem(recentSearchKey(wanjiku.user.id))!)).toEqual(["retry webhook"]);
   });
 
   it("never lets an older answer replace a newer question", async () => {
@@ -338,9 +228,7 @@ describe("SearchOverlay", () => {
     await settle(700);
     expect(state.queries).toEqual(["retry", "nothing here"]);
     expect(options()).toHaveLength(0);
-    expect(
-      container.querySelector("[data-search-empty]")?.textContent,
-    ).toContain("nothing here");
+    expect(container.querySelector("[data-search-empty]")?.textContent).toContain("nothing here");
   });
 
   it("hands the words to Ask Tembo, unsent, for a cohort member only", async () => {
@@ -370,19 +258,11 @@ describe("SearchOverlay", () => {
   });
 
   it("forgets every recent search on sign-out from the shell", async () => {
-    localStorage.setItem(
-      recentSearchKey(wanjiku.user.id),
-      JSON.stringify(["webhooks"]),
-    );
-    localStorage.setItem(
-      recentSearchKey("someone-else"),
-      JSON.stringify(["theirs"]),
-    );
+    localStorage.setItem(recentSearchKey(wanjiku.user.id), JSON.stringify(["webhooks"]));
+    localStorage.setItem(recentSearchKey("someone-else"), JSON.stringify(["theirs"]));
     await mount();
     expect(localStorage.getItem(recentSearchKey("someone-else"))).toBeNull();
-    expect(
-      container.querySelector("[data-search-recent]")?.textContent,
-    ).toContain("webhooks");
+    expect(container.querySelector("[data-search-recent]")?.textContent).toContain("webhooks");
 
     const signOut = document.createElement("a");
     signOut.href = "#signed-out";
@@ -396,19 +276,12 @@ describe("SearchOverlay", () => {
 
   it("says plainly when search failed, and tries again on request", async () => {
     const { client, state } = backend();
-    state.fail.push({
-      status: 503,
-      data: { error: { code: "server", message: "x" } },
-    });
+    state.fail.push({ status: 503, data: { error: { code: "server", message: "x" } } });
     await mount(wanjiku, client);
     await type("retry webhook");
     await settle(300);
-    expect(
-      container.querySelector("[data-search-problem]")?.textContent,
-    ).toContain("Search didn't work this time.");
-    const retry = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "Try again",
-    )!;
+    expect(container.querySelector("[data-search-problem]")?.textContent).toContain("Search didn't work this time.");
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     await settle(300);
     expect(options()).toHaveLength(5);
@@ -416,18 +289,13 @@ describe("SearchOverlay", () => {
 
   it("sends a signed-out person to sign in again rather than showing nothing", async () => {
     const { client, state } = backend();
-    state.fail.push({
-      status: 401,
-      data: { error: { code: "forbidden", message: "x" } },
-    });
+    state.fail.push({ status: 401, data: { error: { code: "forbidden", message: "x" } } });
     await mount(wanjiku, client);
     await type("retry webhook");
     await settle(300);
     const problem = container.querySelector("[data-search-problem]")!;
     expect(problem.textContent).toContain("signed out");
-    expect(problem.querySelector("a")?.getAttribute("href")).toMatch(
-      /^\/auth\/login\?next=/,
-    );
+    expect(problem.querySelector("a")?.getAttribute("href")).toMatch(/^\/auth\/login\?next=/);
     expect(container.querySelector("[data-search-empty]")).toBeNull();
   });
 });

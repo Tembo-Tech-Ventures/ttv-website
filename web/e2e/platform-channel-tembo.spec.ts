@@ -19,9 +19,7 @@ function harness(params: Record<string, string> = {}) {
 async function open(page: Page, path: string) {
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
-  await page.waitForFunction(
-    () => typeof window.__channelHarness?.answerTembo === "function",
-  );
+  await page.waitForFunction(() => typeof window.__channelHarness?.answerTembo === "function");
 }
 
 async function ask(page: Page, words: string) {
@@ -31,54 +29,31 @@ async function ask(page: Page, words: string) {
 }
 
 // The harness exists only in astro dev; deployed builds prove it absent in platform-channel.spec.ts.
-test.skip(
-  Boolean(process.env.PLAYWRIGHT_BASE_URL),
-  "The harness exists only in astro dev.",
-);
+test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The harness exists only in astro dev.");
 // Each test sets its own viewport, so one project runs them.
 test.beforeEach(({ browserName }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium",
-    `covered by the chromium project (${browserName})`,
-  );
+  test.skip(testInfo.project.name !== "chromium", `covered by the chromium project (${browserName})`);
 });
 
-const horizontalOverflow = (page: Page) =>
-  page.evaluate(
-    () =>
-      document.documentElement.scrollWidth -
-      document.documentElement.clientWidth,
-  );
+const horizontalOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 for (const viewport of [DESKTOP, PHONE]) {
-  test(`ask → pending → answer → feedback at ${viewport.width}px`, async ({
-    page,
-  }, testInfo) => {
+  test(`ask → pending → answer → feedback at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await open(page, harness());
-    await expect(page.locator(".channel-composer__scope")).toContainText(
-      "You: 6 of 10 in channels today",
-    );
+    await expect(page.locator(".channel-composer__scope")).toContainText("You: 6 of 10 in channels today");
 
     await ask(page, "@tembo what changed between revisions 2 and 3?");
     const waiting = page.locator("[data-tembo-question=pending]");
     await expect(waiting).toHaveText("Tembo is answering in the thread.");
-    await expect(page.locator("[data-channel-announcer]")).toHaveText(
-      "Tembo is looking into it",
-    );
+    await expect(page.locator("[data-channel-announcer]")).toHaveText("Tembo is looking into it");
     expect(await horizontalOverflow(page)).toBe(0);
-    await page.screenshot({
-      path: `${EVIDENCE_DIR}/01-pending-${viewport.width}.png`,
-    });
+    await page.screenshot({ path: `${EVIDENCE_DIR}/01-pending-${viewport.width}.png` });
     await runAxe(page, testInfo, `tembo-pending-${viewport.width}`);
 
-    expect(
-      await page.evaluate(() => window.__channelHarness!.answerTembo()),
-    ).toBe(1);
+    expect(await page.evaluate(() => window.__channelHarness!.answerTembo())).toBe(1);
     await expect(waiting).toHaveCount(0);
-    const asked = (
-      await page.evaluate(() => window.__channelHarness!.tembo().asked)
-    )[0];
+    const asked = (await page.evaluate(() => window.__channelHarness!.tembo().asked))[0];
     const trigger = page.locator(`[data-thread-trigger="${asked}"]`);
     await expect(trigger).toContainText("1 reply");
 
@@ -86,138 +61,77 @@ for (const viewport of [DESKTOP, PHONE]) {
     await trigger.focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#channel-thread-title")).toBeFocused();
-    const answer = page
-      .locator("[data-thread-rail] [data-message]")
-      .filter({ has: page.locator(".channel-tembo") })
-      .last();
+    const answer = page.locator("[data-thread-rail] [data-message]").filter({ has: page.locator(".channel-tembo") }).last();
     // One AI badge: the server's role badge on Tembo.
-    await expect(
-      answer.locator(".channel-meta").getByText("AI", { exact: true }),
-    ).toHaveCount(1);
+    await expect(answer.locator(".channel-meta").getByText("AI", { exact: true })).toHaveCount(1);
     // No live count under an answer (QA3-07): the composer's line carries it.
-    await expect(answer.locator(".channel-tembo__foot")).toHaveText(
-      /^Sees: this channel, projects shared in it and saved member profiles and their posted work/,
-    );
-    await expect(answer.locator(".channel-tembo__foot")).not.toContainText(
-      "You:",
-    );
-    await expect(page.locator(".channel-composer__scope")).toContainText(
-      "You: 7 of 10 in channels today",
-    );
+    await expect(answer.locator(".channel-tembo__foot")).toHaveText(/^Sees: this channel, projects shared in it and saved member profiles and their posted work/);
+    await expect(answer.locator(".channel-tembo__foot")).not.toContainText("You:");
+    await expect(page.locator(".channel-composer__scope")).toContainText("You: 7 of 10 in channels today");
     // Each [n] links to the source it names, and the chips carry the same numbers (QA3-02).
-    const marker = answer.locator(
-      ".channel-tembo .channel-body a.channel-cite-ref[data-cite='1']",
-    );
+    const marker = answer.locator(".channel-tembo .channel-body a.channel-cite-ref[data-cite='1']");
     await expect(marker).toHaveAccessibleName(/^Source 1: /);
-    await expect(
-      answer.locator("[aria-label=Sources] a[data-cite='1'] .channel-cite__n"),
-    ).toHaveText("1");
+    await expect(answer.locator("[aria-label=Sources] a[data-cite='1'] .channel-cite__n")).toHaveText("1");
     // Two sources in a row: marker 1's focus ring (2px out, 2px wide) stops before marker 2's digit (#312 review).
     const first = await marker.boundingBox();
-    const secondDigit = await answer
-      .locator(
-        ".channel-tembo .channel-body a.channel-cite-ref[data-cite='2'] sup",
-      )
-      .boundingBox();
-    expect(secondDigit!.x - (first!.x + first!.width)).toBeGreaterThanOrEqual(
-      4,
-    );
+    const secondDigit = await answer.locator(".channel-tembo .channel-body a.channel-cite-ref[data-cite='2'] sup").boundingBox();
+    expect(secondDigit!.x - (first!.x + first!.width)).toBeGreaterThanOrEqual(4);
     await marker.focus();
     await expect(marker).toHaveCSS("outline-offset", "2px");
     const helpful = answer.locator("[data-tembo-feedback=helpful]");
     await helpful.focus();
     await page.keyboard.press("Enter");
     await expect(helpful).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("[data-channel-announcer]")).toHaveText(
-      "Thanks: marked helpful",
-    );
-    expect(
-      await page.evaluate(() => window.__channelHarness!.tembo().feedback),
-    ).toEqual([
-      {
-        messageId: await answer.getAttribute("data-message"),
-        feedback: "helpful",
-      },
+    await expect(page.locator("[data-channel-announcer]")).toHaveText("Thanks: marked helpful");
+    expect(await page.evaluate(() => window.__channelHarness!.tembo().feedback)).toEqual([
+      { messageId: await answer.getAttribute("data-message"), feedback: "helpful" },
     ]);
     const box = await helpful.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(viewport.width < 1024 ? 32 : 28);
     expect(await horizontalOverflow(page)).toBe(0);
-    await page.screenshot({
-      path: `${EVIDENCE_DIR}/02-answer-${viewport.width}.png`,
-    });
+    await page.screenshot({ path: `${EVIDENCE_DIR}/02-answer-${viewport.width}.png` });
     await runAxe(page, testInfo, `tembo-answer-${viewport.width}`);
   });
 
-  test(`a question in a thread waits there at ${viewport.width}px`, async ({
-    page,
-  }, testInfo) => {
+  test(`a question in a thread waits there at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await open(page, harness({ thread: "s00000000000000000000401" }));
     const box = page.locator("[data-composer=thread] textarea");
     await box.fill("@tembo does revision 3 change the replay test?");
     await box.press("Enter");
-    const waiting = page.locator(
-      "[data-thread-rail] [data-tembo-question=pending]",
-    );
+    const waiting = page.locator("[data-thread-rail] [data-tembo-question=pending]");
     await expect(waiting).toContainText("The answer will appear here.");
     await expect(waiting.locator("[data-role-badge=AI]")).toHaveText("AI");
-    await page.screenshot({
-      path: `${EVIDENCE_DIR}/03-thread-pending-${viewport.width}.png`,
-    });
+    await page.screenshot({ path: `${EVIDENCE_DIR}/03-thread-pending-${viewport.width}.png` });
     await runAxe(page, testInfo, `tembo-thread-pending-${viewport.width}`);
     await page.evaluate(() => window.__channelHarness!.answerTembo());
     await expect(waiting).toHaveCount(0);
-    await expect(
-      page.locator("[data-thread-rail] .channel-tembo").last(),
-    ).toContainText("Revision 3 logs each callback");
+    await expect(page.locator("[data-thread-rail] .channel-tembo").last()).toContainText("Revision 3 logs each callback");
   });
 
-  test(`out of questions today at ${viewport.width}px`, async ({
-    page,
-  }, testInfo) => {
+  test(`out of questions today at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await open(page, harness({ "tembo-used": "10" }));
     await ask(page, "@tembo one more?");
     const line = page.locator("[data-tembo-question=exhausted]");
-    await expect(line).toContainText(
-      "You've used all 10 of today's questions to Tembo in channels, so this one wasn't asked.",
-    );
-    await expect(line).toContainText(
-      "Questions on your private Ask Tembo page don't count toward this.",
-    );
-    await expect(line).toContainText(
-      "You can ask again after midnight East Africa Time, in",
-    );
-    await expect(page.locator("[data-channel-announcer]")).toHaveText(
-      "You've used today's questions to Tembo in channels",
-    );
+    await expect(line).toContainText("You've used all 10 of today's questions to Tembo in channels, so this one wasn't asked.");
+    await expect(line).toContainText("Questions on your private Ask Tembo page don't count toward this.");
+    await expect(line).toContainText("You can ask again after midnight East Africa Time, in");
+    await expect(page.locator("[data-channel-announcer]")).toHaveText("You've used today's questions to Tembo in channels");
     // At the limit, "Ask Tembo here" is gone: it would only post a question nobody answers (QA3-05).
     await expect(page.locator("[data-ask-tembo]")).toHaveCount(0);
-    expect(
-      await page.evaluate(() => window.__channelHarness!.tembo().asked),
-    ).toEqual([]);
+    expect(await page.evaluate(() => window.__channelHarness!.tembo().asked)).toEqual([]);
     expect(await horizontalOverflow(page)).toBe(0);
-    await page.screenshot({
-      path: `${EVIDENCE_DIR}/04-exhausted-${viewport.width}.png`,
-    });
+    await page.screenshot({ path: `${EVIDENCE_DIR}/04-exhausted-${viewport.width}.png` });
     await runAxe(page, testInfo, `tembo-exhausted-${viewport.width}`);
   });
 }
 
-test("with tembo_channels off, nothing is asked and nothing is rated", async ({
-  page,
-}) => {
-  await open(
-    page,
-    harness({ tembo: "off", thread: "s00000000000000000000401" }),
-  );
+test("with tembo_channels off, nothing is asked and nothing is rated", async ({ page }) => {
+  await open(page, harness({ tembo: "off", thread: "s00000000000000000000401" }));
   await expect(page.locator("[data-tembo-feedback]")).toHaveCount(0);
   await ask(page, "@tembo hello");
-  await expect(page.locator("[data-composer=channel] textarea")).toHaveValue(
-    "",
-  );
+  await expect(page.locator("[data-composer=channel] textarea")).toHaveValue("");
   await expect(page.locator("[data-tembo-question]")).toHaveCount(0);
-  expect(
-    await page.evaluate(() => window.__channelHarness!.tembo().asked),
-  ).toEqual([]);
+  expect(await page.evaluate(() => window.__channelHarness!.tembo().asked)).toEqual([]);
 });

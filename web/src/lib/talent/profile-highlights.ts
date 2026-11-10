@@ -88,7 +88,7 @@ export async function replaceProfileHighlights(
   const selected = JSON.stringify(highlights.map((h) => h.repoFullName));
   const retire = db
     .update(schema.communityJourney)
-    .set({ state: "DRAFT", moderationReviewRequired: false })
+    .set({ state: "DRAFT" , moderationReviewRequired: false })
     .where(
       and(
         eq(schema.communityJourney.userId, profile.userId),

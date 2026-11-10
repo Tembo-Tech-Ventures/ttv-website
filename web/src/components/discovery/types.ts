@@ -16,7 +16,7 @@ export interface JourneyClaim extends WorkIdentity {
   version: number;
   status: "posted" | "draft";
   moderationHold?: boolean;
-  moderatorHidden?: boolean;
+  moderatorHidden?:boolean;
   confirmations: ClaimConfirmation[];
 }
 
@@ -37,10 +37,9 @@ export function currentConfirmations(claim: JourneyClaim): ClaimConfirmation[] {
 }
 
 export interface CommunityProfile {
-  moderationHold?: boolean;
-
+  moderationHold?:boolean;
   matches?: import("@/lib/community/discovery-contract").DiscoveryMatch[];
-  discovery?: { evaluated: number; searched: number };
+  discovery?: {evaluated:number;searched:number};
   id: string;
   version?: number;
   name: string;
@@ -108,16 +107,5 @@ export function filterDemoProfiles(
 export interface EvidenceOrder {
   text: string;
   evaluatedCandidates: number;
-  profiles: Array<{
-    userId: string;
-    name: string;
-    reason: string;
-    missingEvidence: string[];
-    citations?: Array<{
-      kind?: "journey" | "confirmation";
-      id: string;
-      version: number;
-      url: string | null;
-    }>;
-  }>;
+  profiles: Array<{userId:string;name:string;reason:string;missingEvidence:string[];citations?:Array<{kind?:"journey"|"confirmation";id:string;version:number;url:string|null}>}>;
 }

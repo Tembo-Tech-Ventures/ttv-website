@@ -3,15 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { communityActor } from "@/lib/community/actor";
 import { handleCommunityRequest } from "@/lib/community/http";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
-import {
-  createSqliteD1,
-  MINIMAL_AUTH_SCHEMA,
-  readMigration,
-} from "@/test/sqlite-d1";
-import {
-  awaitingConfirmation,
-  type AwaitingConfirmationContext,
-} from "./awaiting";
+import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
+import { awaitingConfirmation, type AwaitingConfirmationContext } from "./awaiting";
 
 const recordErrorInBackground = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/observability/errors", () => ({ recordErrorInBackground }));
@@ -39,60 +32,19 @@ function setup() {
   database.exec(readMigration("0018_confirmation_role_snapshot.sql"));
   database.exec(readMigration("0027_mentor_set_aside.sql"));
   addMemberSchema(database);
-  const users = [
-    "member",
-    "member2",
-    "mentor",
-    "mentor2",
-    "admin",
-    demoMentor,
-    demoMember,
-  ];
-  for (const id of users)
-    database
-      .prepare(`INSERT INTO user (id,name,email) VALUES (?,?,?)`)
-      .run(id, id, `${id}@example.test`);
+  const users = ["member", "member2", "mentor", "mentor2", "admin", demoMentor, demoMember];
+  for (const id of users) database.prepare(`INSERT INTO user (id,name,email) VALUES (?,?,?)`).run(id, id, `${id}@example.test`);
   database.exec(`INSERT INTO Roles (id,name) VALUES ('admin-role','ADMIN')`);
-  for (const [userId, role] of [
-    ["mentor", "MENTOR"],
-    ["mentor2", "MENTOR"],
-    ["admin", "ADMIN"],
-    [demoMentor, "MENTOR"],
-  ]) {
-    database
-      .prepare(
-        `INSERT INTO UserRoles (id,userId,roleId) VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`,
-      )
-      .run(`${userId}-${role}`, userId, role);
+  for (const [userId, role] of [["mentor", "MENTOR"], ["mentor2", "MENTOR"], ["admin", "ADMIN"], [demoMentor, "MENTOR"]]) {
+    database.prepare(`INSERT INTO UserRoles (id,userId,roleId) VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(`${userId}-${role}`, userId, role);
   }
-  for (const id of users)
-    database
-      .prepare("INSERT INTO studentProfile(id,userId,handle) VALUES (?,?,?)")
-      .run(id, id, id);
-  const journey = database.prepare(
-    `INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility,state,createdAt) VALUES (?,?,?,?,?,?,?,?)`,
-  );
+  for (const id of users) database.prepare('INSERT INTO studentProfile(id,userId,handle) VALUES (?,?,?)').run(id,id,id);
+  const journey = database.prepare(`INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility,state,createdAt) VALUES (?,?,?,?,?,?,?,?)`);
   for (const [id, userId, visibility, createdAt] of [
-    ["A", "member", "institution", 1],
-    ["B", "member", "institution", 2],
-    ["C", "member", "private", 3],
-    ["D", "mentor", "institution", 4],
-    ["E", "member2", "institution", 5],
-    ["F", demoMember, "institution", 6],
-  ] as const)
-    journey.run(
-      id,
-      userId,
-      `Work ${id}`,
-      `Fictional work ${id}`,
-      "2026-10-01",
-      "institution",
-      visibility === "private" ? "DRAFT" : "POSTED",
-      createdAt,
-    );
-  const confirm = database.prepare(
-    `INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES (?,?,?,?,?,1,'MENTOR')`,
-  );
+    ["A", "member", "institution", 1], ["B", "member", "institution", 2], ["C", "member", "private", 3],
+    ["D", "mentor", "institution", 4], ["E", "member2", "institution", 5], ["F", demoMember, "institution", 6],
+  ] as const) journey.run(id, userId, `Work ${id}`, `Fictional work ${id}`, "2026-10-01", "institution", visibility === "private" ? "DRAFT" : "POSTED", createdAt);
+  const confirm = database.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES (?,?,?,?,?,1,'MENTOR')`);
   confirm.run("mine", "B", "mentor", "I checked the code", "Review");
   confirm.run("theirs", "A", "mentor2", "I checked the code", "Review");
   return { database, db };
@@ -100,203 +52,87 @@ function setup() {
 
 function locals(userId: string | null, extra: Partial<Locals> = {}): Locals {
   return {
-    user: userId
-      ? {
-          id: userId,
-          name: userId,
-          email: `${userId}@example.test`,
-          emailVerified: true,
-          createdAt: new Date(0),
-          updatedAt: new Date(0),
-        }
-      : null,
+    user: userId ? { id: userId, name: userId, email: `${userId}@example.test`, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) } : null,
     session: null,
     personalAccessToken: null,
     ...extra,
   };
 }
-const agentSession = {
-  userAgent: "ttv-agent:fixture",
-} as unknown as Locals["session"];
-const token = {
-  scopes: ["community:read"],
-} as unknown as Locals["personalAccessToken"];
+const agentSession = { userAgent: "ttv-agent:fixture" } as unknown as Locals["session"];
+const token = { scopes: ["community:read"] } as unknown as Locals["personalAccessToken"];
 
 /** What the Confirm page's own API says this caller has waiting, or null when it refuses them. */
-async function confirmPageWaiting(
-  db: D1Database,
-  env: AwaitingConfirmationContext["env"],
-  caller: Locals,
-): Promise<number | null> {
-  const response = await handleCommunityRequest(
-    new Request("https://example.test/api/community/mentorship"),
-    "mentorship",
-    communityActor(caller),
-    db,
-    env as Env,
-  );
+async function confirmPageWaiting(db: D1Database, env: AwaitingConfirmationContext["env"], caller: Locals): Promise<number | null> {
+  const response = await handleCommunityRequest(new Request("https://example.test/api/community/mentorship"), "mentorship", communityActor(caller), db, env as Env);
   if (response.status !== 200) return null;
-  const { entries } = (await response.json()) as {
-    entries: {
-      reviewedByCurrentMentor: boolean;
-      setAsideByCurrentMentor: boolean;
-    }[];
-  };
-  return entries.filter(
-    (entry) => !entry.reviewedByCurrentMentor && !entry.setAsideByCurrentMentor,
-  ).length;
+  const { entries } = await response.json() as { entries: { reviewedByCurrentMentor: boolean; setAsideByCurrentMentor: boolean }[] };
+  return entries.filter((entry) => !entry.reviewedByCurrentMentor && !entry.setAsideByCurrentMentor).length;
 }
 
 describe("awaitingConfirmation", () => {
-  const cases: [
-    string,
-    Locals,
-    AwaitingConfirmationContext["env"],
-    number | null,
-  ][] = [
-    [
-      "a mentor: shared work by others they have not confirmed (A, E, F), never their own or private work",
-      locals("mentor"),
-      {},
-      3,
-    ],
-    [
-      "another mentor: their own confirmations only, so A no longer waits for them but B does, never mentor-owned D",
-      locals("mentor2"),
-      {},
-      3,
-    ],
-    [
-      "an admin, whom the Confirm page also serves (A, B, E, F)",
-      locals("admin"),
-      {},
-      4,
-    ],
+  const cases: [string, Locals, AwaitingConfirmationContext["env"], number | null][] = [
+    ["a mentor: shared work by others they have not confirmed (A, E, F), never their own or private work", locals("mentor"), {}, 3],
+    ["another mentor: their own confirmations only, so A no longer waits for them but B does, never mentor-owned D", locals("mentor2"), {}, 3],
+    ["an admin, whom the Confirm page also serves (A, B, E, F)", locals("admin"), {}, 4],
     ["a member without mentor access", locals("member"), {}, null],
-    [
-      "a personal access token, which the Confirm page refuses",
-      locals("mentor", { personalAccessToken: token }),
-      {},
-      null,
-    ],
-    [
-      "a delegated agent session for a real mentor",
-      locals("mentor", { session: agentSession }),
-      {},
-      null,
-    ],
-    [
-      "the synthetic demo mentor, scoped to demo members",
-      locals(demoMentor, {
-        session: agentSession,
-        stagingDemo: { persona: "mentor", expiresAt: 0 },
-      }),
-      { DEPLOYMENT_ENVIRONMENT: "staging" },
-      1,
-    ],
-    [
-      "the demo mentor outside staging",
-      locals(demoMentor, {
-        session: agentSession,
-        stagingDemo: { persona: "mentor", expiresAt: 0 },
-      }),
-      { DEPLOYMENT_ENVIRONMENT: "production" },
-      null,
-    ],
+    ["a personal access token, which the Confirm page refuses", locals("mentor", { personalAccessToken: token }), {}, null],
+    ["a delegated agent session for a real mentor", locals("mentor", { session: agentSession }), {}, null],
+    ["the synthetic demo mentor, scoped to demo members", locals(demoMentor, { session: agentSession, stagingDemo: { persona: "mentor", expiresAt: 0 } }), { DEPLOYMENT_ENVIRONMENT: "staging" }, 1],
+    ["the demo mentor outside staging", locals(demoMentor, { session: agentSession, stagingDemo: { persona: "mentor", expiresAt: 0 } }), { DEPLOYMENT_ENVIRONMENT: "production" }, null],
     ["nobody signed in", locals(null), {}, null],
   ];
 
-  it.each(cases)(
-    "matches the Confirm page for %s",
-    async (_name, caller, env, expected) => {
-      const { db } = setup();
-      expect(await awaitingConfirmation({ db, env, locals: caller })).toBe(
-        expected,
-      );
-      expect(await confirmPageWaiting(db, env, caller)).toBe(expected);
-    },
-  );
+  it.each(cases)("matches the Confirm page for %s", async (_name, caller, env, expected) => {
+    const { db } = setup();
+    expect(await awaitingConfirmation({ db, env, locals: caller })).toBe(expected);
+    expect(await confirmPageWaiting(db, env, caller)).toBe(expected);
+  });
 
   it("gives retained QA personas no number, since their Confirm page is a separate filtered handler", async () => {
     const { db } = setup();
-    const qa = {
-      userId: "mentor",
-      persona: "mentor",
-    } as unknown as NonNullable<Locals["stagingQa"]>;
-    expect(
-      await awaitingConfirmation({
-        db,
-        env: {},
-        locals: locals("mentor", { stagingQa: qa }),
-      }),
-    ).toBeNull();
+    const qa = { userId: "mentor", persona: "mentor" } as unknown as NonNullable<Locals["stagingQa"]>;
+    expect(await awaitingConfirmation({ db, env: {}, locals: locals("mentor", { stagingQa: qa }) })).toBeNull();
   });
 
   it("follows confirmations and revisions as they happen", async () => {
     const { database, db } = setup();
-    const count = () =>
-      awaitingConfirmation({ db, env: {}, locals: locals("mentor") });
+    const count = () => awaitingConfirmation({ db, env: {}, locals: locals("mentor") });
     expect(await count()).toBe(3);
     database.exec(`UPDATE communityJourney SET version=2 WHERE id='B'`);
     expect(await count()).toBe(4);
-    database.exec(
-      `INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES ('again','B','mentor','I checked it again','Review',2,'MENTOR')`,
-    );
+    database.exec(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES ('again','B','mentor','I checked it again','Review',2,'MENTOR')`);
     database.exec(`UPDATE communityJourney SET state='DRAFT' WHERE id='E'`);
     expect(await count()).toBe(2);
   });
 
   it("leaves out work this mentor set aside, at its current revision only, for them alone (F-7)", async () => {
     const { database, db } = setup();
-    const count = (id: string) =>
-      awaitingConfirmation({ db, env: {}, locals: locals(id) });
-    database.exec(
-      `INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion) VALUES ('mentor','A',1),('mentor','E',1)`,
-    );
+    const count = (id: string) => awaitingConfirmation({ db, env: {}, locals: locals(id) });
+    database.exec(`INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion) VALUES ('mentor','A',1),('mentor','E',1)`);
     expect(await count("mentor")).toBe(1);
     expect(await confirmPageWaiting(db, {}, locals("mentor"))).toBe(1);
     expect(await count("mentor2")).toBe(3);
     // A new revision waits again; undo restores the rest.
     database.exec(`UPDATE communityJourney SET version=2 WHERE id='A'`);
     expect(await count("mentor")).toBe(2);
-    database.exec(
-      `DELETE FROM communitySetAside WHERE mentorId='mentor' AND journeyId='E'`,
-    );
+    database.exec(`DELETE FROM communitySetAside WHERE mentorId='mentor' AND journeyId='E'`);
     expect(await count("mentor")).toBe(3);
   });
 
   it("records a failed read and reports not known, so the spaces pages still render and claim nothing", async () => {
     const { database, db } = setup();
     database.exec(`DROP TABLE communityConfirmation`);
-    const cfContext = {
-      waitUntil: vi.fn(),
-    } as unknown as App.Locals["cfContext"];
-    expect(
-      await awaitingConfirmation({
-        db,
-        env: {},
-        locals: { ...locals("mentor"), cfContext },
-      }),
-    ).toBeNull();
+    const cfContext = { waitUntil: vi.fn() } as unknown as App.Locals["cfContext"];
+    expect(await awaitingConfirmation({ db, env: {}, locals: { ...locals("mentor"), cfContext } })).toBeNull();
     expect(recordErrorInBackground).toHaveBeenCalledOnce();
-    expect(recordErrorInBackground).toHaveBeenCalledWith(
-      cfContext,
-      db,
-      expect.objectContaining({
-        source: "request",
-        level: "warning",
-        error: expect.objectContaining({
-          message: expect.stringMatching(/no such table/),
-        }),
-      }),
-    );
+    expect(recordErrorInBackground).toHaveBeenCalledWith(cfContext, db, expect.objectContaining({
+      source: "request", level: "warning", error: expect.objectContaining({ message: expect.stringMatching(/no such table/) }),
+    }));
   });
 
   it("records nothing for a caller the Confirm page refuses", async () => {
     const { db } = setup();
-    expect(
-      await awaitingConfirmation({ db, env: {}, locals: locals("member") }),
-    ).toBeNull();
+    expect(await awaitingConfirmation({ db, env: {}, locals: locals("member") })).toBeNull();
     expect(recordErrorInBackground).not.toHaveBeenCalled();
   });
 });

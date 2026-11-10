@@ -47,15 +47,7 @@ import {
   PiSpinnerGapBold,
   PiWarningCircleBold,
 } from "react-icons/pi";
-import {
-  Button,
-  ButtonLink,
-  HINT,
-  IconButton,
-  Notice,
-  StatusChip,
-  cx,
-} from "@/components/platform/ui";
+import { Button, ButtonLink, HINT, IconButton, Notice, StatusChip, cx } from "@/components/platform/ui";
 import { estimateReadingMinutes } from "@/lib/blog/post";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { BlockInsertBar, BlockInsertGutter } from "./BlockInsertMenu";
@@ -114,7 +106,7 @@ interface SaveResponse {
 class SaveError extends Error {
   constructor(
     message: string,
-    readonly slugError?: string,
+    readonly slugError?: string
   ) {
     super(message);
     this.name = "SaveError";
@@ -139,15 +131,14 @@ export default function PostEditor({
   const [state, dispatch] = useReducer(
     autosaveReducer,
     initialDraft,
-    initialAutosaveState,
+    initialAutosaveState
   );
   const [panelOpen, setPanelOpen] = useState(false);
   const [mode, setMode] = useState<"rich" | "markdown">("rich");
   const [slugError, setSlugError] = useState<string | null>(serverSlugError);
   const [derivedExcerpt, setDerivedExcerpt] = useState(initialDerivedExcerpt);
-  const [savedReadingMinutes, setSavedReadingMinutes] = useState(
-    initialReadingMinutes,
-  );
+  const [savedReadingMinutes, setSavedReadingMinutes] =
+    useState(initialReadingMinutes);
   const canvasRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   /** Set while a form submission is on its way, so the unload guard stands down. */
@@ -159,7 +150,7 @@ export default function PostEditor({
   const update = useCallback(
     (patch: Partial<PostDraft>) =>
       dispatch({ type: "edit", draft: { ...draft, ...patch } }),
-    [draft],
+    [draft]
   );
 
   /**
@@ -189,17 +180,16 @@ export default function PostEditor({
             excerpt: draft.excerpt,
             contentMarkdown: draft.contentMarkdown,
           }),
-        },
+        }
       );
       const payload = (await response.json().catch(() => null)) as
-        (Partial<SaveResponse> & { error?: string; slugError?: string }) | null;
+        | (Partial<SaveResponse> & { error?: string; slugError?: string })
+        | null;
 
       if (!response.ok || !payload?.id) {
         throw new SaveError(
-          payload?.slugError ??
-            payload?.error ??
-            "Your post could not be saved.",
-          payload?.slugError,
+          payload?.slugError ?? payload?.error ?? "Your post could not be saved.",
+          payload?.slugError
         );
       }
 
@@ -322,10 +312,7 @@ export default function PostEditor({
 
       {status === "DRAFT" && editable && blockers.length > 0 && (
         // Why Publish is off, in words beside it rather than in a tooltip only a mouse can reach.
-        <p
-          id={PUBLISH_HINT_ID}
-          className={`m-0 shrink-0 border-b border-hairline px-4 py-1.5 text-right ${HINT}`}
-        >
+        <p id={PUBLISH_HINT_ID} className={`m-0 shrink-0 border-b border-hairline px-4 py-1.5 text-right ${HINT}`}>
           To publish: {blockers.join(", ").toLowerCase()}.
         </p>
       )}
@@ -333,13 +320,9 @@ export default function PostEditor({
       {(serverError || adminNote) && (
         <div className="shrink-0 px-4 pt-3">
           {serverError ? (
-            <Notice tone="danger" focusOnLoad title="That didn't save">
-              {serverError}
-            </Notice>
+            <Notice tone="danger" focusOnLoad title="That didn't save">{serverError}</Notice>
           ) : (
-            <Notice tone="warning" title="An admin has taken this post down">
-              {adminNote}
-            </Notice>
+            <Notice tone="warning" title="An admin has taken this post down">{adminNote}</Notice>
           )}
         </div>
       )}
@@ -368,39 +351,29 @@ export default function PostEditor({
         </div>
 
         <MetadataPanel
-          open={panelOpen}
-          onClose={() => setPanelOpen(false)}
-          draft={draft}
-          onChange={update}
-          status={status}
-          handle={handle}
-          readingMinutes={readingMinutes}
-          derivedExcerpt={derivedExcerpt}
-          slugError={slugError}
-          updatedLabel={updatedLabel}
-          publishedLabel={publishedLabel}
-          canDelete={status === "DRAFT" && postId !== null}
-          onDelete={() => submitAction("delete")}
-          actions={
-            status === "PUBLISHED" ? (
-              <Button
-                className="w-full"
-                onClick={() => submitAction("unpublish")}
-              >
-                Move back to drafts
-              </Button>
-            ) : status === "DRAFT" ? (
-              // The top bar's Publish is the page's one primary; this one is quiet.
-              <Button
-                className="w-full"
-                disabled={blockers.length > 0}
-                aria-describedby={
-                  blockers.length > 0 ? PUBLISH_HINT_ID : undefined
-                }
-                onClick={() => submitAction("publish")}
-              >
-                Publish
-              </Button>
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        draft={draft}
+        onChange={update}
+        status={status}
+        handle={handle}
+        readingMinutes={readingMinutes}
+        derivedExcerpt={derivedExcerpt}
+        slugError={slugError}
+        updatedLabel={updatedLabel}
+        publishedLabel={publishedLabel}
+        canDelete={status === "DRAFT" && postId !== null}
+        onDelete={() => submitAction("delete")}
+        actions={
+          status === "PUBLISHED" ? (
+            <Button className="w-full" onClick={() => submitAction("unpublish")}>
+              Move back to drafts
+            </Button>
+          ) : status === "DRAFT" ? (
+            // The top bar's Publish is the page's one primary; this one is quiet.
+            <Button className="w-full" disabled={blockers.length > 0} aria-describedby={blockers.length > 0 ? PUBLISH_HINT_ID : undefined} onClick={() => submitAction("publish")}>
+              Publish
+            </Button>
             ) : null
           }
         />
@@ -458,19 +431,12 @@ function TopBar({
 }: TopBarProps) {
   return (
     <header className="z-30 flex shrink-0 items-center gap-1.5 border-b border-hairline bg-ground/60 px-3 py-1.5 backdrop-blur sm:gap-3 sm:px-4">
-      <ButtonLink
-        href="/dashboard/writing"
-        variant="ghost"
-        icon={<PiArrowLeftBold />}
-        className="pointer-coarse:min-w-11"
-      >
+      <ButtonLink href="/dashboard/writing" variant="ghost" icon={<PiArrowLeftBold />} className="pointer-coarse:min-w-11">
         <span className="sr-only sm:not-sr-only">Writing</span>
       </ButtonLink>
 
       {/* A draft's phone bar keeps its room for Publish; the panel says where it stands. */}
-      <span
-        className={status === "DRAFT" ? "hidden sm:inline-flex" : "inline-flex"}
-      >
+      <span className={status === "DRAFT" ? "hidden sm:inline-flex" : "inline-flex"}>
         <StatusChip domain="post" status={status} />
       </span>
       <SaveIndicator label={saveLabel} state={saveState} />
@@ -495,9 +461,7 @@ function TopBar({
             variant="primary"
             onClick={onPublish}
             disabled={!canPublish}
-            aria-describedby={
-              canPublish || !publishHint ? undefined : PUBLISH_HINT_ID
-            }
+            aria-describedby={canPublish || !publishHint ? undefined : PUBLISH_HINT_ID}
           >
             Publish
           </Button>
@@ -518,7 +482,13 @@ function TopBar({
 /** The line that says why Publish is off, which both Publish buttons point at. */
 const PUBLISH_HINT_ID = "post-publish-hint";
 
-function SaveIndicator({ label, state }: { label: string; state: SaveStatus }) {
+function SaveIndicator({
+  label,
+  state,
+}: {
+  label: string;
+  state: SaveStatus;
+}) {
   // Nothing has happened yet, and saying so is noise next to the status pill.
   if (state === "idle") return null;
 
@@ -535,10 +505,7 @@ function SaveIndicator({ label, state }: { label: string; state: SaveStatus }) {
       // whether their work is safe should not have to watch a pixel for it.
       // `<output>` carries the status role natively.
       aria-live="polite"
-      className={cx(
-        "flex min-w-0 items-center gap-1.5 text-sm",
-        state === "error" ? "text-danger-ink" : "text-ink-muted",
-      )}
+      className={cx("flex min-w-0 items-center gap-1.5 text-sm", state === "error" ? "text-danger-ink" : "text-ink-muted")}
     >
       <Icon
         className={state === "saving" ? "animate-spin" : undefined}
@@ -626,17 +593,17 @@ function RichCanvas({
   // — and recomputing it on a keystroke resets the document being typed into.
   // Switching modes remounts this component, which is what re-reads Markdown.
   const [initialConfig] = useState(() => ({
-    namespace: "post-editor",
-    nodes: POST_EDITOR_NODES,
-    theme: POST_EDITOR_THEME,
-    editable,
-    editorState: () =>
-      $convertFromMarkdownString(initialMarkdown, POST_TRANSFORMERS),
-    onError: (error: Error) => {
-      // Swallowing this would leave the author typing into a broken editor.
-      // Throwing hands the canvas to the error boundary instead.
-      throw error;
-    },
+      namespace: "post-editor",
+      nodes: POST_EDITOR_NODES,
+      theme: POST_EDITOR_THEME,
+      editable,
+      editorState: () =>
+        $convertFromMarkdownString(initialMarkdown, POST_TRANSFORMERS),
+      onError: (error: Error) => {
+        // Swallowing this would leave the author typing into a broken editor.
+        // Throwing hands the canvas to the error boundary instead.
+        throw error;
+      },
   }));
 
   return (
@@ -658,18 +625,18 @@ function RichCanvas({
             }
             placeholder={
               !mounted ? null : (
-                <div className="pointer-events-none absolute inset-x-0 top-0 select-none">
-                  <p className="post-body text-ink-muted">Tell the story.</p>
-                  {/* The shortcuts are the fastest way to write in this editor
+              <div className="pointer-events-none absolute inset-x-0 top-0 select-none">
+                <p className="post-body text-ink-muted">Tell the story.</p>
+                {/* The shortcuts are the fastest way to write in this editor
                     and the only part of it that is invisible, so the empty
                     canvas is where they are worth a line. */}
-                  <p className={`mt-2 ${HINT}`}>
-                    <span className="font-mono">##</span> makes a heading,{" "}
-                    <span className="font-mono">-</span> a list,{" "}
-                    <span className="font-mono">&gt;</span> a quote. Select text
-                    to format it.
-                  </p>
-                </div>
+                <p className={`mt-2 ${HINT}`}>
+                  <span className="font-mono">##</span> makes a heading,{" "}
+                  <span className="font-mono">-</span> a list,{" "}
+                  <span className="font-mono">&gt;</span> a quote. Select text to
+                  format it.
+                </p>
+              </div>
               )
             }
             ErrorBoundary={LexicalErrorBoundary}
@@ -690,7 +657,7 @@ function RichCanvas({
         ignoreSelectionChange
         onChange={(editorState) =>
           editorState.read(() =>
-            onChange($convertToMarkdownString(POST_TRANSFORMERS)),
+            onChange($convertToMarkdownString(POST_TRANSFORMERS))
           )
         }
       />

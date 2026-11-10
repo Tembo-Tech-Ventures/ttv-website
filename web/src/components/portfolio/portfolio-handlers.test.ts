@@ -16,14 +16,9 @@ function makeFormData(entries: Record<string, string>): FormData {
 }
 
 describe("extractProfileFormData", () => {
-  it("accepts opportunity goals without clearing them from older forms", () => {
-    expect(
-      extractProfileFormData(makeFormData({ opportunityGoals: "Collaborate" }))
-        .opportunityGoals,
-    ).toBe("Collaborate");
-    expect(
-      extractProfileFormData(makeFormData({})).opportunityGoals,
-    ).toBeUndefined();
+  it("accepts opportunity goals without clearing them from older forms",()=>{
+    expect(extractProfileFormData(makeFormData({opportunityGoals:"Collaborate"})).opportunityGoals).toBe("Collaborate");
+    expect(extractProfileFormData(makeFormData({})).opportunityGoals).toBeUndefined();
   });
   it("extracts text fields correctly", () => {
     const fd = makeFormData({
@@ -113,14 +108,7 @@ function mockDb(
             columns?: Record<string, unknown>;
             with?: unknown;
           }) => {
-            if (opts?.with && !opts.columns)
-              return {
-                id: "profile-1",
-                contentVersion: 1,
-                handle: "test-user",
-                skills: "[]",
-                user: { name: "Test User", image: null },
-              };
+            if (opts?.with && !opts.columns) return {id:"profile-1",contentVersion:1,handle:"test-user",skills:"[]",user:{name:"Test User",image:null}};
             // Dispatch on requested columns: `saveProfile` issues two distinct
             // lookups (handle lock, then handle uniqueness) against this mock.
             if (opts?.columns && "publishedAt" in opts.columns) {
@@ -494,12 +482,7 @@ function moderationDb(
   return {
     db: {
       query: {
-        programApplication: {
-          findFirst: vi.fn(async () => ({
-            status: "COMPLETED",
-            completedAt: new Date(),
-          })),
-        },
+        programApplication: {findFirst: vi.fn(async () => ({status:"COMPLETED",completedAt:new Date()}))},
         studentProfile: {
           findFirst: vi.fn(async () => profile),
         },
@@ -531,17 +514,9 @@ function expectVersionedStatusWriteGuard(
 
 describe("publishProfile", () => {
   it("refuses public listing without a valid completion", async () => {
-    const { db, setProfile } = moderationDb(draftProfile);
-    db.query.programApplication.findFirst.mockResolvedValue({
-      status: "APPROVED",
-      completedAt: new Date(),
-    });
-    expect(
-      await publishProfile(db as never, "user-1", "profile-1"),
-    ).toMatchObject({
-      success: false,
-      error: expect.stringContaining("Complete a cohort"),
-    });
+    const {db,setProfile}=moderationDb(draftProfile);
+    db.query.programApplication.findFirst.mockResolvedValue({status:"APPROVED",completedAt:new Date()});
+    expect(await publishProfile(db as never,"user-1","profile-1")).toMatchObject({success:false,error:expect.stringContaining("Complete a cohort")});
     expect(setProfile).not.toHaveBeenCalled();
   });
   it("publishes a passing draft immediately", async () => {

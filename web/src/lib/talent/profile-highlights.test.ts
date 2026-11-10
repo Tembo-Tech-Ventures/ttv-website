@@ -42,7 +42,6 @@ const highlight: ProfileHighlightValues = {
   sortOrder: 0,
   snapshotAt: new Date("2026-10-10T00:00:00Z"),
 };
-
 const databases: ReturnType<typeof createSqliteD1>["database"][] = [];
 afterEach(() => databases.splice(0).forEach((d) => d.close()));
 function fixture() {
@@ -180,31 +179,16 @@ describe("repository work writes", () => {
   });
 });
 
-it("reposts an author draft only after an explicit picker selection", async () => {
-  const { db, database } = fixture();
-  await replaceProfileHighlights(db, profile, [highlight]);
-  database.exec("UPDATE communityJourney SET state='DRAFT'");
-  await replaceProfileHighlights(
-    db,
-    { ...profile, contentVersion: 9 },
-    [highlight],
-    true,
-  );
-  expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({
-    state: "POSTED",
-  });
-  database.exec("UPDATE communityJourney SET state='DRAFT',moderatorHidden=1");
-  await replaceProfileHighlights(
-    db,
-    { ...profile, contentVersion: 10 },
-    [highlight],
-    true,
-  );
-  expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({
-    state: "DRAFT",
-  });
+it("reposts an author draft only after an explicit picker selection",async()=>{
+ const {db,database}=fixture();
+ await replaceProfileHighlights(db,profile,[highlight]);
+ database.exec("UPDATE communityJourney SET state='DRAFT'");
+ await replaceProfileHighlights(db,{...profile,contentVersion:9},[highlight],true);
+ expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({state:"POSTED"});
+ database.exec("UPDATE communityJourney SET state='DRAFT',moderatorHidden=1");
+ await replaceProfileHighlights(db,{...profile,contentVersion:10},[highlight],true);
+ expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({state:"DRAFT"});
 });
-
 it("reorders preserve holds and keeps, and deletion cannot erase a hidden repository tombstone", async () => {
   const { db, database } = fixture();
   await replaceProfileHighlights(db, profile, [highlight], true);

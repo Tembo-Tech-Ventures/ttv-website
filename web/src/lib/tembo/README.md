@@ -105,7 +105,7 @@ reaches no more than its members.
 | Channel   | Tools                               | Sources                                                                                                                                                                                                                               |
 | --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | COHORT    | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages                                                                                                                                     |
-| COMMUNITY | `search_projects`, `search_channel` | Public builder profiles (the /talent rule: published, after a completed cohort) and their highlights; projects their owners shared in this channel, as shared there and while still shared; this channel's messages. Never recordings |
+| COMMUNITY | `search_projects`, `search_channel` | Saved, eligible member profiles and their posted work; projects their owners shared in this channel, while still readable; this channel's messages. Never recordings |
 | DIRECT    | `search_channel`                    | This conversation only, and only when someone in it asks                                                                                                                                                                              |
 
 Messages are read as a reader without privileges reads them: a person's (never

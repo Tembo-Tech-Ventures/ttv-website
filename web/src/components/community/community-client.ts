@@ -7,12 +7,7 @@ import type {
   EvidenceAnswer,
   ScoutCriteria,
 } from "../discovery/types";
-import type {
-  ClaimDraft,
-  EditableCommunityProfile,
-  MentorReviewDecision,
-  MentorReviewRequest,
-} from "./community-types";
+import type { ClaimDraft, EditableCommunityProfile, MentorReviewDecision, MentorReviewRequest } from "./community-types";
 import { UiApiError } from "../discovery/ui-errors";
 
 // Validate the network boundary independently from server-side authorization.
@@ -24,7 +19,7 @@ const profileSchema = z.object({
   bio: z.string(),
   skills: z.array(z.string()),
   opportunityGoals: z.string(),
-  moderationHold: z.boolean().optional(),
+  moderationHold:z.boolean().optional(),
   moderatorHidden: z.coerce.boolean().optional(),
   version: z.number().int(),
   updatedAt: z.number().nullable(),
@@ -39,8 +34,8 @@ const confirmationSchema = z.object({
   createdAt: z.number(),
 });
 const entrySchema = z.object({
-  kind: WorkKind.default("contribution"),
-  repoFullName: z.string().nullable().default(null),
+  kind:WorkKind.default("contribution"),
+  repoFullName:z.string().nullable().default(null),
   id: z.string(),
   userId: z.string(),
   title: z.string(),
@@ -48,7 +43,7 @@ const entrySchema = z.object({
   evidenceUrl: z.string().nullable().optional(),
   occurredAt: z.string(),
   status: z.enum(["posted", "draft"]),
-  moderationHold: z.boolean().optional(),
+  moderationHold:z.boolean().optional(),
   moderatorHidden: z.coerce.boolean().optional(),
   version: z.number().int().positive(),
   confirmations: z.array(confirmationSchema).default([]),
@@ -74,9 +69,9 @@ export function mapJourney(entry: EntryDto): JourneyClaim {
     date: entry.occurredAt,
     version: entry.version,
     status: entry.status,
-    kind: entry.kind,
-    repoFullName: entry.repoFullName,
-    moderationHold: entry.moderationHold,
+    kind:entry.kind,
+    repoFullName:entry.repoFullName,
+    moderationHold:entry.moderationHold,
     moderatorHidden: entry.moderatorHidden,
     skills: [],
     evidence: entry.evidenceUrl
@@ -105,7 +100,7 @@ export function mapProfile(
   entries?: EntryDto[],
 ): CommunityProfile {
   return {
-    moderationHold: profile.moderationHold,
+    moderationHold:profile.moderationHold,
     id: profile.userId,
     version: profile.version,
     name: profile.name,
@@ -133,10 +128,7 @@ export async function communityRequest<T>(
 ): Promise<T> {
   const controller = new AbortController();
   // Chat may use three bounded model steps (60s total); allow response overhead.
-  const timeoutMs =
-    (path === "chat" || path === "profiles/discover") && method === "POST"
-      ? 70_000
-      : 25_000;
+  const timeoutMs = (path === "chat" || path === "profiles/discover") && method === "POST" ? 70_000 : 25_000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetcher(`/api/community/${path}`, {
@@ -163,8 +155,7 @@ export async function communityRequest<T>(
 const ownProfileSchema = z.object({ profile: profileSchema });
 const journeySchema = z.object({ entries: z.array(entrySchema) });
 
-export const loadAccess = (fetcher: typeof fetch = fetch) =>
-  communityRequest("access", accessSchema, "GET", undefined, fetcher);
+export const loadAccess = (fetcher: typeof fetch = fetch) => communityRequest("access", accessSchema, "GET", undefined, fetcher);
 export async function loadOwnProfile() {
   const [profile, entries] = await Promise.all([
     communityRequest("profile", ownProfileSchema),
@@ -178,10 +169,7 @@ export async function loadOwnProfile() {
  * GET journey, validated and mapped as loadOwnProfile does. Null when either
  * body does not match.
  */
-export function parseOwnJourney(
-  profile: unknown,
-  journey: unknown,
-): CommunityProfile | null {
+export function parseOwnJourney(profile: unknown, journey: unknown): CommunityProfile | null {
   const parsedProfile = ownProfileSchema.safeParse(profile);
   const parsedJourney = journeySchema.safeParse(journey);
   if (!parsedProfile.success || !parsedJourney.success) return null;
@@ -221,58 +209,21 @@ export async function saveContribution(draft: ClaimDraft) {
   );
   return mapJourney(result.entry);
 }
-export async function updateContribution(
-  claim: JourneyClaim,
-  draft: ClaimDraft,
-): Promise<JourneyClaim> {
-  await communityRequest(
-    `journey/${encodeURIComponent(claim.id)}`,
-    z.object({ id: z.string(), updated: z.literal(true) }),
-    "PUT",
-    {
-      title: draft.title,
-      description: draft.description,
-      evidenceUrl: draft.sourceUrl.trim() || null,
-      occurredAt: draft.date,
-      status: claim.status ?? "posted",
-      expectedRevision: claim.version,
-    },
-  );
-  const current = await communityRequest(
-    "journey",
-    z.object({ entries: z.array(entrySchema) }),
-  );
-  const saved = current.entries.find((entry) => entry.id === claim.id);
-  if (!saved || saved.version <= claim.version) throw new UiApiError(502);
+export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft): Promise<JourneyClaim> {
+  await communityRequest(`journey/${encodeURIComponent(claim.id)}`,z.object({id:z.string(),updated:z.literal(true)}),"PUT",{
+    title:draft.title,description:draft.description,evidenceUrl:draft.sourceUrl.trim()||null,occurredAt:draft.date,
+    status:claim.status??"posted",expectedRevision:claim.version,
+  });
+  const current=await communityRequest("journey",z.object({entries:z.array(entrySchema)}));
+  const saved=current.entries.find(entry=>entry.id===claim.id);
+  if(!saved || saved.version<=claim.version)throw new UiApiError(502);
   return mapJourney(saved);
 }
-export async function discoverPeople(
-  criteria: ScoutCriteria,
-  fetcher: typeof fetch = fetch,
-) {
-  const result = await communityRequest(
-    "profiles/discover",
-    z.object({
-      profiles: z.array(
-        z.object({ profile: profileSchema, matches: z.array(matchSchema) }),
-      ),
-      evaluated: z.number(),
-      searched: z.number(),
-    }),
-    "POST",
-    criteria,
-    fetcher,
-  );
-  return result.profiles.map((item) => ({
-    ...mapProfile(item.profile),
-    matches: item.matches,
-    discovery: { evaluated: result.evaluated, searched: result.searched },
-  }));
+export async function discoverPeople(criteria: ScoutCriteria, fetcher: typeof fetch = fetch) {
+  const result = await communityRequest("profiles/discover", z.object({profiles:z.array(z.object({profile:profileSchema,matches:z.array(matchSchema)})),evaluated:z.number(),searched:z.number()}),"POST",criteria,fetcher);
+  return result.profiles.map(item=>({...mapProfile(item.profile),matches:item.matches,discovery:{evaluated:result.evaluated,searched:result.searched}}));
 }
-export async function searchProfiles(
-  criteria: ScoutCriteria,
-  fetcher: typeof fetch = fetch,
-) {
+export async function searchProfiles(criteria: ScoutCriteria, fetcher: typeof fetch = fetch) {
   // Both filters are evaluated by the service before its result limit.
   const query = new URLSearchParams({
     query: criteria.query,
@@ -288,20 +239,12 @@ export async function searchProfiles(
   );
   return result.profiles.map((profile) => mapProfile(profile));
 }
-export async function loadMentorship(
-  fetcher: typeof fetch = fetch,
-): Promise<MentorReviewRequest[]> {
+export async function loadMentorship(fetcher: typeof fetch = fetch): Promise<MentorReviewRequest[]> {
   const result = await communityRequest(
     "mentorship",
     z.object({
       // Retained QA personas read through a separate handler that predates set-aside.
-      entries: z.array(
-        entrySchema.extend({
-          memberName: z.string(),
-          reviewedByCurrentMentor: z.boolean(),
-          setAsideByCurrentMentor: z.boolean().default(false),
-        }),
-      ),
+      entries: z.array(entrySchema.extend({ memberName: z.string(), reviewedByCurrentMentor: z.boolean(), setAsideByCurrentMentor: z.boolean().default(false) })),
     }),
     "GET",
     undefined,
@@ -321,42 +264,20 @@ export async function loadMentorship(
   }));
 }
 /** "I can't confirm this": private to the mentor, for the revision they saw. */
-export async function setAsideContribution(
-  id: string,
-  expectedRevision: number,
-  fetcher: typeof fetch = fetch,
-): Promise<void> {
+export async function setAsideContribution(id: string, expectedRevision: number, fetcher: typeof fetch = fetch): Promise<void> {
   const result = await communityRequest(
     `journey/${encodeURIComponent(id)}/set-aside`,
-    z.object({
-      setAside: z.object({
-        journeyId: z.string(),
-        journeyVersion: z.number().int(),
-        setAside: z.literal(true),
-      }),
-    }),
+    z.object({ setAside: z.object({ journeyId: z.string(), journeyVersion: z.number().int(), setAside: z.literal(true) }) }),
     "POST",
     { expectedRevision },
     fetcher,
   );
-  if (
-    result.setAside.journeyId !== id ||
-    result.setAside.journeyVersion !== expectedRevision
-  )
-    throw new UiApiError(502);
+  if (result.setAside.journeyId !== id || result.setAside.journeyVersion !== expectedRevision) throw new UiApiError(502);
 }
-export async function undoSetAside(
-  id: string,
-  fetcher: typeof fetch = fetch,
-): Promise<void> {
+export async function undoSetAside(id: string, fetcher: typeof fetch = fetch): Promise<void> {
   await communityRequest(
     `journey/${encodeURIComponent(id)}/set-aside`,
-    z.object({
-      setAside: z.object({
-        journeyId: z.literal(id),
-        setAside: z.literal(false),
-      }),
-    }),
+    z.object({ setAside: z.object({ journeyId: z.literal(id), setAside: z.literal(false) }) }),
     "DELETE",
     undefined,
     fetcher,
@@ -409,17 +330,11 @@ export async function askProfile(
   criteria: ScoutCriteria,
   fetcher: typeof fetch = fetch,
 ): Promise<EvidenceAnswer> {
-  const answer = await communityRequest(
-    "chat",
-    chatSchema,
-    "POST",
-    {
-      message: question,
-      profileId: profile.id,
-      context: `${criteria.context.slice(0, 1000)}\nSkills of interest: ${criteria.skills.slice(0, 300)}`,
-    },
-    fetcher,
-  );
+  const answer = await communityRequest("chat", chatSchema, "POST", {
+    message: question,
+    profileId: profile.id,
+    context: `${criteria.context.slice(0, 1000)}\nSkills of interest: ${criteria.skills.slice(0, 300)}`,
+  }, fetcher);
   if (!answer.grounded)
     return {
       text: "An evidence-grounded answer could not be produced. Narrow your question or review the published contributions directly.",
@@ -463,46 +378,8 @@ export async function askProfile(
 
 /** Model order is confined to profiles actually retrieved and cited by the server. */
 export async function orderProfilesByEvidence(criteria: ScoutCriteria) {
-  const schema = z.object({
-    answer: z.string(),
-    grounded: z.boolean(),
-    evaluatedCandidates: z.number().int().min(0).max(10),
-    orderedProfiles: z
-      .array(
-        z.object({
-          userId: z.string(),
-          name: z.string(),
-          reason: z.string(),
-          missingEvidence: z.array(z.string()),
-          citations: z
-            .array(
-              z.object({
-                kind: z.enum(["journey", "confirmation"]),
-                id: z.string(),
-                version: z.number().int(),
-                url: z.string().nullable(),
-              }),
-            )
-            .default([]),
-        }),
-      )
-      .max(3),
-  });
-  const response = await communityRequest("chat", schema, "POST", {
-    orderByEvidence: true,
-    message: `Find a small shortlist using query ${JSON.stringify(criteria.query)} and skills ${JSON.stringify(
-      criteria.skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    )}. Compare published project evidence for the opportunity and order by evidence relevance, with comparative reasons and unknowns.`,
-    context: criteria.context.slice(0, 2000),
-  });
-  if (!response.grounded || response.orderedProfiles.length === 0)
-    throw new UiApiError(502);
-  return {
-    text: response.answer,
-    evaluatedCandidates: response.evaluatedCandidates,
-    profiles: response.orderedProfiles,
-  };
+  const schema=z.object({answer:z.string(),grounded:z.boolean(),evaluatedCandidates:z.number().int().min(0).max(10),orderedProfiles:z.array(z.object({userId:z.string(),name:z.string(),reason:z.string(),missingEvidence:z.array(z.string()),citations:z.array(z.object({kind:z.enum(["journey","confirmation"]),id:z.string(),version:z.number().int(),url:z.string().nullable()})).default([])})).max(3)});
+  const response=await communityRequest("chat",schema,"POST",{orderByEvidence:true,message:`Find a small shortlist using query ${JSON.stringify(criteria.query)} and skills ${JSON.stringify(criteria.skills.split(',').map(s=>s.trim()).filter(Boolean))}. Compare published project evidence for the opportunity and order by evidence relevance, with comparative reasons and unknowns.`,context:criteria.context.slice(0,2000)});
+  if(!response.grounded || response.orderedProfiles.length === 0) throw new UiApiError(502);
+  return {text:response.answer,evaluatedCandidates:response.evaluatedCandidates,profiles:response.orderedProfiles};
 }

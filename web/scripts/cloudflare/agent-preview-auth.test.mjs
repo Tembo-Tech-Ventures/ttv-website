@@ -15,97 +15,46 @@ import {
 
 describe("agent preview identity", () => {
   it("separates runs and attempts and never recreates the legacy bearer", () => {
-    const secret = "s".repeat(32),
-      environment = "agent-pr-55";
-    const legacy = createHmac("sha256", secret)
-      .update(`ttv-agent-preview-token:${environment}`)
-      .digest("hex");
-    const tokens = ["github-123-1", "github-123-2", "github-124-1"].map((run) =>
-      deriveAgentPreviewToken(secret, environment, run),
-    );
+    const secret = "s".repeat(32), environment = "agent-pr-55";
+    const legacy = createHmac("sha256", secret).update(`ttv-agent-preview-token:${environment}`).digest("hex");
+    const tokens = ["github-123-1", "github-123-2", "github-124-1"].map(run => deriveAgentPreviewToken(secret, environment, run));
     expect(new Set(tokens).size).toBe(3);
     expect(tokens).not.toContain(legacy);
-    expect(deriveAgentPreviewToken(secret, environment, "github-123-1")).toBe(
-      tokens[0],
-    );
-    expect(
-      deriveAgentPreviewPersonaToken(
-        secret,
-        environment,
-        "newStudent",
-        "github-123-1",
-      ),
-    ).not.toBe(
-      deriveAgentPreviewPersonaToken(
-        secret,
-        environment,
-        "newStudent",
-        "github-123-2",
-      ),
-    );
-    expect(requirePreviewRunId(`local-${"a".repeat(32)}`)).toBe(
-      `local-${"a".repeat(32)}`,
-    );
+    expect(deriveAgentPreviewToken(secret, environment, "github-123-1")).toBe(tokens[0]);
+    expect(deriveAgentPreviewPersonaToken(secret, environment, "newStudent", "github-123-1"))
+      .not.toBe(deriveAgentPreviewPersonaToken(secret, environment, "newStudent", "github-123-2"));
+    expect(requirePreviewRunId(`local-${"a".repeat(32)}`)).toBe(`local-${"a".repeat(32)}`);
   });
-  it.each([
-    undefined,
-    "",
-    "github-123",
-    "github-0-1",
-    "local-short",
-    "old-secret-value",
-  ])("fails closed before seed writes with invalid scope %s", async (runId) => {
+  it.each([undefined, "", "github-123", "github-0-1", "local-short", "old-secret-value"])("fails closed before seed writes with invalid scope %s", async runId => {
     const executeQuery = vi.fn();
-    await expect(
-      seedAgentPreviewAccess({
-        databaseId: "fictional",
-        environmentName: "agent-pr-55",
-        previewSecret: "s".repeat(32),
-        runId,
-        executeQuery,
-      }),
-    ).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
-    await expect(
-      seedAgentPreviewFixtures({
-        databaseId: "fictional",
-        environmentName: "agent-pr-55",
-        previewSecret: "s".repeat(32),
-        runId,
-        executeQuery,
-      }),
-    ).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
+    await expect(seedAgentPreviewAccess({ databaseId: "fictional", environmentName: "agent-pr-55", previewSecret: "s".repeat(32), runId, executeQuery })).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
+    await expect(seedAgentPreviewFixtures({ databaseId: "fictional", environmentName: "agent-pr-55", previewSecret: "s".repeat(32), runId, executeQuery })).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
     expect(executeQuery).not.toHaveBeenCalled();
   });
   it("accepts bounded agent names and rejects ambiguous resource names", () => {
     expect(assertAgentEnvironmentName("agent-pr-55")).toBe("agent-pr-55");
     expect(() => assertAgentEnvironmentName("staging")).toThrow(
-      'must start with "agent-"',
+      'must start with "agent-"'
     );
-    expect(() => assertAgentEnvironmentName(`agent-${"a".repeat(40)}`)).toThrow(
-      "at most 40",
-    );
+    expect(() =>
+      assertAgentEnvironmentName(`agent-${"a".repeat(40)}`)
+    ).toThrow("at most 40");
     expect(() => assertAgentEnvironmentName("agent-trailing-")).toThrow(
-      "may not end",
+      "may not end"
     );
   });
 
   it("derives separate, environment-specific session and auth secrets", () => {
     const secret = "s".repeat(32);
-    const firstToken = deriveAgentPreviewToken(
-      secret,
-      "agent-pr-55",
-      "github-123-1",
-    );
+    const firstToken = deriveAgentPreviewToken(secret, "agent-pr-55", "github-123-1");
     expect(firstToken).toHaveLength(64);
-    expect(
-      deriveAgentPreviewToken(secret, "agent-pr-56", "github-123-1"),
-    ).not.toBe(firstToken);
+    expect(deriveAgentPreviewToken(secret, "agent-pr-56", "github-123-1")).not.toBe(firstToken);
     expect(deriveAgentPreviewAuthSecret(secret, "agent-pr-55")).not.toBe(
-      firstToken,
+      firstToken
     );
-    expect(() =>
-      deriveAgentPreviewToken("too-short", "agent-pr-55", "github-123-1"),
-    ).toThrow("at least 32");
+    expect(() => deriveAgentPreviewToken("too-short", "agent-pr-55", "github-123-1")).toThrow(
+      "at least 32"
+    );
   });
 
   it("derives bounded tokens for the seeded student personas", () => {
@@ -113,20 +62,17 @@ describe("agent preview identity", () => {
     const newStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "newStudent",
-      "github-123-1",
+      "newStudent", "github-123-1"
     );
     const acceptedStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "acceptedStudent",
-      "github-123-1",
+      "acceptedStudent", "github-123-1"
     );
     const graduateStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "graduateStudent",
-      "github-123-1",
+      "graduateStudent", "github-123-1"
     );
 
     expect(newStudent).toHaveLength(64);
@@ -135,7 +81,7 @@ describe("agent preview identity", () => {
     expect(acceptedStudent).not.toBe(newStudent);
     expect(graduateStudent).not.toBe(acceptedStudent);
     expect(() =>
-      deriveAgentPreviewPersonaToken(secret, "agent-pr-55", "unknown"),
+      deriveAgentPreviewPersonaToken(secret, "agent-pr-55", "unknown")
     ).toThrow("Unknown agent preview persona");
   });
 
@@ -166,7 +112,7 @@ describe("agent preview identity", () => {
     expect(executeQuery).toHaveBeenCalledTimes(5);
     expect(executeQuery.mock.calls[3][2]).toContain("existing-admin-role");
     expect(executeQuery.mock.calls[4][2]).toContain(
-      AGENT_PREVIEW_SESSION_MARKER,
+      AGENT_PREVIEW_SESSION_MARKER
     );
     expect(executeQuery.mock.calls[4][2][2]).toHaveLength(64);
   });
@@ -178,7 +124,7 @@ describe("seedAgentPreviewFixtures", () => {
       seedAgentPreviewFixtures({
         databaseId: "",
         executeQuery: vi.fn(),
-      }),
+      })
     ).rejects.toThrow("database ID");
   });
 
@@ -187,7 +133,7 @@ describe("seedAgentPreviewFixtures", () => {
       seedAgentPreviewFixtures({
         databaseId: "db-123",
         executeQuery: "not-a-function",
-      }),
+      })
     ).rejects.toThrow("query executor");
   });
 
@@ -197,7 +143,7 @@ describe("seedAgentPreviewFixtures", () => {
         databaseId: "db-123",
         executeQuery: vi.fn(),
         environmentName: "agent-pr-55",
-      }),
+      })
     ).rejects.toThrow("require both environmentName and previewSecret");
   });
 
@@ -235,32 +181,32 @@ describe("seedAgentPreviewFixtures", () => {
       calls.find(
         (call) =>
           call[1].includes(`INSERT INTO "${table}"`) &&
-          (call[2] ?? []).includes(value),
+          (call[2] ?? []).includes(value)
       );
 
     expect(calls[0][1]).toContain('DELETE FROM "studentProfile"');
 
     expect(findByParam("ttv-fixture-curriculum")?.[1]).toContain("curriculum");
     expect(
-      findInsertByParam("user", AGENT_PREVIEW_PERSONAS.newStudent.userId)?.[1],
+      findInsertByParam("user", AGENT_PREVIEW_PERSONAS.newStudent.userId)?.[1]
     ).toContain('INSERT INTO "user"');
     expect(
       findInsertByParam(
         "user",
-        AGENT_PREVIEW_PERSONAS.acceptedStudent.userId,
-      )?.[1],
+        AGENT_PREVIEW_PERSONAS.acceptedStudent.userId
+      )?.[1]
     ).toContain('INSERT INTO "user"');
     expect(
       findInsertByParam(
         "user",
-        AGENT_PREVIEW_PERSONAS.graduateStudent.userId,
-      )?.[1],
+        AGENT_PREVIEW_PERSONAS.graduateStudent.userId
+      )?.[1]
     ).toContain('INSERT INTO "user"');
     expect(
       findInsertByParam(
         "programApplication",
-        "ttv-fixture-app-journey-graduate",
-      )?.[2],
+        "ttv-fixture-app-journey-graduate"
+      )?.[2]
     ).toContain("COMPLETED");
     const programCall = findByParam("ttv-fixture-program-cohort-04");
     expect(programCall?.[1]).toContain("program");
@@ -270,94 +216,92 @@ describe("seedAgentPreviewFixtures", () => {
 
     const desktopApplicationProgram = findInsertByParam(
       "program",
-      "ttv-fixture-program-self-apply-desktop-0",
+      "ttv-fixture-program-self-apply-desktop-0"
     );
     expect(desktopApplicationProgram?.[2]).toContain(
-      "Open Cohort Desktop Applications 1",
+      "Open Cohort Desktop Applications 1"
     );
     expect(desktopApplicationProgram?.[2]).toContain(1);
     const mobileApplicationProgram = findInsertByParam(
       "program",
-      "ttv-fixture-program-self-apply-mobile-2",
+      "ttv-fixture-program-self-apply-mobile-2"
     );
     expect(mobileApplicationProgram?.[2]).toContain(
-      "Open Cohort Mobile Applications 3",
+      "Open Cohort Mobile Applications 3"
     );
     expect(mobileApplicationProgram?.[2]).toContain(1);
     expect(
-      findInsertByParam(
-        "program",
-        "ttv-fixture-program-applications-closed",
-      )?.[2],
+      findInsertByParam("program", "ttv-fixture-program-applications-closed")?.[2]
     ).toContain(0);
 
     const selfApplicationReset = calls.find(
       (call) =>
         call[1].includes('DELETE FROM "programApplication"') &&
-        (call[2] ?? []).includes(AGENT_PREVIEW_USER_ID),
+        (call[2] ?? []).includes(AGENT_PREVIEW_USER_ID)
     );
     expect(selfApplicationReset?.[2]).toContain(
-      "ttv-fixture-program-self-apply-desktop-0",
+      "ttv-fixture-program-self-apply-desktop-0"
     );
     expect(selfApplicationReset?.[2]).toContain(
-      "ttv-fixture-program-self-apply-mobile-2",
+      "ttv-fixture-program-self-apply-mobile-2"
     );
 
-    const cohortReset = calls.find(
-      (call) =>
-        call[1].includes('DELETE FROM "programApplication"') &&
-        (call[2] ?? []).includes("ttv-fixture-program-cohort-04"),
+    const cohortReset = calls.find((call) =>
+      call[1].includes('DELETE FROM "programApplication"') &&
+      (call[2] ?? []).includes("ttv-fixture-program-cohort-04")
     );
     expect(cohortReset?.[2]).toContain(
-      "ttv-fixture-user-cohort-desktop-current",
+      "ttv-fixture-user-cohort-desktop-current"
     );
     expect(cohortReset?.[2]).toContain(
-      "ttv-fixture-user-cohort-mobile-current",
+      "ttv-fixture-user-cohort-mobile-current"
     );
 
     const desktopCurrent = findInsertByParam(
       "user",
-      "ttv-fixture-user-cohort-desktop-current",
+      "ttv-fixture-user-cohort-desktop-current"
     );
-    expect(desktopCurrent?.[2]).toContain("Cohort Desktop Current Learner");
+    expect(desktopCurrent?.[2]).toContain(
+      "Cohort Desktop Current Learner"
+    );
     expect(
       findInsertByParam(
         "programApplication",
-        "ttv-fixture-user-cohort-desktop-current",
-      ),
+        "ttv-fixture-user-cohort-desktop-current"
+      )
     ).toBeUndefined();
 
     const desktopPending = findInsertByParam(
       "programApplication",
-      "ttv-fixture-app-cohort-desktop-pending",
+      "ttv-fixture-app-cohort-desktop-pending"
     );
     expect(desktopPending?.[2]).toContain("PENDING");
     expect(
       findInsertByParam(
         "programApplication",
-        "ttv-fixture-app-cohort-mobile-audit",
-      )?.[2],
+        "ttv-fixture-app-cohort-mobile-audit"
+      )?.[2]
     ).toContain("AUDIT");
 
     const desktopStaff = findInsertByParam(
       "user",
-      "ttv-fixture-user-staff-desktop",
+      "ttv-fixture-user-staff-desktop"
     );
     expect(desktopStaff?.[2]).toContain("Cohort Desktop Staff");
     const mobileStaff = findInsertByParam(
       "user",
-      "ttv-fixture-user-staff-mobile",
+      "ttv-fixture-user-staff-mobile"
     );
     expect(mobileStaff?.[2]).toContain("Cohort Mobile Staff");
     const desktopCrossCohortRole = findInsertByParam(
       "programRole",
-      "ttv-fixture-role-cross-cohort-desktop",
+      "ttv-fixture-role-cross-cohort-desktop"
     );
     expect(desktopCrossCohortRole?.[2]).toContain(
-      "ttv-fixture-program-applications-closed",
+      "ttv-fixture-program-applications-closed"
     );
     expect(desktopCrossCohortRole?.[2]).toContain(
-      "ttv-fixture-user-staff-desktop",
+      "ttv-fixture-user-staff-desktop"
     );
     expect(desktopCrossCohortRole?.[1]).toContain("'INSTRUCTOR'");
 
@@ -366,37 +310,35 @@ describe("seedAgentPreviewFixtures", () => {
     expect(previewApp?.[2]).toContain(AGENT_PREVIEW_USER_ID);
 
     expect(findByParam("ttv-fixture-user-amina")?.[2]).toContain(
-      "Amina Fixture",
+      "Amina Fixture"
     );
     const aminaProfile = findByParam("ttv-fixture-profile-amina");
     expect(aminaProfile?.[2]).toContain("amina-preview");
     expect(aminaProfile?.[2]).toContain("Kenya");
     expect(aminaProfile?.[1]).toContain("'error'");
     expect(aminaProfile?.[1]).toContain('"moderationReviewRequired" = 1');
-    const aminaCommunity = calls.find(
-      (call) =>
-        call[1].startsWith("UPDATE studentProfile") &&
-        call[2].includes("ttv-fixture-user-amina"),
-    );
-    expect(aminaCommunity?.[1]).toContain("opportunityGoals");
+    const aminaCommunity = calls.find(call => call[1].startsWith('UPDATE studentProfile') && call[2].includes("ttv-fixture-user-amina"));
+    expect(aminaCommunity?.[1]).toContain('opportunityGoals');
     const readerPost = findByParam("ttv-fixture-post-amina-reader");
     expect(readerPost?.[1]).toContain('INSERT INTO "blogPost"');
     expect(readerPost?.[2]).toContain("building-resilient-interfaces");
     expect(readerPost?.[2]).toContain("PUBLISHED");
     expect(findByParam("ttv-fixture-post-amina-moderation")?.[2]).toContain(
-      "PUBLISHED",
+      "PUBLISHED"
     );
-    expect(findByParam("ttv-fixture-post-amina-draft")?.[2]).toContain("DRAFT");
+    expect(findByParam("ttv-fixture-post-amina-draft")?.[2]).toContain(
+      "DRAFT"
+    );
     expect(findByParam("ttv-fixture-post-amina-suspended")?.[2]).toContain(
-      "SUSPENDED",
+      "SUSPENDED"
     );
     const invalidCompletionApp = findByParam(
-      "ttv-fixture-app-invalid-completion",
+      "ttv-fixture-app-invalid-completion"
     );
     expect(invalidCompletionApp?.[1]).toContain("'COMPLETED'");
     expect(invalidCompletionApp?.[1]).toContain('"completedAt" = NULL');
     expect(
-      findByParam("ttv-fixture-profile-invalid-completion")?.[2],
+      findByParam("ttv-fixture-profile-invalid-completion")?.[2]
     ).toContain("invalid-completion-preview");
 
     expect(findByParam("ttv-fixture-highlight-amina-1")).toBeDefined();
@@ -410,13 +352,13 @@ describe("seedAgentPreviewFixtures", () => {
     expect(kwameProfile?.[1]).toContain("contains_contact_details");
 
     expect(findByParam("ttv-fixture-project-approved")?.[2]).toContain(
-      "Savanna Logistics",
+      "Savanna Logistics"
     );
     expect(findByParam("ttv-fixture-project-pending")?.[2]).toContain(
-      "Baraka Health",
+      "Baraka Health"
     );
     expect(findByParam("ttv-fixture-recording-failed")?.[1]).toContain(
-      "processingError",
+      "processingError"
     );
     expect(findByParam("ttv-fixture-import-error")?.[1]).toContain("lastError");
 
@@ -442,7 +384,7 @@ describe("seedAgentPreviewFixtures", () => {
     });
 
     const sessionCalls = executeQuery.mock.calls.filter((call) =>
-      call[1].includes('INSERT INTO "session"'),
+      call[1].includes('INSERT INTO "session"')
     );
     expect(sessionCalls).toHaveLength(5);
     expect(sessionCalls.map((call) => call[2][0])).toEqual([
@@ -456,41 +398,28 @@ describe("seedAgentPreviewFixtures", () => {
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "newStudent",
-        "github-123-1",
-      ),
+        "newStudent", "github-123-1"
+      )
     );
     expect(sessionCalls[1][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "acceptedStudent",
-        "github-123-1",
-      ),
+        "acceptedStudent", "github-123-1"
+      )
     );
     expect(sessionCalls[2][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "graduateStudent",
-        "github-123-1",
-      ),
+        "graduateStudent", "github-123-1"
+      )
     );
     expect(sessionCalls[3][2][2]).toBe(
-      deriveAgentPreviewPersonaToken(
-        previewSecret,
-        "agent-pr-55",
-        "mentor",
-        "github-123-1",
-      ),
+      deriveAgentPreviewPersonaToken(previewSecret, "agent-pr-55", "mentor", "github-123-1")
     );
     expect(sessionCalls[4][2][2]).toBe(
-      deriveAgentPreviewPersonaToken(
-        previewSecret,
-        "agent-pr-55",
-        "institution",
-        "github-123-1",
-      ),
+      deriveAgentPreviewPersonaToken(previewSecret, "agent-pr-55", "institution", "github-123-1")
     );
   });
 
@@ -506,7 +435,7 @@ describe("seedAgentPreviewFixtures", () => {
       (call) =>
         call[1].includes("INSERT") &&
         call[1].includes("studentProfile") &&
-        call[2].includes(AGENT_PREVIEW_USER_ID),
+        call[2].includes(AGENT_PREVIEW_USER_ID)
     );
     expect(profileInserts).toHaveLength(0);
   });
