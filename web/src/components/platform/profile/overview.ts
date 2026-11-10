@@ -46,6 +46,8 @@ export interface OverviewFacts {
     country: string | null;
     skills: readonly string[];
     onPublicSite?: number;
+    /** Listed in the Members directory (memberEligibility): not suspended, not held, not staff. */
+    listed?: number;
     publicName: string | null;
     publicAvatarUrl: string | null;
   } | null;
@@ -73,6 +75,9 @@ export interface OverviewCard {
   bio: string | null;
   skills: readonly string[];
   status: { label: string; tone: "ring" | "peach" | "neutral" };
+  /** Their page in the Members directory, as everyone signed in sees it, while they are listed there. */
+  memberHref: string | null;
+  /** Their page on the public website, while they are on it. */
   publicHref: string | null;
 }
 
@@ -120,7 +125,8 @@ export interface OverviewOpportunity {
 export interface ProfileOverviewModel {
   title: string;
   lead: string;
-  actions: { view: string | null; edit: { href: string; label: string } | null };
+  /** `member`: their page in the Members directory; `view`: their page on the public website. */
+  actions: { member: string | null; view: string | null; edit: { href: string; label: string } | null };
   card: OverviewCard | null;
   noProfile: OverviewNoProfile | null;
   projects: { items: readonly OverviewProject[]; total: number; available: boolean };
@@ -192,7 +198,8 @@ function card(facts: OverviewFacts): OverviewCard | null {
     bio: profile.bio?.trim() || null,
     skills: profile.skills,
     status: STATUS[profile.status],
-    publicHref: memberProfileHref({ handle: profile.handle, onPublicSite: profile.status === "PUBLISHED" && Boolean(profile.onPublicSite) }),
+    memberHref: profile.listed ? memberProfileHref(profile) : null,
+    publicHref: profile.status === "PUBLISHED" && profile.onPublicSite ? `/talent/${encodeURIComponent(profile.handle)}` : null,
   };
 }
 
@@ -296,6 +303,7 @@ export function profileOverview(facts: OverviewFacts): ProfileOverviewModel {
       ? "What visitors and approved organisations see, and what's waiting for you."
       : "Your work, what's waiting for you, and what opens next.",
     actions: {
+      member: shown?.memberHref ?? null,
       view: shown?.publicHref ?? null,
       edit: facts.profile ? { href: PROFILE_EDITOR_PATH, label: "Edit" } : null,
     },

@@ -7,7 +7,7 @@
  * Members wrote the text shown here, so it is rendered as text: Astro escapes each expression.
  */
 import {
-  PiArrowRight, PiArrowSquareOut, PiCertificate, PiEnvelopeSimple, PiIdentificationCard, PiNotePencil, PiPencilSimple, PiShieldCheck,
+  PiArrowRight, PiArrowSquareOut, PiCertificate, PiEnvelopeSimple, PiIdentificationCard, PiNotePencil, PiPencilSimple, PiShieldCheck, PiUsersThree,
 } from "react-icons/pi";
 import { Avatar, ButtonLink, Chip, PageTitle, PersonMarker, RAISED, linkClass } from "@/components/platform/ui";
 import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
@@ -38,8 +38,14 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
       <PageTitle>{model.title}</PageTitle>
       <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">{model.lead}</p>
     </div>
-    {(actions.view || actions.edit) && (
+    {(actions.member || actions.view || actions.edit) && (
       <div class="flex flex-wrap gap-3">
+        {actions.member && (
+          <ButtonLink href={actions.member} size="lg" data-profile-member>
+            <PiUsersThree aria-hidden="true" className="size-4" />
+            See your page
+          </ButtonLink>
+        )}
         {actions.view && (
           <ButtonLink href={actions.view} size="lg" data-profile-view>
             <PiArrowSquareOut aria-hidden="true" className="size-4" />

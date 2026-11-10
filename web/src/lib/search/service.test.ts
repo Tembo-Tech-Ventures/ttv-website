@@ -61,7 +61,7 @@ describe("authorized source retrieval", () => {
     const s = setup({}, "synthetic-otieno");
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "projects" });
     expect(result.projects).toHaveLength(3);
-    expect(result.projects.find(p=>p.owner.id==="synthetic-otieno")).toMatchObject({ journeyId: "project-synthetic-otieno", version: 3, href: "/talent/synthetic-otieno", visibility: { label: "Signed-in members" } });
+    expect(result.projects.find(p=>p.owner.id==="synthetic-otieno")).toMatchObject({ journeyId: "project-synthetic-otieno", version: 3, href: "/dashboard/community/members/synthetic-otieno#work-project-synthetic-otieno", visibility: { label: "Signed-in members" } });
   });
 
   it("limits demo administrators to demo profiles and explicit demo cohort membership", async () => {
@@ -81,8 +81,10 @@ describe("authorized source retrieval", () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }], globalRoles: ["INSTITUTION"] });
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "all" });
     expect(result.sessionMoments[0]).toMatchObject({ recordingId: "recording-a", title: "Session A", startSeconds: 12.5, quote: "Webhook cohort A evidence", href: "/dashboard/sessions/recording-a?t=12" });
-    expect(result.people[0]?.href).toBeNull();
-    expect(result.projects[0]?.href).toBeNull();
+    // Every listed person and their work lead to their member page in the app, never to the public site.
+    expect(result.people.length).toBeGreaterThan(0);
+    for (const hit of result.people) expect(hit.href).toMatch(/^\/dashboard\/community\/members\/[a-z0-9-]+$/);
+    for (const hit of result.projects) expect(hit.href).toMatch(/^\/dashboard\/community\/members\/[a-z0-9-]+#work-/);
   });
 
   it("treats SQL wildcards and injection strings literally", async () => {

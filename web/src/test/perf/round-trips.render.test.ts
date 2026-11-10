@@ -93,6 +93,9 @@ const PAGES = {
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
   conduct: { path: () => "/dashboard/community/conduct", page: () => import("@/pages/dashboard/community/conduct.astro"), user: ADMIN },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
+  members: { path: () => "/dashboard/community/members", page: () => import("@/pages/dashboard/community/members/index.astro"), user: STUDENT },
+  "members, searched": { path: () => "/dashboard/community/members?q=savings&skills=TypeScript&open=roles", page: () => import("@/pages/dashboard/community/members/index.astro"), user: INSTITUTION },
+  "member page": { path: () => "/dashboard/community/members/achieng-otieno", page: () => import("@/pages/dashboard/community/members/[handle].astro"), user: STUDENT, handle: "achieng-otieno" },
   discover: { path: () => "/dashboard/discover", page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
   "discover, a person": { path: () => `/dashboard/discover?profile=${BUILDER}`, page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
   "mentoring home": { path: () => "/dashboard/mentoring", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
@@ -170,7 +173,7 @@ async function visit(name: PageName) {
   const deferred: Promise<unknown>[] = [];
   const locals = { cfContext: { waitUntil: (task: Promise<unknown>) => deferred.push(task) } } as unknown as App.Locals;
   // A detail page names its record; the conversation page reads the direct channel.
-  const params = { slug: cohortChannel, id: "id" in entry ? entry.id : DIRECT };
+  const params = { slug: cohortChannel, id: "id" in entry ? entry.id : DIRECT, ...("handle" in entry ? { handle: entry.handle } : {}) };
   const context = {
     url, request: new Request(url), locals, params,
     cookies: { get: () => undefined, set: () => {} },
@@ -224,6 +227,12 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   discover: { d1: 12, depth: 2 },
   "discover, a person": { d1: 16, depth: 3 },
   mentors: { d1: 20, depth: 3 },
+  // The page of members (with its count) and the caller's own card, one wave beside the space context,
+  // so the page's own reads land at the floor (depth 3). An institution's search pays no more.
+  members: { d1: 18, depth: 3 },
+  "members, searched": { d1: 15, depth: 3 },
+  // The member with their work and its confirmations, one batch beside the space context.
+  "member page": { d1: 17, depth: 3 },
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
   // Its channel list, requests and availability start beside onboarding (depth 5 before).
   "mentoring home": { d1: 16, depth: 3 },
