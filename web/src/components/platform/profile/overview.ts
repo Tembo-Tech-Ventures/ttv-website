@@ -1,15 +1,14 @@
 import { memberProfileHref } from "@/lib/members/links";
 import type { CommunityJourney } from "@/lib/community/model";
 import type { OpportunityGateState } from "@/components/hire/validation";
-import type { StudentDashboardLinkId, StudentJourneyState } from "@/lib/student/journey";
-import type { CommunityFraming } from "@/components/platform/onboarding/framing";
+import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import { MENTORS_PATH } from "@/components/platform/mentors/mentor-display";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 
 /*
  * What the Profile space's Overview says (T01, prototype screens/07), as data. Pure: the page
  * renders this, and the tests read it without a database. Everything here comes from records
- * that already exist (the public builder profile, the contributions shared on Your journey and
+ * that already exist (the profile, the contributions shared on Your journey and
  * their mentor confirmations, visitor messages, writing drafts, client projects and
  * certificates), and every line describes something the platform does today.
  */
@@ -32,11 +31,12 @@ export type PublicProfileStatus = "DRAFT" | "PUBLISHED" | "SUSPENDED";
 export interface OverviewFacts {
   /** The signed-in person, as their account names them. */
   person: { id: string; name: string; image: string | null };
-  /** The existing journey's state and unlocked destinations (lib/student/journey). */
-  journeyState: StudentJourneyState;
+  /** The journey's unlocked destinations (lib/student/journey). */
   visibleLinkIds: readonly StudentDashboardLinkId[];
-  /** A completed cohort opens the public builder profile (owner decision 2026-10-06, rule 1). */
+  /** A completed cohort opens the public website to the profile (owner decision 2026-10-06, rule 1). */
   eligible: boolean;
+  /** A mentor or TTV staff: never listed in the directory or on the public website, by decision. */
+  staff?: boolean;
   profile: {
     status: PublicProfileStatus;
     handle: string;
@@ -48,6 +48,8 @@ export interface OverviewFacts {
     onPublicSite?: number;
     /** Listed in the Members directory (memberEligibility): not suspended, not held, not staff. */
     listed?: number;
+    /** It has been on the public website before (publishedAt): a draft now means they took themselves off. */
+    everListed?: boolean;
     publicName: string | null;
     publicAvatarUrl: string | null;
   } | null;
@@ -63,8 +65,6 @@ export interface OverviewFacts {
   certificates: readonly { id: string; programName: string }[];
   /** Whether "Ask for time" is open to this person (mentor requests). */
   mentorRequests: boolean;
-  /** How onboarding frames this person, when it does: "partner" chose to mentor or find people, not to build and learn. */
-  framing: CommunityFraming | null;
 }
 
 export interface OverviewCard {
@@ -81,12 +81,12 @@ export interface OverviewCard {
   publicHref: string | null;
 }
 
-/** The profile card when there is no public profile yet, saying what opens it. */
+/** The profile card before there is a profile: everyone can make one (one profile model). */
 export interface OverviewNoProfile {
-  kind: "create" | "locked" | "partner";
+  kind: "create";
   title: string;
   body: string;
-  action: { href: string; label: string } | null;
+  action: { href: string; label: string };
 }
 
 export type ProjectState =
@@ -136,11 +136,18 @@ export interface ProfileOverviewModel {
   certificates: readonly { id: string; programName: string; href: string }[];
 }
 
-const STATUS: Record<PublicProfileStatus, OverviewCard["status"]> = {
-  PUBLISHED: { label: "Published", tone: "ring" },
-  DRAFT: { label: "Draft", tone: "neutral" },
-  SUSPENDED: { label: "Suspended", tone: "peach" },
-};
+/**
+ * Where the profile is, in words, by the rules the directory and the public website read with: on the
+ * public website, members only, or neither, because a check holds it, it's paused, or the person is a
+ * mentor or staff (who are not listed, by decision).
+ */
+function standing(profile: NonNullable<OverviewFacts["profile"]>, staff: boolean): OverviewCard["status"] {
+  if (profile.status === "SUSPENDED") return { label: "Paused", tone: "peach" };
+  if (staff) return { label: "Not listed: mentors and staff", tone: "neutral" };
+  if (profile.onPublicSite) return { label: "On the public website", tone: "ring" };
+  if (profile.listed) return { label: "Members only", tone: "neutral" };
+  return { label: "Waiting for a check", tone: "neutral" };
+}
 
 /** The first line of a description, cut on a word boundary near `max` characters, with an ellipsis. */
 export function summarise(text: string, max = 120): string {
@@ -197,7 +204,7 @@ function card(facts: OverviewFacts): OverviewCard | null {
     meta: [profile.headline?.trim() || null, place, cohort].filter((part): part is string => Boolean(part)),
     bio: profile.bio?.trim() || null,
     skills: profile.skills,
-    status: STATUS[profile.status],
+    status: standing(profile, Boolean(facts.staff)),
     memberHref: profile.listed ? memberProfileHref(profile) : null,
     publicHref: profile.status === "PUBLISHED" && profile.onPublicSite ? `/talent/${encodeURIComponent(profile.handle)}` : null,
   };
@@ -205,24 +212,15 @@ function card(facts: OverviewFacts): OverviewCard | null {
 
 function noProfile(facts: OverviewFacts): OverviewNoProfile | null {
   if (facts.profile) return null;
-  if (facts.eligible) {
-    return {
-      kind: "create",
-      title: "Your public builder page is ready to set up",
-      body: "You've completed a cohort, so you can publish a page with your work, skills and how to reach you. It stays a draft until you publish it.",
-      action: { href: PROFILE_EDITOR_PATH, label: "Create your profile" },
-    };
-  }
-  // Someone who chose to mentor or find people is not sent to apply (QAO-07); PartnerProfileNote says the rest.
-  if (facts.framing === "partner") return { kind: "partner", title: "", body: "", action: null };
-  const applying = facts.journeyState === "no_application" || facts.journeyState === "rejected";
   return {
-    kind: "locked",
-    title: "Your public builder page opens when you complete a cohort",
-    body: applying
-      ? "Cohort graduates get a page with their work and skills. Until then, the work you share on Your journey is how mentors and approved organisations get to know you."
-      : "When your cohort is complete, you can publish a page with your work and skills. Until then, the work you share on Your journey is how mentors and approved organisations get to know you.",
-    action: applying ? { href: SPACE_PAGE_PATHS.apply, label: "Apply to a cohort" } : null,
+    kind: "create",
+    title: "Make your profile",
+    body: facts.staff
+      ? "Who you are and what you work with, with the work you post. Mentors and TTV staff aren't listed in the members directory or on the public website; work you share in a channel is seen by that channel."
+      : facts.eligible
+        ? "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it, and because you've completed a cohort you can also list it on the public website."
+        : "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it.",
+    action: { href: PROFILE_EDITOR_PATH, label: "Make your profile" },
   };
 }
 
@@ -265,10 +263,13 @@ function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): Over
     });
   }
   list.push(...moreOnJourney("revisions", newer.length, "newer revision", "newer revisions"));
-  if (facts.profile?.status === "DRAFT") {
+  // Only someone who completed a cohort can be listed on the public website, so only they are asked, and
+  // never someone who took themselves off, whom a check is holding, or a mentor or staff.
+  const profile = facts.profile;
+  if (profile?.status === "DRAFT" && facts.eligible && !profile.everListed && profile.listed && !facts.staff) {
     list.push({
-      key: "profile-draft", icon: "profile", text: "Your public profile is a draft",
-      action: { href: PROFILE_EDITOR_PATH, label: "Publish", name: "Publish your public profile" },
+      key: "profile-draft", icon: "profile", text: "You're not on the public website yet",
+      action: { href: PROFILE_EDITOR_PATH, label: "List me", name: "List your profile on the public website" },
     });
   }
   const drafts = projects.filter((project) => project.state.kind === "draft");
@@ -299,9 +300,12 @@ export function profileOverview(facts: OverviewFacts): ProfileOverviewModel {
   const opportunitiesOpen = visible.has("opportunities") && facts.opportunities.gate === "published";
   return {
     title: "Your profile",
-    lead: shown
-      ? "What visitors and approved organisations see, and what's waiting for you."
-      : "Your work, what's waiting for you, and what opens next.",
+    // Only someone the directory lists is seen by everyone signed in (not staff, held or paused).
+    lead: shown && facts.profile?.listed && !facts.staff
+      ? "What everyone signed in to TTV sees, and what's waiting for you."
+      : shown
+        ? "Your profile, and what's waiting for you."
+        : "Your work, what's waiting for you, and what opens next.",
     actions: {
       member: shown?.memberHref ?? null,
       view: shown?.publicHref ?? null,

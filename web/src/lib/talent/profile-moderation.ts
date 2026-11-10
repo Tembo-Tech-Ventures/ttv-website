@@ -91,6 +91,8 @@ export type AdminProfileAction = "publish" | "unpublish" | "clear_flag";
 
 interface AdminProfileState {
   status: string;
+  /** What an admin's pause interrupted (null unless suspended, or paused before this was kept). */
+  suspendedFrom?: "DRAFT" | "PUBLISHED" | null;
   publishedAt: Date | null;
   publicName?: string | null;
   publicAvatarUrl?: string | null;
@@ -128,10 +130,18 @@ export function resolveAdminProfileUpdate(
   if (action === "unpublish") {
     return {
       status: "SUSPENDED",
+      // Remember what the pause interrupts, so restoring it puts back the person's own choice.
+      suspendedFrom: current.status === "SUSPENDED" ? (current.suspendedFrom ?? null) : current.status,
       contentVersion: current.contentVersion + 1,
     };
   }
+  // "publish" restores a paused profile to what it was: a person who had taken themselves off the
+  // public website stays off it. Only they list themselves; an admin never publishes a draft.
+  if (restoredStatus(current) === "DRAFT") {
+    return { status: "DRAFT", suspendedFrom: null, contentVersion: current.contentVersion + 1 };
+  }
   return {
+    suspendedFrom: null,
     status: "PUBLISHED",
     contentVersion: current.contentVersion + 1,
     moderationReviewRequired: false,
@@ -144,20 +154,28 @@ export function resolveAdminProfileUpdate(
   };
 }
 
+/** What restoring a paused profile puts back: the status the pause interrupted. */
+export function restoredStatus(current: Pick<AdminProfileState, "suspendedFrom" | "publishedAt">): "DRAFT" | "PUBLISHED" {
+  return current.suspendedFrom ?? (current.publishedAt ? "PUBLISHED" : "DRAFT");
+}
+
 export async function applyAdminProfileAction(
   db: Database,
   profileId: string,
   current: AdminProfileState,
   action: AdminProfileAction,
   expectedVersion: number,
-): Promise<boolean> {
-  if (current.contentVersion !== expectedVersion) return false;
-  if (action === "publish") {
+): Promise<"done" | "changed" | "ineligible"> {
+  if (current.contentVersion !== expectedVersion) return "changed";
+  // Listing is the person's own choice: an admin only restores a profile they paused.
+  if (action === "publish" && current.status !== "SUSPENDED") return "changed";
+  if (action === "publish" && restoredStatus(current) === "PUBLISHED") {
     const profile = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.id, profileId),
       columns: { userId: true },
     });
-    if (!profile || !(await hasCompletedCohort(db, profile.userId))) return false;
+    // The public website is for people who completed a cohort: without one, it can't be republished.
+    if (!profile || !(await hasCompletedCohort(db, profile.userId))) return "ineligible";
   }
   const result = await db
     .update(schema.studentProfile)
@@ -168,5 +186,5 @@ export async function applyAdminProfileAction(
         eq(schema.studentProfile.contentVersion, expectedVersion),
       ),
     );
-  return result.meta.changes > 0;
+  return result.meta.changes > 0 ? "done" : "changed";
 }

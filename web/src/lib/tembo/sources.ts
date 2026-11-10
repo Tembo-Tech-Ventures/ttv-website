@@ -280,8 +280,8 @@ const searchProjects: Search = async ({ db, book, channel }, terms) => {
   for (const row of profiles) {
     const name = title(resolvePublicProfileIdentity(row).name, "TTV builder");
     const text = `${name}: ${clip(row.doc)}`;
-    const key = book.add({ type: "profile", userId: row.userId, title: `${name} · builder profile`, href: memberProfileHref(row) }, text);
-    if (key) found.push({ source: key, kind: "profile", title: `${name} · builder profile`, text });
+    const key = book.add({ type: "profile", userId: row.userId, title: `${name} · profile`, href: memberProfileHref(row) }, text);
+    if (key) found.push({ source: key, kind: "profile", title: `${name} · profile`, text });
   }
   for (const row of shared) {
     if (typeof row.journeyId !== "string" || !Number.isInteger(row.version) || row.version < 1) continue;

@@ -1,6 +1,5 @@
 import {
   canTransition,
-  PROFILE_TRANSITIONS,
   PROJECT_TRANSITIONS,
 } from "./transitions";
 
@@ -52,19 +51,6 @@ export function sortProjectsForQueue<T extends ProjectSortable>(
     const bTime = b.createdAt?.getTime() ?? 0;
     return bTime - aTime;
   });
-}
-
-export function validateProfileTransition(
-  currentStatus: string,
-  newStatus: string
-): { valid: true } | { valid: false; reason: string } {
-  if (!canTransition(PROFILE_TRANSITIONS, currentStatus, newStatus)) {
-    return {
-      valid: false,
-      reason: `Cannot transition from ${currentStatus} to ${newStatus}`,
-    };
-  }
-  return { valid: true };
 }
 
 export function validateProjectTransition(

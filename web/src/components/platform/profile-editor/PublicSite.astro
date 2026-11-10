@@ -1,0 +1,86 @@
+---
+/**
+ * The public website, in the editor. Being listed there is for people who completed a cohort
+ * (spec rule 2): a graduate chooses it with one press, and comes off it the same way, after a confirm
+ * step that says what comes off (unpublishProfile). Everyone else gets one honest line about how they
+ * get there, and nothing to press. What it says is what the public website shows: "listed" is
+ * publicProfileEligibility, not the status alone, so a held profile, a mentor or a member of staff is
+ * never told they are live. A paused profile is shown nowhere, and says so.
+ */
+import { Button, ButtonLink, Card, ConfirmStep, linkClass } from "@/components/platform/ui";
+import { PUBLIC_SITE } from "./copy";
+import { EDITOR_PATH, UNLIST_ACTION, unlistHref } from "./work-forms";
+
+interface Props {
+  /** Completed a cohort (the journey's `profile` link). */
+  eligible: boolean;
+  /** A mentor or TTV staff: never listed on the public website, by decision. */
+  staff?: boolean;
+  /**
+   * The saved profile, or null before the first save. `everListed`: it has been on the public website
+   * before (publishedAt), so a draft means they took themselves off. `onPublicSite`: shown there now.
+   */
+  profile: { handle: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED"; everListed?: boolean; onPublicSite?: boolean } | null;
+  /** Coming off the public website is being confirmed. */
+  confirming?: boolean;
+  /** Held by the automatic check: listed or not, nothing shows publicly until a person checks it. */
+  held?: boolean;
+}
+
+const { eligible, staff = false, profile, confirming = false, held = false } = Astro.props;
+const publicPath = profile ? `/talent/${encodeURIComponent(profile.handle)}` : null;
+const listed = profile?.status === "PUBLISHED";
+type State = "paused" | "staff" | "live" | "held" | "not-shown" | "waiting" | "unlisted" | "offered" | "save-first" | "not-yet";
+const state: State = profile?.status === "SUSPENDED" ? "paused"
+  : staff ? "staff"
+  : listed ? (held ? "held" : profile?.onPublicSite ? "live" : "not-shown")
+  : !eligible ? "not-yet"
+  : !profile ? "save-first"
+  : held ? "waiting"
+  : profile.everListed ? "unlisted" : "offered";
+const SAY: Partial<Record<State, string>> = {
+  paused: PUBLIC_SITE.paused,
+  staff: listed ? PUBLIC_SITE.staffListed : PUBLIC_SITE.staff,
+  "not-shown": PUBLIC_SITE.listedNotShown,
+  "not-yet": PUBLIC_SITE.notYet,
+  "save-first": PUBLIC_SITE.saveFirst,
+  waiting: PUBLIC_SITE.heldWaiting,
+  held: PUBLIC_SITE.listedHeld.replace("{path}", publicPath ?? ""),
+  unlisted: PUBLIC_SITE.unlisted.replace("{handle}", profile?.handle ?? ""),
+  offered: PUBLIC_SITE.offer.replace("{handle}", profile?.handle ?? ""),
+};
+const text = "m-0 max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary";
+---
+
+<Card as="section" aria-labelledby="public-site-title" className="flex flex-col gap-3" data-public-site={state}>
+  <h2 id="public-site-title" class="text-xl leading-snug text-ink-primary">{PUBLIC_SITE.title}</h2>
+  {state === "live" && publicPath ? (
+    <p class={text}>
+      {PUBLIC_SITE.listed} <a href={publicPath} class={linkClass()}>{publicPath}</a>{PUBLIC_SITE.listedAfter}
+    </p>
+  ) : (
+    <p class={text} data-public-site-held={state === "held" || state === "waiting" ? "" : undefined}>{SAY[state]}</p>
+  )}
+  {/* Coming off is always the person's own choice, whoever they are (mentors and staff included). */}
+  {listed && publicPath && (
+    confirming ? (
+      <ConfirmStep
+        title={PUBLIC_SITE.unlistTitle}
+        confirmLabel={PUBLIC_SITE.unlistConfirm}
+        cancelHref={EDITOR_PATH}
+        action={EDITOR_PATH}
+        fields={{ _action: UNLIST_ACTION }}
+      >
+        {PUBLIC_SITE.unlistBody.replace("{path}", publicPath)}
+      </ConfirmStep>
+    ) : (
+      <div><ButtonLink href={unlistHref()} variant="ghost">{PUBLIC_SITE.unlist}</ButtonLink></div>
+    )
+  )}
+  {(state === "offered" || state === "unlisted") && (
+    <form method="POST" action={EDITOR_PATH}>
+      <input type="hidden" name="_action" value="publish" />
+      <Button type="submit">{PUBLIC_SITE.list}</Button>
+    </form>
+  )}
+</Card>

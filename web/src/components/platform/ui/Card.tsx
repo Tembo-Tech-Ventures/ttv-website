@@ -7,6 +7,8 @@ type CardProps = {
   as?: "div" | "article" | "section" | "li" | "aside";
   padding?: "sm" | "md";
   className?: string;
+  /** For a link to the card's place on the page, such as a form's own section. */
+  id?: string;
   "aria-labelledby"?: string;
 };
 

@@ -210,7 +210,7 @@ describe("student journey", () => {
       accessible: true,
       completed: true,
       unread: 2,
-      expectedTitle: "Your builder profile is live",
+      expectedTitle: "Your profile is on the public site",
       expectedAction: "/dashboard/leads",
       expectedActionLabel: "Read messages",
       expectedLinks: [

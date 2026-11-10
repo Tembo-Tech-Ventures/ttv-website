@@ -1,12 +1,10 @@
 ---
 /**
- * Community's home (/dashboard/community): the caller's community profile and
- * their journey of contributions, on the kit (style-guide rollout M15, D5).
- * Server-rendered with no island: adding or revising a contribution and
- * editing the profile are plain forms that post here and save through the
- * community API's own handler (home-forms.ts), so all of it works without a
- * script. Authentication is enforced by dashboard middleware; every read and
- * write passes the API's own checks.
+ * Community's home (/dashboard/community): the caller's profile and the work they've posted, as
+ * everyone signed in sees them, with the way to change them. There is one profile editor, in the
+ * Profile space (/dashboard/me/portfolio): this page links there for the profile and for posting,
+ * editing and deleting work, so nothing is edited in two places. Server-rendered with no island.
+ * Authentication is enforced by dashboard middleware; every read passes the API's own checks.
  */
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -24,22 +22,32 @@ import { PARTNER } from "@/components/platform/onboarding/copy";
 import { offersCohort } from "@/components/platform/onboarding/framing";
 import { ButtonLink, DataList, EmptyState, Notice, PageHeader, linkClass } from "@/components/platform/ui";
 import ProfileCard from "@/components/community/home/ProfileCard.astro";
-import ProfileForm from "@/components/community/home/ProfileForm.astro";
-import ContributionForm from "@/components/community/home/ContributionForm.astro";
 import JourneyEntry from "@/components/community/home/JourneyEntry.astro";
-import { loadCommunityHome, sendCommunityWrite } from "@/components/community/home/home-data";
-import {
-  COMMUNITY_HOME_PATH, EMPTY_CONTRIBUTION, SAVED_FLASH, addHref, contributionValuesOf, editorFromUrl, handleCommunityHomePost,
-  profileValuesOf, type HomeEditor, type HomePostResult,
-} from "@/components/community/home/home-forms";
+import { loadCommunityHome } from "@/components/community/home/home-data";
+import { EVERYONE_SEES, PROFILE_HELD, STAFF_SEES } from "@/components/platform/profile-editor/copy";
+import { isUnlistedStaff } from "@/components/platform/profile-editor/staff";
+import { addWorkHref, EDITOR_PATH, editWorkHref, profileFormHref } from "@/components/platform/profile-editor/work-forms";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 
 const { method } = Astro.request;
-const bare = (status: number, body: string | null = null, headers: Record<string, string> = {}) =>
-  new Response(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
-if (method !== "GET" && method !== "HEAD" && method !== "POST") return bare(405, "Not allowed.", { Allow: "GET, HEAD, POST" });
+// This page used to post work and save the profile itself. A form from a tab opened before that moved
+// lands in the editor, told plainly that nothing was saved, instead of on a bare 405.
+if (method === "POST") {
+  return redirectWithFlash(Astro, EDITOR_PATH, {
+    tone: "warning", title: "Your profile and work are edited here now", message: "Nothing was saved from the old page. Please make the change again below.",
+  });
+}
+if (method !== "GET" && method !== "HEAD") {
+  return new Response("Not allowed.", { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store", Vary: "Cookie" } });
+}
+// The old page's own links (posting, editing a piece, editing the profile) open the same in the editor.
+const legacy = Astro.url.searchParams;
+const editing = legacy.get("edit");
+const moved = legacy.has("add") ? addWorkHref() : editing ? editWorkHref({ id: editing }) : legacy.get("profile") === "edit" ? profileFormHref() : null;
+if (moved) return Astro.redirect(moved, 301);
 
 // The page's own reads start together, beside the space context and onboarding (PERF-2): the profile
-// and journey through the community API, the student journey the frame and the invitation share, and
+// and work through the community API, the student journey the frame and the invitation share, and
 // the channel list for the "Channels" card, which the sidebar reuses (QA2-16).
 const [landing, journey, home] = await Promise.all([
   resolveSpacePageWith(Astro.locals, "journey", (me) => loadChannelShortcuts({ me, space: pickSpace(me, "journey")!, page: "journey" })),
@@ -47,27 +55,12 @@ const [landing, journey, home] = await Promise.all([
   loadCommunityHome(Astro.request, Astro.locals, env),
 ]);
 const spaces = landing?.[0] ?? null;
+const staff = await isUnlistedStaff(spaces, env.DB, Astro.locals.user!.id);
 const { channels, shortcuts } = landing?.[1] ?? { channels: undefined, shortcuts: null };
-const claims = home?.claims ?? [];
-
-let posted: Extract<HomePostResult, { kind: "render" }> | null = null;
-if (method === "POST") {
-  const result = await handleCommunityHomePost(Astro.request, claims, (write) => sendCommunityWrite(Astro.request, Astro.locals, env, write));
-  if (result.kind === "saved") return redirectWithFlash(Astro, COMMUNITY_HOME_PATH, { tone: "success", ...SAVED_FLASH[result.saved] });
-  if (result.kind === "refuse") return bare(result.status, result.status === 413 ? "That form was too large." : result.status === 403 ? "That request was refused." : "That form could not be read.", { "Content-Type": "text/plain; charset=utf-8" });
-  posted = result;
-  Astro.response.status = result.status;
-}
+// Everything the caller has posted or drafted, repositories included: each one leads to where it is changed.
+const work = home?.claims ?? [];
 Astro.response.headers.set("Cache-Control", "no-store");
-
-const flash = posted ? null : takeFlash(Astro);
-// After a refusal, the form that was sent stays open with what was typed; otherwise the address says which editor is open.
-const postedClaim = posted?.render.form === "contribution" && posted.render.claimId
-  ? claims.find((claim) => claim.id === (posted?.render.form === "contribution" ? posted.render.claimId : null)) ?? null
-  : null;
-const editor: HomeEditor | null = posted
-  ? posted.render.form === "profile" ? { kind: "profile" } : postedClaim ? { kind: "edit", claim: postedClaim } : { kind: "add" }
-  : editorFromUrl(Astro.url, claims);
+const flash = takeFlash(Astro);
 
 // With onboarding on, how the person said they take part frames this page (onboarding SPEC §3).
 // Without it, Community reads exactly as before: member framing for everyone.
@@ -80,17 +73,12 @@ const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), ste
 const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
 ---
 
-<SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} titlePrefix={posted ? "Error: " : ""} journey={journey} channels={channels}>
+<SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} journey={journey} channels={channels}>
   <div class="flex max-w-4xl flex-col gap-10">
     <div class="flex flex-col gap-8">
       <PageHeader title="Community">
         Show what you made, what you learned, and the part that was yours.
-        {home && editor?.kind !== "add" && (
-          <Fragment slot="action">
-            {/* The page's one peach action, until an editor is open: then its own save is. */}
-            <ButtonLink href={addHref()} variant={editor ? "quiet" : "primary"} size="lg">Add a contribution</ButtonLink>
-          </Fragment>
-        )}
+        {home && <Fragment slot="action"><ButtonLink href={addWorkHref()} variant="primary" size="lg">Post work</ButtonLink></Fragment>}
       </PageHeader>
       {/* Onboarding's cards follow the page's title, so its h1 comes first (QAO-05). */}
       {spaces?.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class="" />}
@@ -102,16 +90,12 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
 
     {home ? (
       <>
-        {home.moderationHold && <Notice tone="info" title="Your profile is waiting for a human review">Your profile is saved. Only you and admins can see it until a human has reviewed it.</Notice>}
-        {editor?.kind === "profile"
-          ? (
-            <ProfileForm
-              values={posted?.render.form === "profile" ? posted.render.values : profileValuesOf(home)}
-              errors={posted?.render.form === "profile" ? posted.render.errors : undefined}
-              failure={posted?.failure}
-            />
-          )
-          : <ProfileCard profile={home} />}
+        {home.moderationHold && (
+          <Notice tone="warning" title="Your profile is waiting for a check">
+            {PROFILE_HELD}
+          </Notice>
+        )}
+        <ProfileCard profile={home} />
 
         <section aria-labelledby="community-journey-title" class="flex flex-col gap-6" data-community-journey>
           <div class="flex flex-col gap-3">
@@ -121,38 +105,18 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
               reviewed. A missing confirmation is an open question, not a mark against you.
             </p>
           </div>
-          <Notice tone="info" title="Who can discover this?">
-            Everyone signed in to TTV can see your saved profile and posted work. If you complete a cohort and
-            publish your profile, it also appears on the public website. Unpublished drafts are only visible to you.
-            Held content is only visible to you and admins while it waits for a human review.
+          <Notice tone="info" title="Who sees this">
+            {staff ? STAFF_SEES : EVERYONE_SEES} Drafts are only for you.
+            <Fragment slot="actions"><ButtonLink href={`${SPACE_PATHS.community}/members`}>See the members directory</ButtonLink></Fragment>
           </Notice>
 
-          {editor?.kind === "add" && (
-            <ContributionForm
-              values={posted?.render.form === "contribution" ? posted.render.values : EMPTY_CONTRIBUTION}
-              errors={posted?.render.form === "contribution" ? posted.render.errors : undefined}
-              failure={posted?.failure}
-            />
-          )}
-
-          <DataList label={journeyTitle} isEmpty={claims.length === 0}>
-            {claims.map((claim) => editor?.kind === "edit" && editor.claim.id === claim.id
-              ? (
-                <li class="border-b border-hairline py-4 first:pt-0">
-                  <ContributionForm
-                    claim={claim}
-                    values={posted?.render.form === "contribution" ? posted.render.values : contributionValuesOf(claim)}
-                    errors={posted?.render.form === "contribution" ? posted.render.errors : undefined}
-                    failure={posted?.failure}
-                  />
-                </li>
-              )
-              : <JourneyEntry claim={claim} />)}
+          <DataList label={journeyTitle} isEmpty={work.length === 0}>
+            {work.map((claim) => <JourneyEntry claim={claim} />)}
             <Fragment slot="empty">
               {/* Someone just looking around, a mentor or an organisation is not prompted like a student. */}
-              {framing === "member" && editor?.kind !== "add" && (
-                <EmptyState title="Your first contribution belongs here.">
-                  You do not need a finished portfolio. Start with one thing you made or learned.
+              {framing === "member" && (
+                <EmptyState title="Your first piece of work belongs here.">
+                  You don't need a finished portfolio. Start with one thing you made or learned.
                 </EmptyState>
               )}
             </Fragment>
@@ -160,11 +124,11 @@ const journeyTitle = framing === "partner" ? PARTNER.ownWork : "Your journey";
         </section>
       </>
     ) : (
-      <Notice tone="danger" title="We couldn't load your community profile">
-        Your profile and contributions are safe. Try again in a moment, or{" "}
-        <a href={`/auth/login?next=${encodeURIComponent(COMMUNITY_HOME_PATH)}`} class={linkClass()}>sign in again</a> if
+      <Notice tone="danger" title="We couldn't load your profile">
+        Your profile and work are safe. Try again in a moment, or{" "}
+        <a href={`/auth/login?next=${encodeURIComponent(SPACE_PATHS.community)}`} class={linkClass()}>sign in again</a> if
         you've been signed out.
-        <Fragment slot="actions"><ButtonLink href={COMMUNITY_HOME_PATH}>Try again</ButtonLink></Fragment>
+        <Fragment slot="actions"><ButtonLink href={SPACE_PATHS.community}>Try again</ButtonLink></Fragment>
       </Notice>
     )}
 

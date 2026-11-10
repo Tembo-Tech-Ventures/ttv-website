@@ -89,7 +89,7 @@ export function assessmentSource(
   if (citation.kind === "profile")
     return citation.id === profile.id && citation.version === profile.version
       ? {
-          label: `Community profile · Revision ${citation.version}`,
+          label: `Profile · Revision ${citation.version}`,
           sources: [],
         }
       : null;

@@ -494,11 +494,11 @@ function profile(facts: SidebarFacts): SidebarModel {
   const visible = new Set(facts.visibleLinkIds);
   return {
     title: "Profile",
-    description: "Your public story and what it brings in.",
+    description: "Who you are, your work, and what it brings in.",
     groups: [
       ...group(facts, undefined, [
         { key: "overview", page: "profile", label: "Overview", icon: "overview" },
-        { key: "portfolio", page: "portfolio", label: "Public profile", icon: "profile" },
+        { key: "portfolio", page: "portfolio", label: "Edit profile", icon: "profile" },
         visible.has("writing") && { key: "writing", page: "writing", label: "Writing", icon: "writing" },
         visible.has("opportunities") && { key: "opportunities", page: "opportunities", label: "Opportunities", icon: "opportunities" },
         visible.has("leads") && {

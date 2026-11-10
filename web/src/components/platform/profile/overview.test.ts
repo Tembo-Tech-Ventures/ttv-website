@@ -16,7 +16,6 @@ function work(id: string, overrides: Partial<CommunityJourney> = {}): CommunityJ
 
 const ALUMNA: OverviewFacts = {
   person: { id: "achieng", name: "Achieng Otieno", image: null },
-  journeyState: "published",
   visibleLinkIds: [...STUDENT_DASHBOARD_LINK_IDS],
   eligible: true,
   profile: {
@@ -29,14 +28,12 @@ const ALUMNA: OverviewFacts = {
   opportunities: { gate: "published", items: [] },
   certificates: [{ id: "app-2", programName: "Cohort 02" }],
   mentorRequests: false,
-  framing: null,
 };
 
 /** A member who has not completed a cohort: no public profile, nothing behind the profile gate. */
 const MEMBER: OverviewFacts = {
   ...ALUMNA,
   person: { id: "lucy", name: "Lucy Chebet", image: null },
-  journeyState: "no_application",
   visibleLinkIds: ["home", "apply", "ask", "account", "logout"],
   eligible: false,
   profile: null,
@@ -88,7 +85,7 @@ describe("profileOverview for an alumna", () => {
     expect(model.title).toBe("Your profile");
     expect(model.card).toMatchObject({
       name: "Achieng Otieno", meta: ["Backend builder", "Kisumu", "Cohort 02"], skills: ["TypeScript", "SQL"],
-      status: { label: "Published", tone: "ring" }, memberHref: "/dashboard/community/members/achieng-otieno", publicHref: "/talent/achieng-otieno",
+      status: { label: "On the public website", tone: "ring" }, memberHref: "/dashboard/community/members/achieng-otieno", publicHref: "/talent/achieng-otieno",
     });
     expect(model.actions).toEqual({
       member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },
@@ -107,12 +104,37 @@ describe("profileOverview for an alumna", () => {
     expect(model.card).toMatchObject({ name: "Achieng O.", avatar: { src: "https://example.invalid/public.png" }, meta: ["KE"] });
   });
 
-  it("offers no public page for a draft or suspended profile, and a draft profile needs publishing", () => {
-    const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
+  it("offers no public page for an unlisted or suspended profile, and asks only a graduate to list it", () => {
+    const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT", onPublicSite: 0 } });
     expect(draft.actions.view).toBeNull();
-    expect(draft.card?.status).toEqual({ label: "Draft", tone: "neutral" });
-    expect(draft.needs.map((need) => need.text)).toContain("Your public profile is a draft");
+    expect(draft.card?.status).toEqual({ label: "Members only", tone: "neutral" });
+    expect(draft.needs.find((need) => need.key === "profile-draft")).toMatchObject({
+      text: "You're not on the public website yet", action: { href: "/dashboard/me/portfolio", label: "List me" },
+    });
+    // Someone who hasn't completed a cohort can't be listed, so nothing asks them to be.
+    const member = profileOverview({ ...ALUMNA, eligible: false, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
+    expect(member.needs.find((need) => need.key === "profile-draft")).toBeUndefined();
     expect(profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "SUSPENDED" } }).actions.view).toBeNull();
+  });
+
+  it("says where the profile really is, and never asks someone who took themselves off, is held, or is staff to list it", () => {
+    const off = { ...ALUMNA.profile!, status: "DRAFT" as const, onPublicSite: 0 };
+    const need = (facts: OverviewFacts) => profileOverview(facts).needs.find((item) => item.key === "profile-draft");
+    // Listed before and a draft now: they chose to come off, so nothing nags them back.
+    expect(need({ ...ALUMNA, profile: { ...off, everListed: true } })).toBeUndefined();
+    expect(profileOverview({ ...ALUMNA, profile: { ...off, everListed: true } }).card?.status.label).toBe("Members only");
+    // Held by the check: not in the directory and not public, and pressing "List me" would only ask the check again.
+    const held = { ...ALUMNA, profile: { ...off, listed: 0 } };
+    expect(need(held)).toBeUndefined();
+    expect(profileOverview(held).card?.status.label).toBe("Waiting for a check");
+    expect(profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, onPublicSite: 0, listed: 0 } }).card?.status.label).toBe("Waiting for a check");
+    // Mentors and staff are never listed, whatever the status says.
+    const staff = { ...ALUMNA, staff: true, profile: { ...ALUMNA.profile!, onPublicSite: 0, listed: 0 } };
+    expect(profileOverview(staff).card?.status.label).toBe("Not listed: mentors and staff");
+    expect(need({ ...staff, profile: { ...off, listed: 0 } })).toBeUndefined();
+    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).toContain("work you share in a channel is seen by that channel");
+    expect(profileOverview(staff).lead).toBe("Your profile, and what's waiting for you.");
+    expect(profileOverview({ ...MEMBER, staff: true }).noProfile?.body).not.toContain("Everyone signed in");
   });
 
   it("encodes the handle and the certificate id as one path segment", () => {
@@ -200,27 +222,26 @@ describe("profileOverview for an alumna", () => {
 });
 
 describe("profileOverview without a public profile", () => {
-  it("tells a member the page opens with a completed cohort, and offers applying", () => {
+  it("invites anyone without a profile to make one, and says who sees it", () => {
     const model = profileOverview(MEMBER);
     expect(model.card).toBeNull();
     expect(model.actions).toEqual({ member: null, view: null, edit: null });
-    expect(model.noProfile).toMatchObject({
-      kind: "locked", title: "Your public builder page opens when you complete a cohort",
-      action: { href: "/dashboard/cohort/apply", label: "Apply to a cohort" },
+    expect(model.noProfile).toEqual({
+      kind: "create", title: "Make your profile",
+      body: "Who you are, what you work with and what you're looking for, with the work you post. Everyone signed in to TTV can see it.",
+      action: { href: "/dashboard/me/portfolio", label: "Make your profile" },
     });
     expect(model.opportunities).toBeNull();
     expect(model.needs).toEqual([]);
-  });
-
-  it("does not ask someone already in a cohort to apply again", () => {
-    for (const journeyState of ["pending", "accepted", "audit"] as const) {
-      expect(profileOverview({ ...MEMBER, journeyState }).noProfile?.action).toBeNull();
+    // Whatever their cohort, or none: nobody is sent to apply before they can have a profile.
+    for (const eligible of [false, true]) {
+      expect(profileOverview({ ...MEMBER, eligible }).noProfile?.action.href).toBe("/dashboard/me/portfolio");
     }
   });
 
   it("shows a profile that exists as it is, even after the completion behind it changed", () => {
     const model = profileOverview({ ...ALUMNA, eligible: false });
-    expect(model.card?.status.label).toBe("Published");
+    expect(model.card?.status.label).toBe("On the public website");
     expect(model.noProfile).toBeNull();
     expect(model.actions).toEqual({
       member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },
@@ -237,14 +258,11 @@ describe("profileOverview without a public profile", () => {
     expect(draft.actions).toMatchObject({ member: "/dashboard/community/members/achieng-otieno", view: null });
   });
 
-  it("invites a graduate without a profile to create one", () => {
+  it("tells a graduate without a profile they can also list it on the public website", () => {
     expect(profileOverview({ ...ALUMNA, profile: null }).noProfile).toMatchObject({
-      kind: "create", action: { href: "/dashboard/me/portfolio", label: "Create your profile" },
+      kind: "create", body: expect.stringContaining("you can also list it on the public website"),
+      action: { href: "/dashboard/me/portfolio", label: "Make your profile" },
     });
-  });
-
-  it("leaves mentors and organisations to the partner note, never asking them to apply (QAO-07)", () => {
-    expect(profileOverview({ ...MEMBER, framing: "partner" }).noProfile).toMatchObject({ kind: "partner", action: null });
   });
 
   it("hides what the journey has not unlocked: visitor messages and writing drafts", () => {
@@ -263,7 +281,7 @@ describe("the overview's words", () => {
       profileOverview(ALUMNA),
       profileOverview(MEMBER),
       profileOverview({ ...ALUMNA, profile: null }),
-      profileOverview({ ...MEMBER, journeyState: "accepted" }),
+      profileOverview({ ...MEMBER, staff: true }),
     ];
     const text = JSON.stringify(models);
     for (const word of [/empower/i, /uplift/i, /underserved/i, /give back/i, /rescue/i, /guarantee/i, /verified/i]) {

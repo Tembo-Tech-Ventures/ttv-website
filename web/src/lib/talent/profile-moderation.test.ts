@@ -9,6 +9,7 @@ import {
   parseModerationFlags,
   publishesAfterModeration,
   resolveAdminProfileUpdate,
+  restoredStatus,
   splitModerationReviewLists,
 } from "./profile-moderation";
 
@@ -112,12 +113,14 @@ describe("admin profile moderation actions", () => {
     expect(parseAdminProfileVersion(null)).toBeNull();
   });
 
-  it("publishes, preserves an existing publication date, and clears the flag", () => {
+  it("restores a paused profile to what the pause interrupted, never listing someone who took themselves off", () => {
     const publishedAt = new Date("2026-01-01");
+    // Paused while listed: republished as it is now, the first publication date kept.
     expect(
       resolveAdminProfileUpdate(
         {
-          status: "DRAFT",
+          status: "SUSPENDED",
+          suspendedFrom: "PUBLISHED",
           publishedAt,
           contentVersion: 3,
           publicName: "Checked Builder",
@@ -127,50 +130,50 @@ describe("admin profile moderation actions", () => {
         new Date("2026-10-10"),
       ),
     ).toEqual({
+      suspendedFrom: null,
       status: "PUBLISHED",
       contentVersion: 4,
       moderationReviewRequired: false, moderationOutcome: "pass",
       publicName: "Checked Builder",
       publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
     });
+    // Paused after they took themselves off (publishedAt still set): back to members only.
+    expect(
+      resolveAdminProfileUpdate({ status: "SUSPENDED", suspendedFrom: "DRAFT", publishedAt, contentVersion: 5 }, "publish"),
+    ).toEqual({ status: "DRAFT", suspendedFrom: null, contentVersion: 6 });
+    // Paused before this was recorded: a profile never listed goes back to being a draft.
+    expect(restoredStatus({ suspendedFrom: null, publishedAt: null })).toBe("DRAFT");
+    expect(restoredStatus({ suspendedFrom: null, publishedAt })).toBe("PUBLISHED");
   });
 
-  it("sets the first publication date and supports unpublish and clear flag", () => {
+  it("remembers what a pause interrupts, and clears a flag", () => {
     const now = new Date("2026-10-10");
     expect(
-      resolveAdminProfileUpdate(
-        {
-          status: "DRAFT",
-          publishedAt: null,
-          contentVersion: 6,
-          user: {
-            name: "Draft Builder",
-            image: "https://avatars.githubusercontent.com/u/123",
-          },
-        },
-        "publish",
-        now,
-      ),
-    ).toEqual({
-      status: "PUBLISHED",
-      contentVersion: 7,
-      moderationReviewRequired: false, moderationOutcome: "pass",
-      publicName: "Draft Builder",
-      publicAvatarUrl: null,
-      publishedAt: now,
-    });
+      resolveAdminProfileUpdate({ status: "PUBLISHED", publishedAt: now, contentVersion: 7 }, "unpublish"),
+    ).toEqual({ status: "SUSPENDED", suspendedFrom: "PUBLISHED", contentVersion: 8 });
     expect(
-      resolveAdminProfileUpdate(
-        { status: "PUBLISHED", publishedAt: now, contentVersion: 7 },
-        "unpublish",
-      ),
-    ).toEqual({ status: "SUSPENDED", contentVersion: 8 });
+      resolveAdminProfileUpdate({ status: "DRAFT", publishedAt: now, contentVersion: 2 }, "unpublish"),
+    ).toEqual({ status: "SUSPENDED", suspendedFrom: "DRAFT", contentVersion: 3 });
     expect(
       resolveAdminProfileUpdate(
         { status: "DRAFT", publishedAt: null, contentVersion: 2 },
         "clear_flag",
       ),
     ).toEqual({ moderationReviewRequired: false, moderationOutcome: "pass", contentVersion: 3 });
+  });
+
+  it("never lets an admin publish a draft: listing is the member's own choice", async () => {
+    const update = vi.fn();
+    await expect(
+      applyAdminProfileAction(
+        { update } as never,
+        "profile-1",
+        { status: "DRAFT", publishedAt: new Date(), contentVersion: 4 },
+        "publish",
+        4,
+      ),
+    ).resolves.toBe("changed");
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("applies admin actions only to the version that was reviewed", async () => {
@@ -186,10 +189,11 @@ describe("admin profile moderation actions", () => {
         "unpublish",
         9,
       ),
-    ).resolves.toBe(true);
+    ).resolves.toBe("done");
 
     expect(set).toHaveBeenCalledWith({
       status: "SUSPENDED",
+      suspendedFrom: "PUBLISHED",
       contentVersion: 10,
     });
     const query = new SQLiteSyncDialect().sqlToQuery(
@@ -214,11 +218,11 @@ describe("admin profile moderation actions", () => {
       applyAdminProfileAction(
         db as never,
         "profile-1",
-        { status: "DRAFT", publishedAt: null, contentVersion: 4 },
+        { status: "SUSPENDED", suspendedFrom: "PUBLISHED", publishedAt: new Date(), contentVersion: 4 },
         "publish",
         4,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe("changed");
   });
 
   it("rejects an action rendered for an older profile version", async () => {
@@ -233,7 +237,25 @@ describe("admin profile moderation actions", () => {
         "publish",
         5,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe("changed");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("says a Republish needs a completed cohort, and changes nothing", async () => {
+    const update = vi.fn();
+    const db = {
+      query: { studentProfile: { findFirst: vi.fn(async () => ({ userId: "user-1" })) }, programApplication: { findFirst: vi.fn(async () => undefined) } },
+      update,
+    };
+    await expect(
+      applyAdminProfileAction(
+        db as never,
+        "profile-1",
+        { status: "SUSPENDED", suspendedFrom: "PUBLISHED", publishedAt: new Date(), contentVersion: 2 },
+        "publish",
+        2,
+      ),
+    ).resolves.toBe("ineligible");
     expect(update).not.toHaveBeenCalled();
   });
 });

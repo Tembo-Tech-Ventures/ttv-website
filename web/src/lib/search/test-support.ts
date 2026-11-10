@@ -26,7 +26,7 @@ export function searchDatabase(fixture: Partial<CapabilityCase> = {}, actor = "s
     database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio,moderationFlags) VALUES (?,?,?,?,'Otieno Ouma','Webhook builder','secret staff note')").run(id, id, id, status);
     if (completed) database.prepare("INSERT INTO programApplication(id,userId,programId,status,completedAt,application) VALUES (?,?,'cohort-b','COMPLETED',123,'secret admissions note')").run("completion-" + id, id);
     database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,version) VALUES (?,?, 'Webhook project','Webhook evidence','2026-10-31','institution',3)").run("project-" + id, id);
-    // A saved community profile, so institutional callers may discover them.
+    // A saved profile, so institutional callers may discover them.
 
   }
   database.exec(`INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state)

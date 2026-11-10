@@ -6,7 +6,7 @@ import { communityEntryHref } from "../../lib/community-entry";
 const steps = [
   { title: "Start with something you made.", text: "A project, a small improvement, a piece of a team effort. Explain what you contributed and why it mattered." },
   { title: "Let the evidence add context.", text: "Connect your contribution to a source. A mentor can record what they checked about that specific work." },
-  { title: "Say what comes next.", text: "Share your interests and opportunity goals. Everyone signed in to TTV can see your profile and everything you post." },
+  { title: "Say what comes next.", text: "Share your interests and what you’re looking for. Everyone signed in to TTV can see your profile and everything you post. If you complete a cohort and publish, it’s also on the public website, where anyone can see it." },
 ];
 
 function ContributionTrail() {
@@ -24,7 +24,7 @@ function ContributionTrail() {
 
 export default function CommunityAudiencePage({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
   const href = communityEntryHref(isAuthenticated);
-  const cta = isAuthenticated ? "Open my community journey" : "Build your community profile";
+  const cta = isAuthenticated ? "Open my community journey" : "Build your profile";
   return <article className="community-audience hp audience-members" data-community-root>
       <nav className="audience-breadcrumb audience-container" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">For members</span></nav>
       <CommunitySheet className="audience-hero" labelledby="audience-title" tone="base" layer={1}>
@@ -32,7 +32,7 @@ export default function CommunityAudiencePage({ isAuthenticated = false }: { isA
           <h1 id="audience-title">Give your work <em>a story.</em></h1>
           <p className="audience-lead">You are more than a list of skills. Show what you have made, the part you played, and where you want to go.</p>
           <a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a>
-          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts. Everyone signed in to TTV can see your profile and everything you post.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
+          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts. Everyone signed in to TTV can see your profile and everything you post. If you complete a cohort and publish, it’s also on the public website.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
           <a className="audience-text-link" href="#your-first-contribution">See how it works <span aria-hidden="true">↓</span></a>
         </div>
         <ContributionTrail />
@@ -43,9 +43,9 @@ export default function CommunityAudiencePage({ isAuthenticated = false }: { isA
       </CommunitySheet>
       <CommunitySheet className="audience-context" labelledby="context-title" tone="lift" layer={3}>
         <div><h2 id="context-title">Your contribution,<br /><em>in context.</em></h2><p>A link shows where to look. Your words explain your part. A mentor’s note adds what they have checked.</p></div>
-        <div className="audience-context-notes"><div><h3>Add a mentor’s perspective.</h3><p>Mentor confirmation stays attached to the specific work reviewed. It is not a blanket endorsement of your skills or a promise of a job.</p></div><div><h3>Help people understand your work.</h3><p>Everyone signed in to TTV can see your profile and everything you post. Mentors can review shared contributions. Private cohort recordings and internal records stay outside institutional discovery.</p></div></div>
+        <div className="audience-context-notes"><div><h3>Add a mentor’s perspective.</h3><p>Mentor confirmation stays attached to the specific work reviewed. It is not a blanket endorsement of your skills or a promise of a job.</p></div><div><h3>Help people understand your work.</h3><p>Everyone signed in to TTV can see your profile and everything you post, and mentors can confirm the work they check. Cohort recordings and internal records are never part of a profile.</p></div></div>
       </CommunitySheet>
-      <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div><details><summary>What can I share?</summary><p>Describe a project or contribution and add a source you have permission to share. Explain your own role in team work. Keep private information out of your profile and linked evidence.</p></details><details><summary>Do I need to join a TTV cohort?</summary><p>No. Community profiles are open to members with or without a cohort. Cohort applications and access to cohort learning materials remain separate.</p></details></div></CommunitySheet>
+      <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div><details><summary>What can I share?</summary><p>Describe a project or contribution and add a source you have permission to share. Explain your own role in team work. Everyone signed in to TTV can see it, so keep private information out of your profile and linked evidence.</p></details><details><summary>Do I need to join a TTV cohort?</summary><p>No. Anyone signed in can make a profile and post work, with or without a cohort. Listing your profile on the public website comes with completing a cohort. Cohort applications and cohort learning materials remain separate.</p></details></div></CommunitySheet>
       <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">Start with your work.<br />See where the conversation goes.</h2><a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a><p>Everyone signed in to TTV can see your profile and everything you post. Shared contributions are available for mentor review. Participation does not guarantee a job, placement, or introduction.</p></div></CommunitySheet>
   </article>;
 }

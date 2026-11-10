@@ -40,7 +40,7 @@ test.describe.serial("talent platform integration journey", () => {
     });
     await page.goto("/dashboard/portfolio");
 
-    const createButton = page.getByRole("button", { name: "Create profile" });
+    const createButton = page.getByRole("button", { name: "Make my profile" });
     if (await createButton.isVisible().catch(() => false)) {
       await page.locator('input[name="handle"]').fill(publicHandle);
       await page
@@ -50,8 +50,8 @@ test.describe.serial("talent platform integration journey", () => {
         .locator('textarea[name="bio"]')
         .fill("Profile exercised end-to-end by the integration suite.");
       await createButton.click();
-      // A new profile is a draft: publishing it is the primary, saving it again the quiet button.
-      await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+      // A saved profile is in the members directory; a graduate can then list it on the public website.
+      await expect(page.getByRole("button", { name: "Save profile" })).toBeVisible();
     }
     publicHandle = await page.locator('input[name="handle"]').inputValue();
     await page.screenshot({
@@ -60,8 +60,25 @@ test.describe.serial("talent platform integration journey", () => {
     });
 
     const publishButton = page.getByRole("button", {
-      name: /^publish profile$/i,
+      name: /^list me on the public website$/i,
     });
+    const site = page.locator("[data-public-site]");
+    // A hold waits for a person: an admin clears it in /admin/profiles, and only then can the builder list themselves.
+    const clearHold = async () => {
+      const adminContext = await browser.newContext({
+        baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4321",
+        extraHTTPHeaders: { Authorization: `Bearer ${adminToken}` },
+      });
+      try {
+        const adminPage = await adminContext.newPage();
+        await adminPage.goto("/admin/profiles");
+        const held = adminPage.locator("[data-data-list-item]", { hasText: `/talent/${publicHandle}` }).first();
+        await held.getByRole("button", { name: /^clear flag/i }).click();
+        await adminPage.waitForLoadState("load");
+      } finally {
+        await adminContext.close();
+      }
+    };
     if (await publishButton.isVisible().catch(() => false)) {
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],
@@ -75,16 +92,19 @@ test.describe.serial("talent platform integration journey", () => {
         const mobilePage = await mobileContext.newPage();
         await mobilePage.goto("/dashboard/portfolio");
         await mobilePage
-          .getByRole("button", { name: /^publish profile$/i })
+          .getByRole("button", { name: /^list me on the public website$/i })
           .click();
         await expect(
           mobilePage.getByText(
             /remove phone numbers, email addresses, or id numbers/i,
           ),
         ).toBeVisible();
+        // Held: pressing again would only ask the check again, so it isn't offered.
+        await mobilePage.goto("/dashboard/portfolio");
+        await expect(mobilePage.locator("[data-public-site]")).toHaveAttribute("data-public-site", "waiting");
         await expect(
-          mobilePage.getByRole("button", { name: /^publish profile$/i }),
-        ).toBeVisible();
+          mobilePage.getByRole("button", { name: /^list me on the public website$/i }),
+        ).toHaveCount(0);
         await mobilePage.screenshot({
           path: evidence("integration-02-mobile-held"),
           fullPage: true,
@@ -92,11 +112,17 @@ test.describe.serial("talent platform integration journey", () => {
       } finally {
         await mobileContext.close();
       }
-
+    }
+    // Converges from a run that stopped while held, too.
+    if ((await site.getAttribute("data-public-site").catch(() => null)) !== "live") {
       await page.reload();
+      if ((await site.getAttribute("data-public-site")) === "waiting") {
+        await clearHold();
+        await page.reload();
+      }
       await publishButton.click();
     }
-    await expect(page.getByText(/live at/i).first()).toBeVisible();
+    await expect(page.getByText(/you're on the public website at/i).first()).toBeVisible();
     await page.screenshot({
       path: evidence("integration-03-profile-published"),
       fullPage: true,
@@ -120,7 +146,7 @@ test.describe.serial("talent platform integration journey", () => {
       const mobilePage = await mobileContext.newPage();
       await mobilePage.goto("/dashboard/portfolio");
       await mobilePage.locator('textarea[name="bio"]').fill(heldBio);
-      await mobilePage.getByRole("button", { name: "Save changes" }).click();
+      await mobilePage.getByRole("button", { name: "Save profile" }).click();
 
       await expect(
         mobilePage.getByText(

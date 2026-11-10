@@ -8,7 +8,8 @@ import CommunityLanding from "./CommunityLanding";
     const html = renderToStaticMarkup(<CommunityLanding isAuthenticated={isAuthenticated} />);
     expect(html.match(/<h1 /g)).toHaveLength(1);
     expect(html).toContain("Everyone signed in to TTV can see your profile and everything you post.");
-    expect(html).toContain("Everyone signed in to TTV can see saved profiles and posted work.");
+    expect(html).toContain("Everyone signed in to TTV can browse saved profiles and posted work.");
+    expect(html).toContain("If you complete a cohort and publish, it’s also on the public website, where anyone can see it.");
     expect(html).not.toContain("can explore documented work");
     for (const persona of ["members", "mentors", "institutions"]) expect(html).toContain(`href="/community/${persona}"`);
     for (const destination of ["/dashboard/community", "/dashboard/discover"]) {
@@ -18,7 +19,7 @@ import CommunityLanding from "./CommunityLanding";
     expect(html).toContain('id="institutions"');
     expect(html).toContain("You do not need to join or complete a cohort");
     expect(html).toContain("Institutional access requires administrator approval after sign-in");
-    expect(html).toContain("Cohort recordings and internal records are not part");
+    expect(html).toContain("Cohort recordings and internal records are never part of a profile");
     expect(html).toContain("does not guarantee a job");
     expect(html.includes("Continue with GitHub")).toBe(!isAuthenticated);
     expect(html).not.toContain("/api/community");

@@ -9,7 +9,7 @@ import "@/styles/community-audience.css";
 
 const flow = await partnerAccessFlow({ locals: Astro.locals, db: env.DB, env, route: Astro.url.pathname });
 ---
-<PublicLayout title="Community for institutions | Tembo Tech Ventures" description="Explore community profiles, documented contributions, and mentor context. Follow the evidence and decide what to ask next." canonical="/community/institutions">
+<PublicLayout title="Community for institutions | Tembo Tech Ventures" description="Explore member profiles, documented contributions, and mentor context. Follow the evidence and decide what to ask next." canonical="/community/institutions">
   <CommunityMotion />
   <CommunityPartnerPage audience="institutions" isAuthenticated={Boolean(Astro.locals.user)} flow={flow} />
 </PublicLayout>

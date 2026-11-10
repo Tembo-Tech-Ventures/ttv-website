@@ -65,7 +65,8 @@ test.describe("authenticated talent foundation", () => {
   test("dashboard/portfolio stub renders", async ({ page }) => {
     await page.goto("/dashboard/portfolio");
     await expect(
-      page.getByRole("heading", { name: /^(portfolio|public profile)$/i }),
+      // The one profile editor's title.
+      page.getByRole("heading", { name: /^(portfolio|public profile|your profile)$/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-portfolio"),
@@ -128,7 +129,7 @@ test.describe("authenticated talent foundation", () => {
       const sidebar = page.locator("#space-sidebar");
       // The space opens on its Overview; the editor is its own entry (T01).
       await expect(sidebar.locator("a", { hasText: "Overview" })).toHaveAttribute("href", "/dashboard/me");
-      await expect(sidebar.locator("a", { hasText: "Public profile" })).toHaveAttribute("href", "/dashboard/me/portfolio");
+      await expect(sidebar.locator("a", { hasText: "Edit profile" })).toHaveAttribute("href", "/dashboard/me/portfolio");
       await expect(sidebar.locator("a", { hasText: "Visitor messages" })).toHaveAttribute("href", "/dashboard/me/leads");
       await expect(sidebar.locator("a", { hasText: "Opportunities" })).toHaveCount(0);
     } else {

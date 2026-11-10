@@ -1,346 +1,376 @@
 ---
 /**
- * The public profile editor (/dashboard/me/portfolio), on the kit (style-guide rollout M13, audit
- * A§16): the profile's state as a Notice with its StatusChip (publishing a draft is the page's one
- * primary), kit fields, and the GitHub highlights island below the form, hydrated when it scrolls in.
- * Its reads start beside the space frame, and a GET makes no call to GitHub. A saved form answers 303
- * with a read-once flash; a refused one renders again with every value kept, the error under each
- * field and a focused danger Notice (400, or 422 when Tembo's check holds it); a failure that isn't
- * the person's is a 503.
+ * The one profile editor (/dashboard/me/portfolio), for everyone signed in (spec: one profile model).
+ * Who you are, what you've posted, and, for people who completed a cohort, the public website. All of
+ * it is plain forms that post here, so it works without a script; GitHub repositories are the one
+ * island (RepoPicker, hydrated when it scrolls in).
+ *
+ * - The profile saves through saveProfile, with the automatic check (profile-editor/moderation.ts).
+ * - Work posts, edits, moves between posted and draft, and deletes through /api/community/journey,
+ *   in process (work-forms.ts), so the API's own checks apply.
+ * - Listing on the public website is publishProfile, refused to anyone without a completed cohort.
+ *
+ * A saved change answers 303 with a read-once flash; a refused one renders again with every value
+ * kept, the error under each field and a focused danger Notice (400, or 422 when the check holds
+ * it); a failure that isn't the person's is a 503. Reads start beside the space frame.
  */
-import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
-import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
-import {
-  Button, ButtonLink, Card, Checkbox, EmptyState, HINT, LABEL, Notice, PageHeader, PrefixField, StatusChip,
-  TextAreaField, TextField, linkClass,
-} from "@/components/platform/ui";
-import RepoPicker from "@/components/portfolio/RepoPicker";
-import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
 import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { preserveFormTextValues } from "@/lib/form-values";
-import { isAgentSession } from "@/lib/agent-auth";
+import { memberEligibility, publicProfileEligibility } from "@/lib/community/eligibility";
+import { isUnlistedStaff } from "@/components/platform/profile-editor/staff";
+import { memberProfileHref } from "@/lib/members/links";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import {
-  loadProfilePhotoForModeration,
-  resolveModeratedProfileAvatar,
-  safePublicProfileAvatarUrl,
-} from "@/lib/avatar";
+  Button, ButtonLink, Card, Checkbox, DataList, EmptyState, HINT, LABEL, Notice, PageHeader, PrefixField, TextAreaField, TextField,
+  confirmingAction, linkClass,
+} from "@/components/platform/ui";
+import RepoPicker from "@/components/portfolio/RepoPicker";
+import { publishProfile, saveProfile, unpublishProfile, type ProfileFormResult } from "@/components/portfolio/portfolio-handlers";
+import { loadOwnWork, sendCommunityWrite } from "@/components/community/home/home-data";
+import { profileModeration } from "@/components/platform/profile-editor/moderation";
+import PublicSite from "@/components/platform/profile-editor/PublicSite.astro";
+import WorkEntry from "@/components/platform/profile-editor/WorkEntry.astro";
+import WorkForm from "@/components/platform/profile-editor/WorkForm.astro";
+import { EVERYONE_SEES, HANDLE, NOT_SAVED, PAUSED_SEES, PROFILE_HELD, SAVED, STAFF_SEES } from "@/components/platform/profile-editor/copy";
 import {
-  checkProfileContent,
-  previewProfileModerationResult,
-  PROFILE_MODERATION_PREVIEW_HEADER,
-} from "@/lib/moderation/clef";
-import { discardUnreferencedProfilePhoto } from "@/components/profile/profile-photo-cleanup";
-import {
-  publishProfile,
-  saveProfile,
-  type ProfileContentCheck,
-  type ProfileFormResult,
-} from "@/components/portfolio/portfolio-handlers";
-import { PORTFOLIO_COPY } from "@/lib/student/portfolio-page";
+  addWorkHref, changeHandleHref, deleteAction, EDITOR_PATH, EMPTY_WORK, HANDLE_ACTION, handleWorkPost, isContribution, PROFILE_FORM_ID,
+  profileFormHref, readEditorPost, UNLIST_ACTION, WORK_ACTIONS, workEditorFromUrl, workValuesOf, type WorkAction, type WorkPostResult,
+} from "@/components/platform/profile-editor/work-forms";
+
+const { method } = Astro.request;
+const bare = (status: number, body: string, headers: Record<string, string> = {}) =>
+  new Response(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", "Content-Type": "text/plain; charset=utf-8", ...headers } });
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return bare(405, "Not allowed.", { Allow: "GET, HEAD, POST" });
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
-// The frame starts first, beside whatever the request does (PERF-2). Whether the person has completed a
-// cohort comes from their journey, which the frame reads anyway (one read per request): its sidebar
-// offers the profile link exactly then.
+// The profile, its GitHub repositories, the caller's own work and the GitHub account, read together,
+// beside the space frame (PERF-2). Whether the person completed a cohort comes from their journey,
+// which the frame reads anyway.
+const readProfile = () => db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  extras: {
+    // In the Members directory, and on the public website, by the rules those pages read with.
+    listed: sql<number>`${sql.raw(memberEligibility("studentProfile.userId"))}`.as("listed"),
+    onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite"),
+  },
+});
+const readRepos = () => db.query.communityJourney.findMany({
+  where: and(eq(schema.communityJourney.userId, user.id), eq(schema.communityJourney.kind, "repo"), eq(schema.communityJourney.state, "POSTED")),
+  columns: { repoFullName: true, blurb: true, sortOrder: true },
+  orderBy: [asc(schema.communityJourney.sortOrder)],
+});
 const resolving = resolveSpacePageWith(Astro.locals, "portfolio", async () => null);
 const eligibility = getStudentJourney(db, user.id).then((journey) => journey.visibleLinkIds.includes("profile"));
+const ownWork = loadOwnWork(Astro.request, Astro.locals, env);
 
-const previewModeration = previewProfileModerationResult(
-  env.DEPLOYMENT_ENVIRONMENT,
-  isAgentSession(Astro.locals.session?.userAgent),
-  Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
-);
-let moderatedSnapshotUrl: string | null = null;
-const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
-  if (previewModeration) {
-    return {
-      ...previewModeration,
-      publicAvatarUrl: safePublicProfileAvatarUrl(avatarUrl),
-    };
-  }
-
-  let loadedAvatarImage: string | null | undefined;
-  const moderation = await checkProfileContent(env.AI, state, {
-    gatewayName: env.AI_GATEWAY_NAME,
-    loadAvatarImage: avatarUrl
-      ? async () => {
-          loadedAvatarImage = await loadProfilePhotoForModeration(
-            env.BUCKET,
-            avatarUrl,
-          );
-          return loadedAvatarImage;
-        }
-      : undefined,
-  });
-
-  const resolvedAvatar = await resolveModeratedProfileAvatar({
-    bucket: env.BUCKET,
-    userId: user.id,
-    avatarUrl,
-    avatarImage: loadedAvatarImage,
-    outcome: moderation.outcome,
-  });
-  moderatedSnapshotUrl = resolvedAvatar.createdSnapshotUrl;
-
-  return { ...moderation, publicAvatarUrl: resolvedAvatar.publicAvatarUrl };
-};
-
-async function withModeratedSnapshotCleanup<T>(
-  write: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await write();
-  } finally {
-    await discardUnreferencedProfilePhoto({
-      db,
-      bucket: env.BUCKET,
-      userId: user.id,
-      imageUrl: moderatedSnapshotUrl,
-    });
-    moderatedSnapshotUrl = null;
-  }
-}
-
-const PROFILE_TEXT_FIELDS = [
-  "handle",
-  "headline",
-  "bio",
-  "location",
-  "country",
-  "skills",
-  "portfolioUrl",
-  "linkedinUrl",
-] as const;
+const PROFILE_TEXT_FIELDS = ["handle", "headline", "bio", "opportunityGoals", "location", "country", "skills", "portfolioUrl", "linkedinUrl"] as const;
 type ProfileTextField = (typeof PROFILE_TEXT_FIELDS)[number];
 
-let result: ProfileFormResult | null = null;
-/** Which form was refused: the editor ("save") or the draft's publish button. */
-let refused: "save" | "publish" | null = null;
+let profileResult: ProfileFormResult | null = null;
+/** Which profile form was refused: the profile, or listing on or coming off the public website. */
+let refused: "save" | "publish" | "unpublish" | null = null;
 let unavailable = false;
-let submittedProfileValues: Record<ProfileTextField, string> | null = null;
-let submittedAvailability = { openToFreelance: false, openToRoles: false };
+let submitted: Record<ProfileTextField, string> | null = null;
+let submittedOpenTo = { openToFreelance: false, openToRoles: false };
+/** The refused form had opened the handle on purpose ("Change handle"), so it stays open with what was typed. */
+let renaming = false;
+let work: Exclude<WorkPostResult, { kind: "saved" | "refuse" }> | null = null;
 
-if (Astro.request.method === "POST") {
-  if (!(await eligibility)) {
-    // Nothing to save before a cohort is complete: the page says why.
-    Astro.response.status = 403;
-  } else {
+if (method === "POST") {
+  const post = await readEditorPost(Astro.request);
+  if ("refuse" in post) return bare(post.refuse, post.refuse === 413 ? "That form was too large." : post.refuse === 403 ? "That request was refused." : "That form could not be read.");
+  const { action, form } = post;
+  if ((WORK_ACTIONS as readonly string[]).includes(action)) {
+    const claims = (await ownWork) ?? [];
+    const result = await handleWorkPost(action as WorkAction, form, claims, (write) => sendCommunityWrite(Astro.request, Astro.locals, env, write));
+    if (result.kind === "saved") {
+      return redirectWithFlash(Astro, EDITOR_PATH, result.held
+        ? { tone: "warning", title: SAVED.held, message: SAVED.heldDetail }
+        : { tone: "success", title: SAVED[result.saved] });
+    }
+    if (result.kind === "refuse") return bare(result.status, "That form could not be read.");
+    work = result;
+    Astro.response.status = result.status;
+  } else if (action === UNLIST_ACTION) {
+    // The owner's own consent control: no check runs, and nothing but the listing changes.
     try {
-      const formData = await Astro.request.formData();
-      const action = formData.get("_action");
-      const existing = await db.query.studentProfile.findFirst({
-        where: eq(schema.studentProfile.userId, user.id),
-        columns: { id: true },
-      });
-
-      if (action === "save") {
-        submittedProfileValues = preserveFormTextValues(formData, PROFILE_TEXT_FIELDS);
-        submittedAvailability = {
-          openToFreelance: formData.get("openToFreelance") === "on",
-          openToRoles: formData.get("openToRoles") === "on",
-        };
-        result = await withModeratedSnapshotCleanup(() => saveProfile(db, user.id, formData, existing?.id, moderateProfile));
-        if (result.success) {
-          const title = result.published ? PORTFOLIO_COPY.live : existing ? PORTFOLIO_COPY.draftSaved : PORTFOLIO_COPY.created;
-          return redirectWithFlash(Astro, SPACE_PAGE_PATHS.portfolio, { tone: "success", title });
-        }
-        refused = "save";
-        Astro.response.status = result.moderationOutcome === "hold" ? 422 : 400;
-      } else if (action === "publish") {
-        result = existing
-          ? await withModeratedSnapshotCleanup(() => publishProfile(db, user.id, existing.id, moderateProfile))
-          : { success: false, error: "Create your profile first." };
-        if (result.success) {
-          return redirectWithFlash(Astro, SPACE_PAGE_PATHS.portfolio, { tone: "success", title: PORTFOLIO_COPY.published });
-        }
-        refused = "publish";
-        Astro.response.status = result.moderationOutcome === "hold" ? 422 : 400;
-      } else {
-        refused = "save";
-        result = { success: false, error: "That form didn't arrive whole. Try again." };
-        Astro.response.status = 400;
-      }
+      const existing = await db.query.studentProfile.findFirst({ where: eq(schema.studentProfile.userId, user.id), columns: { id: true } });
+      profileResult = existing ? await unpublishProfile(db, user.id, existing.id) : { success: false, error: "Your profile isn't on the public website." };
+      if (profileResult.success) return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title: SAVED.unlisted });
+      refused = "unpublish";
+      Astro.response.status = 409;
     } catch {
       unavailable = true;
       Astro.response.status = 503;
     }
+  } else if (action === "save" || action === "publish") {
+    const moderation = profileModeration({ env, db, userId: user.id, request: Astro.request, locals: Astro.locals });
+    try {
+      const existing = await db.query.studentProfile.findFirst({
+        where: eq(schema.studentProfile.userId, user.id),
+        columns: { id: true, status: true },
+        // Whether the public website shows it now: only then does a save say it's there too.
+        extras: { onPublicSite: sql<number>`${sql.raw(publicProfileEligibility("studentProfile"))}`.as("onPublicSite") },
+      });
+      if (action === "save") {
+        submitted = preserveFormTextValues(form, PROFILE_TEXT_FIELDS);
+        submittedOpenTo = { openToFreelance: form.get("openToFreelance") === "on", openToRoles: form.get("openToRoles") === "on" };
+        renaming = form.get("changeHandle") === "1";
+        profileResult = await moderation.run(() => saveProfile(db, user.id, form, existing?.id, moderation.check));
+        if (profileResult.success) {
+          const title = existing?.onPublicSite ? SAVED.profilePublic : SAVED.profile;
+          return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title });
+        }
+        // A draft's text is written and held by the automatic check: that is a save, said once, as a warning.
+        // A listed profile's held edit writes nothing (the live version stays), so it comes back with every value.
+        if (profileResult.saved) {
+          return redirectWithFlash(Astro, EDITOR_PATH, { tone: "warning", title: SAVED.profileHeld, message: SAVED.profileHeldDetail });
+        }
+        refused = "save";
+      } else {
+        profileResult = existing
+          ? await moderation.run(() => publishProfile(db, user.id, existing.id, moderation.check))
+          : { success: false, error: "Save your profile first." };
+        if (profileResult.success) return redirectWithFlash(Astro, EDITOR_PATH, { tone: "success", title: SAVED.listed });
+        refused = "publish";
+      }
+      Astro.response.status = profileResult.moderationOutcome === "hold" ? 422 : 400;
+    } catch {
+      unavailable = true;
+      Astro.response.status = 503;
+    }
+  } else {
+    return bare(400, "That form could not be read.");
   }
 }
 
-const [landing, eligible, profile, github] = await Promise.all([
+const [landing, eligible, profile, repos, claims, github] = await Promise.all([
   resolving,
   eligibility,
-  db.query.studentProfile.findFirst({
-    where: eq(schema.studentProfile.userId, user.id),
-    with: { work: true },
-  }),
+  readProfile(),
+  readRepos(),
+  ownWork,
   db.query.account.findFirst({
     where: and(eq(schema.account.userId, user.id), eq(schema.account.providerId, "github")),
     columns: { accessToken: true },
   }),
 ]);
 const spaces = landing?.[0] ?? null;
-// Someone who chose to mentor or find people, and not to build and learn, is not sent to apply (QAO-07).
-// A partner who has completed a cohort keeps their profile, and the page that goes with it.
-const partnerLocked = !eligible && spaces?.onboarding?.framing === "partner";
-const editable = eligible && (!profile || profile.status === "DRAFT" || profile.status === "PUBLISHED");
+// Mentors and staff are not listed in the directory or on the public website (by decision), so they are told so.
+const staff = await isUnlistedStaff(spaces, env.DB, user.id);
+// A paused profile is shown nowhere and can't be changed: nothing is offered to post.
+const paused = profile?.status === "SUSPENDED";
+const editable = !profile || profile.status !== "SUSPENDED";
+const held = profile?.moderationOutcome === "hold";
 // A POST never carries a flash, and a refused one says what went wrong instead.
-const flash = Astro.request.method === "GET" ? takeFlash(Astro) : null;
+const flash = method === "GET" ? takeFlash(Astro) : null;
 
-const kept = refused === "save" ? submittedProfileValues : null;
+const kept = refused === "save" ? submitted : null;
 const values: Record<ProfileTextField, string> = {
   handle: kept?.handle ?? profile?.handle ?? "",
   headline: kept?.headline ?? profile?.headline ?? "",
   bio: kept?.bio ?? profile?.bio ?? "",
+  opportunityGoals: kept?.opportunityGoals ?? profile?.opportunityGoals ?? "",
   location: kept?.location ?? profile?.location ?? "",
   country: kept?.country ?? profile?.country ?? "",
   skills: kept?.skills ?? (profile ? parseSkillsJson(profile.skills).join(", ") : ""),
   portfolioUrl: kept?.portfolioUrl ?? profile?.portfolioUrl ?? "",
   linkedinUrl: kept?.linkedinUrl ?? profile?.linkedinUrl ?? "",
 };
-const availability = kept
-  ? submittedAvailability
-  : { openToFreelance: profile?.openToFreelance ?? false, openToRoles: profile?.openToRoles ?? false };
-
+const openTo = kept ? submittedOpenTo : { openToFreelance: profile?.openToFreelance ?? false, openToRoles: profile?.openToRoles ?? false };
 const errors: Partial<Record<ProfileTextField, string>> = {};
 if (refused === "save") {
-  if (result?.handleError) errors.handle = result.handleError;
+  if (profileResult?.handleError) errors.handle = profileResult.handleError;
   for (const field of PROFILE_TEXT_FIELDS) {
     if (field === "handle") continue;
-    const nested = Object.entries(result?.fieldErrors ?? {}).find(([path]) => path.startsWith(`${field}.`))?.[1];
-    const error = result?.fieldErrors?.[field] ?? nested;
+    const nested = Object.entries(profileResult?.fieldErrors ?? {}).find(([path]) => path.startsWith(`${field}.`))?.[1];
+    const error = profileResult?.fieldErrors?.[field] ?? nested;
     if (error) errors[field] = error;
   }
 }
 const fieldErrors = Object.keys(errors).length > 0;
-const moderationMessages = result?.moderationMessages ?? [];
+// A listed profile's edit the check held: nothing was written, and the live version stays as it was.
+const heldChanges = refused === "save" && profileResult?.moderationOutcome === "hold";
+const refusedTitle = refused === "publish" ? NOT_SAVED.listed
+  : refused === "unpublish" ? (profile?.status === "SUSPENDED" ? NOT_SAVED.paused : NOT_SAVED.unlisted)
+  : heldChanges ? NOT_SAVED.heldChanges
+  : NOT_SAVED.profile;
+const moderationMessages = profileResult?.moderationMessages ?? [];
 const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
 
-const existingHighlights = (profile?.work ?? []).filter(h=>h.kind === "repo" && h.state === "POSTED" && h.repoFullName)
-  .toSorted((a, b) => a.sortOrder - b.sortOrder)
-  .map((h) => ({ repoFullName: h.repoFullName!, blurb: h.blurb ?? "", sortOrder: h.sortOrder }));
-const draft = profile?.status === "DRAFT";
+const contributions = (claims ?? []).filter(isContribution);
+const rendered = work?.kind === "render" ? work : null;
+const renderedClaim = rendered?.claimId ? contributions.find((item) => item.id === rendered.claimId) ?? null : null;
+// After a refusal, the work form that was sent stays open with what was typed; otherwise the address says which is open.
+// A paused profile opens no work form: a refused write is said once, at the top.
+const editor = paused ? null
+  : rendered ? (renderedClaim ? { kind: "edit" as const, claim: renderedClaim } : { kind: "add" as const })
+  : workEditorFromUrl(Astro.url, contributions);
+const confirming = confirmingAction(Astro.url, [...contributions.map(deleteAction), UNLIST_ACTION, HANDLE_ACTION]);
+// The handle is the member page's address: after the first save it changes only as a deliberate step, and
+// never once the profile has been on the public website, where it is part of every post link.
+const handleLocked = Boolean(profile?.publishedAt);
+const handleEditable = !profile || (!handleLocked && (confirming === HANDLE_ACTION || renaming));
+const existingHighlights = repos.flatMap((repo) => repo.repoFullName ? [{ repoFullName: repo.repoFullName, blurb: repo.blurb ?? "", sortOrder: repo.sortOrder }] : []);
+const memberPage = profile?.listed ? memberProfileHref(profile) : null;
+Astro.response.headers.set("Cache-Control", "no-store");
 ---
 
-<SpacePage context={spaces} title="Public profile" titlePrefix={refused || unavailable ? "Error: " : ""}>
+<SpacePage context={spaces} title="Your profile" titlePrefix={refused || unavailable || work ? "Error: " : ""}>
   <div class="flex max-w-3xl flex-col gap-8">
-    <PageHeader title="Public profile">
-      {!partnerLocked && "Show your work, and be found for what you can do."}
+    <PageHeader title="Your profile">
+      Who you are and what you've made, in one place.
+      {memberPage && <Fragment slot="action"><ButtonLink href={memberPage}>See your member page</ButtonLink></Fragment>}
     </PageHeader>
 
-    {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
+    <Notice tone="info" title="Who sees this" id="profile-visibility">{paused ? PAUSED_SEES : staff ? STAFF_SEES : EVERYONE_SEES}</Notice>
 
-    {unavailable && (
-      <Notice tone="danger" focusOnLoad id="portfolio-failure" title={PORTFOLIO_COPY.notSaved}>{PORTFOLIO_COPY.unavailable}</Notice>
-    )}
+    {flash && <Notice tone={flash.tone} title={flash.title} focusOnLoad>{flash.message}</Notice>}
+    {unavailable && <Notice tone="danger" focusOnLoad id="profile-failure" title={NOT_SAVED.profile}>{NOT_SAVED.unavailable}</Notice>}
     {refused && (
-      <Notice tone="danger" focusOnLoad id="portfolio-failure" title={refused === "publish" ? PORTFOLIO_COPY.notPublished : PORTFOLIO_COPY.notSaved}>
-        <p class="m-0">{fieldErrors ? PORTFOLIO_COPY.fixBelow : result?.error}</p>
+      <Notice tone="danger" focusOnLoad id="profile-failure" title={refusedTitle}>
+        <p class="m-0">{fieldErrors ? NOT_SAVED.fixBelow : heldChanges ? (profile?.onPublicSite ? NOT_SAVED.heldChangesDetail : NOT_SAVED.heldChangesDetailHidden) : profileResult?.error}</p>
         {moderationMessages.length > 0 && (
-          <ul class="m-0 mt-2 list-disc space-y-1 pl-5">
-            {moderationMessages.map((message) => <li>{message}</li>)}
-          </ul>
+          <ul class="m-0 mt-2 list-disc space-y-1 pl-5">{moderationMessages.map((message) => <li>{message}</li>)}</ul>
         )}
       </Notice>
     )}
-
-    {partnerLocked && <PartnerProfileNote />}
-
-    {!eligible && !partnerLocked && (
-      <EmptyState title="Public website listing opens when you complete a cohort" headingLevel={2}>
-        You can already save a profile and post work for signed-in members in Community. A completed cohort also lets you list your profile on the public website.
-        <Fragment slot="action"><ButtonLink href={SPACE_PAGE_PATHS.apply} variant="primary">Browse cohorts</ButtonLink></Fragment>
-      </EmptyState>
+    {work?.kind === "failed" && <Notice tone="danger" focusOnLoad title={work.failure.title}>{work.failure.detail}</Notice>}
+    {paused && rendered?.failure && <Notice tone="danger" focusOnLoad title={rendered.failure.title}>{rendered.failure.detail}</Notice>}
+    {held && (
+      <Notice tone="warning" title="Your profile is waiting for a check">
+        {PROFILE_HELD}
+      </Notice>
     )}
 
-    {eligible && profile && (
-      <div data-profile-status={profile.status}>
-        {profile.moderationOutcome === "hold" && (
-          <Notice tone="warning" title="Your profile is waiting for a human review">
-            Only you and admins can see it until the hold is cleared.
-          </Notice>
-        )}
-        {profile.status === "DRAFT" && (
-          <Notice tone="info" title="Your profile is not on the public website">
-            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="DRAFT" /> {profile.moderationOutcome === "hold" ? "Your saved profile is held for review." : "Signed-in members can see your saved profile."} Graduates can also list it on the public website.</span>
-            <Fragment slot="actions">
-              <form method="POST">
-                <input type="hidden" name="_action" value="publish" />
-                <Button type="submit" variant="primary" size="sm">Publish profile</Button>
-              </form>
-            </Fragment>
-          </Notice>
-        )}
-        {profile.status === "PUBLISHED" && profile.moderationOutcome !== "hold" && (
-          <Notice tone="success" title="Your profile is live">
-            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="PUBLISHED" /> <span>Live at <a href={`/talent/${profile.handle}`} class={linkClass()}>/talent/{profile.handle}</a>.</span></span>
-            Saved edits go live straight away. An automatic check runs as you save, and if it holds an edit for the team, you'll see why.
-          </Notice>
-        )}
-        {profile.status === "SUSPENDED" && (
-          <Notice tone="warning" title="Your profile is paused">
-            <span class="inline-flex flex-wrap items-center gap-2"><StatusChip domain="profile" status="SUSPENDED" /> Reach out to the team for next steps.</span>
-          </Notice>
-        )}
-      </div>
-    )}
-
-    {editable && (
-      <Card as="section" aria-labelledby="profile-editor-title" className="flex flex-col gap-5">
-        <h2 id="profile-editor-title" class="text-xl leading-snug text-ink-primary">{profile ? "Edit your profile" : "Create your profile"}</h2>
-        <form id="profile-editor" method="POST" class="flex flex-col gap-5">
+    {/* Before the first save, one form at a time: the work form, when it's open, is the page's one peach action. */}
+    {editable && !(editor && !profile) && (
+      <Card as="section" aria-labelledby="profile-form-title" className="flex scroll-mt-6 flex-col gap-5" id={PROFILE_FORM_ID} data-profile-form>
+        <h2 id="profile-form-title" class="text-xl leading-snug text-ink-primary">{profile ? "About you" : "Make your profile"}</h2>
+        <form method="POST" action={EDITOR_PATH} class="flex flex-col gap-5">
           <input type="hidden" name="_action" value="save" />
-          <PrefixField
-            label="Handle" name="handle" prefix="/talent/" required maxLength={39} autoComplete="off" spellCheck={false}
-            defaultValue={values.handle} error={errors.handle}
-            hint="3 to 39 characters: lowercase letters, numbers and hyphens. Your GitHub username works well."
-          />
+          {handleEditable ? (
+            <>
+              <PrefixField
+                label="Handle" name="handle" prefix="members/" required maxLength={39} autoComplete="off" spellCheck={false}
+                defaultValue={values.handle} error={errors.handle} hint={HANDLE.hint}
+              />
+              {/* The server renames only a form that says so: a stale tab's hidden handle never does. */}
+              {profile && <input type="hidden" name="changeHandle" value="1" />}
+              {profile && <input type="hidden" name="handleWas" value={profile.handle} />}
+              {profile && (
+                <Notice tone="warning" title="Changing your handle" id="handle-warning">
+                  {HANDLE.changeWarning}
+                  <Fragment slot="actions"><ButtonLink href={profileFormHref()} variant="ghost">Keep {profile.handle}</ButtonLink></Fragment>
+                </Notice>
+              )}
+            </>
+          ) : profile && (
+            <div class="flex flex-col gap-1.5" data-handle-locked={handleLocked ? "listed" : "saved"}>
+              <span class={LABEL}>Handle</span>
+              <input type="hidden" name="handle" value={profile.handle} />
+              <p class="m-0 text-[0.9375rem] text-ink-primary">members/<strong>{profile.handle}</strong></p>
+              <p class={`m-0 ${HINT}`}>{handleLocked ? HANDLE.locked : HANDLE.current}</p>
+              {errors.handle && <p class="m-0 text-sm text-danger-ink" id="handle-error" data-handle-error>{errors.handle}</p>}
+              {!handleLocked && <a href={changeHandleHref()} class={linkClass("w-fit pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center")}>{HANDLE.change}</a>}
+            </div>
+          )}
           <TextField label="Headline" name="headline" optional maxLength={120} placeholder="Full-stack developer in Kisumu" defaultValue={values.headline} error={errors.headline} />
-          <TextAreaField label="Bio" name="bio" optional rows={5} maxLength={4000} defaultValue={values.bio} error={errors.bio}
+          <TextAreaField label="About you" name="bio" optional rows={5} maxLength={4000} defaultValue={values.bio} error={errors.bio}
             hint="Who you are, what you've built, and what you're building next." />
-          <div class="grid gap-5 sm:grid-cols-2">
-            <TextField label="City or region" name="location" optional maxLength={120} autoComplete="address-level2" defaultValue={values.location} error={errors.location} />
-            <TextField label="Country" name="country" optional maxLength={56} autoComplete="country-name" defaultValue={values.country} error={errors.country} />
-          </div>
+          <TextAreaField label="What you're looking for" name="opportunityGoals" optional rows={3} maxLength={2000} defaultValue={values.opportunityGoals}
+            error={errors.opportunityGoals} hint="A role, freelance work, a collaborator, a mentor: in your words." />
           <TextField label="Skills" name="skills" optional pattern={skillsPattern} placeholder="TypeScript, React, Python" defaultValue={values.skills} error={errors.skills}
             hint="Up to 12, separated by commas, each up to 30 characters." />
           <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
             <legend class={LABEL}>Open to <span class="font-normal text-ink-muted">(optional)</span></legend>
-            <Checkbox label="Freelance work" name="openToFreelance" defaultChecked={availability.openToFreelance} />
-            <Checkbox label="Full-time roles" name="openToRoles" defaultChecked={availability.openToRoles} />
+            <Checkbox label="Freelance work" name="openToFreelance" defaultChecked={openTo.openToFreelance} />
+            <Checkbox label="Full-time roles" name="openToRoles" defaultChecked={openTo.openToRoles} />
           </fieldset>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <TextField label="City or region" name="location" optional maxLength={120} autoComplete="address-level2" defaultValue={values.location} error={errors.location} />
+            <TextField label="Country" name="country" optional maxLength={56} autoComplete="country-name" defaultValue={values.country} error={errors.country} />
+          </div>
           <div class="grid gap-5 sm:grid-cols-2">
             <TextField label="Portfolio link" name="portfolioUrl" type="url" optional maxLength={300} placeholder="https://your-site.com" defaultValue={values.portfolioUrl} error={errors.portfolioUrl} />
             <TextField label="LinkedIn link" name="linkedinUrl" type="url" optional maxLength={300} placeholder="https://linkedin.com/in/you" defaultValue={values.linkedinUrl} error={errors.linkedinUrl} />
           </div>
           <div>
-            <Button type="submit" variant={draft ? "quiet" : "primary"}>{!profile ? "Create profile" : draft ? "Save draft" : "Save changes"}</Button>
+            {/* The page's one peach action, until a work editor is open: then its own save is. */}
+            <Button type="submit" variant={editor ? "quiet" : "primary"} aria-describedby="profile-visibility">{profile ? "Save profile" : "Make my profile"}</Button>
           </div>
         </form>
       </Card>
     )}
 
-    {eligible && profile && profile.status !== "SUSPENDED" && (
-      <Card as="section" aria-labelledby="highlights-title" className="flex flex-col gap-4">
-        <div>
-          <h2 id="highlights-title" class="text-xl leading-snug text-ink-primary">GitHub highlights</h2>
-          <p class={`m-0 mt-1 ${HINT}`}>Choose up to six repositories to post as work, each with a line about your part in it.</p>
+    <PublicSite
+      eligible={eligible}
+      staff={staff}
+      profile={profile ? { handle: profile.handle, status: profile.status, everListed: Boolean(profile.publishedAt), onPublicSite: Boolean(profile.onPublicSite) } : null}
+      confirming={confirming === UNLIST_ACTION}
+      held={held}
+    />
+
+    <section id="work" aria-labelledby="your-work-heading" class="flex scroll-mt-6 flex-col gap-6" data-work>
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div class="flex min-w-0 flex-col gap-2">
+          <h2 id="your-work-heading" class="text-2xl text-ink-primary">Your work</h2>
+          <p class="max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
+            Post what you made or helped make. A mentor can confirm the specific work they checked; a missing confirmation is an open
+            question, not a mark against you.
+          </p>
         </div>
-        <RepoPicker
-          client:visible
-          profileId={profile.id}
-          existingHighlights={existingHighlights}
-          hasGitHubToken={Boolean(github?.accessToken)}
-        />
-      </Card>
-    )}
+        {!paused && editor?.kind !== "add" && contributions.length > 0 && <ButtonLink href={addWorkHref()}>Post work</ButtonLink>}
+      </div>
+
+      {claims === null ? (
+        <Notice tone="danger" title="We couldn't load your work">
+          Nothing is lost. Try again in a moment.
+          <Fragment slot="actions"><ButtonLink href={`${EDITOR_PATH}#work`}>Try again</ButtonLink></Fragment>
+        </Notice>
+      ) : (
+        <>
+          {editor?.kind === "add" && <WorkForm values={rendered?.values ?? EMPTY_WORK} errors={rendered?.errors} failure={rendered?.failure} staff={staff} />}
+          <DataList label="Your work" isEmpty={contributions.length === 0}>
+            {contributions.map((claim) => editor?.kind === "edit" && editor.claim.id === claim.id
+              ? (
+                <li class="border-b border-hairline py-4 first:pt-0">
+                  <WorkForm claim={claim} values={rendered?.values ?? workValuesOf(claim)} errors={rendered?.errors} failure={rendered?.failure} staff={staff} />
+                </li>
+              )
+              : <WorkEntry claim={claim} confirming={confirming === deleteAction(claim)} paused={paused} />)}
+            <Fragment slot="empty">
+              {editor?.kind !== "add" && (
+                <EmptyState title="Nothing posted yet">
+                  You don't need a finished portfolio. Start with one thing you made or learned.
+                  {!paused && <Fragment slot="action"><ButtonLink href={addWorkHref()}>Post work</ButtonLink></Fragment>}
+                </EmptyState>
+              )}
+            </Fragment>
+          </DataList>
+        </>
+      )}
+
+      {profile && profile.status !== "SUSPENDED" && (
+        <Card as="section" aria-labelledby="repos-title" className="flex flex-col gap-4" data-repos>
+          <div>
+            <h3 id="repos-title" class="text-lg leading-snug text-ink-primary">GitHub repositories</h3>
+            <p class={`m-0 mt-1 ${HINT}`}>
+              Choose up to six repositories, each with a line about your part in it. They're posted with your work, so everyone
+              signed in to TTV can see them, and the public website shows them if you're listed there.
+            </p>
+          </div>
+          <RepoPicker client:visible profileId={profile.id} existingHighlights={existingHighlights} hasGitHubToken={Boolean(github?.accessToken)} />
+        </Card>
+      )}
+    </section>
   </div>
 </SpacePage>

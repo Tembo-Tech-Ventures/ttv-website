@@ -6,12 +6,13 @@ import { ADMIN_PAGE_SIZE } from "@/lib/admin/paging";
 import {
   applyAdminProfileAction,
   parseModerationFlags,
+  restoredStatus,
   splitModerationReviewLists,
   type AdminProfileAction,
 } from "@/lib/talent/profile-moderation";
 
 /*
- * The admin's list of builder profiles: the ones the content check left for
+ * The admin's list of profiles: the ones the content check left for
  * a person, then every profile a page at a time, filtered by status in SQL.
  */
 
@@ -30,28 +31,40 @@ interface ActionableProfile {
 }
 
 /**
- * The publishing actions that change something for this profile: Publish when
- * it is not public, Unpublish while it can still be hidden, Clear flag while
- * the content check asks for a person. Never one that would do nothing.
+ * The publishing actions that change something for this profile: Restore a
+ * profile an admin paused, Unpublish (pause) while it can still be hidden,
+ * Clear flag while the content check asks for a person. Never one that would
+ * do nothing, and never listing someone: that is the person's own choice.
  */
 export function profileActionsFor(profile: ActionableProfile): AdminProfileAction[] {
   const actions: AdminProfileAction[] = [];
-  if (profile.status !== "PUBLISHED") actions.push("publish");
+  if (profile.status === "SUSPENDED") actions.push("publish");
   if (profile.status !== "SUSPENDED") actions.push("unpublish");
   if (profile.moderationReviewRequired) actions.push("clear_flag");
   return actions;
 }
 
-/** What an action's button says: a suspended profile is republished. */
-export function profileActionLabel(action: AdminProfileAction, status: string): string {
-  if (action === "publish") return status === "SUSPENDED" ? "Republish" : "Publish";
-  return action === "unpublish" ? "Unpublish" : "Clear flag";
+/**
+ * What an action's button says: a paused profile is republished, or restored to members only; a
+ * listed one is unpublished, and anything else paused (it isn't on the public website to come off).
+ */
+export function profileActionLabel(
+  action: AdminProfileAction,
+  profile: { status: string; suspendedFrom?: "DRAFT" | "PUBLISHED" | null; publishedAt: Date | null },
+): string {
+  if (action === "publish") return restoredStatus(profile) === "PUBLISHED" ? "Republish" : "Restore";
+  if (action === "unpublish") return profile.status === "PUBLISHED" ? "Unpublish" : "Pause";
+  return "Clear flag";
 }
+
+/** Why an admin's Republish was refused: the public website is for people who completed a cohort. */
+export const REPUBLISH_INELIGIBLE =
+  "This member no longer has a completed cohort, so their profile can't go back on the public website. Restore isn't available until they do.";
 
 /** What an action says once it is done, as the page's flash. */
 export const PROFILE_DONE: Record<AdminProfileAction, string> = {
-  publish: "Profile published",
-  unpublish: "Profile unpublished",
+  publish: "Profile restored",
+  unpublish: "Profile paused",
   clear_flag: "Flag cleared",
 };
 
@@ -102,6 +115,8 @@ export async function readProfilesPage(db: Database, { status, page }: { status:
         id: true,
         handle: true,
         status: true,
+        suspendedFrom: true,
+        publishedAt: true,
         updatedAt: true,
         contentVersion: true,
         moderationOutcome: true,
@@ -118,7 +133,7 @@ export async function readProfilesPage(db: Database, { status, page }: { status:
   return { rows, total, review: splitModerationReviewLists(review) };
 }
 
-export type ProfileModerationResult = "done" | "missing" | "changed";
+export type ProfileModerationResult = "done" | "missing" | "changed" | "ineligible";
 
 /**
  * Publish, unpublish or clear the flag on one profile, only if it is still the
@@ -130,9 +145,9 @@ export async function moderateProfile(
 ): Promise<ProfileModerationResult> {
   const current = await db.query.studentProfile.findFirst({
     where: eq(schema.studentProfile.id, profileId),
-    columns: { status: true, publishedAt: true, contentVersion: true, publicName: true, publicAvatarUrl: true },
+    columns: { status: true, suspendedFrom: true, publishedAt: true, contentVersion: true, publicName: true, publicAvatarUrl: true },
     with: { user: { columns: { name: true, image: true } } },
   });
   if (!current) return "missing";
-  return (await applyAdminProfileAction(db, profileId, current, action, expectedVersion)) ? "done" : "changed";
+  return applyAdminProfileAction(db, profileId, current, action, expectedVersion);
 }

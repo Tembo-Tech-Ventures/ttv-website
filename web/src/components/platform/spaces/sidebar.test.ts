@@ -245,15 +245,15 @@ describe("space sidebars", () => {
 
   it("show the profile's pages as the journey unlocks them, with visitor messages counted", () => {
     const newcomer = spaceSidebar("profile", facts(meByPersona.lucy, "portfolio", { visibleLinkIds: NEW_SIGN_IN }));
-    expect(labels(newcomer)).toEqual(["Overview", "Public profile", "Account", "Your feedback"]);
-    expect(current(newcomer)).toEqual(["Public profile"]);
+    expect(labels(newcomer)).toEqual(["Overview", "Edit profile", "Account", "Your feedback"]);
+    expect(current(newcomer)).toEqual(["Edit profile"]);
 
     const alumna = spaceSidebar("profile", facts(meByPersona.achieng, "leads", {
       unreadLeadCount: 3,
       certificates: [{ id: "application-2", programName: "Cohort 02" }],
     }));
     expect(alumna.groups.map((group) => group.label)).toEqual([undefined, "Certificates", "Settings"]);
-    expect(labels(alumna)).toEqual(["Overview", "Public profile", "Writing", "Opportunities", "Visitor messages", "Cohort 02", "Account", "Your feedback"]);
+    expect(labels(alumna)).toEqual(["Overview", "Edit profile", "Writing", "Opportunities", "Visitor messages", "Cohort 02", "Account", "Your feedback"]);
     expect(alumna.groups[0]!.items.find((item) => item.key === "leads")).toMatchObject({ count: 3, current: true });
     expect(hrefs(alumna)).toContain("/certificate/application-2");
 
@@ -266,10 +266,10 @@ describe("space sidebars", () => {
     const model = spaceSidebar("profile", facts(meByPersona.achieng, "profile"));
     expect(model.groups[0]!.items.slice(0, 2).map(({ label, href }) => ({ label, href }))).toEqual([
       { label: "Overview", href: "/dashboard/me" },
-      { label: "Public profile", href: "/dashboard/me/portfolio" },
+      { label: "Edit profile", href: "/dashboard/me/portfolio" },
     ]);
     expect(current(model)).toEqual(["Overview"]);
-    expect(current(spaceSidebar("profile", facts(meByPersona.achieng, "portfolio")))).toEqual(["Public profile"]);
+    expect(current(spaceSidebar("profile", facts(meByPersona.achieng, "portfolio")))).toEqual(["Edit profile"]);
   });
 
   it("encode certificate ids as one path segment", () => {

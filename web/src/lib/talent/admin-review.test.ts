@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   sortProfilesForQueue,
   sortProjectsForQueue,
-  validateProfileTransition,
   validateProjectTransition,
   shouldSetPublishedAt,
   separateInterests,
@@ -93,51 +92,6 @@ describe("sortProjectsForQueue", () => {
       "REJECTED",
       "CLOSED",
     ]);
-  });
-});
-
-describe("validateProfileTransition", () => {
-  it("accepts DRAFT → PUBLISHED", () => {
-    expect(validateProfileTransition("DRAFT", "PUBLISHED")).toEqual({
-      valid: true,
-    });
-  });
-
-  it("accepts DRAFT → SUSPENDED", () => {
-    expect(validateProfileTransition("DRAFT", "SUSPENDED")).toEqual({
-      valid: true,
-    });
-  });
-
-  it("accepts PUBLISHED → SUSPENDED", () => {
-    expect(validateProfileTransition("PUBLISHED", "SUSPENDED")).toEqual({
-      valid: true,
-    });
-  });
-
-  it("accepts SUSPENDED → PUBLISHED", () => {
-    expect(validateProfileTransition("SUSPENDED", "PUBLISHED")).toEqual({
-      valid: true,
-    });
-  });
-
-  it("rejects PUBLISHED → DRAFT", () => {
-    const result = validateProfileTransition("PUBLISHED", "DRAFT");
-    expect(result.valid).toBe(false);
-  });
-
-  it("rejects unknown source status", () => {
-    const result = validateProfileTransition("NONEXISTENT", "PUBLISHED");
-    expect(result.valid).toBe(false);
-  });
-
-  it("includes from/to in error reason", () => {
-    const result = validateProfileTransition("PUBLISHED", "DRAFT");
-    expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.reason).toContain("PUBLISHED");
-      expect(result.reason).toContain("DRAFT");
-    }
   });
 });
 

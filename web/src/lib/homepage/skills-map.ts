@@ -1,6 +1,6 @@
 /**
  * The homepage skills map: a radial picture of how the skills on
- * published builder profiles connect, in the spirit of École 42's "holy graph".
+ * published profiles connect, in the spirit of École 42's "holy graph".
  *
  * It is an illustration, not a feature. TTV does not track anyone's progress
  * through a map, so nothing here models a person: the graph is built only

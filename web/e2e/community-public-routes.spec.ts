@@ -22,7 +22,7 @@ test("public navigation leads to community and preserves sign-in return paths", 
 test("existing builder and hiring pages explain the wider community", async ({ page, baseURL }) => {
   test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro routes.");
   await page.goto("/talent");
-  await expect(page.getByRole("link", { name: "Build your community profile" })).toHaveAttribute("href", "/community");
+  await expect(page.getByRole("link", { name: "Build your profile" })).toHaveAttribute("href", "/community");
   await page.goto("/hire");
   await expect(page.getByRole("link", { name: "Learn about institutional access" })).toHaveAttribute("href", "/community#institutions");
 });
@@ -30,7 +30,7 @@ test("existing builder and hiring pages explain the wider community", async ({ p
 // A partner page's CTA words follow the onboarding flag a member would get after sign-in
 // (data-access-flow); where it leads does not.
 const CTAS: Record<string, Record<string, string>> = {
-  members: { page: "Build your community profile" },
+  members: { page: "Build your profile" },
   mentors: { legacy: "Continue to mentor review", request: "Ask to mentor" },
   institutions: { legacy: "Continue to institutional access", request: "Ask for institutional access" },
 };
@@ -64,7 +64,7 @@ test.skip("authenticated audience workspaces: unsupported with preview bearer; c
 test("community navigation and disclosures still work after browser Back", async ({ page, baseURL }) => {
   test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro documents and their page lifecycle.");
   await page.goto("/community/members");
-  await page.getByRole("link", { name: "Build your community profile" }).first().click();
+  await page.getByRole("link", { name: "Build your profile" }).first().click();
   await expect(page).toHaveURL(/\/auth\/login/);
   await page.goBack();
   await page.getByRole("link", { name: "See how it works" }).click();

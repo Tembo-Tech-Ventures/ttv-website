@@ -1,38 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  PROFILE_TRANSITIONS,
   POST_TRANSITIONS,
   PROJECT_TRANSITIONS,
   canTransition,
 } from "./transitions";
-
-describe("PROFILE_TRANSITIONS", () => {
-  it("allows DRAFT → PUBLISHED and DRAFT → SUSPENDED", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "PUBLISHED")).toBe(true);
-    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "SUSPENDED")).toBe(true);
-  });
-
-  it("allows PUBLISHED → SUSPENDED", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "PUBLISHED", "SUSPENDED")).toBe(
-      true
-    );
-  });
-
-  it("allows SUSPENDED → PUBLISHED", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "SUSPENDED", "PUBLISHED")).toBe(
-      true
-    );
-  });
-
-  it("disallows invalid transitions", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "PUBLISHED", "DRAFT")).toBe(
-      false
-    );
-    expect(canTransition(PROFILE_TRANSITIONS, "SUSPENDED", "DRAFT")).toBe(
-      false
-    );
-  });
-});
 
 describe("POST_TRANSITIONS", () => {
   it("allows DRAFT → PUBLISHED (author self-publishes)", () => {

@@ -58,7 +58,7 @@ function reads(linkIds: StudentJourney["visibleLinkIds"]) {
     own: {
       profile: {
         id: "profile", onPublicSite: 1, listed: 1, status: "PUBLISHED" as const, handle: "achieng-otieno", headline: null, bio: null, location: null, country: null,
-        skills: '["Python"]', publicName: null, publicAvatarUrl: null,
+        skills: '["Python"]', publicName: null, publicAvatarUrl: null, publishedAt: null,
       },
       leads: [{ id: "lead", fromName: "Grace Wanjiru", organization: "Chama Savings" }],
       drafts: [],
@@ -70,7 +70,10 @@ function reads(linkIds: StudentJourney["visibleLinkIds"]) {
 }
 
 const CONTEXT = {
-  me: { user: { id: "achieng", name: "Achieng Otieno", avatarUrl: null }, flags: { channels: true, mentor_requests: true } },
+  me: {
+    user: { id: "achieng", name: "Achieng Otieno", avatarUrl: null }, flags: { channels: true, mentor_requests: true },
+    capabilities: { isMentor: false, isAdmin: false },
+  },
   onboarding: { framing: "builder" },
 } as unknown as SpacePageContext;
 
@@ -83,7 +86,6 @@ describe("profileOverviewFacts", () => {
       leads: { items: [{ id: "lead" }], total: 7 },
       opportunities: { gate: "published", items: PROJECTS },
       mentorRequests: true,
-      framing: "builder",
     });
     expect(facts.profile?.skills).toEqual(["Python"]);
   });

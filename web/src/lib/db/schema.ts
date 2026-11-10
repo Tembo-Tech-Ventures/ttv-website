@@ -717,6 +717,9 @@ export const studentProfile = sqliteTable(
     })
       .notNull()
       .default("DRAFT"),
+    // The status an admin's pause (SUSPENDED) interrupted, so restoring it never lists someone who
+    // had taken themselves off the public website. Null unless suspended.
+    suspendedFrom: text("suspendedFrom", { enum: ["DRAFT", "PUBLISHED"] }),
     headline: text("headline"),
     bio: text("bio"),
     location: text("location"),

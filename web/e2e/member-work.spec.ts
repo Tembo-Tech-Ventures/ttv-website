@@ -60,8 +60,11 @@ test("posted work is shared with members while drafts remain author-only", async
       status: "posted",
     });
     const page = await own.newPage();
-    await page.goto(`${baseURL}/dashboard/community?add=1`);
-    await expect(page.locator('[name="visibility"]')).toHaveCount(0);
+    // The one place work is posted: the profile editor's work form, which asks post or draft, never "visibility".
+    await page.goto(`${baseURL}/dashboard/me/portfolio?add=1`);
+    const form = page.locator("[data-work-editor='add']");
+    await expect(form.locator('[name="status"]')).toHaveCount(2);
+    await expect(form.locator('[name="visibility"]')).toHaveCount(0);
   } finally {
     if (workId)
       expect((await own.request.delete(`${baseURL}/api/community/journey/${workId}`, { headers })).ok()).toBe(true);

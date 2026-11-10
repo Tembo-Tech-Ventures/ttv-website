@@ -1,11 +1,5 @@
 export type TransitionMap = Record<string, readonly string[]>;
 
-export const PROFILE_TRANSITIONS: TransitionMap = {
-  DRAFT: ["PUBLISHED", "SUSPENDED"],
-  PUBLISHED: ["SUSPENDED"],
-  SUSPENDED: ["PUBLISHED"],
-};
-
 export const POST_TRANSITIONS: TransitionMap = {
   DRAFT: ["PUBLISHED"],
   PUBLISHED: ["DRAFT", "SUSPENDED"],

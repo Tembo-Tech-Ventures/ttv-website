@@ -151,7 +151,7 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
   // The service checks the authenticated actor; neither selected IDs nor context grant access.
   const selected = profileId ? { profile: await service.getProfile(profileId), journey: (await service.listJourney(profileId)).filter(j=>j.status === "posted" && !j.moderationHold) } : undefined;
   const tools = selected ? [tool("get_selected_profile", "Read evidence for the selected person only. No subject switching.", {}, [])] : institutional ? [
-    tool("search_profiles", "Search visible community profiles. Maximum 10 results.", { query: { type: "string", maxLength: 200 }, skills:{type:"array",items:{type:"string",maxLength:60},maxItems:10}, limit: { type: "integer", minimum: 1, maximum: 10 } }, ["query"]),
+    tool("search_profiles", "Search visible member profiles. Maximum 10 results.", { query: { type: "string", maxLength: 200 }, skills:{type:"array",items:{type:"string",maxLength:60},maxItems:10}, limit: { type: "integer", minimum: 1, maximum: 10 } }, ["query"]),
     tool("get_profile", "Read a visible profile and its published evidence.", { userId: { type: "string" } }, ["userId"]),
   ] : [tool("get_own_profile", "Read your own profile and contributions.", {}, [])];
   const assessments = new Map<string, EvidenceSupportAssessment>();

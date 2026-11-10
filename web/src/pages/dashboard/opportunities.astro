@@ -29,7 +29,7 @@ const publishedProfile = () => db.select({ id: schema.studentProfile.id }).from(
   .where(and(eq(schema.studentProfile.userId, user.id), eq(schema.studentProfile.status, "PUBLISHED")));
 const readProfile = () => db.query.studentProfile.findFirst({
   where: eq(schema.studentProfile.userId, user.id),
-  columns: { id: true, status: true },
+  columns: { id: true, status: true, publishedAt: true },
 });
 
 const DONE = { raised: "You raised your hand for this project.", withdrawn: "You withdrew your interest." } as const;
@@ -130,7 +130,7 @@ const profilePath = SPACE_PAGE_PATHS.portfolio;
     {failure && <Notice tone="danger" focusOnLoad>{failure}</Notice>}
 
     {gateState !== "published" && (
-      <EmptyState title="Opportunities open with a published profile" headingLevel={2}>
+      <EmptyState title={profile?.status === "DRAFT" && profile.publishedAt ? "You're off the public website" : "Opportunities open with a published profile"} headingLevel={2}>
         {gateMessage}
         <ButtonLink slot="action" href={profilePath} variant={gateState === "no_profile" ? "primary" : "quiet"}>
           {gateState === "no_profile" ? "Create your profile" : "Go to your profile"}

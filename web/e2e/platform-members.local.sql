@@ -55,3 +55,25 @@ INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journe
   'Walked through the ledger with Achieng; the reconciliation logic is hers.','Reviewed the code and asked about the design',1,'MENTOR',1793400000),
  ('ttv-local-member-work-confirm-faith','ttv-local-member-work-faith-site','ttv-local-persona-mentor',
   'Checked the page with a screen reader and keyboard; Faith fixed what we found.','Tested it together on a call',1,'MENTOR',1793400000);
+-- e2e/platform-profile-editor.spec.ts: a graduate of her own for taking herself off the public website and
+-- back, so no other spec sees the listing change under it. Re-seeding lists her again, with one post.
+INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-graduate','Zawadi Mwende','zawadi@invalid.ttv',1,NULL,1793400000,1793400000);
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-graduate-session',1893456000,'ttv-local-persona-graduate-token',NULL,'local','ttv-local-persona-graduate',1793400000,1793400000);
+INSERT OR REPLACE INTO programApplication (id,programId,userId,status,application,completedAt,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-app-graduate','ttv-local-persona-cohort-04','ttv-local-persona-graduate','COMPLETED','{}',1780272000,1770000000,1780272000);
+INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,bio,location,country,skills,publicName,publishedAt) VALUES
+ ('ttv-local-persona-profile-graduate','ttv-local-persona-graduate','zawadi-mwende','PUBLISHED','Mobile developer',
+  'I build Android apps for boda boda riders.','Machakos','KE','["Kotlin","Android"]','Zawadi Mwende',1781000000);
+INSERT OR REPLACE INTO blogPost (id,profileId,slug,title,contentMarkdown,status,publishedAt) VALUES
+ ('ttv-local-persona-post-graduate','ttv-local-persona-profile-graduate','offline-first-fares','Offline-first fares',
+  'Riders lose signal between stages, so the app keeps every fare on the phone until it can send it.','PUBLISHED',1781100000);
+-- e2e/platform-profile-editor.spec.ts: a member of her own for changing her handle, so no other spec
+-- (the admin-access one gives Brian a role) changes who she is under it. Re-seeding puts her handle back.
+INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-renamer','Neema Atieno','neema@invalid.ttv',1,NULL,1793400000,1793400000);
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-renamer-session',1893456000,'ttv-local-persona-renamer-token',NULL,'local','ttv-local-persona-renamer',1793400000,1793400000);
+INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,skills,publicName) VALUES
+ ('ttv-local-persona-profile-renamer','ttv-local-persona-renamer','neema-atieno','DRAFT','Data journalist','["Python","SQL"]','Neema Atieno');

@@ -1,11 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
-import { personaSession, signIn, type PersonaKey } from "./platform-personas";
+import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./platform-personas";
 
 /**
  * T01: the Profile space opens on its Overview (prototype screens/07), and the editor is its own
- * entry, "Public profile". Checked as the people it is for: an alumna with a published profile, a
+ * entry, "Edit profile". Checked as the people it is for: an alumna with a published profile, a
  * member without one (who is told what opens it and offered a cohort), and a mentor (framed as a
  * partner, never asked to apply). Then, as the alumna, the confirmation state of shared work: a
  * mentor confirms revision 1, she edits it, and the Overview says revision 2 waits for a mentor.
@@ -75,12 +75,12 @@ test("an alumna sees her published profile as visitors do, with the editor one c
   const entries = await sidebarEntries(page);
   expect(entries.slice(0, 2)).toEqual([
     { name: "Overview", href: OVERVIEW, current: true },
-    { name: "Public profile", href: EDITOR, current: false },
+    { name: "Edit profile", href: EDITOR, current: false },
   ]);
 
   const card = overview(page).locator("[data-profile-card]");
   await expect(card.getByRole("heading", { level: 2, name: "Achieng Otieno" })).toBeVisible();
-  await expect(card.locator("[data-chip]").first()).toHaveText("Published");
+  await expect(card.locator("[data-chip]").first()).toHaveText("On the public website");
   await expect(card.locator("[data-profile-meta]")).toHaveText("Backend builder · Kisumu · Cohort 04");
   await expect(card.getByRole("list", { name: "Skills" }).getByRole("listitem")).toHaveText(["TypeScript", "SQL"]);
   await expect(overview(page).getByRole("link", { name: "View public page" })).toHaveAttribute("href", "/talent/achieng-otieno");
@@ -96,12 +96,12 @@ test("an alumna sees her published profile as visitors do, with the editor one c
   await page.screenshot({ path: evidence("alumna") });
   await runAxe(page, test.info(), "profile overview, alumna");
 
-  // "Edit" opens the editor, in sentence case, with "Public profile" current.
+  // "Edit" opens the editor, in sentence case, with "Edit profile" current.
   await overview(page).getByRole("link", { name: "Edit", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${EDITOR}$`));
-  await expect(page.getByRole("heading", { name: "Edit your profile" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "About you" })).toBeVisible();
   await expect(page.getByText("Edit Your Profile", { exact: true })).toHaveCount(0);
-  expect((await sidebarEntries(page)).find((entry) => entry.current)?.name).toBe("Public profile");
+  expect((await sidebarEntries(page)).find((entry) => entry.current)?.name).toBe("Edit profile");
 });
 
 test("a form posted to the Overview from a tab opened before it existed goes on to the editor, body and all", async ({ page, baseURL }) => {
@@ -116,14 +116,21 @@ test("a form posted to the Overview from a tab opened before it existed goes on 
   expect((await page.request.get(OVERVIEW, { maxRedirects: 0 })).status()).toBe(200);
 });
 
-test("a member without a public profile is told what opens it, and offered a cohort", async ({ page, baseURL }) => {
-  await as(page.context(), baseURL!, "community");
+test("a member without a profile is invited to make one, as the page's one peach action", async ({ page, baseURL }) => {
+  // The local applicant never posts work in these suites (posting work saves a profile), so they stay
+  // without one whatever else runs.
+  const applicant = localPersonaSession("applicant");
+  test.skip(typeof applicant === "string", typeof applicant === "string" ? applicant : "");
+  if (typeof applicant === "string") return;
+  await signIn(page.context(), baseURL!, applicant);
   await open(page, OVERVIEW);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your profile");
-  const card = overview(page).locator("[data-profile-card=locked]");
-  await expect(card.getByRole("heading", { level: 2 })).toHaveText("Your public builder page opens when you complete a cohort");
-  await expect(card.getByRole("link", { name: "Apply to a cohort" })).toHaveAttribute("href", "/dashboard/cohort/apply");
+  const card = overview(page).locator("[data-profile-card=create]");
+  await expect(card.getByRole("heading", { level: 2 })).toHaveText("Make your profile");
+  await expect(card).toContainText("Everyone signed in to TTV can see it.");
+  await expect(card.getByRole("link", { name: "Make your profile" })).toHaveAttribute("href", EDITOR);
+  await expect(overview(page).getByRole("link", { name: /^Apply to a cohort/ })).toHaveCount(0);
   await expect(overview(page).getByRole("link", { name: "View public page" })).toHaveCount(0);
   await expect(overview(page).getByRole("link", { name: "See your member page" })).toHaveCount(0);
   await expect(overview(page).getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
@@ -135,14 +142,13 @@ test("a member without a public profile is told what opens it, and offered a coh
   await runAxe(page, test.info(), "profile overview, member without a profile");
 });
 
-test("a mentor's overview frames the profile for a partner, and never asks them to apply", async ({ page, baseURL }) => {
+test("a mentor is invited to make a profile like anyone, and never asked to apply", async ({ page, baseURL }) => {
   await as(page.context(), baseURL!, "mentor");
   await open(page, OVERVIEW);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your profile");
-  await expect(overview(page).getByRole("region", { name: "Public profiles come with a cohort" })).toBeVisible();
+  await expect(overview(page).locator("[data-profile-card=create]")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Apply to a cohort/ })).toHaveCount(0);
-  await expect(overview(page).locator("[data-profile-card]")).toHaveCount(0);
 
   await expectNoSidewaysScroll(page);
   await page.screenshot({ path: evidence("mentor") });

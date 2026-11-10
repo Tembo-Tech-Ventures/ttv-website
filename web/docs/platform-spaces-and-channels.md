@@ -77,13 +77,34 @@ it, and each page and API still makes its own checks.
 
 Each space has a home: `/dashboard/cohort`, `/dashboard/community`,
 `/dashboard/mentoring`, `/dashboard/discover`, `/admin` and, for `profile`,
-`/dashboard/me`. The Profile space's home is its Overview: the public builder
-profile as visitors see it, the work shared on Your journey with where each
-mentor confirmation stands, what needs the person (unopened visitor messages,
-newer revisions nobody has confirmed, drafts), the client projects open to
-them and their certificates. The editor is `/dashboard/me/portfolio`
-("Public profile"). The Overview only reads; every row links to the page that
-does the work.
+`/dashboard/me`. The Profile space's home is its Overview: the profile as
+everyone signed in sees it (with their member page and, for a graduate who
+listed it, their public page), the work they've posted with where each mentor
+confirmation stands, what needs the person (unopened visitor messages, newer
+revisions nobody has confirmed, drafts), the client projects open to them and
+their certificates. The one profile editor, for everyone, is
+`/dashboard/me/portfolio` ("Edit profile"): the profile, posting work (a link,
+or GitHub repositories), and, for graduates, listing on the public website and
+coming off it. Community's home links there; it edits nothing itself, and an
+old tab's post or link to it lands in the editor. The Overview only reads;
+every row links to the page that does the work.
+
+What the editor and the Overview say is what the directory and the public
+website show: "listed" is `publicProfileEligibility`, never the status alone.
+A held profile is told it waits for a check (and is offered no listing until a
+person has looked); mentors and staff are told they aren't listed anywhere;
+someone who took themselves off (a draft with `publishedAt`) is never asked to
+list again, and Writing and Opportunities tell them why they're closed. Coming
+off twice answers the same as once. A held save of the profile or of work is a
+save, said as a warning; a listed profile's held edit writes nothing, so it
+comes back (422) with every value. Listing is the person's own choice: a held
+profile can't be listed until a person clears the check (`publishProfile`
+refuses it), and an admin never publishes a draft. Their Unpublish pauses a
+profile and records what it interrupted (`suspendedFrom`), so restoring it puts
+back the person's choice. The handle stays put after the first save: the
+server renames only a form that opened it (`changeHandle=1`, the "Change
+handle" step, which warns old links stop working), and never once the profile
+has been listed, since it is part of post links.
 
 Every admin page (`/admin/*`) renders in the Admin space while `spaces` is on
 for the admin, with the admin navigation as the space's sidebar and the page

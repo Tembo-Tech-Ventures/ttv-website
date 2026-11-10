@@ -113,6 +113,16 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       throw new CommunityError("A moderator took this down.", 409);
     if(row?.kind === "repo") throw new CommunityError("Edit repositories in GitHub highlights.",409);
   }
+  /** A profile the team paused shows nowhere, so nothing new is posted to it, even by a forged request. Deleting stays open. */
+  async function requireNotPaused() {
+    const row=await db.prepare("SELECT 1 FROM studentProfile WHERE userId=? AND status='SUSPENDED'").bind(actorId).first();
+    if (row) throw new CommunityError(PAUSED_WRITE_REFUSAL,403);
+  }
+  /** Whether the automatic check is holding the caller's own work for a person, after a write. */
+  async function heldWork(id:string): Promise<boolean> {
+    const row=await db.prepare("SELECT moderationOutcome FROM communityJourney WHERE id=? AND userId=?").bind(id,actorId).first<{moderationOutcome:string|null}>();
+    return row?.moderationOutcome === "hold";
+  }
   async function readJourney(target: string): Promise<CommunityJourney[]> {
     const mentorScope = fixtureScope("c.mentorId");
     // The confirmations are read beside the entries rather than after them: one round trip, not two.
@@ -296,6 +306,7 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyInput, input);
+      await requireNotPaused();
       const saved = await db.prepare("SELECT id FROM studentProfile WHERE userId=?").bind(actorId).first();
       if (!saved) await ensureMemberProfile(db,actorId, requireModerationEnv());
       const id = createId();
@@ -310,6 +321,7 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyUpdateInput,input);
+      await requireNotPaused();
       await requireContribution(id);
       const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility='institution',state=?,moderationOutcome=CASE WHEN (title IS NOT ? OR description IS NOT ?) AND moderationOutcome IS NOT 'hold' THEN NULL ELSE moderationOutcome END,moderationCheckedAt=CASE WHEN (title IS NOT ? OR description IS NOT ?) THEN NULL ELSE moderationCheckedAt END,moderationReviewRequired=CASE WHEN ?='DRAFT' THEN 0 WHEN (title IS NOT ? OR description IS NOT ?) OR moderationCheckedAt IS NULL OR moderationOutcome IN ('hold','error') THEN 1 ELSE moderationReviewRequired END,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND moderatorHidden=0 AND kind='contribution' AND (? IS NULL OR version=?)`)
         .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,workState(p.status),
@@ -322,18 +334,19 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
           p.description,id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
       if (!result.meta.changes) throw new CommunityError(p.expectedRevision ? "Contribution changed or is no longer available. Reload before editing." : "Contribution not found.",p.expectedRevision?409:404);
       await checkPostedWork(db,id,requireModerationEnv());
-      return {id,updated:true};
+      return {id,updated:true,moderationHold:await heldWork(id)};
     },
     async setJourneyStatus(id: string, input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyStatusInput,input);
+      await requireNotPaused();
       await requireContribution(id);
       const result = await db.prepare(`UPDATE communityJourney SET visibility='institution',state=?,moderationReviewRequired=CASE WHEN ?='DRAFT' THEN 0 WHEN moderationCheckedAt IS NULL OR moderationOutcome IN ('hold','error') THEN 1 ELSE moderationReviewRequired END,updatedAt=unixepoch() WHERE id=? AND userId=? AND moderatorHidden=0 AND kind='contribution'`)
         .bind(workState(p.status), workState(p.status),id,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
       await checkPostedWork(db,id,requireModerationEnv());
-      return {id,status:p.status};
+      return {id,status:p.status,moderationHold:await heldWork(id)};
     },
     async deleteJourney(id: string) {
       requireWritable();
@@ -403,6 +416,8 @@ function communityService(db: D1Database, actorId: string, fixture: StagingFixtu
     },
   };
 }
+/** What the API says to a write of work while the author's profile is paused. */
+export const PAUSED_WRITE_REFUSAL = "Your profile is paused, so nothing new can be posted to it.";
 export type CommunityService = ReturnType<typeof createCommunityService>;
 
 

@@ -82,14 +82,15 @@ describe("community partner audience pages", () => {
   });
   it("separates evidence from human judgment and respects private-data boundaries", () => {
     const html = renderToStaticMarkup(<CommunityPartnerPage audience="institutions" />);
-    expect(html).toContain("Everyone signed in to TTV can see saved profiles and posted work.");
+    expect(html).toContain("Approved organisations see the same saved profiles and posted work as every signed-in member.");
+    expect(html).toContain("Their extra is AI tools to search and assess that work.");
     expect(html).toContain("Start with hiring. Explore the work behind a profile and decide what to ask next.");
     expect(html).not.toContain("single, generic role");
     expect(html).toContain("Member claim:");
     expect(html).toContain("Mentor note:");
     expect(html).toContain("not an automated recommendation");
     expect(html).toContain("Missing evidence is not evidence of low ability");
-    expect(html).toContain("Private cohort recordings and internal records stay outside");
+    expect(html).toContain("Cohort recordings and internal records stay out of all of it.");
     expect(html).toContain("does not send a message, book an interview, or arrange an introduction");
   });
 });

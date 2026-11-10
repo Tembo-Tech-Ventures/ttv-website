@@ -13,7 +13,7 @@ const { view, tone } = Astro.props;
 <div class:list={["actions", `tone-${tone}`]}>
   {view.profileHref && (
     <a class="action action-primary" href={view.profileHref}>
-      View {view.studentFirstName}&rsquo;s builder profile
+      View {view.studentFirstName}&rsquo;s profile
     </a>
   )}
   <button class="action" type="button" data-certificate-print>Print</button>

@@ -88,8 +88,8 @@ test.describe("landings, as SPEC §3 maps them", () => {
     await expect(page.getByRole("region", { name: "Welcome to the community" })).toBeVisible();
     await expect(welcome.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account#taking-part");
     await expect(invitation(page)).toBeVisible();
-    await expect(main(page).getByText("Add a contribution")).toBeVisible();
-    await expect(main(page).getByText("Your first contribution belongs here.")).toHaveCount(0);
+    await expect(main(page).getByRole("link", { name: "Post work" })).toBeVisible();
+    await expect(main(page).getByText("Your first piece of work belongs here.")).toHaveCount(0);
     expect(await sidebarLabels(page)).toContain("Apply to a cohort");
     await noSideways(page);
     await page.screenshot({ path: evidence("exploring") });
@@ -128,10 +128,10 @@ test.describe("landings, as SPEC §3 maps them", () => {
     await expect(status(page, "pending", "MENTOR")).toBeVisible();
     await expect(invitation(page)).toHaveCount(0);
     await expect(main(page).getByText(/Apply to Cohort|Find your next cohort/)).toHaveCount(0);
-    await expect(main(page).getByText("Your first contribution belongs here.")).toHaveCount(0);
+    await expect(main(page).getByText("Your first piece of work belongs here.")).toHaveCount(0);
     // Their own work is fully usable, under its own name.
     await expect(main(page).getByRole("heading", { level: 2, name: "Your own work" })).toBeVisible();
-    await expect(main(page).getByRole("link", { name: "Add a contribution" })).toBeVisible();
+    await expect(main(page).getByRole("link", { name: "Post work" })).toBeVisible();
     const labels = await sidebarLabels(page);
     expect(labels).not.toContain("Apply to a cohort");
     expect(labels).toContain("Your own work");
@@ -562,7 +562,7 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     await expect(page.locator("[data-onboarding-prompt-done]")).toHaveCount(0);
   });
 
-  test("QAO-07: mentors and organisations get no student lock on their public profile", async ({ page, baseURL }) => {
+  test("QAO-07: mentors and organisations make a profile like anyone, and are never asked to apply", async ({ page, baseURL }) => {
     for (const [persona, local] of [["institution", false], ["onb-otieno", true]] as const) {
       await page.context().clearCookies();
       if (local) {
@@ -573,16 +573,13 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
         if (typeof session === "string") return;
         await signIn(page.context(), baseURL!, session);
       }
-      // The Overview (T01) and the editor both frame the profile for them.
-      for (const [path, name] of [["/dashboard/me", "overview"], ["/dashboard/me/portfolio", "public profile"]] as const) {
+      // The Overview and the editor both offer the one profile, with no lock and no cohort pitch.
+      for (const [path, name] of [["/dashboard/me", "overview"], ["/dashboard/me/portfolio", "profile editor"]] as const) {
         await open(page, path);
-        await expect(page.getByText("Your portfolio unlocks when you complete a cohort"), persona).toHaveCount(0);
-        await expect(page.getByText("Your public builder page opens when you complete a cohort"), persona).toHaveCount(0);
+        await expect(page.getByText(/opens when you complete a cohort|unlocks when you complete a cohort/), persona).toHaveCount(0);
         await expect(page.getByRole("link", { name: /^Browse programs$/i }), persona).toHaveCount(0);
         await expect(page.getByRole("link", { name: /^Apply to a cohort/ }), persona).toHaveCount(0);
-        const note = page.getByRole("region", { name: "Public profiles come with a cohort" });
-        await expect(note, persona).toContainText("A public builder profile opens when a member completes a cohort. To build and learn as well, choose it in Account.");
-        await expect(note.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account#taking-part");
+        await expect(page.locator("[data-partner-profile]"), persona).toHaveCount(0);
         await noSideways(page);
         await page.screenshot({ path: evidence(`f6-profile-${persona}-${name.replace(" ", "-")}`) });
         await runAxe(page, test.info(), `${name}, ${persona}`);
@@ -590,14 +587,13 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     }
   });
 
-  test("QAO-07: a member keeps the profile lock, which is theirs to open", async ({ page, baseURL }) => {
+  test("QAO-07: a member makes their profile from the Overview and the editor, with no lock", async ({ page, baseURL }) => {
     await as(page, baseURL, "onb-mercy");
     await open(page, "/dashboard/me/portfolio");
-    await expect(page.getByText("Your portfolio unlocks when you complete a cohort")).toBeVisible();
-    await expect(page.locator("[data-partner-profile]")).toHaveCount(0);
-    // The Overview says the same, in its own words, and never frames them as a partner.
+    await expect(page.locator("[data-profile-form]")).toBeVisible();
+    await expect(page.getByText(/unlocks when you complete a cohort/)).toHaveCount(0);
     await open(page, "/dashboard/me");
-    await expect(page.getByRole("heading", { level: 2, name: "Your public builder page opens when you complete a cohort" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Make your profile" })).toBeVisible();
     await expect(page.locator("[data-partner-profile]")).toHaveCount(0);
   });
 });

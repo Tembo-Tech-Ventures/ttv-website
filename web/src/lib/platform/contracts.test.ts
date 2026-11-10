@@ -310,8 +310,8 @@ describe("wire invariants", () => {
 });
 
 describe("Tembo contracts (B-3.1)", () => {
-  it("cites a public builder profile by an internal link, and reports when the allowance resets", () => {
-    const profile = { type: "profile", userId: "synthetic-achieng", title: "Achieng Atieno · builder profile", href: "/talent/achieng" } as const;
+  it("cites a public profile by an internal link, and reports when the allowance resets", () => {
+    const profile = { type: "profile", userId: "synthetic-achieng", title: "Achieng Atieno · profile", href: "/talent/achieng" } as const;
     expect(C.Citation.parse(profile)).toEqual(profile);
     expect(C.Citation.parse({...profile,href:null}).href).toBeNull();
     expect(C.TemboUsage.parse({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) })).toEqual({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) });

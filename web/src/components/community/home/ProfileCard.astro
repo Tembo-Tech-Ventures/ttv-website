@@ -1,22 +1,18 @@
 ---
 /**
- * The caller's own profile: photo or initials, name and headline,
- * and the opportunities they are looking for, with the way into the profile
- * editor. A kit card on the sheet, the name in Maven like every heading but
- * the page's h1. The editor opens in place (ProfileForm), through a link, so
- * it works without a script.
+ * The caller's profile as everyone signed in sees it: their photo or initials, name and headline,
+ * and what they are looking for, with the way to the one profile editor (Profile space). A kit card
+ * on the sheet, the name in Maven like every heading but the page's h1.
  */
 import type { CommunityProfile } from "@/components/discovery/types";
 import { Avatar, ButtonLink, Card } from "@/components/platform/ui";
-import { profileHref } from "./home-forms";
+import { profileFormHref } from "@/components/platform/profile-editor/work-forms";
 
 interface Props {
   profile: CommunityProfile;
-  /** The editor is open below: the card no longer offers to open it. */
-  editing?: boolean;
 }
 
-const { profile, editing = false } = Astro.props;
+const { profile } = Astro.props;
 ---
 
 <Card as="section" aria-labelledby="community-profile-name" className="flex flex-col gap-5" data-community-profile>
@@ -26,14 +22,12 @@ const { profile, editing = false } = Astro.props;
       <h2 id="community-profile-name" class="text-xl leading-snug break-words text-ink-primary">{profile.name}</h2>
       {profile.headline && <p class="mt-1 text-base leading-relaxed text-ink-secondary">{profile.headline}</p>}
     </div>
-    {!editing && (
-      <ButtonLink href={profileHref()}>Edit your profile</ButtonLink>
-    )}
+    <ButtonLink href={profileFormHref()}>Edit your profile</ButtonLink>
   </div>
   <div class="border-t border-hairline pt-4">
-    <h3 class="text-[0.9375rem] leading-snug text-ink-primary">Opportunity goals</h3>
+    <h3 class="text-[0.9375rem] leading-snug text-ink-primary">What you're looking for</h3>
     <p class:list={["mt-1 max-w-prose text-sm leading-relaxed whitespace-pre-line", profile.goal ? "text-ink-secondary" : "text-ink-muted"]}>
-      {profile.goal || "Not written yet. Say what kind of work you're looking for when you edit your profile."}
+      {profile.goal || "Not written yet. Say what you're looking for when you edit your profile."}
     </p>
   </div>
 </Card>

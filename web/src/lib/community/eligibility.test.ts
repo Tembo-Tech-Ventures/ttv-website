@@ -13,7 +13,7 @@ import { COMMUNITY_NATIVE_MODEL } from "./native-gateway";
 
 /**
  * Owner decision 2026-11-01 (QA1-09): institutional discovery lists only people
- * who saved a community profile, never mentors, admins or the caller, and the
+ * who saved a profile, never mentors, admins or the caller, and the
  * INSTITUTION role never excludes an otherwise eligible member. One test
  * across every institutional surface, so they cannot drift apart again.
  */

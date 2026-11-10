@@ -166,6 +166,12 @@ export async function loadOwnProfile() {
   return mapProfile(profile.profile, entries.entries);
 }
 
+/** The caller's own work from the body of GET journey, validated and mapped; null when it does not match. */
+export function parseOwnWork(journey: unknown): JourneyClaim[] | null {
+  const parsed = journeySchema.safeParse(journey);
+  return parsed.success ? parsed.data.entries.map(mapJourney) : null;
+}
+
 /**
  * The caller's own profile with its journey, from the bodies of GET profile and
  * GET journey, validated and mapped as loadOwnProfile does. Null when either
@@ -350,7 +356,7 @@ export async function askProfile(
     if (citation.kind === "profile") {
       if (citation.id !== profile.id || citation.version !== profile.version)
         throw new UiApiError(502);
-      references.push(`Community profile · Revision ${citation.version}`);
+      references.push(`Profile · Revision ${citation.version}`);
       continue;
     }
     const claim = profile.claims.find((item) =>

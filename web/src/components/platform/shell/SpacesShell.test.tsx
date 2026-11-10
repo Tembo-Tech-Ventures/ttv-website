@@ -466,14 +466,14 @@ describe("SpacesShell bell: shared work waiting for confirmation (QA1R-03)", () 
 
   it("shows a dot and names the work when nothing is unread", async () => {
     await mount({ me: mentor(4), overlays: ["attention"] });
-    expect(bell().getAttribute("aria-label")).toBe("Attention, 4 shared contributions to confirm");
+    expect(bell().getAttribute("aria-label")).toBe("Attention, 4 pieces of work to confirm");
     expect(bell().querySelector('[data-count-badge="dot"]')).not.toBeNull();
     expect(bell().querySelector('[data-count-badge="count"]')).toBeNull();
   });
 
   it("keeps the unread count on the badge and adds the work to the name", async () => {
     await mount({ me: mentor(1, { ...quiet, mentoring: 2, community: 1 }), overlays: ["attention"] });
-    expect(bell().getAttribute("aria-label")).toBe("Attention, 3 waiting, 1 shared contribution to confirm");
+    expect(bell().getAttribute("aria-label")).toBe("Attention, 3 waiting, 1 piece of work to confirm");
     expect(bell().querySelector('[data-count-badge="count"]')?.textContent).toContain("3");
     expect(bell().querySelector('[data-count-badge="dot"]')).toBeNull();
   });

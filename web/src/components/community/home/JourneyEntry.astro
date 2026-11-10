@@ -4,14 +4,15 @@
  * author can see it, what they wrote, the source they attached, and what each
  * mentor checked. A confirmation belongs to the revision it reviewed: once the
  * contribution changes, it reads as the previous revision's, never as a
- * confirmation of the new text.
+ * confirmation of the new text. Work a moderator took down can't be changed,
+ * so it offers only Delete (a contribution's, in the editor), with the same words.
  */
 import { PiArrowUpRight, PiCheckCircle, PiClockCounterClockwise } from "react-icons/pi";
 import { evidenceHref, type JourneyClaim } from "@/components/discovery/types";
 import { Chip, DataListItem, RowAction, linkClass } from "@/components/platform/ui";
 import { formatCalendarDate } from "@/lib/display-date";
-import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { editHref } from "./home-forms";
+import { confirmDeleteHref, editWorkHref, isContribution, reposHref } from "@/components/platform/profile-editor/work-forms";
+import { DRAFT_ENTRY, HELD_ENTRY, TAKEN_DOWN, TAKEN_DOWN_DELETE } from "@/components/platform/profile-editor/copy";
 
 interface Props {
   claim: JourneyClaim;
@@ -24,10 +25,18 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
 
 <DataListItem title={claim.title} headingLevel={3}>
   <Fragment slot="meta"><time datetime={claim.date}>{calendar(claim.date)}</time></Fragment>
-  {(claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip>{claim.moderatorHidden ? "Taken down" : claim.moderationHold ? "Awaiting review" : "Draft"}</Chip></Fragment>}
-  <Fragment slot="actions"><RowAction href={claim.kind === "repo" ? `${SPACE_PAGE_PATHS.portfolio}#highlights-title` : editHref(claim)} row={claim.title}>Edit</RowAction></Fragment>
+  {(claim.moderatorHidden || claim.moderationHold || claim.status === "draft") && <Fragment slot="status"><Chip tone={claim.moderatorHidden ? "danger" : claim.moderationHold ? "warning" : "neutral"}>{claim.moderatorHidden ? "Taken down" : claim.moderationHold ? "Waiting for a check" : "Draft"}</Chip></Fragment>}
+  <Fragment slot="actions">
+    {claim.moderatorHidden
+      ? isContribution(claim) && <RowAction href={confirmDeleteHref(claim)} row={claim.title} variant="ghost">Delete</RowAction>
+      : <RowAction href={isContribution(claim) ? editWorkHref(claim) : reposHref()} row={claim.title}>Edit</RowAction>}
+  </Fragment>
   <div class="flex flex-col gap-3">
-    {claim.moderatorHidden ? <p>A moderator took this down.</p> : claim.moderationHold ? <p>Your work is saved and waiting for a human review. Only you and admins can see it.</p> : claim.status === "draft" && <p>Unpublished draft. Only you can see this contribution.</p>}
+    {claim.moderatorHidden
+      ? <p>{TAKEN_DOWN}{isContribution(claim) ? ` ${TAKEN_DOWN_DELETE}` : ""}</p>
+      : claim.moderationHold
+        ? <p>{HELD_ENTRY}</p>
+        : claim.status === "draft" && <p>{DRAFT_ENTRY}</p>}
     <p class="whitespace-pre-line break-words">{claim.description}</p>
     {claim.evidence.length > 0 && (
       <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`Sources for ${claim.title}`}>
@@ -36,7 +45,7 @@ const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00
           return (
             <li>
               {href ? (
-                <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1")}>
+                <a href={href} target="_blank" rel="noopener noreferrer" class={linkClass("inline-flex items-center gap-1 pointer-coarse:min-h-11")}>
                   {source.title}<span class="sr-only"> ({source.kind}, opens in a new tab)</span>
                   <PiArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
                 </a>

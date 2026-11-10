@@ -1,7 +1,7 @@
 ---
 /**
  * Confirm work, the list a mentor confirms from, on the kit (style-guide rollout M17, D5): one card per
- * shared contribution with its evidence, its confirmation history and, while it waits for this mentor,
+ * piece of posted work with its evidence, its confirmation history and, while it waits for this mentor,
  * a form to confirm it and a private "Set aside". Every action is a plain POST to the page, so all of it
  * works without a script. No action here is the page's primary: each card has its own, and they are quiet.
  */
@@ -18,6 +18,8 @@ interface Props {
 }
 
 const { requests, kept } = Astro.props;
+/** Who sees a confirmation: everyone who sees the work it's attached to (spec rule 4). */
+const CONFIRMATION_SEEN_BY = "Your confirmation shows with the work, with your name, to everyone signed in to TTV. If the member completes a cohort and lists their profile on the public website, it shows there too, where anyone can see it.";
 const { listed, setAside, waiting } = splitContributions(requests);
 const role = (value: string) => (value === "MENTOR" ? "Mentor" : value === "ADMIN" ? "Administrator" : "Role not recorded");
 ---
@@ -25,9 +27,9 @@ const role = (value: string) => (value === "MENTOR" ? "Mentor" : value === "ADMI
 <div class="flex flex-col gap-8">
   <div class="flex max-w-prose flex-col gap-3 text-ink-secondary">
     <p class="m-0">
-      Confirm only the contribution and evidence you checked yourself, not the whole person. Members share this
-      work so mentors can confirm the parts they've checked; nobody has sent you a review request. A Tembo answer
-      never confirms anything.
+      Confirm only the work and evidence you checked yourself, not the whole person. Members post this work so
+      mentors can confirm the parts they've checked; nobody has sent you a review request. A Tembo answer never
+      confirms anything.
     </p>
     {requests.length > 0 && (
       <p class="m-0 font-semibold text-ink-primary" data-awaiting-confirmation={waiting}>
@@ -37,11 +39,11 @@ const role = (value: string) => (value === "MENTOR" ? "Mentor" : value === "ADMI
   </div>
 
   {requests.length === 0 ? (
-    <EmptyState title="No shared contributions to review yet" headingLevel={2}>
-      When members share work with its evidence, it appears here for you to check.
+    <EmptyState title="No posted work to review yet" headingLevel={2}>
+      When members post work with its evidence, it appears here for you to check.
     </EmptyState>
   ) : (
-    <ul class="m-0 flex list-none flex-col gap-5 p-0" aria-label="Shared contributions">
+    <ul class="m-0 flex list-none flex-col gap-5 p-0" aria-label="Posted work">
       {listed.map((request) => {
         const key = `contribution-${request.id}`;
         const mine = kept?.id === request.id ? kept : null;
@@ -135,8 +137,9 @@ const role = (value: string) => (value === "MENTOR" ? "Mentor" : value === "ADMI
                       error={mine?.errors.note}
                       hint="The evidence or work you checked, what it supports, and any limits. At least 20 characters and three words; nothing private or sensitive."
                     />
+                    <p id={`${key}-who`} class={`m-0 ${HINT}`} data-confirmation-visibility>{CONFIRMATION_SEEN_BY}</p>
                     <div>
-                      <Button type="submit" aria-describedby={`${key}-title`}>Confirm this revision</Button>
+                      <Button type="submit" aria-describedby={`${key}-title ${key}-who`}>Confirm this revision</Button>
                     </div>
                   </form>
                   <form method="POST" class="flex flex-col gap-1">

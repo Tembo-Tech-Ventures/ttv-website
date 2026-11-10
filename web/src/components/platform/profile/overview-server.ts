@@ -19,7 +19,7 @@ import { OVERVIEW_LIMITS, type OverviewFacts } from "./overview";
 
 /*
  * The Profile Overview's reads (T01). Read-only, and each one is the person's own: their public
- * builder profile, their contributions through the community service (which applies the same
+ * profile, their contributions through the community service (which applies the same
  * staging and fixture scopes as the Your journey API), their unopened visitor messages, their
  * writing drafts, the approved client projects the Opportunities page lists, and their
  * certificates. Nothing here grants anything; every linked page still authorises itself.
@@ -52,7 +52,7 @@ async function ownJourney(
   }
 }
 
-/** The person's builder profile, as a subquery, so what hangs off it is read beside it. */
+/** The person's profile, as a subquery, so what hangs off it is read beside it. */
 function ownProfileId(db: Database, userId: string, status?: "PUBLISHED") {
   return db
     .select({ id: schema.studentProfile.id })
@@ -66,7 +66,7 @@ function ownProfileId(db: Database, userId: string, status?: "PUBLISHED") {
 }
 
 /**
- * The public builder profile and what hangs off it, in one round trip: unopened visitor messages,
+ * The profile and what hangs off it, in one round trip: unopened visitor messages,
  * writing drafts and the Opportunities page's projects, each found through the profile's subquery
  * rather than after it. The count of unopened messages is the journey's.
  */
@@ -90,6 +90,7 @@ async function profileFacts(db: Database, userId: string) {
         skills: true,
         publicName: true,
         publicAvatarUrl: true,
+        publishedAt: true,
       },
     }),
     db.query.profileContact.findMany({
@@ -194,13 +195,14 @@ export function profileOverviewFacts(
     : { gate: own.opportunities.gate, items: [] };
   return {
     person: { id: me.user.id, name: me.user.name, image: me.user.avatarUrl },
-    journeyState: journey.state,
     visibleLinkIds: journey.visibleLinkIds,
     // The journey shows the profile editor to whoever has completed a cohort (hasCompletedCohort).
     eligible: journey.visibleLinkIds.includes("profile"),
+    staff: me.capabilities.isMentor || me.capabilities.isAdmin,
     profile: profile && {
       onPublicSite: profile.onPublicSite,
       listed: profile.listed,
+      everListed: Boolean(profile.publishedAt),
       status: profile.status,
       handle: profile.handle,
       headline: profile.headline,
@@ -217,6 +219,5 @@ export function profileOverviewFacts(
     opportunities,
     certificates,
     mentorRequests: mentorRequestsOpen(me),
-    framing: context.onboarding?.framing ?? null,
   };
 }
