@@ -1,4 +1,4 @@
-import { postedWorkEligibility } from "@/lib/community/eligibility";
+import { memberEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
 import { memberWorkHref } from "@/lib/members/links";
 import {
   ExternalLink, MessageEmbed,
@@ -254,11 +254,12 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * confirmations at or before the shared revision. ?3 is the channel's program. A project must still
  * exist, belong to the message's author and be published; a recording must still be complete and in
  * this channel's cohort. Every reader of a cohort channel can see that cohort's recordings, so the
- * channel decides for all of them. Deleted messages carry no embeds and cost nothing here.
+ * channel decides for all of them. Deleted messages carry no embeds and cost nothing here. A project's
+ * author handle comes only while the Members directory lists them: staff-shared work has no member page.
  */
 export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
     WHEN 'project' THEN (SELECT json_object('confirmations', json(${confirmationsOf("j.id", "json_extract(e.value, '$.version')")}),
-        'handle', (SELECT p.handle FROM studentProfile p WHERE p.userId = j.userId)) FROM communityJourney j
+        'handle', (SELECT p.handle FROM studentProfile p WHERE p.userId = j.userId AND ${memberEligibility("p.userId")})) FROM communityJourney j
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j", true)})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ${program} AND r.processingStatus = 'complete')

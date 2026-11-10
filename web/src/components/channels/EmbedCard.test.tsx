@@ -54,6 +54,8 @@ describe("a shared project", () => {
     const linked = html(<EmbedCard embed={{ ...ledger, memberHref: "/dashboard/community/members/achieng-otieno#work-ledger" }} />);
     expect(linked).toMatch(/<p class="channel-embed__title"><a href="\/dashboard\/community\/members\/achieng-otieno#work-ledger"[^>]*>Chama ledger: M-Pesa receipt parser<\/a><\/p>/);
     expect(html(<EmbedCard embed={ledger} />)).toMatch(/<p class="channel-embed__title">Chama ledger: M-Pesa receipt parser<\/p>/);
+    // A 44px target on a touch screen.
+    expect(linked).toMatch(/<a href="\/dashboard\/community\/members\/[^"]+" class="[^"]*pointer-coarse:min-h-11/);
   });
 
   it("draws no way in when the project has no evidence link", () => {

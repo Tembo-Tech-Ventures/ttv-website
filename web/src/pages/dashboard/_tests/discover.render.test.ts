@@ -122,6 +122,17 @@ describe("Discover", () => {
     expect(primaries(page)).toEqual([]);
   });
 
+  it("links no member page while member pages are closed (the spaces flag off)", async () => {
+    seeded("UPDATE feature_flag SET audience='OFF' WHERE key='spaces';");
+    const results = await visit({ path: `${PATH}?lookup=1&scout=results&query=Achieng` });
+    expect(results.status).toBe(200);
+    expect(results.body).toContain("Achieng Otieno");
+    expect(results.body).not.toContain("data-discover-member-page");
+    const profile = await visit({ path: `${PATH}?profile=${MEMBER}&lookup=1&query=Achieng` });
+    expect(profile.body).toContain("Chama savings ledger");
+    expect(profile.body).not.toContain("data-discover-member-page");
+  });
+
   it("opens a person's profile and work, with Explore evidence as the one peach action", async () => {
     seeded();
     const { status, body } = await visit({ path: `${PATH}?profile=${MEMBER}&lookup=1&query=Achieng` });

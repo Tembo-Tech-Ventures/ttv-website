@@ -501,7 +501,10 @@ it.each(["ADMIN", "MENTOR"] as const)(
   async (role) => {
     const s = setup({ ...cohortMember, globalRoles: [role] });
     s.journey("staff-work");
-    expect((await s.share("help", [s.project("staff-work")])).status).toBe(201);
+    const shared = await s.share("help", [s.project("staff-work")]);
+    expect(shared.status).toBe(201);
+    // Mentors and staff aren't in the Members directory, so their work links to no member page.
+    expect(sent(shared).embeds[0]).not.toHaveProperty("memberHref");
   },
 );
 it.each([

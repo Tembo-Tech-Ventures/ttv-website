@@ -16,9 +16,11 @@ import { entryCountLabel, lookupFormHref, MATCH_LABEL, profileHref } from "./dis
 interface Props {
   carried: Carried;
   profiles: readonly CommunityProfile[];
+  /** Member pages are open (the spaces flag): only then is each person's member page linked. */
+  memberPages?: boolean;
 }
 
-const { carried, profiles } = Astro.props;
+const { carried, profiles, memberPages = false } = Astro.props;
 const counts = profiles[0]?.discovery;
 const builders = `${profiles.length} ${profiles.length === 1 ? "builder" : "builders"} to get to know`;
 ---
@@ -70,7 +72,7 @@ const builders = `${profiles.length} ${profiles.length === 1 ? "builder" : "buil
                 <div class="min-w-0">
                   <h3 id={`person-${profile.id}`} class="text-lg leading-snug break-words text-ink-primary">{profile.name}</h3>
                   {profile.headline && <p class="mt-1 text-sm leading-relaxed text-ink-secondary">{profile.headline}</p>}
-                  {profile.handle && (
+                  {memberPages && profile.handle && (
                     <a href={memberProfileHref({ handle: profile.handle })} class={linkClass("mt-1 inline-flex text-sm pointer-coarse:min-h-11 pointer-coarse:items-center")} data-discover-member-page>
                       Member page<span class="sr-only"> of {profile.name}</span>
                     </a>

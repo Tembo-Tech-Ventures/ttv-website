@@ -60,7 +60,9 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
       </p>
       <p className="channel-embed__title">
         {/* The work on its owner's member page, where every confirmation and the rest of their work are. */}
-        {embed.memberHref ? <a href={embed.memberHref} className={linkClass()}>{embed.title}</a> : embed.title}
+        {embed.memberHref
+          ? <a href={embed.memberHref} className={linkClass("pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center")}>{embed.title}</a>
+          : embed.title}
       </p>
       {!compact && embed.summary && <p className="channel-embed__summary">{embed.summary}</p>}
       {!compact && embed.skills.length > 0 && (

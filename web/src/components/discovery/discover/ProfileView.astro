@@ -30,9 +30,11 @@ interface Props {
   rowsError: string | null;
   assessment: EvidenceAssessment | null;
   assessProblem: Problem | null;
+  /** Member pages are open (the spaces flag): only then is the person's member page linked. */
+  memberPages?: boolean;
 }
 
-const { carried, profile, question, answer, askProblem, rows, rowsError, assessment, assessProblem } = Astro.props;
+const { carried, profile, question, answer, askProblem, rows, rowsError, assessment, assessProblem, memberPages = false } = Astro.props;
 const scouted = !carried.lookup && Boolean(carried.context || carried.skills || carried.query);
 const calendar = (date: string) => formatCalendarDate(new Date(`${date}T00:00:00Z`));
 const SUGGESTIONS = ["What evidence supports their skills?", "What should I ask them next?"];
@@ -64,7 +66,7 @@ const STATUS_TEXT = (criterion: EvidenceAssessment["criteria"][number]) =>
       <BackLink href={DISCOVER_PATH}>Discover</BackLink>
     )}
     <p class="text-sm text-ink-muted">
-      {profile.handle && (
+      {memberPages && profile.handle && (
         <>
           <a href={memberProfileHref({ handle: profile.handle })} class={linkClass()} data-discover-member-page>Their member page</a>, as every member sees it ·{" "}
         </>

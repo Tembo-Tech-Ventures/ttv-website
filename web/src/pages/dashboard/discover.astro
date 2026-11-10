@@ -76,11 +76,12 @@ const refused = Astro.response.status >= 400;
       <Notice tone="danger" title="We couldn't open Discover">Please try again in a moment.</Notice>
     )}
     {view?.kind === "criteria" && <CriteriaForm carried={view.carried} errors={view.errors} problem={view.problem} />}
-    {view?.kind === "results" && <PersonResults carried={view.carried} profiles={view.profiles} />}
+    {view?.kind === "results" && <PersonResults carried={view.carried} profiles={view.profiles} memberPages={Boolean(spaces)} />}
     {view?.kind === "profile" && (
       <ProfileView
         carried={view.carried} profile={view.profile} question={view.question} answer={view.answer} askProblem={view.askProblem}
         rows={view.rows} rowsError={view.rowsError} assessment={view.assessment} assessProblem={view.assessProblem}
+        memberPages={Boolean(spaces)}
       />
     )}
     {view?.kind === "unavailable" && (

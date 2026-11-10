@@ -224,6 +224,13 @@ describe("discoverableMember", () => {
     expect(await service.getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 1, handle: expect.stringMatching(/^[a-z0-9-]+$/) });
     expect((await service.searchProfiles({ query: "lucy" })).map(p => p.userId)).toEqual([id("lucy")]);
   });
+  it("names a member page only for someone the directory lists: never a mentor's or an admin's", async () => {
+    const db = world();
+    for (const staff of ["david", "amina"] as const) {
+      expect(await createCommunityService(db, id(staff), undefined, undefined, undefined, {} as Env).getProfile(id(staff)), `${staff}`)
+        .toMatchObject({ userId: id(staff), handle: null });
+    }
+  });
   it("still lets everyone read their own profile without saving one", async () => {
     const db = world();
     expect(await createCommunityService(db, id("lucy"), undefined, undefined, undefined, {} as Env).getProfile(id("lucy"))).toMatchObject({ userId: id("lucy"), version: 0, handle: null });
