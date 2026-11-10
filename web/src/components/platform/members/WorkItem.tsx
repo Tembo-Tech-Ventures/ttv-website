@@ -34,10 +34,10 @@ export default function WorkItem({ work }: WorkItemProps) {
       </div>
       <h3 id={headingId} className="mt-2 text-lg leading-snug break-words text-ink-primary">
         {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass("inline-flex max-w-full items-baseline gap-1 underline-offset-4")}>
+          <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass("inline-flex max-w-full items-center gap-1 underline-offset-4 pointer-coarse:min-h-11")}>
             <span className="min-w-0 break-words">{work.title}</span>
             <span className="sr-only"> (opens in a new tab)</span>
-            <PiArrowUpRight aria-hidden className="size-4 shrink-0 self-center" />
+            <PiArrowUpRight aria-hidden className="size-4 shrink-0" />
           </a>
         ) : work.title}
       </h3>
