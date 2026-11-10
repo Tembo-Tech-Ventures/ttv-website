@@ -30,6 +30,8 @@ INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,bio,loca
   '','Eldoret','KE','[]',0,0,'',NULL),
  ('ttv-local-member-profile-ruth','ttv-local-member-ruth','ruth-chepkemoi','DRAFT','Waiting for a check',
   'Held by the automatic check in this fixture.','Kericho','KE','["Go"]',0,0,'','hold');
+-- Saving a profile records the name it shows (publicName), as the editor does.
+UPDATE studentProfile SET publicName=(SELECT name FROM user WHERE user.id=studentProfile.userId) WHERE id LIKE 'ttv-local-member-profile-%';
 -- Posted work, a draft only its author sees, and a confirmation at the current revision.
 DELETE FROM communityConfirmation WHERE journeyId LIKE 'ttv-local-member-work-%';
 DELETE FROM communityJourney WHERE id LIKE 'ttv-local-member-work-%';
