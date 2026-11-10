@@ -244,6 +244,9 @@ describe("posting work", () => {
   it("opens the work form from its link, says who sees it before the save, and makes its save the one peach action", async () => {
     seeded(PROFILE("DRAFT"));
     const page = main((await visitAt(new URL(`${PATH}?add=1`, ORIGIN))).body);
+    // Every id on the page is its own, so each label names its own field.
+    const ids = [...page.querySelectorAll("[id]")].map((element) => element.id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
     const editor = page.querySelector("[data-work-editor='add']")!;
     expect(editor.querySelector("form")?.getAttribute("action")).toBe(PATH);
     expect(editor.querySelector("#work-visibility")?.textContent).toContain(EVERYONE_SEES);

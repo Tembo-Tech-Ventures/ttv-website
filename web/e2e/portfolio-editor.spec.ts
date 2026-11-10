@@ -13,26 +13,16 @@ test.describe("authenticated portfolio editor", () => {
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  test("portfolio editor renders for eligible user", async ({
+  test("the profile editor renders for everyone signed in", async ({
     page,
   }, testInfo) => {
     await page.goto("/dashboard/portfolio");
     await expect(page).toHaveURL(/\/dashboard\/(?:me\/)?portfolio/);
 
     await expect(
-      // "Public profile" inside the spaces shell.
-      page.getByRole("heading", { name: /^(portfolio|public profile)$/i }),
+      // "Your profile", the one editor in the Profile space.
+      page.getByRole("heading", { level: 1, name: /^(portfolio|your profile)$/i }),
     ).toBeVisible();
-
-    const isLocked = await page
-      .getByText(/opens when you complete a cohort/i)
-      .isVisible()
-      .catch(() => false);
-
-    if (isLocked) {
-      test.skip(true, "User has not completed a cohort — editor is locked");
-      return;
-    }
 
     await expect(
       page.locator(
@@ -51,14 +41,6 @@ test.describe("authenticated portfolio editor", () => {
   }, testInfo) => {
     await page.goto("/dashboard/portfolio");
 
-    const isLocked = await page
-      .getByText(/opens when you complete a cohort/i)
-      .isVisible()
-      .catch(() => false);
-    if (isLocked) {
-      test.skip(true, "User has not completed a cohort");
-      return;
-    }
 
     const handleInput = page.locator('input[name="handle"]');
     if ((await handleInput.inputValue()) === "") {
@@ -101,14 +83,6 @@ test.describe("authenticated portfolio editor", () => {
 
     await page.goto("/dashboard/portfolio");
 
-    const isLocked = await page
-      .getByText(/opens when you complete a cohort/i)
-      .isVisible()
-      .catch(() => false);
-    if (isLocked) {
-      test.skip(true, "User has not completed a cohort");
-      return;
-    }
 
     const handleInput = page.locator('input[name="handle"]');
     const hasExistingProfile = await handleInput
@@ -126,11 +100,11 @@ test.describe("authenticated portfolio editor", () => {
       await page.locator('textarea[name="bio"]').fill(SENTINEL_BIO);
     }
 
-    await page.getByRole("button", { name: /save|create/i }).click();
+    await page.getByRole("button", { name: /^(save profile|make my profile)$/i }).click();
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText(/profile created as a draft|draft saved|changes are live/i),
+      page.getByText(/^profile saved/i),
     ).toBeVisible();
 
     await page.reload();
@@ -152,17 +126,9 @@ test.describe("authenticated portfolio editor", () => {
   }, testInfo) => {
     await page.goto("/dashboard/portfolio");
 
-    const isLocked = await page
-      .getByText(/opens when you complete a cohort/i)
-      .isVisible()
-      .catch(() => false);
-    if (isLocked) {
-      test.skip(true, "User has not completed a cohort");
-      return;
-    }
 
     const hasProfile = await page
-      .getByText(/github highlights/i)
+      .getByText(/github repositories/i)
       .isVisible()
       .catch(() => false);
 

@@ -87,7 +87,7 @@ describe("profileOverview for an alumna", () => {
     expect(model.title).toBe("Your profile");
     expect(model.card).toMatchObject({
       name: "Achieng Otieno", meta: ["Backend builder", "Kisumu", "Cohort 02"], skills: ["TypeScript", "SQL"],
-      status: { label: "Published", tone: "ring" }, memberHref: "/dashboard/community/members/achieng-otieno", publicHref: "/talent/achieng-otieno",
+      status: { label: "On the public website", tone: "ring" }, memberHref: "/dashboard/community/members/achieng-otieno", publicHref: "/talent/achieng-otieno",
     });
     expect(model.actions).toEqual({
       member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },
@@ -106,11 +106,16 @@ describe("profileOverview for an alumna", () => {
     expect(model.card).toMatchObject({ name: "Achieng O.", avatar: { src: "https://example.invalid/public.png" }, meta: ["KE"] });
   });
 
-  it("offers no public page for a draft or suspended profile, and a draft profile needs publishing", () => {
+  it("offers no public page for an unlisted or suspended profile, and asks only a graduate to list it", () => {
     const draft = profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
     expect(draft.actions.view).toBeNull();
-    expect(draft.card?.status).toEqual({ label: "Draft", tone: "neutral" });
-    expect(draft.needs.map((need) => need.text)).toContain("Your public profile is a draft");
+    expect(draft.card?.status).toEqual({ label: "Members only", tone: "neutral" });
+    expect(draft.needs.find((need) => need.key === "profile-draft")).toMatchObject({
+      text: "You're not on the public website yet", action: { href: "/dashboard/me/portfolio", label: "List me" },
+    });
+    // Someone who hasn't completed a cohort can't be listed, so nothing asks them to be.
+    const member = profileOverview({ ...ALUMNA, eligible: false, profile: { ...ALUMNA.profile!, status: "DRAFT" } });
+    expect(member.needs.find((need) => need.key === "profile-draft")).toBeUndefined();
     expect(profileOverview({ ...ALUMNA, profile: { ...ALUMNA.profile!, status: "SUSPENDED" } }).actions.view).toBeNull();
   });
 
@@ -218,7 +223,7 @@ describe("profileOverview without a public profile", () => {
 
   it("shows a profile that exists as it is, even after the completion behind it changed", () => {
     const model = profileOverview({ ...ALUMNA, eligible: false });
-    expect(model.card?.status.label).toBe("Published");
+    expect(model.card?.status.label).toBe("On the public website");
     expect(model.noProfile).toBeNull();
     expect(model.actions).toEqual({
       member: "/dashboard/community/members/achieng-otieno", view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" },

@@ -40,7 +40,7 @@ test.describe.serial("talent platform integration journey", () => {
     });
     await page.goto("/dashboard/portfolio");
 
-    const createButton = page.getByRole("button", { name: "Create profile" });
+    const createButton = page.getByRole("button", { name: "Make my profile" });
     if (await createButton.isVisible().catch(() => false)) {
       await page.locator('input[name="handle"]').fill(publicHandle);
       await page
@@ -50,8 +50,8 @@ test.describe.serial("talent platform integration journey", () => {
         .locator('textarea[name="bio"]')
         .fill("Profile exercised end-to-end by the integration suite.");
       await createButton.click();
-      // A new profile is a draft: publishing it is the primary, saving it again the quiet button.
-      await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+      // A saved profile is in the members directory; a graduate can then list it on the public website.
+      await expect(page.getByRole("button", { name: "Save profile" })).toBeVisible();
     }
     publicHandle = await page.locator('input[name="handle"]').inputValue();
     await page.screenshot({
@@ -60,7 +60,7 @@ test.describe.serial("talent platform integration journey", () => {
     });
 
     const publishButton = page.getByRole("button", {
-      name: /^publish profile$/i,
+      name: /^list me on the public website$/i,
     });
     if (await publishButton.isVisible().catch(() => false)) {
       const mobileContext = await browser.newContext({
@@ -75,7 +75,7 @@ test.describe.serial("talent platform integration journey", () => {
         const mobilePage = await mobileContext.newPage();
         await mobilePage.goto("/dashboard/portfolio");
         await mobilePage
-          .getByRole("button", { name: /^publish profile$/i })
+          .getByRole("button", { name: /^list me on the public website$/i })
           .click();
         await expect(
           mobilePage.getByText(
@@ -83,7 +83,7 @@ test.describe.serial("talent platform integration journey", () => {
           ),
         ).toBeVisible();
         await expect(
-          mobilePage.getByRole("button", { name: /^publish profile$/i }),
+          mobilePage.getByRole("button", { name: /^list me on the public website$/i }),
         ).toBeVisible();
         await mobilePage.screenshot({
           path: evidence("integration-02-mobile-held"),
@@ -96,7 +96,7 @@ test.describe.serial("talent platform integration journey", () => {
       await page.reload();
       await publishButton.click();
     }
-    await expect(page.getByText(/live at/i).first()).toBeVisible();
+    await expect(page.getByText(/you're on the public website at/i).first()).toBeVisible();
     await page.screenshot({
       path: evidence("integration-03-profile-published"),
       fullPage: true,
@@ -120,7 +120,7 @@ test.describe.serial("talent platform integration journey", () => {
       const mobilePage = await mobileContext.newPage();
       await mobilePage.goto("/dashboard/portfolio");
       await mobilePage.locator('textarea[name="bio"]').fill(heldBio);
-      await mobilePage.getByRole("button", { name: "Save changes" }).click();
+      await mobilePage.getByRole("button", { name: "Save profile" }).click();
 
       await expect(
         mobilePage.getByText(

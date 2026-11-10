@@ -134,10 +134,11 @@ export interface ProfileOverviewModel {
   certificates: readonly { id: string; programName: string; href: string }[];
 }
 
+/** Where the profile is, in words: everyone signed in sees a saved one; only a listed one is public. */
 const STATUS: Record<PublicProfileStatus, OverviewCard["status"]> = {
-  PUBLISHED: { label: "Published", tone: "ring" },
-  DRAFT: { label: "Draft", tone: "neutral" },
-  SUSPENDED: { label: "Suspended", tone: "peach" },
+  PUBLISHED: { label: "On the public website", tone: "ring" },
+  DRAFT: { label: "Members only", tone: "neutral" },
+  SUSPENDED: { label: "Paused", tone: "peach" },
 };
 
 /** The first line of a description, cut on a word boundary near `max` characters, with an ellipsis. */
@@ -252,10 +253,11 @@ function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): Over
     });
   }
   list.push(...moreOnJourney("revisions", newer.length, "newer revision", "newer revisions"));
-  if (facts.profile?.status === "DRAFT") {
+  // Only someone who completed a cohort can be listed on the public website, so only they are asked.
+  if (facts.profile?.status === "DRAFT" && facts.eligible) {
     list.push({
-      key: "profile-draft", icon: "profile", text: "Your public profile is a draft",
-      action: { href: PROFILE_EDITOR_PATH, label: "Publish", name: "Publish your public profile" },
+      key: "profile-draft", icon: "profile", text: "You're not on the public website yet",
+      action: { href: PROFILE_EDITOR_PATH, label: "List me", name: "List your profile on the public website" },
     });
   }
   const drafts = projects.filter((project) => project.state.kind === "draft");

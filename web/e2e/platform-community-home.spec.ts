@@ -4,17 +4,18 @@ import { runAxe } from "./platform-axe";
 import { personaSession, signIn } from "./platform-personas";
 
 /**
- * Community's home on the kit (style-guide rollout M15): the kit title "Community" and a sentence,
- * onboarding's cards after it, the profile in a kit card with an avatar, "Who can discover this?" as
- * an info notice, and "Add a contribution" as the one peach action. There is no island: the editors
- * open from links and save through plain forms, so a member adds a contribution and edits their
- * profile without JavaScript. Writes run against the local seed only, so a preview's persona keeps
- * its journey. Render-level detail is in src/pages/dashboard/community/_tests/home.render.test.ts.
+ * Community's home: the kit title "Community" and a sentence, onboarding's cards after it, the profile
+ * in a kit card with an avatar, "Who sees this" as an info notice, and "Post work" as the one peach
+ * action. It edits nothing itself: "Post work" and "Edit your profile" lead to the one profile editor
+ * in the Profile space, where a member posts work without JavaScript and comes back to see it here.
+ * Writes run against the local seed only, so a preview's persona keeps its journey. Render-level
+ * detail is in src/pages/dashboard/community/_tests/home.render.test.ts and portfolio.render.test.ts.
  */
 const EVIDENCE_DIR = "test-results/evidence/platform-community-home";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
 const PATH = "/dashboard/community";
+const EDITOR = "/dashboard/me/portfolio";
 
 const main = (page: Page) => page.locator("#spaces-main");
 const evidence = (name: string) => `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
@@ -49,11 +50,12 @@ for (const width of [1440, 320]) {
     await open(page, PATH);
     await expect(main(page).getByRole("heading", { level: 1 })).toHaveText("Community");
     await expect(primaries(page)).toHaveCount(1);
-    await expect(primaries(page)).toHaveText("Add a contribution");
+    await expect(primaries(page)).toHaveText("Post work");
     const profile = main(page).locator("[data-community-profile]");
     await expect(profile.locator("[data-avatar]")).toBeVisible();
-    await expect(profile.getByRole("link", { name: "Edit your profile" })).toBeVisible();
-    await expect(main(page).locator("[data-notice='info']", { hasText: "Who can discover this?" })).toBeVisible();
+    await expect(profile.getByRole("link", { name: "Edit your profile" })).toHaveAttribute("href", `${EDITOR}#profile-form`);
+    await expect(main(page).locator("[data-notice='info']", { hasText: "Who sees this" }))
+      .toContainText("Everyone signed in to TTV can see your profile and everything you post.");
     await noSidewaysScroll(page);
     await page.screenshot({ path: evidence(`home-${width}`), fullPage: true });
     await runAxe(page, test.info(), `community home ${width}`);
@@ -63,54 +65,54 @@ for (const width of [1440, 320]) {
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("a contribution with problems comes back with what was written; a good one saves and says so once", async ({ page, baseURL }) => {
+  test("Post work leads to the editor; a piece with problems comes back with what was written; a good one is posted and shows at home", async ({ page, baseURL }) => {
     test.skip(PREVIEW, "Writes run against the local seed only.");
     await page.setViewportSize({ width: 390, height: 844 });
     await signedIn(page, baseURL);
     await open(page, PATH, { script: false });
-    await main(page).getByRole("link", { name: "Add a contribution" }).click();
-    await expect(page).toHaveURL(/\?add=1#contribution-editor$/);
-    const editor = main(page).locator("[data-contribution-editor='add']");
-    await expect(primaries(page)).toHaveText("Save contribution");
+    await main(page).getByRole("link", { name: "Post work" }).click();
+    await expect(page).toHaveURL(new RegExp(`${EDITOR}\\?add=1#work-editor$`));
+    const editor = main(page).locator("[data-work-editor='add']");
+    await expect(editor.locator("#work-visibility")).toContainText("Everyone signed in to TTV can see your profile and everything you post.");
 
     // The browser's own checks let this through; the page's do not.
-    await editor.getByLabel("Entry title").fill("Bus fare splitter");
-    await editor.getByLabel("Your contribution").fill("Wrote the fare-splitting logic and its tests.");
-    await editor.getByLabel("Date").fill("2026-10-30");
-    await editor.getByLabel(/Source link/).fill("https://example.test/dashboard/private");
-    await editor.getByRole("button", { name: "Save contribution" }).click();
+    await editor.getByLabel("Title").fill("Bus fare splitter");
+    await editor.getByLabel("What you did").fill("Wrote the fare-splitting logic and its tests.");
+    await editor.getByLabel("When").fill("2026-10-30");
+    await editor.getByLabel(/^Link/).fill("https://example.test/dashboard/private");
+    await editor.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveTitle(/^Error: /);
-    const refused = main(page).locator("[data-contribution-editor='add']");
+    const refused = main(page).locator("[data-work-editor='add']");
     await expect(refused.locator("[data-notice='danger']")).toBeFocused();
-    await expect(refused.getByLabel("Entry title")).toHaveValue("Bus fare splitter");
+    await expect(refused.getByLabel("Title")).toHaveValue("Bus fare splitter");
     await page.screenshot({ path: evidence("refused-no-js") });
 
     const title = `Bus fare splitter ${Date.now()}`;
-    await refused.getByLabel("Entry title").fill(title);
-    await refused.getByLabel(/Source link/).fill("https://github.com/example/fares");
-    await refused.getByRole("button", { name: "Save contribution" }).click();
-    await expect(page).toHaveURL((url) => url.pathname === PATH && url.search === "");
-    await expect(main(page).locator("[data-notice='success']")).toContainText("Your contribution has been saved.");
+    await refused.getByLabel("Title").fill(title);
+    await refused.getByLabel(/^Link/).fill("https://github.com/example/fares");
+    await refused.getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL((url) => url.pathname === EDITOR && url.search === "");
+    await expect(main(page).locator("[data-notice='success']")).toContainText("Posted");
     await expect(main(page).getByRole("heading", { level: 3, name: title })).toBeVisible();
     await page.reload();
     await expect(main(page).locator("[data-notice='success']")).toHaveCount(0);
+    await open(page, PATH, { script: false });
+    await expect(main(page).getByRole("heading", { level: 3, name: title })).toBeVisible();
   });
 
-  test("the profile editor opens in place, and a refusal keeps what was typed", async ({ page, baseURL }) => {
+  test("Edit your profile leads to the editor's profile form, and a refusal keeps what was typed", async ({ page, baseURL }) => {
+    test.skip(PREVIEW, "Writes run against the local seed only.");
     await page.setViewportSize({ width: 390, height: 844 });
     await signedIn(page, baseURL);
     await open(page, PATH, { script: false });
     await main(page).getByRole("link", { name: "Edit your profile" }).click();
-    const editor = main(page).locator("[data-profile-editor]");
-    await expect(editor).toBeVisible();
-    await expect(main(page).locator("[data-community-profile]")).toHaveCount(0);
-    const skills = Array.from({ length: 31 }, (_, index) => `skill ${index}`).join(", ");
-    await editor.getByLabel(/^Skills/).fill(skills);
-    await editor.getByRole("button", { name: "Save profile" }).click();
+    await expect(page).toHaveURL(new RegExp(`${EDITOR}#profile-form$`));
+    const form = main(page).locator("[data-profile-form] form");
+    const tooLong = "A skill name well over thirty characters long";
+    await form.getByLabel(/^Handle/).fill("lucy-chebet");
+    await form.getByLabel(/^Skills/).fill(tooLong);
+    await form.evaluate((element: HTMLFormElement) => element.submit());
     await expect(page).toHaveTitle(/^Error: /);
-    await expect(main(page).locator("[data-profile-editor]").getByLabel(/^Skills/)).toHaveValue(skills);
-    await expect(main(page).locator("[data-profile-editor]")).toContainText("Add no more than 30 skills.");
-    await main(page).locator("[data-profile-editor]").getByRole("link", { name: "Cancel" }).click();
-    await expect(main(page).locator("[data-community-profile]")).toBeVisible();
+    await expect(main(page).locator("[data-profile-form]").getByLabel(/^Skills/)).toHaveValue(tooLong);
   });
 });

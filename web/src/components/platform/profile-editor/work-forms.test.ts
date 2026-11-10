@@ -8,11 +8,11 @@ import {
 
 const ORIGIN = "https://ttv.invalid";
 const PAGE = `${ORIGIN}${EDITOR_PATH}`;
-const claim = (overrides: Partial<JourneyClaim> & { kind?: "contribution" | "repo" } = {}): JourneyClaim => ({
+const claim = (overrides: Partial<JourneyClaim> = {}): JourneyClaim => ({
   id: "ledger", title: "Chama savings ledger", description: "Built and tested a fictional savings ledger.", date: "2026-10-24",
-  skills: [], evidence: [], version: 3, status: "posted", confirmations: [], ...overrides,
+  skills: [], evidence: [], version: 3, status: "posted", confirmations: [], kind: "contribution", repoFullName: null, ...overrides,
 });
-const repo = claim({ id: "mpesa", kind: "repo" });
+const repo = claim({ id: "mpesa", kind: "repo", repoFullName: "achieng-otieno/mpesa-callbacks" });
 const WORK = { _action: "work", title: "Matatu fare splitter", description: "Wrote the fare-splitting logic and its tests.", date: "2026-10-30", link: "", status: "posted" };
 const form = (fields: Record<string, string>) => {
   const data = new FormData();

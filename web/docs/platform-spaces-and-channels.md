@@ -77,13 +77,16 @@ it, and each page and API still makes its own checks.
 
 Each space has a home: `/dashboard/cohort`, `/dashboard/community`,
 `/dashboard/mentoring`, `/dashboard/discover`, `/admin` and, for `profile`,
-`/dashboard/me`. The Profile space's home is its Overview: the public builder
-profile as visitors see it, the work shared on Your journey with where each
-mentor confirmation stands, what needs the person (unopened visitor messages,
-newer revisions nobody has confirmed, drafts), the client projects open to
-them and their certificates. The editor is `/dashboard/me/portfolio`
-("Public profile"). The Overview only reads; every row links to the page that
-does the work.
+`/dashboard/me`. The Profile space's home is its Overview: the profile as
+everyone signed in sees it (with their member page and, for a graduate who
+listed it, their public page), the work they've posted with where each mentor
+confirmation stands, what needs the person (unopened visitor messages, newer
+revisions nobody has confirmed, drafts), the client projects open to them and
+their certificates. The one profile editor, for everyone, is
+`/dashboard/me/portfolio` ("Edit profile"): the profile, posting work (a link,
+or GitHub repositories), and, for graduates, listing on the public website and
+coming off it. Community's home links there; it edits nothing itself. The
+Overview only reads; every row links to the page that does the work.
 
 Every admin page (`/admin/*`) renders in the Admin space while `spaces` is on
 for the admin, with the admin navigation as the space's sidebar and the page

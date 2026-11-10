@@ -253,10 +253,10 @@ Astro.response.headers.set("Cache-Control", "no-store");
 
     <PublicSite eligible={eligible} profile={profile ? { handle: profile.handle, status: profile.status } : null} confirming={confirming === UNLIST_ACTION} held={held} />
 
-    <section id="work" aria-labelledby="work-title" class="flex scroll-mt-6 flex-col gap-6" data-work>
+    <section id="work" aria-labelledby="your-work-heading" class="flex scroll-mt-6 flex-col gap-6" data-work>
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div class="flex min-w-0 flex-col gap-2">
-          <h2 id="work-title" class="text-2xl text-ink-primary">Your work</h2>
+          <h2 id="your-work-heading" class="text-2xl text-ink-primary">Your work</h2>
           <p class="max-w-prose text-[0.9375rem] leading-relaxed text-ink-secondary">
             Post what you made or helped make. A mentor can confirm the specific work they checked; a missing confirmation is an open
             question, not a mark against you.
