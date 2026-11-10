@@ -9,8 +9,6 @@ ALTER TABLE communityJourney ADD COLUMN state text NOT NULL DEFAULT 'POSTED';
 --> statement-breakpoint
 ALTER TABLE communityJourney ADD COLUMN kind text NOT NULL DEFAULT 'contribution';
 --> statement-breakpoint
-ALTER TABLE communityJourney ADD COLUMN profileId text REFERENCES studentProfile(id) ON DELETE SET NULL;
---> statement-breakpoint
 ALTER TABLE communityJourney ADD COLUMN repoFullName text;
 --> statement-breakpoint
 ALTER TABLE communityJourney ADD COLUMN repoUrl text;
@@ -75,10 +73,10 @@ SELECT 'member-profile-'||c.userId,c.userId,'member-'||c.handleNumber,c.headline
 FROM numbered c JOIN user u ON u.id=c.userId WHERE true
 ON CONFLICT(userId) DO NOTHING;
 --> statement-breakpoint
-INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,profileId,
+INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,
  repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,createdAt,updatedAt)
 SELECT 'repo-'||h.id,p.userId,h.repoFullName,coalesce(h.blurb,h.description,''),h.repoUrl,
- strftime('%Y-%m-%d',coalesce(h.pushedAt,h.createdAt),'unixepoch'),'institution','POSTED','repo',p.id,
+ strftime('%Y-%m-%d',coalesce(h.pushedAt,h.createdAt),'unixepoch'),'institution','POSTED','repo',
  h.repoFullName,h.repoUrl,h.description,h.language,h.topics,h.stars,h.pushedAt,h.blurb,h.sortOrder,h.snapshotAt,h.createdAt,h.updatedAt
 FROM profileHighlight h JOIN studentProfile p ON p.id=h.profileId WHERE true
 ON CONFLICT(userId,repoFullName) DO NOTHING;

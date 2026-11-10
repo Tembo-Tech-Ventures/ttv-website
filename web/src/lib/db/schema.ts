@@ -1186,7 +1186,6 @@ export const communityJourney = sqliteTable("communityJourney", {
   visibility: text("visibility", { enum: ["institution", "private"] }).notNull(),
   state: text("state", { enum: ["POSTED", "DRAFT"] }).notNull().default("POSTED"),
   kind: text("kind", { enum: ["contribution", "repo"] }).notNull().default("contribution"),
-  profileId: text("profileId").references(() => studentProfile.id, { onDelete: "set null" }),
   repoFullName: text("repoFullName"),
   repoUrl: text("repoUrl"),
   repoDescription: text("repoDescription"),

@@ -2111,13 +2111,6 @@
           "autoincrement": false,
           "default": "'contribution'"
         },
-        "profileId": {
-          "name": "profileId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "repoFullName": {
           "name": "repoFullName",
           "type": "text",
@@ -2289,19 +2282,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "communityJourney_profileId_studentProfile_id_fk": {
-          "name": "communityJourney_profileId_studentProfile_id_fk",
-          "tableFrom": "communityJourney",
-          "tableTo": "studentProfile",
-          "columnsFrom": [
-            "profileId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

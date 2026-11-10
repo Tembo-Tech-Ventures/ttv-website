@@ -957,11 +957,10 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "profileId", "repoFullName", "repoUrl", "description", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
-       "profileId" = excluded."profileId",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",
@@ -973,7 +972,6 @@ export async function seedAgentPreviewFixtures({
        "updatedAt" = excluded."updatedAt"`,
     [
       "ttv-fixture-highlight-amina-1",
-      "ttv-fixture-profile-amina",
       "amina-fixture/savanna-api",
       "https://github.com/amina-fixture/savanna-api",
       "REST API for logistics tracking",
@@ -989,11 +987,10 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "profileId", "repoFullName", "repoUrl", "description", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','Synthetic repository','https://github.com/amina-fixture/repo','2026-11-09','institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
-       "profileId" = excluded."profileId",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",
@@ -1005,7 +1002,6 @@ export async function seedAgentPreviewFixtures({
        "updatedAt" = excluded."updatedAt"`,
     [
       "ttv-fixture-highlight-amina-2",
-      "ttv-fixture-profile-amina",
       "amina-fixture/react-dashboard",
       "https://github.com/amina-fixture/react-dashboard",
       "Admin dashboard with D1 backend",

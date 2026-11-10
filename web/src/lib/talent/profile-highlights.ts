@@ -107,7 +107,7 @@ export async function replaceProfileHighlights(
   ));
   const upserts = highlights.map(h => db.insert(schema.communityJourney).select(sql`
     SELECT ${createId()},${profile.userId},${h.repoFullName},${h.blurb ?? h.description ?? ""},${h.repoUrl},
-      ${new Date(h.pushedAt ?? h.snapshotAt).toISOString().slice(0,10)},'institution','POSTED','repo',${profile.id},
+      ${new Date(h.pushedAt ?? h.snapshotAt).toISOString().slice(0,10)},'institution','POSTED','repo',
       ${h.repoFullName},${h.repoUrl},${h.description},${h.language},${h.topics},${h.stars},${epochSeconds(h.pushedAt)},
       ${h.blurb},${h.sortOrder},${epochSeconds(h.snapshotAt)},${result.outcome},${JSON.stringify(result.flags)},
       ${JSON.stringify(result.scores)},unixepoch(),${Number(result.outcome!=="pass")},1,unixepoch(),unixepoch()
