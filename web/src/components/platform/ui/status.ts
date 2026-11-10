@@ -54,9 +54,15 @@ export const STATUSES = {
     DONE: { label: "Done", tone: "success" },
     NOT_PLANNED: { label: "Not planned", tone: "neutral" },
   },
-  /** studentProfile.status, and a blog post's. */
+  /** studentProfile.status. */
   profile: {
     DRAFT: { label: "Not on public website", tone: "neutral" },
+    PUBLISHED: { label: "Published", tone: "success" },
+    SUSPENDED: { label: "Suspended", tone: "danger" },
+  },
+  /** blogPost.status */
+  post: {
+    DRAFT: { label: "Draft", tone: "neutral" },
     PUBLISHED: { label: "Published", tone: "success" },
     SUSPENDED: { label: "Suspended", tone: "danger" },
   },
@@ -91,10 +97,14 @@ export const STATUSES = {
     EXPIRED: { label: "Expired", tone: "neutral" },
     REVOKED: { label: "Revoked", tone: "neutral" },
   },
-} as const satisfies Record<string, Record<string, { label: string; tone: ChipTone }>>;
+} as const satisfies Record<
+  string,
+  Record<string, { label: string; tone: ChipTone }>
+>;
 
 export type StatusDomain = keyof typeof STATUSES;
-export type StatusOf<D extends StatusDomain> = keyof (typeof STATUSES)[D] & string;
+export type StatusOf<D extends StatusDomain> = keyof (typeof STATUSES)[D] &
+  string;
 export type StatusLook = { label: string; tone: ChipTone };
 
 /**
@@ -102,9 +112,15 @@ export type StatusLook = { label: string; tone: ChipTone };
  * a newer deploy) reads as itself in a neutral chip rather than breaking the
  * page; status.test.ts keeps that from happening for the stored values.
  */
-export function statusTone<D extends StatusDomain>(domain: D, status: StatusOf<D>): StatusLook {
+export function statusTone<D extends StatusDomain>(
+  domain: D,
+  status: StatusOf<D>,
+): StatusLook {
   const known = (STATUSES[domain] as Record<string, StatusLook>)[status];
   if (known) return known;
   const words = String(status).replace(/_/g, " ").toLowerCase();
-  return { label: words.charAt(0).toUpperCase() + words.slice(1), tone: "neutral" };
+  return {
+    label: words.charAt(0).toUpperCase() + words.slice(1),
+    tone: "neutral",
+  };
 }

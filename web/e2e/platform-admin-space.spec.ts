@@ -20,9 +20,16 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 test.use({ reducedMotion: "reduce" });
 
 test.beforeEach(async ({ page }, testInfo) => {
-  test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The personas are checked against the local seed only.");
-  test.skip(typeof personaSession("staff") === "string", "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql.");
-  if (testInfo.project.name === "mobile-chromium") await page.setViewportSize({ width: 390, height: 844 });
+  test.skip(
+    Boolean(process.env.PLAYWRIGHT_BASE_URL),
+    "The personas are checked against the local seed only.",
+  );
+  test.skip(
+    typeof personaSession("staff") === "string",
+    "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql.",
+  );
+  if (testInfo.project.name === "mobile-chromium")
+    await page.setViewportSize({ width: 390, height: 844 });
   else await page.setViewportSize({ width: 1440, height: 900 });
 });
 
@@ -44,34 +51,56 @@ async function open(page: Page, path: string) {
   const response = await page.goto(path);
   expect(response?.status(), path).toBe(200);
   // A cold dev server compiles each island on first use.
-  await expect(page.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 30_000 });
-  await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await page.addStyleTag({
+    content: "astro-dev-toolbar { display: none !important; }",
+  });
   await page.evaluate(() => document.fonts.ready);
 }
 
 /** The space tabs at this width: the card-file tabs on desktop, the bottom bar on phones. */
-const tabs = (page: Page) => page.locator(wide(page) ? ".space-file__nav" : ".spaces-bottom");
+const tabs = (page: Page) =>
+  page.locator(wide(page) ? ".space-file__nav" : ".spaces-bottom");
 
 /** In the Admin space: its tab current, search and the bell in the top bar, its sidebar current entry, one display heading. */
-async function expectAdminSpace(page: Page, heading: string, current: string | null) {
-  await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
-  await expect(tabs(page).locator("[aria-current='page']")).toContainText("Admin");
+async function expectAdminSpace(
+  page: Page,
+  heading: string,
+  current: string | null,
+) {
+  await expect(page.locator(".spaces-shell")).toHaveAttribute(
+    "data-space",
+    "admin",
+  );
+  await expect(tabs(page).locator("[aria-current='page']")).toContainText(
+    "Admin",
+  );
   await expect(page.getByRole("button", { name: /^Search/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Attention/ })).toBeVisible();
   await expect(page.locator("#spaces-main h1")).toHaveText(heading);
   const marked = page.locator("#space-sidebar a[aria-current='page']");
   if (current === null) await expect(marked).toHaveCount(0);
   else await expect(marked).toHaveText(new RegExp(`^${current}`));
-  const overflow = await page.evaluate(() => [document.documentElement, document.querySelector(".spaces-shell__main")]
-    .filter((element): element is Element => element !== null)
-    .map((element) => element.scrollWidth - element.clientWidth));
+  const overflow = await page.evaluate(() =>
+    [document.documentElement, document.querySelector(".spaces-shell__main")]
+      .filter((element): element is Element => element !== null)
+      .map((element) => element.scrollWidth - element.clientWidth),
+  );
   for (const extra of overflow) expect(extra).toBeLessThanOrEqual(0);
 }
 
-test("an admin moves from a channel to Moderation and back without leaving the spaces shell", async ({ page, baseURL }) => {
+test("an admin moves from a channel to Moderation and back without leaving the spaces shell", async ({
+  page,
+  baseURL,
+}) => {
   await as(page, baseURL!, "staff");
   await open(page, "/dashboard/community/c/help");
-  await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
+  await expect(page.locator(".spaces-shell")).toHaveAttribute(
+    "data-space",
+    "community",
+  );
 
   await tabs(page).getByRole("link", { name: /Admin/ }).click();
   await expect(page).toHaveURL(/\/admin$/);
@@ -81,33 +110,68 @@ test("an admin moves from a channel to Moderation and back without leaving the s
 
   await open(page, "/admin/moderation");
   await expectAdminSpace(page, "Moderation", "Moderation");
-  await expect(page.getByText("Contact details are hidden from other members until you decide; everything else stays visible.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Contact details are hidden from other members until you decide; everything else stays visible.",
+    ),
+  ).toBeVisible();
   await page.screenshot({ path: evidence("moderation") });
   await runAxe(page, test.info(), "moderation in the Admin space");
 
-  await tabs(page).getByRole("link", { name: /Community/ }).click();
-  await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
+  await tabs(page)
+    .getByRole("link", { name: /Community/ })
+    .click();
+  await expect(page.locator(".spaces-shell")).toHaveAttribute(
+    "data-space",
+    "community",
+  );
 });
 
-test("the Admin space's sidebar is the admin navigation, and its Moderation count follows the queue", async ({ page, baseURL }) => {
-  test.skip(!wide(page), "The sidebar is a drawer on phones; its links are the same.");
+test("the Admin space's sidebar is the admin navigation, and its Moderation count follows the queue", async ({
+  page,
+  baseURL,
+}) => {
+  test.skip(
+    !wide(page),
+    "The sidebar is a drawer on phones; its links are the same.",
+  );
   await as(page, baseURL!, "staff");
   await open(page, "/admin/moderation");
   const sidebar = page.locator("#space-sidebar");
-  for (const [name, href] of [["Access requests", "/admin/access-requests"], ["Users", "/admin/users"], ["Feature flags", "/admin/platform-flags"]]) {
-    await expect(sidebar.getByRole("link", { name: new RegExp(`^${name}`) })).toHaveAttribute("href", href);
+  for (const [name, href] of [
+    ["Access requests", "/admin/access-requests"],
+    ["Users", "/admin/users"],
+    ["Feature flags", "/admin/platform-flags"],
+  ]) {
+    await expect(
+      sidebar.getByRole("link", { name: new RegExp(`^${name}`) }),
+    ).toHaveAttribute("href", href);
   }
-  await expect(sidebar.getByRole("link", { name: "Back to dashboard" })).toHaveCount(0);
+  await expect(
+    sidebar.getByRole("link", { name: "Back to dashboard" }),
+  ).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "Logout" })).toHaveCount(0);
 
   // A decision swapped in place reports the queue's new count (enhance.ts); the badge follows it.
-  const badge = sidebar.getByRole("link", { name: /^Moderation/ }).locator("[data-count-badge]");
+  const badge = sidebar
+    .getByRole("link", { name: /^Moderation/ })
+    .locator("[data-count-badge]");
   await expect(badge).toBeVisible();
-  const notes = Number(await page.locator("[data-admin-space]").getAttribute("data-request-notes"));
-  await page.evaluate(() => document.dispatchEvent(new CustomEvent("ttv:moderation-pending", { detail: 2 })));
+  const notes = Number(
+    await page.locator("[data-admin-space]").getAttribute("data-request-notes"),
+  );
+  await page.evaluate(() =>
+    document.dispatchEvent(
+      new CustomEvent("ttv:moderation-pending", { detail: 2 }),
+    ),
+  );
   await expect(badge).toContainText(`${2 + notes} waiting`);
   if (notes === 0) {
-    await page.evaluate(() => document.dispatchEvent(new CustomEvent("ttv:moderation-pending", { detail: 0 })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new CustomEvent("ttv:moderation-pending", { detail: 0 }),
+      ),
+    );
     await expect(badge).toBeHidden();
   }
 });
@@ -126,34 +190,168 @@ interface AdminPage {
 
 /** Every admin page T14 moved, with a seeded record behind each detail page (platform-personas.local.sql). */
 const MOVED: readonly AdminPage[] = [
-  { path: "/admin/access-requests", heading: "Access requests", current: "Access requests", retired: true },
+  {
+    path: "/admin/access-requests",
+    heading: "Access requests",
+    current: "Access requests",
+    retired: true,
+  },
   { path: "/admin/users", heading: "Users", current: "Users", retired: true },
-  { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users", retired: true },
-  { path: "/admin/applications", heading: "Applications", current: "Applications", retired: true },
-  { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application from Wanjiku Mwangi", current: "Applications", retired: true },
-  { path: "/admin/profiles", heading: "Profiles", current: "Profiles", retired: true },
-  { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Achieng Otieno", current: "Profiles", retired: true },
-  { path: "/admin/feedback", heading: "Feedback", current: "Feedback", retired: true },
-  { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Feedback from Wanjiku Mwangi", current: "Feedback", retired: true },
-  { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback", retired: true },
-  { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback", retired: true },
-  { path: "/admin/projects", heading: "Client projects", current: "Client projects", retired: true },
-  { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects", retired: true },
-  { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
-  { path: "/admin/curricula/new", heading: "New curriculum", current: "Curricula", retired: true },
-  { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Full-stack foundations", current: "Curricula", retired: true },
-  { path: "/admin/programs", heading: "Cohorts", current: "Cohorts", retired: true },
-  { path: "/admin/programs/new", heading: "New cohort", current: "Cohorts", retired: true },
-  { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
-  { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
-  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
-  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings", retired: true },
-  { path: "/admin/recordings/import", heading: "Import session recordings", current: "Recordings" },
-  { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
-  { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
-  { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", retired: true },
-  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", retired: true },
-  { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", retired: true },
+  {
+    path: "/admin/users/ttv-local-persona-student",
+    heading: "Wanjiku Mwangi",
+    current: "Users",
+    retired: true,
+  },
+  {
+    path: "/admin/applications",
+    heading: "Applications",
+    current: "Applications",
+    retired: true,
+  },
+  {
+    path: "/admin/applications/ttv-local-persona-app-student",
+    heading: "Application from Wanjiku Mwangi",
+    current: "Applications",
+    retired: true,
+  },
+  {
+    path: "/admin/profiles",
+    heading: "Profiles",
+    current: "Profiles",
+    retired: true,
+  },
+  {
+    path: "/admin/profiles/ttv-local-persona-profile-alumna",
+    heading: "Achieng Otieno",
+    current: "Profiles",
+    retired: true,
+  },
+  {
+    path: "/admin/feedback",
+    heading: "Feedback",
+    current: "Feedback",
+    retired: true,
+  },
+  {
+    path: "/admin/feedback/ttv-local-persona-feedback",
+    heading: "Feedback from Wanjiku Mwangi",
+    current: "Feedback",
+    retired: true,
+  },
+  {
+    path: "/admin/feedback/themes",
+    heading: "Themes",
+    current: "Feedback",
+    retired: true,
+  },
+  {
+    path: "/admin/feedback/themes/ttv-local-persona-theme",
+    heading: "Session links are hard to find",
+    current: "Feedback",
+    retired: true,
+  },
+  {
+    path: "/admin/projects",
+    heading: "Client projects",
+    current: "Client projects",
+    retired: true,
+  },
+  {
+    path: "/admin/projects/ttv-local-persona-project",
+    heading: "Member savings tracker",
+    current: "Client projects",
+    retired: true,
+  },
+  {
+    path: "/admin/curricula",
+    heading: "Curricula",
+    current: "Curricula",
+    retired: true,
+  },
+  {
+    path: "/admin/curricula/new",
+    heading: "New curriculum",
+    current: "Curricula",
+    retired: true,
+  },
+  {
+    path: "/admin/curricula/ttv-local-persona-curriculum",
+    heading: "Full-stack foundations",
+    current: "Curricula",
+    retired: true,
+  },
+  {
+    path: "/admin/programs",
+    heading: "Cohorts",
+    current: "Cohorts",
+    retired: true,
+  },
+  {
+    path: "/admin/programs/new",
+    heading: "New cohort",
+    current: "Cohorts",
+    retired: true,
+  },
+  {
+    path: "/admin/programs/ttv-local-persona-cohort-05",
+    heading: "Cohort 05",
+    current: "Cohorts",
+    legacy: null,
+  },
+  {
+    path: "/admin/recordings",
+    heading: "Recordings",
+    current: "Recordings",
+    retired: true,
+  },
+  {
+    path: "/admin/recordings/ttv-local-persona-recording-05",
+    heading: "Week 4: SQL joins and indexes",
+    current: "Recordings",
+    retired: true,
+  },
+  {
+    path: "/admin/recordings/upload",
+    heading: "Upload recording",
+    current: "Recordings",
+    retired: true,
+  },
+  {
+    path: "/admin/recordings/import",
+    heading: "Import session recordings",
+    current: "Recordings",
+  },
+  {
+    path: "/admin/settings/integrations",
+    heading: "Integrations",
+    current: "Integrations",
+    retired: true,
+  },
+  {
+    path: "/admin/platform-flags",
+    heading: "Feature flags",
+    current: "Feature flags",
+    retired: true,
+  },
+  {
+    path: "/admin/personal-access-tokens",
+    heading: "Personal access tokens",
+    current: "Personal access tokens",
+    retired: true,
+  },
+  {
+    path: "/admin/data-migration",
+    heading: "Data migration",
+    current: "Data migration",
+    retired: true,
+  },
+  {
+    path: "/admin/agent-access",
+    heading: "Agent access",
+    current: "Agent access",
+    retired: true,
+  },
 ];
 
 /** Whether `spaces` is on for the signed-in person: /api/platform/me exists only while it is. */
@@ -162,196 +360,409 @@ async function spacesOn(page: Page): Promise<boolean> {
 }
 
 test.describe("every admin page", () => {
-  test("renders in the Admin space with its h1 and its sidebar entry current, and fits the screen", async ({ page, baseURL }) => {
+  test("renders in the Admin space with its h1 and its sidebar entry current, and fits the screen", async ({
+    page,
+    baseURL,
+  }) => {
     test.setTimeout(240_000);
     await as(page, baseURL!, "staff");
-    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here; the next test covers that.");
+    test.skip(
+      !(await spacesOn(page)),
+      "Spaces is off for the admin here; the next test covers that.",
+    );
     for (const moved of MOVED) {
       await test.step(moved.path, async () => {
         await open(page, moved.path);
         // The optional tools are listed only where they are enabled (admin-nav-server.ts).
-        const listed = await page.locator("#space-sidebar a").filter({ hasText: new RegExp(`^${moved.current}`) }).count();
-        await expectAdminSpace(page, moved.heading, listed > 0 ? moved.current : null);
+        const listed = await page
+          .locator("#space-sidebar a")
+          .filter({ hasText: new RegExp(`^${moved.current}`) })
+          .count();
+        await expectAdminSpace(
+          page,
+          moved.heading,
+          listed > 0 ? moved.current : null,
+        );
       });
     }
   });
 
-  test("keeps the existing admin shell, with the title it always had, while spaces is off for the admin", async ({ page, baseURL }) => {
+  test("keeps the existing admin shell, with the title it always had, while spaces is off for the admin", async ({
+    page,
+    baseURL,
+  }) => {
     test.skip(!wide(page), "One width is enough for the unchanged shell.");
     test.setTimeout(240_000);
     await as(page, baseURL!, "staff");
-    test.skip(await spacesOn(page), "Spaces is on for the admin here; run against a server without PLATFORM_FLAGS_OVERRIDE.");
+    test.skip(
+      await spacesOn(page),
+      "Spaces is on for the admin here; run against a server without PLATFORM_FLAGS_OVERRIDE.",
+    );
     for (const moved of MOVED) {
       await test.step(moved.path, async () => {
         await open(page, moved.path);
         await expect(page.locator(".spaces-shell")).toHaveCount(0);
-        await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
+        await expect(
+          page.getByRole("link", { name: "Back to dashboard" }),
+        ).toBeVisible();
         if (moved.retired) {
-          await expect(page.getByRole("heading", { level: 1, name: moved.heading, exact: true })).toBeVisible();
+          await expect(
+            page.getByRole("heading", {
+              level: 1,
+              name: moved.heading,
+              exact: true,
+            }),
+          ).toBeVisible();
           return;
         }
         await expect(page.locator("main h1")).toHaveCount(0);
-        const legacy = moved.legacy === undefined ? moved.heading : moved.legacy;
-        if (legacy !== null) await expect(page.getByRole("heading", { level: 2, name: legacy, exact: true })).toBeVisible();
+        const legacy =
+          moved.legacy === undefined ? moved.heading : moved.legacy;
+        if (legacy !== null)
+          await expect(
+            page.getByRole("heading", { level: 2, name: legacy, exact: true }),
+          ).toBeVisible();
       });
     }
   });
 
-  test("the page title never covers a link, tab or field beside it", async ({ page, baseURL }) => {
+  test("the page title never covers a link, tab or field beside it", async ({
+    page,
+    baseURL,
+  }) => {
     // Mattone's text overhangs a tight line box, and a browser hit-tests the overhang: a 60px title
     // once took the click meant for the "Back to Curricula" link just above it.
     test.setTimeout(120_000);
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
-    for (const path of ["/admin/curricula/ttv-local-persona-curriculum", "/admin/curricula/new", "/admin/programs/new", "/admin/applications", "/admin/projects", "/admin/feedback/themes", "/admin/recordings/upload"]) {
+    for (const path of [
+      "/admin/curricula/ttv-local-persona-curriculum",
+      "/admin/curricula/new",
+      "/admin/programs/new",
+      "/admin/applications",
+      "/admin/projects",
+      "/admin/feedback/themes",
+      "/admin/recordings/upload",
+    ]) {
       await test.step(path, async () => {
         await open(page, path);
         const covered = await page.evaluate(() => {
           const title = document.querySelector("#spaces-main h1")!;
           title.scrollIntoView({ block: "center" });
-          return Array.from(document.querySelectorAll("#spaces-main :is(a, button, input, select, textarea, summary)"))
+          return Array.from(
+            document.querySelectorAll(
+              "#spaces-main :is(a, button, input, select, textarea, summary)",
+            ),
+          )
             .filter((control) => !title.contains(control))
             .filter((control) => {
               const box = control.getBoundingClientRect();
               if (box.width === 0 || box.height === 0) return false;
               // Its centre and the corners nearest a title above or below it.
-              return [[box.x + box.width / 2, box.y + box.height / 2], [box.x + 2, box.top + 1], [box.x + 2, box.bottom - 1]]
-                .some(([x, y]) => title.contains(document.elementFromPoint(x, y)));
+              return [
+                [box.x + box.width / 2, box.y + box.height / 2],
+                [box.x + 2, box.top + 1],
+                [box.x + 2, box.bottom - 1],
+              ].some(([x, y]) =>
+                title.contains(document.elementFromPoint(x, y)),
+              );
             })
-            .map((control) => control.textContent?.trim().slice(0, 40) ?? control.tagName);
+            .map(
+              (control) =>
+                control.textContent?.trim().slice(0, 40) ?? control.tagName,
+            );
         });
         expect(covered).toEqual([]);
       });
     }
   });
 
-  test("the users list: each name opens the person, roles read as words, and a page past the end says so", async ({ page, baseURL }) => {
+  test("the users list: each name opens the person, roles read as words, and a page past the end says so", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/users");
     const table = page.getByRole("table", { name: "Users" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Email", "Roles", "Joined"]);
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Name",
+      "Email",
+      "Roles",
+      "Joined",
+    ]);
     const david = table.getByRole("row").filter({ hasText: "David Kamau" });
     await expect(david.getByRole("cell").nth(2)).toHaveText("Mentor");
-    await expect(david.getByRole("cell").nth(3)).toHaveText(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/);
-    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    await expect(david.getByRole("cell").nth(3)).toHaveText(
+      /^\d{1,2} [A-Z][a-z]{2} \d{4}$/,
+    );
+    expect(
+      await page
+        .locator("#spaces-main")
+        .evaluate((main) => main.scrollWidth <= main.clientWidth),
+    ).toBe(true);
     // At 320 the rows stack, and a long email breaks inside its cell rather than widening the screen.
     const size = page.viewportSize()!;
     await page.setViewportSize({ width: 320, height: 800 });
-    expect(await page.locator(".spaces-shell__main").evaluate((main) => main.scrollWidth - main.clientWidth)).toBeLessThanOrEqual(0);
+    expect(
+      await page
+        .locator(".spaces-shell__main")
+        .evaluate((main) => main.scrollWidth - main.clientWidth),
+    ).toBeLessThanOrEqual(0);
     await page.setViewportSize(size);
     // On a touch screen the name that opens the row is a 44px target.
     if (test.info().project.name === "mobile-chromium") {
-      expect((await david.getByRole("link", { name: "David Kamau" }).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      expect(
+        (await david.getByRole("link", { name: "David Kamau" }).boundingBox())
+          ?.height,
+      ).toBeGreaterThanOrEqual(44);
     }
     await david.getByRole("link", { name: "David Kamau" }).click();
     await expect(page).toHaveURL(/\/admin\/users\/ttv-local-persona-mentor$/);
 
     await open(page, "/admin/users?page=40");
-    await expect(page.getByRole("heading", { level: 2, name: "No one on this page" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "No one on this page" }),
+    ).toBeVisible();
     await page.getByRole("link", { name: "Back to the first page" }).click();
     await expect(page).toHaveURL(/\/admin\/users$/);
-    await expect(page.getByRole("navigation", { name: "Users pages" })).toHaveCount(0);
+    await expect(
+      page.getByRole("navigation", { name: "Users pages" }),
+    ).toHaveCount(0);
   });
 
-  test("applications: the status filter is a link with an address, and each applicant opens their application", async ({ page, baseURL }) => {
+  test("applications: the status filter is a link with an address, and each applicant opens their application", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/applications");
     const table = page.getByRole("table", { name: "Applications" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Applicant", "Cohort", "Status", "Applied"]);
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Applicant",
+      "Cohort",
+      "Status",
+      "Applied",
+    ]);
 
-    const filters = page.getByRole("navigation", { name: "Application status" });
-    await expect(filters.getByRole("link", { name: "All", exact: true })).toHaveAttribute("aria-current", "page");
+    const filters = page.getByRole("navigation", {
+      name: "Application status",
+    });
+    await expect(
+      filters.getByRole("link", { name: "All", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
     await filters.getByRole("link", { name: /^In review/ }).click();
     await expect(page).toHaveURL(/\/admin\/applications\?status=PENDING$/);
-    await expect(filters.getByRole("link", { name: /^In review/ })).toHaveAttribute("aria-current", "page");
-    const inReview = page.getByRole("table", { name: "Applications, in review" });
+    await expect(
+      filters.getByRole("link", { name: /^In review/ }),
+    ).toHaveAttribute("aria-current", "page");
+    const inReview = page.getByRole("table", {
+      name: "Applications, in review",
+    });
     const statuses = inReview.locator("td[data-label='Status']");
     expect(await statuses.count()).toBeGreaterThan(0);
-    for (const status of await statuses.allTextContents()) expect(status.trim()).toBe("In review");
-    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    for (const status of await statuses.allTextContents())
+      expect(status.trim()).toBe("In review");
+    expect(
+      await page
+        .locator("#spaces-main")
+        .evaluate((main) => main.scrollWidth <= main.clientWidth),
+    ).toBe(true);
 
     await inReview.locator("td[data-primary] a").first().click();
     await expect(page).toHaveURL(/\/admin\/applications\/[^/?]+$/);
   });
 
-  test("cohorts: New cohort is the page's one primary, and each cohort's name opens it", async ({ page, baseURL }) => {
+  test("cohorts: New cohort is the page's one primary, and each cohort's name opens it", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/programs");
     const table = page.getByRole("table", { name: "Cohorts" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Cohort", "Curriculum", "Starts", "Ends", "Applications"]);
-    await expect(table.getByRole("row").filter({ hasText: "Cohort 06" }).getByRole("cell").nth(4)).toHaveText("Open");
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Cohort",
+      "Curriculum",
+      "Starts",
+      "Ends",
+      "Applications",
+    ]);
+    await expect(
+      table
+        .getByRole("row")
+        .filter({ hasText: "Cohort 06" })
+        .getByRole("cell")
+        .nth(4),
+    ).toHaveText("Open");
     const main = page.locator("#spaces-main");
-    await expect(main.getByRole("link", { name: "New cohort", exact: true })).toHaveAttribute("href", "/admin/programs/new");
-    expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await expect(
+      main.getByRole("link", { name: "New cohort", exact: true }),
+    ).toHaveAttribute("href", "/admin/programs/new");
+    expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+      true,
+    );
     await table.getByRole("link", { name: "Cohort 05", exact: true }).click();
-    await expect(page).toHaveURL(/\/admin\/programs\/ttv-local-persona-cohort-05$/);
+    await expect(page).toHaveURL(
+      /\/admin\/programs\/ttv-local-persona-cohort-05$/,
+    );
   });
 
-  test("profiles: the status filter is a link with an address, and each builder's name opens their profile", async ({ page, baseURL }) => {
+  test("profiles: the status filter is a link with an address, and each builder's name opens their profile", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/profiles");
-    await expect(page.getByRole("heading", { level: 2, name: "Held by the content check" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Held by the content check",
+      }),
+    ).toBeVisible();
     const table = page.getByRole("table", { name: "Profiles" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Builder", "Handle", "Status", "Updated", "Published"]);
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Builder",
+      "Handle",
+      "Status",
+      "Updated",
+      "Published",
+    ]);
 
     const filters = page.getByRole("navigation", { name: "Profile status" });
-    await filters.getByRole("link", { name: "Draft", exact: true }).click();
+    await filters
+      .getByRole("link", { name: "Not on public website", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/admin\/profiles\?status=DRAFT$/);
-    await expect(filters.getByRole("link", { name: "Draft", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(
+      filters.getByRole("link", { name: "Not on public website", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
     const drafts = page.getByRole("table", { name: "Profiles, draft" });
-    for (const status of await drafts.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Draft");
-    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    for (const status of await drafts
+      .locator("td[data-label='Status']")
+      .allTextContents())
+      expect(status.trim()).toBe("Not on public website");
+    expect(
+      await page
+        .locator("#spaces-main")
+        .evaluate((main) => main.scrollWidth <= main.clientWidth),
+    ).toBe(true);
 
     await filters.getByRole("link", { name: "Published", exact: true }).click();
-    await page.getByRole("table", { name: "Profiles, published" }).getByRole("link", { name: "Achieng Otieno" }).click();
-    await expect(page).toHaveURL(/\/admin\/profiles\/ttv-local-persona-profile-alumna$/);
+    await page
+      .getByRole("table", { name: "Profiles, published" })
+      .getByRole("link", { name: "Achieng Otieno" })
+      .click();
+    await expect(page).toHaveURL(
+      /\/admin\/profiles\/ttv-local-persona-profile-alumna$/,
+    );
   });
 
-  test("client projects: the status filter is a link with an address, and each title opens its project", async ({ page, baseURL }) => {
+  test("client projects: the status filter is a link with an address, and each title opens its project", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/projects");
     const table = page.getByRole("table", { name: "Client projects" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Project", "Budget", "Timeline", "Status", "Interested", "Submitted"]);
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Project",
+      "Budget",
+      "Timeline",
+      "Status",
+      "Interested",
+      "Submitted",
+    ]);
     const filters = page.getByRole("navigation", { name: "Project status" });
-    await expect(filters.getByRole("link")).toHaveText([/^All/, /^In review/, /^Accepted/, /^Matched/, /^Declined/, /^Closed/]);
-    expect(await page.locator("#spaces-main").evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
+    await expect(filters.getByRole("link")).toHaveText([
+      /^All/,
+      /^In review/,
+      /^Accepted/,
+      /^Matched/,
+      /^Declined/,
+      /^Closed/,
+    ]);
+    expect(
+      await page
+        .locator("#spaces-main")
+        .evaluate((main) => main.scrollWidth <= main.clientWidth),
+    ).toBe(true);
     await table.getByRole("link", { name: "Member savings tracker" }).click();
-    await expect(page).toHaveURL(/\/admin\/projects\/ttv-local-persona-project$/);
+    await expect(page).toHaveURL(
+      /\/admin\/projects\/ttv-local-persona-project$/,
+    );
 
     await open(page, "/admin/projects?status=CLOSED");
-    await expect(filters.getByRole("link", { name: /^Closed/ })).toHaveAttribute("aria-current", "page");
-    for (const status of await page.locator("td[data-label='Status']").allTextContents()) expect(status.trim()).toBe("Closed");
+    await expect(
+      filters.getByRole("link", { name: /^Closed/ }),
+    ).toHaveAttribute("aria-current", "page");
+    for (const status of await page
+      .locator("td[data-label='Status']")
+      .allTextContents())
+      expect(status.trim()).toBe("Closed");
   });
 
-  test("recordings: one primary to upload, and each title opens its recording", async ({ page, baseURL }) => {
+  test("recordings: one primary to upload, and each title opens its recording", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     await open(page, "/admin/recordings");
     const main = page.locator("main");
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload recording"]);
-    await expect(main.getByRole("link", { name: "Import from Drive", exact: true })).toHaveAttribute("href", "/admin/recordings/import");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Upload recording",
+    ]);
+    await expect(
+      main.getByRole("link", { name: "Import from Drive", exact: true }),
+    ).toHaveAttribute("href", "/admin/recordings/import");
     const table = page.getByRole("table", { name: "Recordings" });
-    await expect(table.getByRole("columnheader")).toHaveText(["Recording", "Cohort", "Recorded", "Length", "Status"]);
-    expect(await page.locator("#spaces-main").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    await table.getByRole("link", { name: "Week 4: SQL joins and indexes" }).click();
-    await expect(page).toHaveURL(/\/admin\/recordings\/ttv-local-persona-recording-05$/);
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Recording",
+      "Cohort",
+      "Recorded",
+      "Length",
+      "Status",
+    ]);
+    expect(
+      await page
+        .locator("#spaces-main")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await table
+      .getByRole("link", { name: "Week 4: SQL joins and indexes" })
+      .click();
+    await expect(page).toHaveURL(
+      /\/admin\/recordings\/ttv-local-persona-recording-05$/,
+    );
   });
 
-  test("a recording: one primary, its details saved without JavaScript, and a confirm step before transcribing again", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Saving writes to the seed; one project is enough.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("a recording: one primary, its details saved without JavaScript, and a confirm step before transcribing again", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Saving writes to the seed; one project is enough.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     const path = "/admin/recordings/ttv-local-persona-recording-05";
     await page.goto(path);
     const main = page.locator("main");
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Save details"]);
-    await expect(main.getByText("Ready", { exact: true }).first()).toBeVisible();
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Save details",
+    ]);
+    await expect(
+      main.getByText("Ready", { exact: true }).first(),
+    ).toBeVisible();
 
     // Saved as the page showed it: the seed is unchanged, and the page says so once.
     const save = main.getByRole("button", { name: "Save details" });
@@ -366,7 +777,9 @@ test.describe("every admin page", () => {
     await again.focus();
     await again.press("Enter");
     await expect(page).toHaveURL(/\?confirm=reprocess$/);
-    const step = page.getByRole("region", { name: "Transcribe Week 4: SQL joins and indexes again?" });
+    const step = page.getByRole("region", {
+      name: "Transcribe Week 4: SQL joins and indexes again?",
+    });
     await expect(step).toContainText("including any edits saved below");
     const cancel = main.getByRole("link", { name: "Cancel" });
     await cancel.focus();
@@ -375,86 +788,183 @@ test.describe("every admin page", () => {
     await context.close();
   });
 
-  test("data migration: an export reviewed, then imported, without JavaScript", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Importing writes to the seed; one project is enough.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("data migration: an export reviewed, then imported, without JavaScript", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Importing writes to the seed; one project is enough.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/data-migration");
     const main = page.locator("main");
-    test.skip(await main.getByTestId("legacy-import-disabled").isVisible(), "The importer works only in staging and agent-* environments (DEPLOYMENT_ENVIRONMENT).");
+    test.skip(
+      await main.getByTestId("legacy-import-disabled").isVisible(),
+      "The importer works only in staging and agent-* environments (DEPLOYMENT_ENVIRONMENT).",
+    );
     const press = async (control: ReturnType<Page["locator"]>) => {
       await control.focus();
       await control.press("Enter");
     };
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Review export"]);
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Review export",
+    ]);
 
-    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from("{ not json") });
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({
+      name: "notes.json",
+      mimeType: "application/json",
+      buffer: Buffer.from("{ not json"),
+    });
     await press(main.getByRole("button", { name: "Review export" }));
-    await expect(main.getByRole("alert").filter({ hasText: "That file isn't JSON." })).toBeVisible();
+    await expect(
+      main.getByRole("alert").filter({ hasText: "That file isn't JSON." }),
+    ).toBeVisible();
 
     const id = `e2e-legacy-${Date.now().toString(36)}`;
-    const legacyExport = { version: 1, exportedAt: "2026-08-01T12:00:00.000Z", users: [{ id, name: "Legacy Learner", email: `${id}@example.test` }] };
-    await main.getByLabel(/^Legacy JSON export/).setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacyExport)) });
+    const legacyExport = {
+      version: 1,
+      exportedAt: "2026-08-01T12:00:00.000Z",
+      users: [{ id, name: "Legacy Learner", email: `${id}@example.test` }],
+    };
+    await main.getByLabel(/^Legacy JSON export/).setInputFiles({
+      name: "export.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(legacyExport)),
+    });
     await press(main.getByRole("button", { name: "Review export" }));
     const table = main.getByRole("table", { name: "Records in this export" });
-    await expect(table.getByRole("row").filter({ hasText: "Users" })).toContainText("1");
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Import 1 record"]);
+    await expect(
+      table.getByRole("row").filter({ hasText: "Users" }),
+    ).toContainText("1");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Import 1 record",
+    ]);
     await press(main.getByRole("button", { name: "Import 1 record" }));
     await expect(page).toHaveURL(/\/admin\/data-migration$/);
     await expect(main.getByText("Import complete")).toBeVisible();
-    await expect(main.getByText("1 rows changed", { exact: false })).toBeVisible();
+    await expect(
+      main.getByText("1 rows changed", { exact: false }),
+    ).toBeVisible();
     await context.close();
   });
 
-  test("uploading a recording: one primary, and a file that isn't a video refused in words, with what was written kept", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("uploading a recording: one primary, and a file that isn't a video refused in words, with what was written kept", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "One project is enough for the form.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/recordings/upload");
     const main = page.locator("main");
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload and process"]);
-    await main.getByRole("textbox", { name: "Title" }).fill("Week 5: e2e upload");
-    await main.getByRole("combobox", { name: /^Cohort/ }).selectOption({ label: "Cohort 05" });
-    await main.getByLabel(/^Video/).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a video") });
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Upload and process",
+    ]);
+    await main
+      .getByRole("textbox", { name: "Title" })
+      .fill("Week 5: e2e upload");
+    await main
+      .getByRole("combobox", { name: /^Cohort/ })
+      .selectOption({ label: "Cohort 05" });
+    await main.getByLabel(/^Video/).setInputFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("not a video"),
+    });
     const upload = main.getByRole("button", { name: "Upload and process" });
     await upload.focus();
     await upload.press("Enter");
-    await expect(main.getByRole("alert").filter({ hasText: "The recording wasn't uploaded" })).toBeVisible();
-    await expect(main.getByText("notes.txt isn't a video. Choose a video file, such as an MP4.")).toBeVisible();
-    await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue("Week 5: e2e upload");
-    await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue("ttv-local-persona-cohort-05");
+    await expect(
+      main
+        .getByRole("alert")
+        .filter({ hasText: "The recording wasn't uploaded" }),
+    ).toBeVisible();
+    await expect(
+      main.getByText(
+        "notes.txt isn't a video. Choose a video file, such as an MP4.",
+      ),
+    ).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue(
+      "Week 5: e2e upload",
+    );
+    await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue(
+      "ttv-local-persona-cohort-05",
+    );
     await context.close();
   });
 
-  test("a new cohort: a refused form keeps what was written and says what to fix, without JavaScript", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("a new cohort: a refused form keeps what was written and says what to fix, without JavaScript", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "One project is enough for the form.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/programs/new");
     const main = page.locator("main");
-    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Create cohort"]);
+    await expect(main.locator('[data-variant="primary"]')).toHaveText([
+      "Create cohort",
+    ]);
     await main.getByRole("textbox", { name: "Name" }).fill("Cohort e2e");
-    await main.getByRole("textbox", { name: "Description" }).fill("Kept description.");
-    await main.getByRole("combobox", { name: "Curriculum" }).selectOption({ index: 1 });
+    await main
+      .getByRole("textbox", { name: "Description" })
+      .fill("Kept description.");
+    await main
+      .getByRole("combobox", { name: "Curriculum" })
+      .selectOption({ index: 1 });
     await main.getByLabel(/^Starts on/).fill("2027-04-02");
     await main.getByLabel(/^Ends on/).fill("2027-01-11");
     await main.getByRole("checkbox", { name: "Applications open" }).check();
     const create = main.getByRole("button", { name: "Create cohort" });
     await create.focus();
     await create.press("Enter");
-    await expect(main.getByRole("alert").filter({ hasText: "The cohort wasn't created" })).toBeVisible();
-    await expect(main.getByText("End date must be on or after start date.")).toBeVisible();
-    await expect(main.getByRole("textbox", { name: "Description" })).toHaveValue("Kept description.");
-    await expect(main.getByRole("checkbox", { name: "Applications open" })).toBeChecked();
+    await expect(
+      main.getByRole("alert").filter({ hasText: "The cohort wasn't created" }),
+    ).toBeVisible();
+    await expect(
+      main.getByText("End date must be on or after start date."),
+    ).toBeVisible();
+    await expect(
+      main.getByRole("textbox", { name: "Description" }),
+    ).toHaveValue("Kept description.");
+    await expect(
+      main.getByRole("checkbox", { name: "Applications open" }),
+    ).toBeChecked();
     await context.close();
   });
 
-  test("recording imports: a source refused in words with what was written kept, then saved paused, turned on and removed after a confirm step, without JavaScript", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Adding a source writes to the seed; one project is enough.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("recording imports: a source refused in words with what was written kept, then saved paused, turned on and removed after a confirm step, without JavaScript", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Adding a source writes to the seed; one project is enough.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/recordings/import");
@@ -466,46 +976,81 @@ test.describe("every admin page", () => {
     const name = `e2e source ${Date.now().toString(36)}`;
     const form = main.locator("form[data-create]");
     await form.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-    await form.getByRole("combobox", { name: "Cohort" }).selectOption({ label: "Cohort 05" });
-    await form.getByRole("textbox", { name: "Drive folder" }).fill("not a folder");
+    await form
+      .getByRole("combobox", { name: "Cohort" })
+      .selectOption({ label: "Cohort 05" });
+    await form
+      .getByRole("textbox", { name: "Drive folder" })
+      .fill("not a folder");
     await press(form.getByRole("button", { name: "Save import source" }));
-    await expect(form.getByRole("alert").filter({ hasText: "The source wasn't saved" })).toBeVisible();
-    await expect(form.getByText("That isn't a Drive folder's address or ID.", { exact: false })).toBeVisible();
-    await expect(form.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
+    await expect(
+      form.getByRole("alert").filter({ hasText: "The source wasn't saved" }),
+    ).toBeVisible();
+    await expect(
+      form.getByText("That isn't a Drive folder's address or ID.", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await expect(
+      form.getByRole("textbox", { name: "Name", exact: true }),
+    ).toHaveValue(name);
 
-    await form.getByRole("textbox", { name: "Drive folder" }).fill("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpE2e");
+    await form
+      .getByRole("textbox", { name: "Drive folder" })
+      .fill("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpE2e");
     await press(form.getByRole("button", { name: "Save import source" }));
     await expect(page).toHaveURL(/\/admin\/recordings\/import$/);
     await expect(main.getByText("Import source saved, paused")).toBeVisible();
-    const row = main.locator("li[data-source]").filter({ has: page.getByRole("heading", { name, exact: true }) });
+    const row = main
+      .locator("li[data-source]")
+      .filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(row).toContainText("Paused");
 
     await press(row.getByRole("button", { name: `Turn on ${name}` }));
-    await expect(main.getByText(`Automatic scans on for ${name}`)).toBeVisible();
+    await expect(
+      main.getByText(`Automatic scans on for ${name}`),
+    ).toBeVisible();
     await expect(row).toContainText("Automatic");
 
     await press(row.getByRole("link", { name: `Remove ${name}` }));
-    await expect(page.getByRole("region", { name: `Remove ${name}?` })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: `Remove ${name}?` }),
+    ).toBeVisible();
     await press(row.getByRole("button", { name: "Remove source" }));
     await expect(main.getByText(`${name} removed`)).toBeVisible();
     await expect(row).toHaveCount(0);
     await context.close();
   });
 
-  test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Making a token writes to the seed; one project is enough.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     const label = `e2e check ${Date.now().toString(36)}`;
     await page.goto("/admin/personal-access-tokens");
     const form = page.getByRole("region", { name: "Create a token" });
     await form.getByRole("textbox", { name: "Label" }).fill(label);
-    await form.getByRole("combobox", { name: "Access" }).selectOption("channels-read");
+    await form
+      .getByRole("combobox", { name: "Access" })
+      .selectOption("channels-read");
     await form.getByRole("button", { name: "Create token" }).click();
 
-    const secret = page.getByRole("region", { name: `Your new token: ${label}` });
-    await expect(secret.locator("code#personal-access-token")).toHaveText(/^\S{20,}$/);
+    const secret = page.getByRole("region", {
+      name: `Your new token: ${label}`,
+    });
+    await expect(secret.locator("code#personal-access-token")).toHaveText(
+      /^\S{20,}$/,
+    );
     await expect(form.getByRole("textbox", { name: "Label" })).toHaveValue("");
 
     const tokens = page.getByRole("table", { name: "Your tokens" });
@@ -513,45 +1058,83 @@ test.describe("every admin page", () => {
     await expect(row).toContainText("Channels, read only");
     await expect(row).toContainText("Active");
     await row.getByRole("link", { name: `Revoke ${label}` }).click();
-    await expect(page.getByRole("region", { name: `Revoke “${label}”?` })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: `Revoke “${label}”?` }),
+    ).toBeVisible();
     await expect(page).toHaveURL(/\?confirm=revoke-[^#]+$/);
     await page.getByRole("button", { name: "Revoke token" }).click();
     await expect(page).toHaveURL(/\/admin\/personal-access-tokens$/);
-    await expect(page.getByRole("status").filter({ hasText: "Token revoked" })).toBeVisible();
-    await expect(tokens.getByRole("row").filter({ hasText: label })).toContainText("Revoked");
-    await expect(page.getByRole("region", { name: `Your new token: ${label}` })).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Token revoked" }),
+    ).toBeVisible();
+    await expect(
+      tokens.getByRole("row").filter({ hasText: label }),
+    ).toContainText("Revoked");
+    await expect(
+      page.getByRole("region", { name: `Your new token: ${label}` }),
+    ).toHaveCount(0);
     await context.close();
   });
 
-  test("agent access: a session's token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Making a session writes to the seed; one project is enough.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("agent access: a session's token shown once without JavaScript, and revoked after a confirm step", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Making a session writes to the seed; one project is enough.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/agent-access");
-    const off = await page.getByText("Agent access is off here", { exact: true }).count();
-    test.skip(off > 0, "Agent sessions are off on this server; set AGENT_AUTH_ENABLED=true (web/.env.local) to run this.");
+    const off = await page
+      .getByText("Agent access is off here", { exact: true })
+      .count();
+    test.skip(
+      off > 0,
+      "Agent sessions are off on this server; set AGENT_AUTH_ENABLED=true (web/.env.local) to run this.",
+    );
     const label = `e2e check ${Date.now().toString(36)}`;
     const form = page.getByRole("region", { name: "Create a session" });
     await form.getByRole("textbox", { name: "Label" }).fill(label);
     await form.getByRole("combobox", { name: "Lasts for" }).selectOption("1");
     await form.getByRole("button", { name: "Create session" }).click();
 
-    await expect(page.getByRole("region", { name: `Your new session: ${label}` }).locator("code#agent-token")).toHaveText(/^[0-9a-f]{64}$/);
+    await expect(
+      page
+        .getByRole("region", { name: `Your new session: ${label}` })
+        .locator("code#agent-token"),
+    ).toHaveText(/^[0-9a-f]{64}$/);
     const sessions = page.getByRole("table", { name: "Your sessions" });
     const row = sessions.getByRole("row").filter({ hasText: label });
     await expect(row).toContainText("Active");
     await row.getByRole("link", { name: `Revoke ${label}` }).click();
-    await expect(page.getByRole("region", { name: `Revoke “${label}”?` })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: `Revoke “${label}”?` }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Revoke session" }).click();
     await expect(page).toHaveURL(/\/admin\/agent-access$/);
-    await expect(page.getByRole("status").filter({ hasText: "Session revoked" })).toBeVisible();
-    await expect(sessions.getByRole("row").filter({ hasText: label })).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Session revoked" }),
+    ).toBeVisible();
+    await expect(
+      sessions.getByRole("row").filter({ hasText: label }),
+    ).toHaveCount(0);
     await context.close();
   });
 
-  test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({ page, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Changing a role changes the seed; one project writes, and puts it back.");
+  test("admin access: given at once, removed after a confirm step on the page, each change said once", async ({
+    page,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "Changing a role changes the seed; one project writes, and puts it back.",
+    );
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     const person = "/admin/users/ttv-local-persona-newcomer";
@@ -565,7 +1148,9 @@ test.describe("every admin page", () => {
     await expect(access).toContainText("Has admin access");
 
     await access.getByRole("link", { name: "Remove admin access" }).click();
-    const ask = page.getByRole("region", { name: "Remove admin access from Brian Kiprono?" });
+    const ask = page.getByRole("region", {
+      name: "Remove admin access from Brian Kiprono?",
+    });
     await expect(ask).toBeFocused();
     await runAxe(page, testInfo, "admin-user-confirm");
     await access.getByRole("link", { name: "Cancel" }).click();
@@ -580,34 +1165,64 @@ test.describe("every admin page", () => {
     await expect(notice()).toHaveCount(0);
   });
 
-  test("a cohort asks before enrolling anyone as completed, without JavaScript, and Cancel changes nothing", async ({ browser, baseURL }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "One width is enough for a server-side step.");
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+  test("a cohort asks before enrolling anyone as completed, without JavaScript, and Cancel changes nothing", async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium",
+      "One width is enough for a server-side step.",
+    );
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1440, height: 900 },
+    });
     const page = await context.newPage();
     await as(page, baseURL!, "staff");
     await page.goto("/admin/programs/ttv-local-persona-cohort-05");
     const roster = page.locator("#roster");
     const before = await roster.getByRole("row").count();
-    await roster.getByRole("combobox", { name: "Person" }).selectOption({ label: "Lucy Chebet (lucy@invalid.ttv)" });
-    await roster.getByRole("combobox", { name: "Status" }).selectOption("COMPLETED");
+    await roster
+      .getByRole("combobox", { name: "Person" })
+      .selectOption({ label: "Lucy Chebet (lucy@invalid.ttv)" });
+    await roster
+      .getByRole("combobox", { name: "Status" })
+      .selectOption("COMPLETED");
     await roster.getByRole("button", { name: "Enroll", exact: true }).click();
-    const ask = page.getByRole("region", { name: "Enroll Lucy Chebet as a past learner?" });
+    const ask = page.getByRole("region", {
+      name: "Enroll Lucy Chebet as a past learner?",
+    });
     await expect(ask).toBeVisible();
     // The question takes focus, so a keyboard or screen-reader user lands on it after the POST.
     await expect(ask).toBeFocused();
-    await expect(roster.getByRole("button", { name: "Enroll as completed" })).toBeVisible();
+    await expect(
+      roster.getByRole("button", { name: "Enroll as completed" }),
+    ).toBeVisible();
     await roster.getByRole("link", { name: "Cancel" }).click();
     await expect(ask).toHaveCount(0);
     await expect(roster.getByRole("row")).toHaveCount(before);
     await context.close();
   });
 
-  test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
+  test("a table page and a form page are clean under axe in the Admin space", async ({
+    page,
+    baseURL,
+  }) => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
-    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
-      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"],
-      ["/admin/recordings/upload", "recordings-upload"], ["/admin/recordings/import", "recordings-import"]]) {
+    for (const [path, name] of [
+      ["/admin/users", "users"],
+      ["/admin/applications", "applications"],
+      ["/admin/programs/new", "programs-new"],
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"],
+      [
+        "/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess",
+        "recording-detail-confirm",
+      ],
+      ["/admin/data-migration", "data-migration"],
+      ["/admin/recordings/upload", "recordings-upload"],
+      ["/admin/recordings/import", "recordings-import"],
+    ]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);
@@ -616,23 +1231,49 @@ test.describe("every admin page", () => {
 });
 
 test.describe("staff only", () => {
-  for (const who of ["student", "alumna", "mentor", "community", "institution"] as const) {
-    test(`${who}: no admin page opens, and there is no Admin tab`, async ({ page, baseURL }) => {
+  for (const who of [
+    "student",
+    "alumna",
+    "mentor",
+    "community",
+    "institution",
+  ] as const) {
+    test(`${who}: no admin page opens, and there is no Admin tab`, async ({
+      page,
+      baseURL,
+    }) => {
       test.skip(!wide(page), "Access is the same at every width.");
       await as(page, baseURL!, who);
-      for (const path of ["/admin", "/admin/moderation", "/admin/users", "/admin/platform-flags"]) {
+      for (const path of [
+        "/admin",
+        "/admin/moderation",
+        "/admin/users",
+        "/admin/platform-flags",
+      ]) {
         const response = await page.request.get(path, { maxRedirects: 0 });
         expect([302, 303], `${who} ${path}`).toContain(response.status());
-        expect(new URL(response.headers().location!, baseURL).pathname, `${who} ${path}`).toBe("/dashboard");
+        expect(
+          new URL(response.headers().location!, baseURL).pathname,
+          `${who} ${path}`,
+        ).toBe("/dashboard");
       }
       await open(page, "/dashboard/community");
-      await expect(tabs(page).getByRole("link", { name: /Admin/ })).toHaveCount(0);
+      await expect(tabs(page).getByRole("link", { name: /Admin/ })).toHaveCount(
+        0,
+      );
     });
   }
 
-  test("signed out: every admin page sends you to sign in", async ({ page }) => {
+  test("signed out: every admin page sends you to sign in", async ({
+    page,
+  }) => {
     test.skip(!wide(page), "Access is the same at every width.");
-    for (const path of ["/admin", "/admin/moderation", "/admin/users", "/admin/platform-flags"]) {
+    for (const path of [
+      "/admin",
+      "/admin/moderation",
+      "/admin/users",
+      "/admin/platform-flags",
+    ]) {
       const response = await page.request.get(path, { maxRedirects: 0 });
       expect([302, 303], path).toContain(response.status());
       expect(response.headers().location, path).toMatch(/\/auth\/login/);

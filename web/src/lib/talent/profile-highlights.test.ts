@@ -1,3 +1,6 @@
+import { readdirSync } from "node:fs";
+import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
+import { afterEach } from "vitest";
 import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -40,9 +43,6 @@ const highlight: ProfileHighlightValues = {
   snapshotAt: new Date("2026-10-10T00:00:00Z"),
 };
 
-import { readdirSync } from "node:fs";
-import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
-import { afterEach } from "vitest";
 const databases: ReturnType<typeof createSqliteD1>["database"][] = [];
 afterEach(() => databases.splice(0).forEach((d) => d.close()));
 function fixture() {
@@ -180,13 +180,97 @@ describe("repository work writes", () => {
   });
 });
 
-it("reposts an author draft only after an explicit picker selection",async()=>{
- const {db,database}=fixture();
- await replaceProfileHighlights(db,profile,[highlight]);
- database.exec("UPDATE communityJourney SET state='DRAFT'");
- await replaceProfileHighlights(db,{...profile,contentVersion:9},[highlight],true);
- expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({state:"POSTED"});
- database.exec("UPDATE communityJourney SET state='DRAFT',moderatorHidden=1");
- await replaceProfileHighlights(db,{...profile,contentVersion:10},[highlight],true);
- expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({state:"DRAFT"});
+it("reposts an author draft only after an explicit picker selection", async () => {
+  const { db, database } = fixture();
+  await replaceProfileHighlights(db, profile, [highlight]);
+  database.exec("UPDATE communityJourney SET state='DRAFT'");
+  await replaceProfileHighlights(
+    db,
+    { ...profile, contentVersion: 9 },
+    [highlight],
+    true,
+  );
+  expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({
+    state: "POSTED",
+  });
+  database.exec("UPDATE communityJourney SET state='DRAFT',moderatorHidden=1");
+  await replaceProfileHighlights(
+    db,
+    { ...profile, contentVersion: 10 },
+    [highlight],
+    true,
+  );
+  expect(database.prepare("SELECT state FROM communityJourney").get()).toEqual({
+    state: "DRAFT",
+  });
+});
+
+it("reorders preserve holds and keeps, and deletion cannot erase a hidden repository tombstone", async () => {
+  const { db, database } = fixture();
+  await replaceProfileHighlights(db, profile, [highlight], true);
+  database.exec(
+    "UPDATE communityJourney SET moderationOutcome='hold',moderationCheckedAt=123,moderationReviewRequired=1",
+  );
+  const reordered = await replaceProfileHighlights(
+    db,
+    { ...profile, contentVersion: 9 },
+    [{ ...highlight, sortOrder: 1 }],
+    true,
+  );
+  expect(reordered).toMatchObject({ outcome: "saved", revisions: [] });
+  expect(
+    database
+      .prepare(
+        "SELECT version,moderationOutcome,moderationCheckedAt FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({
+    version: 1,
+    moderationOutcome: "hold",
+    moderationCheckedAt: 123,
+  });
+  database.exec(
+    "UPDATE communityJourney SET moderationOutcome='pass',moderationReviewRequired=0",
+  );
+  await replaceProfileHighlights(
+    db,
+    { ...profile, contentVersion: 10 },
+    [highlight],
+    true,
+  );
+  expect(
+    database
+      .prepare(
+        "SELECT moderationOutcome,moderationReviewRequired FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({ moderationOutcome: "pass", moderationReviewRequired: 0 });
+  database.exec(
+    "UPDATE communityJourney SET moderatorHidden=1,state='DRAFT',moderationOutcome='hold'",
+  );
+  const { createCommunityService } = await import("@/lib/community/service");
+  const raw = (db as unknown as { $client: D1Database }).$client;
+  const service = createCommunityService(
+    raw,
+    "user-1",
+    undefined,
+    undefined,
+    undefined,
+    {} as Env,
+  );
+  const row = database.prepare("SELECT id FROM communityJourney").get() as {
+    id: string;
+  };
+  await service.deleteJourney(row.id);
+  await replaceProfileHighlights(
+    db,
+    { ...profile, contentVersion: 11 },
+    [highlight],
+    true,
+  );
+  expect(
+    database
+      .prepare("SELECT id,state,moderatorHidden FROM communityJourney")
+      .get(),
+  ).toEqual({ id: row.id, state: "DRAFT", moderatorHidden: 1 });
 });

@@ -16,9 +16,14 @@ function makeFormData(entries: Record<string, string>): FormData {
 }
 
 describe("extractProfileFormData", () => {
-  it("accepts opportunity goals without clearing them from older forms",()=>{
-    expect(extractProfileFormData(makeFormData({opportunityGoals:"Collaborate"})).opportunityGoals).toBe("Collaborate");
-    expect(extractProfileFormData(makeFormData({})).opportunityGoals).toBeUndefined();
+  it("accepts opportunity goals without clearing them from older forms", () => {
+    expect(
+      extractProfileFormData(makeFormData({ opportunityGoals: "Collaborate" }))
+        .opportunityGoals,
+    ).toBe("Collaborate");
+    expect(
+      extractProfileFormData(makeFormData({})).opportunityGoals,
+    ).toBeUndefined();
   });
   it("extracts text fields correctly", () => {
     const fd = makeFormData({
@@ -108,7 +113,14 @@ function mockDb(
             columns?: Record<string, unknown>;
             with?: unknown;
           }) => {
-            if (opts?.with && !opts.columns) return {id:"profile-1",contentVersion:1,handle:"test-user",skills:"[]",user:{name:"Test User",image:null}};
+            if (opts?.with && !opts.columns)
+              return {
+                id: "profile-1",
+                contentVersion: 1,
+                handle: "test-user",
+                skills: "[]",
+                user: { name: "Test User", image: null },
+              };
             // Dispatch on requested columns: `saveProfile` issues two distinct
             // lookups (handle lock, then handle uniqueness) against this mock.
             if (opts?.columns && "publishedAt" in opts.columns) {
@@ -482,7 +494,12 @@ function moderationDb(
   return {
     db: {
       query: {
-        programApplication: {findFirst: vi.fn(async () => ({status:"COMPLETED",completedAt:new Date()}))},
+        programApplication: {
+          findFirst: vi.fn(async () => ({
+            status: "COMPLETED",
+            completedAt: new Date(),
+          })),
+        },
         studentProfile: {
           findFirst: vi.fn(async () => profile),
         },
@@ -514,9 +531,17 @@ function expectVersionedStatusWriteGuard(
 
 describe("publishProfile", () => {
   it("refuses public listing without a valid completion", async () => {
-    const {db,setProfile}=moderationDb(draftProfile);
-    db.query.programApplication.findFirst.mockResolvedValue({status:"APPROVED",completedAt:new Date()});
-    expect(await publishProfile(db as never,"user-1","profile-1")).toMatchObject({success:false,error:expect.stringContaining("Complete a cohort")});
+    const { db, setProfile } = moderationDb(draftProfile);
+    db.query.programApplication.findFirst.mockResolvedValue({
+      status: "APPROVED",
+      completedAt: new Date(),
+    });
+    expect(
+      await publishProfile(db as never, "user-1", "profile-1"),
+    ).toMatchObject({
+      success: false,
+      error: expect.stringContaining("Complete a cohort"),
+    });
     expect(setProfile).not.toHaveBeenCalled();
   });
   it("publishes a passing draft immediately", async () => {
@@ -661,7 +686,7 @@ describe("published profile edits", () => {
     user: { name: "Mutable Account Name", image: null },
   };
 
-  it("screens public edits before writing and holds the previous public text for review", async () => {
+  it("screens public edits without changing previously checked text on a hold", async () => {
     const setProfile = vi.fn();
     const updateProfile = vi.fn();
     const db = mockDb({
@@ -695,14 +720,7 @@ describe("published profile edits", () => {
     );
 
     expect(result).toMatchObject({ success: false, moderationOutcome: "hold" });
-    expect(setProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        moderationOutcome: "hold",
-        moderationReviewRequired: true,
-      }),
-    );
-    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
-    expect(setProfile.mock.invocationCallOrder[0]).toBeGreaterThan(checkContent.mock.invocationCallOrder[0]);
+    expect(setProfile).not.toHaveBeenCalled();
     expect(checkContent).toHaveBeenCalledWith(
       expect.objectContaining({
         displayName: "Checked Public Name",
@@ -718,7 +736,7 @@ describe("published profile edits", () => {
       }),
       "/api/avatar/avatars/user-1/checked.webp",
     );
-    expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
+    expect(updateProfile).not.toHaveBeenCalled();
   });
 
   it("publishes a passing edit and fails open on an unavailable check", async () => {
@@ -763,15 +781,6 @@ describe("published profile edits", () => {
   });
 
   it.each([
-    [
-      "held",
-      () =>
-        Promise.resolve({
-          outcome: "hold" as const,
-          flags: ["contains_contact_details" as const],
-          scores: { contains_contact_details: 0.99 },
-        }),
-    ],
     [
       "passing",
       () =>

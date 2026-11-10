@@ -9,7 +9,7 @@ import { readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { saveMemberText, checkPostedWork } from "./writes";
-import { reviewWork } from "./moderation";
+import { reviewWork, listWorkReviews } from "./moderation";
 import { readMember } from "./directory";
 import * as clef from "@/lib/moderation/clef";
 const databases: ReturnType<typeof createSqliteD1>["database"][] = [];
@@ -183,7 +183,7 @@ it("screens a published name before saving and retains the previous public ident
     database
       .prepare("SELECT publicName,moderationOutcome FROM studentProfile")
       .get(),
-  ).toEqual({ publicName: "Synthetic Wanjiku", moderationOutcome: "hold" });
+  ).toEqual({ publicName: "Synthetic Wanjiku", moderationOutcome: "error" });
 });
 
 it("allocates readable handles across duplicate names, reserved names and empty slugs", async () => {
@@ -236,6 +236,7 @@ it("keeps an existing profile hold during a recheck and after a Clef outage", as
 
 it("queues an unfinished check and lets only an admin restore hidden work", async () => {
   const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
   const { createCommunityService } = await import("@/lib/community/service");
   const service = createCommunityService(
     db,
@@ -262,7 +263,7 @@ it("queues an unfinished check and lets only an admin restore hidden work", asyn
   expect(await reviewWork(db, "admin", work.id, 1, "hide")).toBe(true);
   await expect(
     service.setJourneyStatus(work.id, { status: "posted" }),
-  ).rejects.toMatchObject({ status: 404 });
+  ).rejects.toMatchObject({ status: 409 });
   expect(
     database
       .prepare(
@@ -320,7 +321,7 @@ it("identifies repository work and refuses contribution-form edits without chang
     }),
   ).rejects.toMatchObject({
     status: 409,
-    message: "Edit repositories in GitHub highlights",
+    message: "Edit repositories in GitHub highlights.",
   });
   await expect(
     service.setJourneyStatus("repo", { status: "draft" }),
@@ -335,4 +336,156 @@ it("identifies repository work and refuses contribution-form edits without chang
     state: "POSTED",
     version: 1,
   });
+});
+
+it("status toggles preserve a checked hold and an admin keep without rerunning Clef", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  const check = vi
+    .spyOn(clef, "checkProfileContent")
+    .mockResolvedValue({ outcome: "hold", flags: [], scores: {} });
+  const { createCommunityService } = await import("@/lib/community/service");
+  const service = createCommunityService(
+    db,
+    "member",
+    undefined,
+    undefined,
+    undefined,
+    env,
+  );
+  const work = await service.createJourney({
+    title: "Evidence",
+    description: "A useful contribution",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(check).toHaveBeenCalledTimes(1);
+  check.mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
+  await service.setJourneyStatus(work.id, { status: "draft" });
+  expect(await listWorkReviews(db)).toEqual([]);
+  await service.setJourneyStatus(work.id, { status: "posted" });
+  expect(
+    database.prepare("SELECT moderationOutcome FROM communityJourney").get(),
+  ).toEqual({ moderationOutcome: "hold" });
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(await reviewWork(db, "admin", work.id, 1, "keep")).toBe(true);
+  await service.setJourneyStatus(work.id, { status: "draft" });
+  await service.setJourneyStatus(work.id, { status: "posted" });
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(
+    database
+      .prepare(
+        "SELECT moderationOutcome,moderationReviewRequired FROM communityJourney",
+      )
+      .get(),
+  ).toEqual({ moderationOutcome: "pass", moderationReviewRequired: 0 });
+  await service.updateJourney(work.id, {
+    title: "Changed evidence",
+    description: "Updated contribution",
+    occurredAt: "2026-11-09",
+    status: "posted",
+  });
+  expect(check).toHaveBeenCalledTimes(2);
+});
+
+it("keeps drafts out of the review queue and hidden history cannot starve held work", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  for (let i = 0; i < 60; i++)
+    database
+      .prepare(
+        "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderatorHidden,moderationReviewRequired) VALUES (?,'member','Hidden','Evidence','2026-11-09','institution','DRAFT',1,0)",
+      )
+      .run(`hidden-${i}`);
+  database.exec(`INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderationOutcome,moderationReviewRequired) VALUES
+    ('draft','member','Private','Private draft','2026-11-09','institution','DRAFT',NULL,1),
+    ('pending','member','Pending','Unfinished check','2026-11-09','institution','POSTED',NULL,1),
+    ('held','member','Held','Held check','2026-11-09','institution','POSTED','hold',1);`);
+  expect((await listWorkReviews(db)).map((w) => w.id)).toEqual([
+    "held",
+    "pending",
+  ]);
+  expect(await listWorkReviews(db, true)).toHaveLength(50);
+  const plan = database
+    .prepare(
+      "EXPLAIN QUERY PLAN SELECT id FROM communityJourney WHERE moderationReviewRequired=1 AND state='POSTED' AND moderatorHidden=0 ORDER BY moderationOutcome DESC,updatedAt DESC,id DESC LIMIT 50",
+    )
+    .all();
+  expect(JSON.stringify(plan)).toContain("communityJourney_review_idx");
+  expect(JSON.stringify(plan)).not.toContain("TEMP B-TREE");
+});
+
+it("first work creates a named profile without duplicating its name as a headline and completes its check", async () => {
+  const { db, database } = fixture();
+  const check = vi
+    .spyOn(clef, "checkProfileContent")
+    .mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
+  const { ensureMemberProfile } = await import("./writes");
+  await ensureMemberProfile(db, "member", env);
+  await ensureMemberProfile(db, "member", env);
+  expect(check).toHaveBeenCalledTimes(1);
+  expect(
+    database
+      .prepare(
+        "SELECT publicName,headline,moderationReviewRequired FROM studentProfile",
+      )
+      .get(),
+  ).toEqual({
+    publicName: "Synthetic Wanjiku",
+    headline: "",
+    moderationReviewRequired: 0,
+  });
+  database.exec("UPDATE studentProfile SET publicName='Chosen Name'");
+  await saveMemberText(db, "member", text, env);
+  expect(
+    database.prepare("SELECT publicName FROM studentProfile").get(),
+  ).toEqual({ publicName: "Chosen Name" });
+});
+
+it("raw and Drizzle work predicates agree; anonymous work additionally requires a pass", async () => {
+  const { db, database } = fixture();
+  await saveMemberText(db, "member", text, {} as Env);
+  await saveMemberText(db, "admin", text, {} as Env);
+  for (const [id, state, outcome, owner] of [
+    ["pending", "POSTED", null, "member"],
+    ["pass", "POSTED", "pass", "member"],
+    ["held", "POSTED", "hold", "member"],
+    ["draft", "DRAFT", "pass", "member"],
+    ["staff", "POSTED", "pass", "admin"],
+  ]) {
+    database
+      .prepare(
+        "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,state,moderationOutcome) VALUES (?,?,?,'Evidence','2026-11-09','institution',?,?)",
+      )
+      .run(id, owner, id, state, outcome);
+  }
+  const { postedWorkEligibility, postedWorkColumnsEligibility } =
+    await import("@/lib/community/eligibility");
+  const raw = database
+    .prepare(
+      `SELECT id FROM communityJourney w WHERE ${postedWorkEligibility("w")} ORDER BY id`,
+    )
+    .all();
+  const orm = drizzle(db, { schema });
+  const { asc } = await import("drizzle-orm");
+  const rows = await orm
+    .select({ id: schema.communityJourney.id })
+    .from(schema.communityJourney)
+    .where(postedWorkColumnsEligibility(schema.communityJourney))
+    .orderBy(asc(schema.communityJourney.id));
+  expect(rows).toEqual(raw);
+  expect(rows.map((w) => w.id)).toEqual(["pass", "pending"]);
+  expect(
+    await orm
+      .select({ id: schema.communityJourney.id })
+      .from(schema.communityJourney)
+      .where(postedWorkColumnsEligibility(schema.communityJourney, true)),
+  ).toEqual([{ id: "pass" }]);
+  expect(
+    database
+      .prepare(
+        `SELECT id FROM communityJourney w WHERE ${postedWorkEligibility("w", true)} AND id='staff'`,
+      )
+      .get(),
+  ).toEqual({ id: "staff" });
 });

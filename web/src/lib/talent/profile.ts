@@ -13,7 +13,7 @@ const skillTag = z.string().min(1).max(30);
 export const profileEditorSchema = z.object({
   headline: z.string().max(120).optional(),
   bio: z.string().max(4000).optional(),
-  opportunityGoals:z.string().max(2000).optional(),
+  opportunityGoals: z.string().max(2000).optional(),
   location: z.string().max(120).optional(),
   country: z.string().max(56).optional(),
   skills: z.array(skillTag).max(12).optional(),

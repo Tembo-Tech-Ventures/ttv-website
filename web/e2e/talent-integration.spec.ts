@@ -7,7 +7,9 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 
-const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
+const token = process.env.PLAYWRIGHT_GRADUATE_STUDENT_TOKEN;
+const adminToken = process.env.PLAYWRIGHT_AGENT_TOKEN;
+let publicHandle = "preview-graduate";
 
 /**
  * Cross-feature journey: a builder publishes a checked profile, appears publicly,
@@ -21,7 +23,7 @@ const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
  */
 test.describe.serial("talent platform integration journey", () => {
   test.skip(
-    !token,
+    !token || !adminToken,
     "No agent bearer token is configured for this environment.",
   );
   test.use({
@@ -40,7 +42,7 @@ test.describe.serial("talent platform integration journey", () => {
 
     const createButton = page.getByRole("button", { name: "Create profile" });
     if (await createButton.isVisible().catch(() => false)) {
-      await page.locator('input[name="handle"]').fill("preview-agent");
+      await page.locator('input[name="handle"]').fill(publicHandle);
       await page
         .locator('input[name="headline"]')
         .fill("Integration journey builder");
@@ -49,8 +51,11 @@ test.describe.serial("talent platform integration journey", () => {
         .fill("Profile exercised end-to-end by the integration suite.");
       await createButton.click();
       // A new profile is a draft: publishing it is the primary, saving it again the quiet button.
-      await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Save draft" }),
+      ).toBeVisible();
     }
+    publicHandle = await page.locator('input[name="handle"]').inputValue();
     await page.screenshot({
       path: evidence("integration-01-portfolio"),
       fullPage: true,
@@ -127,7 +132,7 @@ test.describe.serial("talent platform integration journey", () => {
       await expect(mobilePage.locator('textarea[name="bio"]')).toHaveValue(
         heldBio,
       );
-      await mobilePage.goto("/talent/preview-agent");
+      await mobilePage.goto(`/talent/${publicHandle}`);
       await expect(mobilePage.getByText(heldBio)).toHaveCount(0);
       await mobilePage.screenshot({
         path: evidence("integration-04-mobile-held-edit-live-version"),
@@ -166,7 +171,7 @@ test.describe.serial("talent platform integration journey", () => {
       await expect(mobilePage.locator('input[name="name"]')).toHaveValue(
         heldName,
       );
-      await mobilePage.goto("/talent/preview-agent");
+      await mobilePage.goto(`/talent/${publicHandle}`);
       await expect(
         mobilePage.getByRole("heading", { name: heldName }),
       ).toHaveCount(0);
@@ -187,8 +192,10 @@ test.describe.serial("talent platform integration journey", () => {
     await page.getByRole("button", { name: "Save name" }).click();
     // A 303 to the canonical page, which says it once.
     await expect(page).toHaveURL(/\/dashboard\/account$/);
-    await expect(page.getByRole("status").filter({ hasText: "Name saved" })).toBeVisible();
-    await page.goto("/talent/preview-agent");
+    await expect(
+      page.getByRole("status").filter({ hasText: "Name saved" }),
+    ).toBeVisible();
+    await page.goto(`/talent/${publicHandle}`);
     await expect(
       page.getByRole("heading", { name: checkedName }),
     ).toBeVisible();
@@ -201,7 +208,7 @@ test.describe.serial("talent platform integration journey", () => {
   test("published profile appears publicly and receives a lead", async ({
     page,
   }) => {
-    await page.goto("/talent/preview-agent");
+    await page.goto(`/talent/${publicHandle}`);
     await expect(
       page.getByRole("heading", { name: /checked preview agent/i }),
     ).toBeVisible();
@@ -276,6 +283,9 @@ test.describe.serial("talent platform integration journey", () => {
       fullPage: true,
     });
 
+    await page
+      .context()
+      .setExtraHTTPHeaders({ Authorization: `Bearer ${adminToken}` });
     await page.goto("/admin/projects");
     await page
       .locator("tr", { hasText: "Delivery tracking dashboard" })
@@ -287,7 +297,7 @@ test.describe.serial("talent platform integration journey", () => {
       .filter({ hasText: /interested builders/i })
       .last();
     await expect(
-      interested.getByText(/preview.agent|ttv preview agent/i).first(),
+      interested.getByText(/checked preview agent/i).first(),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("integration-11-admin-interest"),

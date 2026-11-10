@@ -48,15 +48,16 @@ vi.mock("drizzle-orm/d1", () => ({
         findFirst: async (...args: unknown[]) => {
           const profile = await mockFindProfile(...args);
           if (!profile) return profile;
-          const work =
-            profile.work ?? (await mockFindHighlights()) ?? [];
+          const work = profile.work ?? (await mockFindHighlights()) ?? [];
           return { ...DEFAULT_PROFILE, ...profile, work };
         },
       },
       account: { findFirst: mockFindAccount },
       communityJourney: { findMany: mockFindHighlights },
     },
-    select: () => ({ from: () => ({where: async () => (await mockFindHighlights()) ?? []}) }),
+    select: () => ({
+      from: () => ({ where: async () => [{ id: "work-1", version: 1 }] }),
+    }),
     delete: () => ({ where: mockDeleteWhere }),
     insert: () => ({ select: mockInsertSelect }),
     update: () => ({
@@ -135,7 +136,9 @@ beforeEach(() => {
   mockDeleteWhere.mockReturnValue({ meta: { changes: 1 } });
   mockInsertSelect.mockReturnValue({ meta: { changes: 1 } });
   mockUpdateSetWhere.mockReturnValue({ meta: { changes: 1 } });
-  mockBatch.mockImplementation(async (queries: unknown[]) => Promise.all(queries));
+  mockBatch.mockImplementation(async (queries: unknown[]) =>
+    Promise.all(queries),
+  );
   mockCheckProfileContent.mockResolvedValue({
     outcome: "pass",
     flags: [],
@@ -246,7 +249,7 @@ describe("POST /api/portfolio/highlights", () => {
     ];
     const res = await POST(makeRequest("POST", body));
     expect(res.status).toBe(200);
-    expect(mockBatch).toHaveBeenCalledTimes(1);
+    expect(mockBatch).toHaveBeenCalledTimes(2);
   });
 
   it("checks and saves a published highlight edit", async () => {
@@ -288,10 +291,10 @@ describe("POST /api/portfolio/highlights", () => {
       }),
       expect.any(Object),
     );
-    expect(mockBatch).toHaveBeenCalledOnce();
+    expect(mockBatch).toHaveBeenCalled();
   });
 
-  it("holds a published highlight edit without replacing the live rows", async () => {
+  it("holds newly saved work away from shared and public readers", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-1" },
       session: {},
@@ -315,8 +318,10 @@ describe("POST /api/portfolio/highlights", () => {
     );
 
     expect(res.status).toBe(422);
-    expect(await json(res)).toEqual({error:"Your work is saved and waiting for a human review."});
-    expect(mockBatch).toHaveBeenCalledOnce();
+    expect(await json(res)).toEqual({
+      error: "Your work is saved and waiting for a human review.",
+    });
+    expect(mockBatch).toHaveBeenCalled();
     expect(mockDeleteWhere).not.toHaveBeenCalled();
   });
 
@@ -344,7 +349,7 @@ describe("POST /api/portfolio/highlights", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mockBatch).toHaveBeenCalledOnce();
+    expect(mockBatch).toHaveBeenCalled();
   });
 
   it("rejects highlight edits while the profile is suspended", async () => {
@@ -480,7 +485,11 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
-        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo",
+        state: "POSTED",
+        moderatorHidden: false,
+        repoUrl: "https://github.com/user/repo-a",
+        snapshotAt: new Date(),
         repoFullName: "user/repo-a",
         blurb: "My project",
         sortOrder: 0,
@@ -505,14 +514,22 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-old",
-        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo",
+        state: "POSTED",
+        moderatorHidden: false,
+        repoUrl: "https://github.com/user/repo-a",
+        snapshotAt: new Date(),
         repoFullName: "user/old-renamed-repo",
         blurb: "Carefully written blurb",
         sortOrder: 0,
       },
       {
         id: "hl-match",
-        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo",
+        state: "POSTED",
+        moderatorHidden: false,
+        repoUrl: "https://github.com/user/repo-a",
+        snapshotAt: new Date(),
         repoFullName: "user/repo-a",
         blurb: "Another project",
         sortOrder: 1,
@@ -539,7 +556,11 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindHighlights.mockResolvedValue([
       {
         id: "hl-1",
-        kind: "repo", state:"POSTED", moderatorHidden:false, repoUrl:"https://github.com/user/repo-a",snapshotAt:new Date(),
+        kind: "repo",
+        state: "POSTED",
+        moderatorHidden: false,
+        repoUrl: "https://github.com/user/repo-a",
+        snapshotAt: new Date(),
         repoFullName: "user/deleted-repo",
         blurb: "Keep this blurb",
         sortOrder: 0,

@@ -78,10 +78,10 @@ FROM numbered c JOIN user u ON u.id=c.userId WHERE true
 ON CONFLICT(userId) DO NOTHING;
 --> statement-breakpoint
 INSERT INTO communityJourney(id,userId,title,description,evidenceUrl,occurredAt,visibility,state,kind,
- repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,moderationReviewRequired,createdAt,updatedAt)
+ repoFullName,repoUrl,repoDescription,language,topics,stars,pushedAt,blurb,sortOrder,snapshotAt,moderationReviewRequired,moderationOutcome,moderationCheckedAt,createdAt,updatedAt)
 SELECT 'repo-'||h.id,p.userId,h.repoFullName,coalesce(h.blurb,h.description,''),h.repoUrl,
  strftime('%Y-%m-%d',coalesce(h.pushedAt,h.createdAt),'unixepoch'),'institution','POSTED','repo',
- h.repoFullName,h.repoUrl,h.description,h.language,h.topics,h.stars,h.pushedAt,h.blurb,h.sortOrder,h.snapshotAt,p.status<>'PUBLISHED',h.createdAt,h.updatedAt
+ h.repoFullName,h.repoUrl,h.description,h.language,h.topics,h.stars,h.pushedAt,h.blurb,h.sortOrder,h.snapshotAt,p.status<>'PUBLISHED',CASE WHEN p.status='PUBLISHED' THEN 'pass' END,CASE WHEN p.status='PUBLISHED' THEN h.updatedAt END,h.createdAt,h.updatedAt
 FROM profileHighlight h JOIN studentProfile p ON p.id=h.profileId WHERE true
 ON CONFLICT(userId,repoFullName) DO NOTHING;
 --> statement-breakpoint
@@ -102,4 +102,3 @@ CREATE TRIGGER IF NOT EXISTS communityJourney_legacy_private_update AFTER UPDATE
 WHEN NEW.visibility='private' BEGIN
  UPDATE communityJourney SET state='DRAFT',visibility='institution' WHERE id=NEW.id;
 END;
---> statement-breakpoint

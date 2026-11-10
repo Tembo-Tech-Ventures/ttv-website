@@ -25,7 +25,7 @@ export async function reviewWork(
     .prepare(
       `UPDATE communityJourney SET moderationOutcome=CASE WHEN ?='hide' THEN 'hold' ELSE 'pass' END,moderationReviewRequired=0,
     state=CASE WHEN ?='hide' THEN 'DRAFT' WHEN moderatorHidden=1 THEN 'POSTED' ELSE state END,moderatorHidden=(?='hide'),moderationCheckedAt=unixepoch()
-    WHERE id=? AND version=? AND (moderationReviewRequired=1 OR moderatorHidden=1)`,
+    WHERE id=? AND version=? AND (state='POSTED' OR moderatorHidden=1)`,
     )
     .bind(decision, decision, decision, id, revision)
     .run();
@@ -33,13 +33,21 @@ export async function reviewWork(
 }
 
 /** Includes human-hidden work so only an admin can reverse that decision. */
-export async function listWorkReviews(db: D1Database) {
-  const { results } = await db
-    .prepare(
-      `SELECT w.id,w.title,w.description,w.blurb,w.topics,w.version,w.moderationOutcome,
+export async function listWorkReviews(
+  db: D1Database,
+  hidden: boolean | "all" = false,
+) {
+  const query = (
+    showHidden: boolean,
+  ) => `SELECT w.id,w.title,w.description,w.blurb,w.topics,w.version,w.moderationOutcome,w.moderatorHidden,
     coalesce(p.publicName,u.name) AS authorName FROM communityJourney w JOIN user u ON u.id=w.userId
     LEFT JOIN studentProfile p ON p.userId=w.userId
-    WHERE w.moderationReviewRequired=1 OR w.moderatorHidden=1 ORDER BY w.updatedAt,w.id LIMIT 50`,
+    WHERE ${showHidden ? "w.moderatorHidden=1" : "w.moderationReviewRequired=1 AND w.state='POSTED' AND w.moderatorHidden=0"} ORDER BY w.moderationOutcome DESC,w.updatedAt DESC,w.id DESC LIMIT 50`;
+  const { results } = await db
+    .prepare(
+      hidden === "all"
+        ? `SELECT * FROM (${query(false)}) UNION ALL SELECT * FROM (${query(true)})`
+        : query(hidden),
     )
     .all<{
       id: string;
@@ -49,6 +57,7 @@ export async function listWorkReviews(db: D1Database) {
       topics: string | null;
       version: number;
       moderationOutcome: string | null;
+      moderatorHidden: number;
       authorName: string;
     }>();
   return results;

@@ -74,8 +74,12 @@ async function check(
 const checkedOutcome =
   "CASE WHEN ?='error' AND moderationOutcome='hold' THEN 'hold' ELSE ? END";
 
-/** Posting creates a named profile, not a second blank-text moderation request. */
-export async function ensureMemberProfile(db: D1Database, userId: string) {
+/** Posting creates one named profile and checks that identity, with no invented headline. */
+export async function ensureMemberProfile(
+  db: D1Database,
+  userId: string,
+  env: MemberModerationEnv,
+) {
   if (
     await db
       .prepare("SELECT 1 FROM studentProfile WHERE userId=?")
@@ -83,30 +87,12 @@ export async function ensureMemberProfile(db: D1Database, userId: string) {
       .first()
   )
     return;
-  const identity = await identityFor(db, userId);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const handle =
-      attempt === 4
-        ? `member-${createId().slice(0, 12)}`
-        : await nextMemberHandle(db, identity.name);
-    try {
-      await db
-        .prepare(
-          `INSERT INTO studentProfile(id,userId,handle,publicName,headline,moderationReviewRequired)
-        VALUES (?,?,?,?,?,1) ON CONFLICT(userId) DO NOTHING`,
-        )
-        .bind(createId(), userId, handle, identity.name, identity.name)
-        .run();
-      return;
-    } catch (error) {
-      if (
-        attempt === 4 ||
-        !(error instanceof Error) ||
-        !error.message.includes("studentProfile.handle")
-      )
-        throw error;
-    }
-  }
+  await saveMemberText(
+    db,
+    userId,
+    { headline: "", bio: "", skills: [], opportunityGoals: "" },
+    env,
+  );
 }
 
 /** Community edits save before checking; anonymous public text is screened first. */
@@ -119,12 +105,22 @@ export async function saveMemberText(
   const identity = await identityFor(db, userId);
   const existing = await db
     .prepare(
-      "SELECT handle,status,contentVersion FROM studentProfile WHERE userId=?",
+      "SELECT handle,status,contentVersion,headline,bio,skills,opportunityGoals,publicName FROM studentProfile WHERE userId=?",
     )
     .bind(userId)
-    .first<{ handle: string; status: string; contentVersion: number }>();
+    .first<{
+      handle: string;
+      status: string;
+      contentVersion: number;
+      headline: string | null;
+      bio: string | null;
+      skills: string | null;
+      opportunityGoals: string;
+      publicName: string | null;
+    }>();
   if (existing?.status === "SUSPENDED")
     throw new CommunityError("A paused profile cannot be edited.", 409);
+  if (existing && sameMemberText(existing, input)) return;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const handle = await memberHandleForWrite(
@@ -135,41 +131,27 @@ export async function saveMemberText(
       );
       const state = {
         ...emptyModerationState,
-        displayName: identity.name,
+        displayName: existing?.publicName ?? identity.name,
         handle,
         headline: input.headline,
         bio: `${input.bio}\n${input.opportunityGoals}`,
         skills: input.skills,
       };
-      const screened =
-        existing?.status === "PUBLISHED"
-          ? await check(env, state, identity, userId)
-          : null;
-      if (screened?.outcome === "hold") {
-        await db
-          .prepare(
-            `UPDATE studentProfile SET moderationOutcome='hold',moderationReviewRequired=1,
-          moderationFlags=?,moderationScores=?,moderationCheckedAt=unixepoch() WHERE userId=? AND contentVersion=?`,
-          )
-          .bind(
-            JSON.stringify(screened.flags),
-            JSON.stringify(screened.scores),
-            userId,
-            existing!.contentVersion,
-          )
-          .run();
-        throw new CommunityError(
-          "Your changes were not published and need a human review.",
-          409,
-        );
-      }
+      const screened = await screenPublicEdit(
+        existing?.status,
+        env,
+        state,
+        identity,
+        userId,
+      );
+      const expectedVersion = existing?.contentVersion ?? null;
       const row = await db
         .prepare(
           `INSERT INTO studentProfile(id,userId,handle,headline,bio,skills,opportunityGoals,publicName,contentVersion,moderationReviewRequired)
         VALUES (?,?,?,?,?,?,?,?,1,1) ON CONFLICT(userId) DO UPDATE SET headline=excluded.headline,bio=excluded.bio,
-        skills=excluded.skills,opportunityGoals=excluded.opportunityGoals,publicName=excluded.publicName,
+        skills=excluded.skills,opportunityGoals=excluded.opportunityGoals,
         contentVersion=studentProfile.contentVersion+1,moderationOutcome=CASE WHEN studentProfile.moderationOutcome='hold' THEN 'hold' ELSE NULL END,
-        moderationReviewRequired=1,updatedAt=unixepoch() WHERE studentProfile.status<>'SUSPENDED' AND (? IS NULL OR contentVersion=?) RETURNING contentVersion`,
+        moderationReviewRequired=1,updatedAt=unixepoch() WHERE studentProfile.status<>'SUSPENDED' AND contentVersion=? RETURNING contentVersion`,
         )
         .bind(
           createId(),
@@ -180,8 +162,7 @@ export async function saveMemberText(
           JSON.stringify([...new Set(input.skills)]),
           input.opportunityGoals,
           identity.name,
-          existing?.contentVersion ?? null,
-          existing?.contentVersion ?? null,
+          expectedVersion,
         )
         .first<{ contentVersion: number }>();
       if (!row)
@@ -221,7 +202,7 @@ export async function checkPostedWork(
 ) {
   const work = await db
     .prepare(
-      "SELECT title,description,version FROM communityJourney WHERE id=? AND state='POSTED' AND moderatorHidden=0",
+      "SELECT title,description,version FROM communityJourney WHERE id=? AND state='POSTED' AND moderatorHidden=0 AND moderationCheckedAt IS NULL",
     )
     .bind(id)
     .first<{ title: string; description: string; version: number }>();
@@ -258,4 +239,37 @@ async function memberHandleForWrite(
   return attempt === 4
     ? `member-${createId().slice(0, 12)}`
     : nextMemberHandle(db, name);
+}
+
+function sameMemberText(
+  existing: {
+    headline: string | null;
+    bio: string | null;
+    skills: string | null;
+    opportunityGoals: string;
+  },
+  input: CommunityProfileInput,
+) {
+  return (
+    (existing.headline ?? "") === input.headline &&
+    (existing.bio ?? "") === input.bio &&
+    (existing.skills ?? "[]") === JSON.stringify([...new Set(input.skills)]) &&
+    existing.opportunityGoals === input.opportunityGoals
+  );
+}
+async function screenPublicEdit(
+  status: string | undefined,
+  env: MemberModerationEnv,
+  state: ProfileModerationState,
+  identity: SavedIdentity,
+  userId: string,
+) {
+  if (status !== "PUBLISHED") return null;
+  const screened = await check(env, state, identity, userId);
+  if (screened.outcome === "hold")
+    throw new CommunityError(
+      "Your changes need attention before they can go live.",
+      409,
+    );
+  return screened;
 }

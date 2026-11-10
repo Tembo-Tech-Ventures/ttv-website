@@ -3,7 +3,10 @@ import { sql as eligibilitySql } from "drizzle-orm";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import { isValidCompletion, type CompletionState } from "@/lib/talent/eligibility";
+import {
+  isValidCompletion,
+  type CompletionState,
+} from "@/lib/talent/eligibility";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 export interface PublicProfile {
@@ -62,11 +65,11 @@ interface PublicProfileRow extends PublicProfileCandidate {
  * expose a profile with a legacy COMPLETED row that has no completion date.
  */
 export function isEligiblePublicProfile(
-  profile: PublicProfileCandidate | null | undefined
+  profile: PublicProfileCandidate | null | undefined,
 ): boolean {
   return Boolean(
     profile?.status === "PUBLISHED" &&
-      profile.user.programApplications.some(isValidCompletion)
+    profile.user.programApplications.some(isValidCompletion),
   );
 }
 
@@ -109,7 +112,7 @@ async function queryEligibleProfileRowsWithPosts(db: Database) {
           programApplications: {
             where: and(
               eq(schema.programApplication.status, "COMPLETED"),
-              isNotNull(schema.programApplication.completedAt)
+              isNotNull(schema.programApplication.completedAt),
             ),
             columns: { status: true, completedAt: true },
           },
@@ -162,7 +165,9 @@ function toPublicPosts(row: EligibleProfileRow): PublicPostSummary[] {
     }));
 }
 
-export async function listPublicProfiles(db: Database): Promise<PublicProfile[]> {
+export async function listPublicProfiles(
+  db: Database,
+): Promise<PublicProfile[]> {
   const rows = await db.query.studentProfile.findMany({
     where: eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     columns: profileColumns,
@@ -173,7 +178,7 @@ export async function listPublicProfiles(db: Database): Promise<PublicProfile[]>
           programApplications: {
             where: and(
               eq(schema.programApplication.status, "COMPLETED"),
-              isNotNull(schema.programApplication.completedAt)
+              isNotNull(schema.programApplication.completedAt),
             ),
             columns: { status: true, completedAt: true },
           },
@@ -187,12 +192,13 @@ export async function listPublicProfiles(db: Database): Promise<PublicProfile[]>
 
 export async function listPublicPosts(
   db: Database,
-  options: { limit?: number } = {}
+  options: { limit?: number } = {},
 ): Promise<PublicPostSummary[]> {
   const posts = (await queryEligibleProfileRowsWithPosts(db))
     .flatMap(toPublicPosts)
     .toSorted((left, right) => {
-      const published = right.publishedAt.getTime() - left.publishedAt.getTime();
+      const published =
+        right.publishedAt.getTime() - left.publishedAt.getTime();
       if (published !== 0) return published;
       return right.updatedAt.getTime() - left.updatedAt.getTime();
     });
@@ -203,14 +209,12 @@ export async function listPublicPosts(
 export async function findPublicPost(
   db: Database,
   handle: string,
-  slug: string
-): Promise<
-  { post: PublicPost; more: PublicPostSummary[] } | undefined
-> {
+  slug: string,
+): Promise<{ post: PublicPost; more: PublicPostSummary[] } | undefined> {
   const row = await db.query.studentProfile.findFirst({
     where: and(
       eq(schema.studentProfile.handle, handle),
-      eligibilitySql.raw(publicProfileEligibility("studentProfile"))
+      eligibilitySql.raw(publicProfileEligibility("studentProfile")),
     ),
     columns: profileColumns,
     with: {
@@ -220,7 +224,7 @@ export async function findPublicPost(
           programApplications: {
             where: and(
               eq(schema.programApplication.status, "COMPLETED"),
-              isNotNull(schema.programApplication.completedAt)
+              isNotNull(schema.programApplication.completedAt),
             ),
             columns: { status: true, completedAt: true },
           },
@@ -242,7 +246,7 @@ export async function findPublicPost(
   const posts = toPublicPosts(row);
   const summary = posts.find((candidate) => candidate.slug === slug);
   const contentHtml = row.posts.find(
-    (candidate) => candidate.slug === slug
+    (candidate) => candidate.slug === slug,
   )?.contentHtml;
   if (!summary || contentHtml === undefined) return undefined;
 

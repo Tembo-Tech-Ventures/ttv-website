@@ -6,8 +6,16 @@ import { recordErrorInBackground } from "@/lib/observability/errors";
 export interface AwaitingConfirmationContext {
   db: D1Database;
   env: { DEPLOYMENT_ENVIRONMENT?: string; PLATFORM_FLAGS_OVERRIDE?: string };
-  locals: Pick<App.Locals, "user" | "session" | "personalAccessToken" | "stagingDemo" | "stagingFixture" | "stagingQa">
-    & Partial<Pick<App.Locals, "cfContext">>;
+  locals: Pick<
+    App.Locals,
+    | "user"
+    | "session"
+    | "personalAccessToken"
+    | "stagingDemo"
+    | "stagingFixture"
+    | "stagingQa"
+  > &
+    Partial<Pick<App.Locals, "cfContext">>;
 }
 
 /**
@@ -22,17 +30,32 @@ export interface AwaitingConfirmationContext {
  * handler, which this does not reproduce, so they get null too. So does a
  * failed read: it is recorded, and every spaces page still renders.
  */
-export async function awaitingConfirmation({ db, env, locals }: AwaitingConfirmationContext): Promise<number | null> {
+export async function awaitingConfirmation({
+  db,
+  env,
+  locals,
+}: AwaitingConfirmationContext): Promise<number | null> {
   if (locals.stagingQa) return null;
   const actor = communityActor(locals);
   if (!actor) return null;
   try {
     requireBrowser(actor);
-    const service = createCommunityReadService(db, actor.id, actor.fixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE);
+    const service = createCommunityReadService(
+      db,
+      actor.id,
+      actor.fixture,
+      env.DEPLOYMENT_ENVIRONMENT,
+      env.PLATFORM_FLAGS_OVERRIDE,
+    );
     return await service.countAwaitingConfirmation();
   } catch (error) {
     if (!(error instanceof CommunityError)) {
-      recordErrorInBackground(locals.cfContext, db, { source: "request", route: "mentoring:awaiting-confirmation", error, level: "warning" });
+      recordErrorInBackground(locals.cfContext, db, {
+        source: "request",
+        route: "mentoring:awaiting-confirmation",
+        error,
+        level: "warning",
+      });
     }
     return null;
   }

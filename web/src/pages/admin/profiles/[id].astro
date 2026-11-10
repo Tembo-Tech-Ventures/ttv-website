@@ -276,20 +276,21 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
     {profile.work.length > 0 && (
       <Card>
         <div class="grid gap-2">
-          <h2 class="text-lg text-ink-primary">Highlighted projects</h2>
+          <h2 class="text-lg text-ink-primary">Work</h2>
           <ul class="divide-y divide-hairline" data-highlights>
             {profile.work.map((h) => (
               <li class="grid gap-1 py-3 first:pt-0 last:pb-0">
                 <div class="flex flex-wrap items-center justify-between gap-x-4">
-                  <a href={h.repoUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
-                    {h.repoFullName ?? h.title}<span class="sr-only">{NEW_TAB}</span>
-                  </a>
+                  {h.evidenceUrl ? <a href={h.evidenceUrl} class={ROW_LINK} target="_blank" rel="noopener noreferrer">
+                    {h.title}<span class="sr-only">{NEW_TAB}</span>
+                  </a> : <span>{h.title}</span>}
+                  <span>{h.moderatorHidden ? "Taken down by a moderator" : h.state === "DRAFT" ? "Author-only draft" : "Posted"}</span>
                   <span class="text-xs text-ink-muted">
                     {[h.stars > 0 ? `${h.stars} ${h.stars === 1 ? "star" : "stars"}` : null, h.language].filter(Boolean).join(" · ")}
                   </span>
                 </div>
-                {h.description && <p class="text-sm text-ink-secondary">{h.description}</p>}
-                {h.blurb && <p class="text-sm text-ink-primary">“{h.blurb}”</p>}
+                {(h.repoDescription ?? h.description) && <p class="text-sm text-ink-secondary">{h.repoDescription ?? h.description}</p>}
+                {h.blurb && h.blurb !== h.description && <p class="text-sm text-ink-primary">“{h.blurb}”</p>}
               </li>
             ))}
           </ul>
@@ -313,7 +314,7 @@ const ROW_LINK = linkClass("inline-flex min-h-11 items-center text-sm");
                     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                       <div class="flex min-w-0 flex-wrap items-center gap-2">
                         <h3 class="text-base text-ink-primary">{post.title}</h3>
-                        <StatusChip domain="profile" status={post.status} />
+                        <StatusChip domain="post" status={post.status} />
                       </div>
                       {post.status === "PUBLISHED" && (
                         <a href={postPath(profile.handle, post.slug)} class={ROW_LINK} target="_blank" rel="noopener noreferrer">

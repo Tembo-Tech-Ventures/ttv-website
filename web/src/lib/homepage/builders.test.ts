@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadHomepageBuildersSafely, toHomepageBuilder, type BuilderProfileRow } from "./builders";
+import {
+  loadHomepageBuildersSafely,
+  toHomepageBuilder,
+  type BuilderProfileRow,
+} from "./builders";
 
 const recordErrorInBackground = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/observability/errors", () => ({ recordErrorInBackground }));
 
-const completed = { status: "COMPLETED", completedAt: new Date("2025-02-01"), program: { name: "Cohort 02" } };
+const completed = {
+  status: "COMPLETED",
+  completedAt: new Date("2025-02-01"),
+  program: { name: "Cohort 02" },
+};
 
-function profile(overrides: Partial<BuilderProfileRow> = {}): BuilderProfileRow {
+function profile(
+  overrides: Partial<BuilderProfileRow> = {},
+): BuilderProfileRow {
   return {
     handle: "fixture-wanjiru",
     headline: "  Backend developer  ",
@@ -14,7 +24,13 @@ function profile(overrides: Partial<BuilderProfileRow> = {}): BuilderProfileRow 
     skills: JSON.stringify(["TypeScript", " PostgreSQL ", "", "Node.js", "Go"]),
     publicName: "Wanjiru Kamau",
     publicAvatarUrl: null,
-    work: [{ repoFullName: "fixture/chama-ledger", description: "Shared savings ledger.", language: "TypeScript" }],
+    work: [
+      {
+        repoFullName: "fixture/chama-ledger",
+        description: "Shared savings ledger.",
+        language: "TypeScript",
+      },
+    ],
     user: { programApplications: [completed] },
     ...overrides,
   };
@@ -32,33 +48,61 @@ describe("toHomepageBuilder", () => {
       cohort: "Cohort 02",
       country: "Kenya",
       skills: ["TypeScript", "PostgreSQL", "Node.js"],
-      project: { name: "chama-ledger", description: "Shared savings ledger.", language: "TypeScript" },
+      project: {
+        name: "chama-ledger",
+        description: "Shared savings ledger.",
+        language: "TypeScript",
+      },
     });
   });
 
   it("excludes profiles without a valid cohort completion", () => {
-    expect(toHomepageBuilder(profile({ user: { programApplications: [] } }))).toBeNull();
     expect(
-      toHomepageBuilder(profile({ user: { programApplications: [{ ...completed, completedAt: null }] } })),
+      toHomepageBuilder(profile({ user: { programApplications: [] } })),
+    ).toBeNull();
+    expect(
+      toHomepageBuilder(
+        profile({
+          user: { programApplications: [{ ...completed, completedAt: null }] },
+        }),
+      ),
     ).toBeNull();
   });
 
   it("uses only the checked public identity snapshot", () => {
-    const card = toHomepageBuilder(profile({ publicName: null, publicAvatarUrl: "/api/avatar/a.webp" }));
+    const card = toHomepageBuilder(
+      profile({ publicName: null, publicAvatarUrl: "/api/avatar/a.webp" }),
+    );
     expect(card?.name).toBe("TTV Builder");
     expect(card?.image).toBe("/api/avatar/a.webp");
   });
 
   it("reads skills the way profiles store them, as a JSON array", () => {
-    expect(toHomepageBuilder(profile({ skills: '["Next.js","React"]' }))?.skills).toEqual(["Next.js", "React"]);
-    expect(toHomepageBuilder(profile({ skills: "not json" }))?.skills).toEqual([]);
+    expect(
+      toHomepageBuilder(profile({ skills: '["Next.js","React"]' }))?.skills,
+    ).toEqual(["Next.js", "React"]);
+    expect(toHomepageBuilder(profile({ skills: "not json" }))?.skills).toEqual(
+      [],
+    );
   });
 
   it("tolerates missing optional fields", () => {
     const card = toHomepageBuilder(
-      profile({ headline: "   ", country: null, skills: null, work: [], user: { programApplications: [{ ...completed, program: null }] } }),
+      profile({
+        headline: "   ",
+        country: null,
+        skills: null,
+        work: [],
+        user: { programApplications: [{ ...completed, program: null }] },
+      }),
     );
-    expect(card).toMatchObject({ headline: null, country: null, skills: [], project: null, cohort: null });
+    expect(card).toMatchObject({
+      headline: null,
+      country: null,
+      skills: [],
+      project: null,
+      cohort: null,
+    });
   });
 });
 
@@ -73,7 +117,9 @@ describe("loadHomepageBuildersSafely", () => {
 
   it("keeps the homepage up with no showcase when D1 is overloaded", async () => {
     const builders = await loadHomepageBuildersSafely({
-      d1: d1Failing("D1_ERROR: D1 DB is overloaded. Requests queued for too long."),
+      d1: d1Failing(
+        "D1_ERROR: D1 DB is overloaded. Requests queued for too long.",
+      ),
       route: "/",
     });
     expect(builders).toEqual([]);
@@ -86,7 +132,31 @@ describe("loadHomepageBuildersSafely", () => {
 
   it("lets any other database failure reach the error boundary", async () => {
     await expect(
-      loadHomepageBuildersSafely({ d1: d1Failing("no such table: studentProfile"), route: "/" }),
+      loadHomepageBuildersSafely({
+        d1: d1Failing("no such table: studentProfile"),
+        route: "/",
+      }),
     ).rejects.toThrow("Failed query");
+  });
+});
+
+it("shows a posted contribution as the homepage builder's work", () => {
+  expect(
+    toHomepageBuilder(
+      profile({
+        work: [
+          {
+            repoFullName: null,
+            title: "Community workshop",
+            description: "Taught a local workshop",
+            language: null,
+          },
+        ],
+      }),
+    )?.project,
+  ).toEqual({
+    name: "Community workshop",
+    description: "Taught a local workshop",
+    language: null,
   });
 });

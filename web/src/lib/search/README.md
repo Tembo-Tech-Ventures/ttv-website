@@ -2,6 +2,66 @@
 
 See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
 
+`GET /api/search` implements the existing `ROUTES.search`, `SearchQuery` and
+`SearchResults` contracts. The client search store can consume it unchanged.
+Every response is `no-store`. `spaces` OFF returns 404 before parsing or source
+retrieval. Authentication is required; PATs and restricted staging fixture/QA
+sessions remain denied. Middleware keeps its existing session restrictions.
+
+The required scope is one of `all`, `cohort`, `community`, `messages`, `people`,
+`projects`, `sessionMoments`. `q` is nonblank, at most 500 characters. Unknown or
+duplicate parameters are rejected. The response echoes the validated query
+unchanged, while matching trims it and applies SQLite's ASCII-only case folding
+to both the query and source. Non-ASCII letters match their exact case.
+SQL wildcard characters are literal. This is substring search, not semantic
+matching, token expansion or ranking.
+
+| Scope             | Groups searched                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| all               | People, authorized projects, own-cohort session moments, messages in readable channels |
+| community         | People, authorized projects, and messages in community channels; no recordings         |
+| cohort            | Explicitly accessible cohort transcripts, and messages in readable cohort channels     |
+| sessionMoments    | Explicitly accessible cohort transcripts                                               |
+| people / projects | Only the named group                                                                   |
+| messages          | Messages in readable channels                                                          |
+
+An optional `programId` narrows `all`, `cohort` or `sessionMoments` to that
+authorized cohort (messages to that cohort's channels), excluding
+people/projects. Incompatible or inaccessible
+cohort scopes return the same 403 without revealing whether a cohort exists.
+All four groups are always present.
+
+Capabilities are loaded only for scopes that need cohort or channel access. No implicit administrator, global
+mentor or institution recording override is used. Approved/audit/completed
+members and assigned instructors/TAs/mentors receive only their explicit
+cohorts. Demo identities are additionally limited to demo public profiles and
+their canonical demo cohort. Revocation is effective on the next request.
+
+People and projects use the shared member predicates linked above. Names fall back to account names only on signed-in surfaces; email and moderation details are never search results. The visibility kind is `COMMUNITY`, labelled for signed-in members. Private drafts never appear, including for their owner.
+
+Links use existing supported destinations: member profiles, an owner's
+community workspace, the institutional profile view, and recording timestamps.
+Project links open the containing profile/workspace; no unsupported revision or
+project anchor is invented. Session quotes come from `transcript_segment` joined
+to complete recordings in the authorized cohort, labeled “Only you and your
+cohort”. Neither Vectorize metadata nor any model output supplies a citation.
+
+The wire contract has no paging fields. V1 therefore returns at most 10 matches
+per group in deterministic order, with at most 500 characters in each excerpt.
+Matching applies to the full authorized source before the result limit: late
+segments in long recordings and profiles/projects beyond the first 500 records
+remain searchable. Display fallback names and JSON skill punctuation are not
+search evidence. Search performs three capability reads and at most three
+source queries, plus two for messages ("Messages" below). It is request driven, not polled. Transcript retrieval drives
+the segment lookup from authorized complete recordings, never a sample of the
+global segment table. Query work scales with authorized source text; the result
+cap bounds response size rather than pretending to cap all database work.
+Migration `0024_search_source_indexes` adds `recording(programId)` and
+`transcript_segment(recordingId,startTime,id)` indexes. Query-plan tests assert
+both lookups and reject a global segment scan. The migration is idempotent and
+does not rebuild tables or alter data.
+There are no new dependencies, inference calls, caches or runtime resources.
+
 ## Messages (B-2.6)
 
 `messages.ts`. Messages are searched only while the `channels` flag is on for

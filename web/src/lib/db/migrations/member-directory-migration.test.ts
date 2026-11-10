@@ -83,6 +83,13 @@ describe("one-profile additive D1 migration", () => {
           )
           .all(),
       ).toEqual(Array.from({ length: 16 }, (_, sortOrder) => ({ sortOrder })));
+      expect(
+        db
+          .prepare(
+            "SELECT count(*) n FROM communityJourney WHERE kind='repo' AND moderationOutcome='pass' AND moderationCheckedAt IS NOT NULL",
+          )
+          .get(),
+      ).toEqual({ n: 16 });
       for (let i = 0; i < 16; i++)
         expect(
           db
@@ -193,11 +200,22 @@ describe("one-profile additive D1 migration", () => {
       )
         .split("--> statement-breakpoint")
         .filter((s) =>
-          /CREATE (?:UNIQUE INDEX|INDEX|TRIGGER) IF NOT EXISTS|UPDATE studentProfile SET publicName=/.test(
+          /CREATE (?:UNIQUE INDEX|INDEX|TRIGGER) IF NOT EXISTS|WITH RECURSIVE hashes/.test(
             s,
           ),
         );
+      expect(guarded.some((s) => s.includes("WITH RECURSIVE hashes"))).toBe(
+        true,
+      );
+      const before = db
+        .prepare("SELECT id,rotationSeed FROM studentProfile ORDER BY id")
+        .all();
       for (const statement of guarded) db.exec(statement);
+      expect(
+        db
+          .prepare("SELECT id,rotationSeed FROM studentProfile ORDER BY id")
+          .all(),
+      ).toEqual(before);
       expect(
         db
           .prepare("SELECT publicName FROM studentProfile WHERE userId='u0'")

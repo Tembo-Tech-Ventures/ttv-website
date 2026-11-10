@@ -129,7 +129,8 @@ describe("admin profile moderation actions", () => {
     ).toEqual({
       status: "PUBLISHED",
       contentVersion: 4,
-      moderationReviewRequired: false, moderationOutcome: "pass",
+      moderationReviewRequired: false,
+      moderationOutcome: "pass",
       publicName: "Checked Builder",
       publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
     });
@@ -154,7 +155,8 @@ describe("admin profile moderation actions", () => {
     ).toEqual({
       status: "PUBLISHED",
       contentVersion: 7,
-      moderationReviewRequired: false, moderationOutcome: "pass",
+      moderationReviewRequired: false,
+      moderationOutcome: "pass",
       publicName: "Draft Builder",
       publicAvatarUrl: null,
       publishedAt: now,
@@ -170,7 +172,11 @@ describe("admin profile moderation actions", () => {
         { status: "DRAFT", publishedAt: null, contentVersion: 2 },
         "clear_flag",
       ),
-    ).toEqual({ moderationReviewRequired: false, moderationOutcome: "pass", contentVersion: 3 });
+    ).toEqual({
+      moderationReviewRequired: false,
+      moderationOutcome: "pass",
+      contentVersion: 3,
+    });
   });
 
   it("applies admin actions only to the version that was reviewed", async () => {
@@ -202,7 +208,17 @@ describe("admin profile moderation actions", () => {
 
   it("reports an admin conflict when another write wins", async () => {
     const db = {
-      query:{studentProfile:{findFirst:vi.fn(async()=>({userId:"user-1"}))},programApplication:{findFirst:vi.fn(async()=>({status:"COMPLETED",completedAt:new Date()}))}},
+      query: {
+        studentProfile: {
+          findFirst: vi.fn(async () => ({ userId: "user-1" })),
+        },
+        programApplication: {
+          findFirst: vi.fn(async () => ({
+            status: "COMPLETED",
+            completedAt: new Date(),
+          })),
+        },
+      },
       update: vi.fn(() => ({
         set: vi.fn(() => ({
           where: vi.fn(() => ({ meta: { changes: 0 } })),

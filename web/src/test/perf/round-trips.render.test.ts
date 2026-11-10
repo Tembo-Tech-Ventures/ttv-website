@@ -15,7 +15,10 @@ import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { withRoundTrips } from "@/test/d1-round-trips";
 import { withRaw } from "@/lib/attention/test-support";
 
-const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  env: {} as Record<string, unknown>,
+  getSession: vi.fn(),
+}));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("@/lib/auth", async () => {
   const { sessionApi } = await import("@/test/auth-mock");
@@ -37,7 +40,11 @@ afterEach(() => databases.splice(0).forEach((database) => database.close()));
 function seeded() {
   const { database: sqlite, db } = createSqliteD1();
   databases.push(sqlite);
-  for (const file of readdirSync(new URL("../../lib/db/migrations/", import.meta.url)).filter((name) => name.endsWith(".sql")).toSorted()) {
+  for (const file of readdirSync(
+    new URL("../../lib/db/migrations/", import.meta.url),
+  )
+    .filter((name) => name.endsWith(".sql"))
+    .toSorted()) {
     sqlite.exec(readMigration(file));
   }
   sqlite.exec(`INSERT INTO curriculum(id,title,description) VALUES ('curriculum','Synthetic curriculum','Test');
@@ -66,8 +73,14 @@ function seeded() {
     INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','recording',0,4,'Mentor','Welcome back.');
     UPDATE feature_flag SET audience='ALL';`);
   // One request waiting for the mentor, for the Mentoring space's Requests page.
-  sqlite.exec(`INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`);
-  const cohortChannel = sqlite.prepare("SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1").get() as { id: string; slug: string };
+  sqlite.exec(
+    `INSERT INTO mentor_request(id,requesterId,mentorId,format,note) VALUES ('mentor-request','${STUDENT}','${MENTOR}','WRITTEN_REVIEW','A review?');`,
+  );
+  const cohortChannel = sqlite
+    .prepare(
+      "SELECT id, slug FROM channel WHERE kind='COHORT' AND programId='cohort-a' ORDER BY position LIMIT 1",
+    )
+    .get() as { id: string; slug: string };
   // The student has agreed to the habits, so their channel pages show the conversation; the admin has
   // not, so theirs show the habits first. One message in each conversation, so its authors are read.
   sqlite.exec(`INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES ('${STUDENT}',1,0);
@@ -75,83 +88,364 @@ function seeded() {
     INSERT INTO channel_member(channelId,userId) VALUES ('${DIRECT}','${STUDENT}'),('${DIRECT}','${ADMIN}');
     INSERT INTO channel_message(id,channelId,seq,changeSeq,authorId,body) VALUES
       ('cohort-hello','${cohortChannel.id}',1,1,'${STUDENT}','Habari, cohort'),('direct-hello','${DIRECT}',1,1,'${ADMIN}','Karibu');`);
-  return { db: withRoundTrips(withRaw(sqlite, db)), cohortChannel: cohortChannel.slug };
+  return {
+    db: withRoundTrips(withRaw(sqlite, db)),
+    cohortChannel: cohortChannel.slug,
+  };
 }
 
 let container: AstroContainer;
 beforeAll(async () => {
-  container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
+  container = await AstroContainer.create({
+    renderers: await loadRenderers([getContainerRenderer()]),
+  });
 });
 
 const PAGES = {
-  "cohort overview": { path: () => "/dashboard/cohort", page: () => import("@/pages/dashboard/index.astro"), user: STUDENT },
-  "cohort sessions": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: STUDENT },
-  "session viewer": { path: () => "/dashboard/cohort/sessions/recording", page: () => import("@/pages/dashboard/sessions/[id].astro"), user: STUDENT, id: "recording" },
-  "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
-  "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
-  conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
-  community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
-  conduct: { path: () => "/dashboard/community/conduct", page: () => import("@/pages/dashboard/community/conduct.astro"), user: ADMIN },
-  mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
-  discover: { path: () => "/dashboard/discover", page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
-  "discover, a person": { path: () => `/dashboard/discover?profile=${BUILDER}`, page: () => import("@/pages/dashboard/discover.astro"), user: INSTITUTION },
-  "mentoring home": { path: () => "/dashboard/mentoring", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
-  "mentoring confirm": { path: () => "/dashboard/mentoring/confirm", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
-  "mentoring availability": { path: () => "/dashboard/mentoring/availability", page: () => import("@/pages/dashboard/mentoring/availability.astro"), user: MENTOR },
-  "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
-  "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
-  application: { path: () => "/dashboard/cohort/application/application", page: () => import("@/pages/dashboard/application/[id].astro"), user: STUDENT, id: "application" },
-  apply: { path: () => "/dashboard/cohort/apply", page: () => import("@/pages/dashboard/apply.astro"), user: STUDENT },
-  ask: { path: () => "/dashboard/cohort/ask", page: () => import("@/pages/dashboard/ask.astro"), user: STUDENT },
-  attention: { path: () => "/dashboard/attention", page: () => import("@/pages/dashboard/attention.astro"), user: STUDENT },
-  "admin home": { path: () => "/admin", page: () => import("@/pages/admin/index.astro"), user: ADMIN },
-  account: { path: () => "/dashboard/account", page: () => import("@/pages/dashboard/profile.astro"), user: STUDENT },
-  "profile overview": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: STUDENT },
-  "profile overview, published": { path: () => "/dashboard/me", page: () => import("@/pages/dashboard/me/index.astro"), user: BUILDER },
-  "your feedback": { path: () => "/dashboard/feedback", page: () => import("@/pages/dashboard/feedback.astro"), user: STUDENT },
-  "public profile editor": { path: () => "/dashboard/me/portfolio", page: () => import("@/pages/dashboard/portfolio.astro"), user: BUILDER },
-  "visitor messages": { path: () => "/dashboard/me/leads", page: () => import("@/pages/dashboard/leads.astro"), user: BUILDER },
-  writing: { path: () => "/dashboard/me/writing", page: () => import("@/pages/dashboard/writing/index.astro"), user: BUILDER },
-  opportunities: { path: () => "/dashboard/me/opportunities", page: () => import("@/pages/dashboard/opportunities.astro"), user: BUILDER },
-  "admin users": { path: () => "/admin/users", page: () => import("@/pages/admin/users/index.astro"), user: ADMIN },
-  "admin user": { path: () => `/admin/users/${STUDENT}`, page: () => import("@/pages/admin/users/[id].astro"), user: ADMIN, id: STUDENT },
-  "admin cohorts": { path: () => "/admin/programs", page: () => import("@/pages/admin/programs/index.astro"), user: ADMIN },
-  "admin cohort": { path: () => "/admin/programs/cohort-a", page: () => import("@/pages/admin/programs/[id].astro"), user: ADMIN, id: "cohort-a" },
-  "admin new cohort": { path: () => "/admin/programs/new", page: () => import("@/pages/admin/programs/new.astro"), user: ADMIN },
-  "admin recordings": { path: () => "/admin/recordings", page: () => import("@/pages/admin/recordings/index.astro"), user: ADMIN },
-  "admin recording": { path: () => "/admin/recordings/recording", page: () => import("@/pages/admin/recordings/[id].astro"), user: ADMIN, id: "recording" },
+  "cohort overview": {
+    path: () => "/dashboard/cohort",
+    page: () => import("@/pages/dashboard/index.astro"),
+    user: STUDENT,
+  },
+  "cohort sessions": {
+    path: () => "/dashboard/cohort/sessions",
+    page: () => import("@/pages/dashboard/sessions/index.astro"),
+    user: STUDENT,
+  },
+  "session viewer": {
+    path: () => "/dashboard/cohort/sessions/recording",
+    page: () => import("@/pages/dashboard/sessions/[id].astro"),
+    user: STUDENT,
+    id: "recording",
+  },
+  "cohort channel": {
+    path: (slug: string) => `/dashboard/cohort/c/${slug}`,
+    page: () => import("@/pages/dashboard/cohort/c/[slug].astro"),
+    user: STUDENT,
+  },
+  "cohort channel, first visit": {
+    path: (slug: string) => `/dashboard/cohort/c/${slug}`,
+    page: () => import("@/pages/dashboard/cohort/c/[slug].astro"),
+    user: ADMIN,
+  },
+  conversation: {
+    path: () => `/dashboard/community/dm/${DIRECT}`,
+    page: () => import("@/pages/dashboard/community/dm/[id].astro"),
+    user: STUDENT,
+  },
+  community: {
+    path: () => "/dashboard/community",
+    page: () => import("@/pages/dashboard/community.astro"),
+    user: STUDENT,
+  },
+  conduct: {
+    path: () => "/dashboard/community/conduct",
+    page: () => import("@/pages/dashboard/community/conduct.astro"),
+    user: ADMIN,
+  },
+  mentors: {
+    path: () => "/dashboard/community/mentors",
+    page: () => import("@/pages/dashboard/community/mentors.astro"),
+    user: STUDENT,
+  },
+  discover: {
+    path: () => "/dashboard/discover",
+    page: () => import("@/pages/dashboard/discover.astro"),
+    user: INSTITUTION,
+  },
+  "discover, a person": {
+    path: () => `/dashboard/discover?profile=${BUILDER}`,
+    page: () => import("@/pages/dashboard/discover.astro"),
+    user: INSTITUTION,
+  },
+  "mentoring home": {
+    path: () => "/dashboard/mentoring",
+    page: () => import("@/pages/dashboard/mentorship.astro"),
+    user: MENTOR,
+  },
+  "mentoring confirm": {
+    path: () => "/dashboard/mentoring/confirm",
+    page: () => import("@/pages/dashboard/mentorship.astro"),
+    user: MENTOR,
+  },
+  "mentoring availability": {
+    path: () => "/dashboard/mentoring/availability",
+    page: () => import("@/pages/dashboard/mentoring/availability.astro"),
+    user: MENTOR,
+  },
+  "mentors, filtered": {
+    path: () =>
+      "/dashboard/community/mentors?area=Code%20review&available=true",
+    page: () => import("@/pages/dashboard/community/mentors.astro"),
+    user: STUDENT,
+  },
+  "mentoring requests": {
+    path: () => "/dashboard/mentoring/requests",
+    page: () => import("@/pages/dashboard/mentoring/requests.astro"),
+    user: MENTOR,
+  },
+  application: {
+    path: () => "/dashboard/cohort/application/application",
+    page: () => import("@/pages/dashboard/application/[id].astro"),
+    user: STUDENT,
+    id: "application",
+  },
+  apply: {
+    path: () => "/dashboard/cohort/apply",
+    page: () => import("@/pages/dashboard/apply.astro"),
+    user: STUDENT,
+  },
+  ask: {
+    path: () => "/dashboard/cohort/ask",
+    page: () => import("@/pages/dashboard/ask.astro"),
+    user: STUDENT,
+  },
+  attention: {
+    path: () => "/dashboard/attention",
+    page: () => import("@/pages/dashboard/attention.astro"),
+    user: STUDENT,
+  },
+  "admin home": {
+    path: () => "/admin",
+    page: () => import("@/pages/admin/index.astro"),
+    user: ADMIN,
+  },
+  account: {
+    path: () => "/dashboard/account",
+    page: () => import("@/pages/dashboard/profile.astro"),
+    user: STUDENT,
+  },
+  "profile overview": {
+    path: () => "/dashboard/me",
+    page: () => import("@/pages/dashboard/me/index.astro"),
+    user: STUDENT,
+  },
+  "profile overview, published": {
+    path: () => "/dashboard/me",
+    page: () => import("@/pages/dashboard/me/index.astro"),
+    user: BUILDER,
+  },
+  "your feedback": {
+    path: () => "/dashboard/feedback",
+    page: () => import("@/pages/dashboard/feedback.astro"),
+    user: STUDENT,
+  },
+  "public profile editor": {
+    path: () => "/dashboard/me/portfolio",
+    page: () => import("@/pages/dashboard/portfolio.astro"),
+    user: BUILDER,
+  },
+  "visitor messages": {
+    path: () => "/dashboard/me/leads",
+    page: () => import("@/pages/dashboard/leads.astro"),
+    user: BUILDER,
+  },
+  writing: {
+    path: () => "/dashboard/me/writing",
+    page: () => import("@/pages/dashboard/writing/index.astro"),
+    user: BUILDER,
+  },
+  opportunities: {
+    path: () => "/dashboard/me/opportunities",
+    page: () => import("@/pages/dashboard/opportunities.astro"),
+    user: BUILDER,
+  },
+  "admin users": {
+    path: () => "/admin/users",
+    page: () => import("@/pages/admin/users/index.astro"),
+    user: ADMIN,
+  },
+  "admin user": {
+    path: () => `/admin/users/${STUDENT}`,
+    page: () => import("@/pages/admin/users/[id].astro"),
+    user: ADMIN,
+    id: STUDENT,
+  },
+  "admin cohorts": {
+    path: () => "/admin/programs",
+    page: () => import("@/pages/admin/programs/index.astro"),
+    user: ADMIN,
+  },
+  "admin cohort": {
+    path: () => "/admin/programs/cohort-a",
+    page: () => import("@/pages/admin/programs/[id].astro"),
+    user: ADMIN,
+    id: "cohort-a",
+  },
+  "admin new cohort": {
+    path: () => "/admin/programs/new",
+    page: () => import("@/pages/admin/programs/new.astro"),
+    user: ADMIN,
+  },
+  "admin recordings": {
+    path: () => "/admin/recordings",
+    page: () => import("@/pages/admin/recordings/index.astro"),
+    user: ADMIN,
+  },
+  "admin recording": {
+    path: () => "/admin/recordings/recording",
+    page: () => import("@/pages/admin/recordings/[id].astro"),
+    user: ADMIN,
+    id: "recording",
+  },
   // In staging, where the importer works.
-  "admin data migration": { path: () => "/admin/data-migration", page: () => import("@/pages/admin/data-migration.astro"), user: ADMIN, env: { DEPLOYMENT_ENVIRONMENT: "staging" } },
-  "admin upload recording": { path: () => "/admin/recordings/upload", page: () => import("@/pages/admin/recordings/upload.astro"), user: ADMIN },
-  "admin import recordings": { path: () => "/admin/recordings/import", page: () => import("@/pages/admin/recordings/import.astro"), user: ADMIN },
-  "admin tokens": { path: () => "/admin/personal-access-tokens", page: () => import("@/pages/admin/personal-access-tokens.astro"), user: ADMIN },
+  "admin data migration": {
+    path: () => "/admin/data-migration",
+    page: () => import("@/pages/admin/data-migration.astro"),
+    user: ADMIN,
+    env: { DEPLOYMENT_ENVIRONMENT: "staging" },
+  },
+  "admin upload recording": {
+    path: () => "/admin/recordings/upload",
+    page: () => import("@/pages/admin/recordings/upload.astro"),
+    user: ADMIN,
+  },
+  "admin import recordings": {
+    path: () => "/admin/recordings/import",
+    page: () => import("@/pages/admin/recordings/import.astro"),
+    user: ADMIN,
+  },
+  "admin tokens": {
+    path: () => "/admin/personal-access-tokens",
+    page: () => import("@/pages/admin/personal-access-tokens.astro"),
+    user: ADMIN,
+  },
   // With agent sessions on, as on the previews where the page is used; production never turns them on.
-  "admin agent access": { path: () => "/admin/agent-access", page: () => import("@/pages/admin/agent-access.astro"), user: ADMIN, env: { AGENT_AUTH_ENABLED: "true" } },
+  "admin agent access": {
+    path: () => "/admin/agent-access",
+    page: () => import("@/pages/admin/agent-access.astro"),
+    user: ADMIN,
+    env: { AGENT_AUTH_ENABLED: "true" },
+  },
   // With credential storage set up, as in production.
-  "admin integrations": { path: () => "/admin/settings/integrations", page: () => import("@/pages/admin/settings/integrations.astro"), user: ADMIN, env: { CREDENTIALS_ENCRYPTION_KEY: "synthetic-key" } },
-  "admin applications": { path: () => "/admin/applications", page: () => import("@/pages/admin/applications/index.astro"), user: ADMIN },
-  "admin application": { path: () => "/admin/applications/application", page: () => import("@/pages/admin/applications/[id].astro"), user: ADMIN, id: "application" },
-  "admin profiles": { path: () => "/admin/profiles", page: () => import("@/pages/admin/profiles/index.astro"), user: ADMIN },
-  "admin profile": { path: () => "/admin/profiles/profile", page: () => import("@/pages/admin/profiles/[id].astro"), user: ADMIN, id: "profile" },
-  "admin projects": { path: () => "/admin/projects", page: () => import("@/pages/admin/projects/index.astro"), user: ADMIN },
-  "admin project": { path: () => "/admin/projects/project", page: () => import("@/pages/admin/projects/[id].astro"), user: ADMIN, id: "project" },
-  "admin access requests": { path: () => "/admin/access-requests", page: () => import("@/pages/admin/access-requests.astro"), user: ADMIN },
-  "admin curricula": { path: () => "/admin/curricula", page: () => import("@/pages/admin/curricula/index.astro"), user: ADMIN },
-  "admin curriculum": { path: () => "/admin/curricula/curriculum", page: () => import("@/pages/admin/curricula/[id].astro"), user: ADMIN, id: "curriculum" },
-  "admin new curriculum": { path: () => "/admin/curricula/new", page: () => import("@/pages/admin/curricula/new.astro"), user: ADMIN },
-  "admin feedback detail": { path: () => "/admin/feedback/feedback", page: () => import("@/pages/admin/feedback/[id].astro"), user: ADMIN, id: "feedback" },
-  "admin feedback theme": { path: () => "/admin/feedback/themes/theme", page: () => import("@/pages/admin/feedback/themes/[id].astro"), user: ADMIN, id: "theme" },
-  "admin feedback themes": { path: () => "/admin/feedback/themes", page: () => import("@/pages/admin/feedback/themes/index.astro"), user: ADMIN },
-  "admin feedback": { path: () => "/admin/feedback", page: () => import("@/pages/admin/feedback/index.astro"), user: ADMIN },
-  "admin feature flags": { path: () => "/admin/platform-flags", page: () => import("@/pages/admin/platform-flags.astro"), user: ADMIN },
-  "admin moderation": { path: () => "/admin/moderation", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
-  "admin request notes": { path: () => "/admin/moderation?tab=request-notes", page: () => import("@/pages/admin/moderation.astro"), user: ADMIN },
+  "admin integrations": {
+    path: () => "/admin/settings/integrations",
+    page: () => import("@/pages/admin/settings/integrations.astro"),
+    user: ADMIN,
+    env: { CREDENTIALS_ENCRYPTION_KEY: "synthetic-key" },
+  },
+  "admin applications": {
+    path: () => "/admin/applications",
+    page: () => import("@/pages/admin/applications/index.astro"),
+    user: ADMIN,
+  },
+  "admin application": {
+    path: () => "/admin/applications/application",
+    page: () => import("@/pages/admin/applications/[id].astro"),
+    user: ADMIN,
+    id: "application",
+  },
+  "admin profiles": {
+    path: () => "/admin/profiles",
+    page: () => import("@/pages/admin/profiles/index.astro"),
+    user: ADMIN,
+  },
+  "admin profile": {
+    path: () => "/admin/profiles/profile",
+    page: () => import("@/pages/admin/profiles/[id].astro"),
+    user: ADMIN,
+    id: "profile",
+  },
+  "admin projects": {
+    path: () => "/admin/projects",
+    page: () => import("@/pages/admin/projects/index.astro"),
+    user: ADMIN,
+  },
+  "admin project": {
+    path: () => "/admin/projects/project",
+    page: () => import("@/pages/admin/projects/[id].astro"),
+    user: ADMIN,
+    id: "project",
+  },
+  "admin access requests": {
+    path: () => "/admin/access-requests",
+    page: () => import("@/pages/admin/access-requests.astro"),
+    user: ADMIN,
+  },
+  "admin curricula": {
+    path: () => "/admin/curricula",
+    page: () => import("@/pages/admin/curricula/index.astro"),
+    user: ADMIN,
+  },
+  "admin curriculum": {
+    path: () => "/admin/curricula/curriculum",
+    page: () => import("@/pages/admin/curricula/[id].astro"),
+    user: ADMIN,
+    id: "curriculum",
+  },
+  "admin new curriculum": {
+    path: () => "/admin/curricula/new",
+    page: () => import("@/pages/admin/curricula/new.astro"),
+    user: ADMIN,
+  },
+  "admin feedback detail": {
+    path: () => "/admin/feedback/feedback",
+    page: () => import("@/pages/admin/feedback/[id].astro"),
+    user: ADMIN,
+    id: "feedback",
+  },
+  "admin feedback theme": {
+    path: () => "/admin/feedback/themes/theme",
+    page: () => import("@/pages/admin/feedback/themes/[id].astro"),
+    user: ADMIN,
+    id: "theme",
+  },
+  "admin feedback themes": {
+    path: () => "/admin/feedback/themes",
+    page: () => import("@/pages/admin/feedback/themes/index.astro"),
+    user: ADMIN,
+  },
+  "admin feedback": {
+    path: () => "/admin/feedback",
+    page: () => import("@/pages/admin/feedback/index.astro"),
+    user: ADMIN,
+  },
+  "admin feature flags": {
+    path: () => "/admin/platform-flags",
+    page: () => import("@/pages/admin/platform-flags.astro"),
+    user: ADMIN,
+  },
+  "admin moderation": {
+    path: () => "/admin/moderation",
+    page: () => import("@/pages/admin/moderation.astro"),
+    user: ADMIN,
+  },
+  "admin request notes": {
+    path: () => "/admin/moderation?tab=request-notes",
+    page: () => import("@/pages/admin/moderation.astro"),
+    user: ADMIN,
+  },
   // The frame alone: a page with no reads of its own (FramePage.astro) in each kind of space.
-  "frame only, community": { path: () => "/dashboard/community/conduct", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "conduct" } },
-  "frame only, cohort": { path: () => "/dashboard/cohort", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "cohort" } },
-  "frame only, mentoring": { path: () => "/dashboard/mentoring", page: () => import("./FramePage.astro"), user: MENTOR, props: { page: "mentoring" } },
-  "frame only, profile": { path: () => "/dashboard/me", page: () => import("./FramePage.astro"), user: STUDENT, props: { page: "profile" } },
-  "frame only, admin": { path: () => "/admin/curricula", page: () => import("./FramePage.astro"), user: ADMIN, props: { page: "adminCurricula", admin: true } },
+  "frame only, community": {
+    path: () => "/dashboard/community/conduct",
+    page: () => import("./FramePage.astro"),
+    user: STUDENT,
+    props: { page: "conduct" },
+  },
+  "frame only, cohort": {
+    path: () => "/dashboard/cohort",
+    page: () => import("./FramePage.astro"),
+    user: STUDENT,
+    props: { page: "cohort" },
+  },
+  "frame only, mentoring": {
+    path: () => "/dashboard/mentoring",
+    page: () => import("./FramePage.astro"),
+    user: MENTOR,
+    props: { page: "mentoring" },
+  },
+  "frame only, profile": {
+    path: () => "/dashboard/me",
+    page: () => import("./FramePage.astro"),
+    user: STUDENT,
+    props: { page: "profile" },
+  },
+  "frame only, admin": {
+    path: () => "/admin/curricula",
+    page: () => import("./FramePage.astro"),
+    user: ADMIN,
+    props: { page: "adminCurricula", admin: true },
+  },
 } as const;
 type PageName = keyof typeof PAGES;
 
@@ -159,26 +453,55 @@ type PageName = keyof typeof PAGES;
 async function visit(name: PageName) {
   const { db, cohortChannel } = seeded();
   const entry = PAGES[name];
-  Object.assign(mocks.env, { DB: db, DEPLOYMENT_ENVIRONMENT: "production", AGENT_AUTH_ENABLED: undefined, CREDENTIALS_ENCRYPTION_KEY: undefined, ...("env" in entry ? entry.env : {}) });
+  Object.assign(mocks.env, {
+    DB: db,
+    DEPLOYMENT_ENVIRONMENT: "production",
+    AGENT_AUTH_ENABLED: undefined,
+    CREDENTIALS_ENCRYPTION_KEY: undefined,
+    ...("env" in entry ? entry.env : {}),
+  });
   const { path, page, user: userId } = entry;
-  const user = { id: userId, name: "Synthetic", email: `${userId}@example.test`, image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
-  mocks.getSession.mockResolvedValue({ user, session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" } });
+  const user = {
+    id: userId,
+    name: "Synthetic",
+    email: `${userId}@example.test`,
+    image: null,
+    emailVerified: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+  mocks.getSession.mockResolvedValue({
+    user,
+    session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" },
+  });
   const { default: Page } = await page();
   const url = new URL(path(cohortChannel), "https://ttv.invalid");
   // As on Workers, work after the response (the router's acknowledgement of an approval) goes to
   // waitUntil, off the response's path; it settles after the trace, before the database closes.
   const deferred: Promise<unknown>[] = [];
-  const locals = { cfContext: { waitUntil: (task: Promise<unknown>) => deferred.push(task) } } as unknown as App.Locals;
+  const locals = {
+    cfContext: { waitUntil: (task: Promise<unknown>) => deferred.push(task) },
+  } as unknown as App.Locals;
   // A detail page names its record; the conversation page reads the direct channel.
   const params = { slug: cohortChannel, id: "id" in entry ? entry.id : DIRECT };
   const context = {
-    url, request: new Request(url), locals, params,
+    url,
+    request: new Request(url),
+    locals,
+    params,
     cookies: { get: () => undefined, set: () => {} },
-    redirect: (location: string, status = 302) => new Response(null, { status, headers: { location } }),
+    redirect: (location: string, status = 302) =>
+      new Response(null, { status, headers: { location } }),
   };
   const { result, summary } = await tracePerf(db, async () => {
-    const response = await onRequest(context as never, async () =>
-      container.renderToResponse(Page, { request: new Request(url), locals, params, props: "props" in entry ? entry.props : {} })) as Response;
+    const response = (await onRequest(context as never, async () =>
+      container.renderToResponse(Page, {
+        request: new Request(url),
+        locals,
+        params,
+        props: "props" in entry ? entry.props : {},
+      }),
+    )) as Response;
     return { status: response.status, body: await response.text() };
   });
   await Promise.allSettled(deferred);
@@ -322,19 +645,34 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
 };
 
 describe("D1 round trips per page (PERF-2)", () => {
-  it.each(Object.keys(PAGES) as PageName[])("%s stays within its budget", async (name) => {
-    const { status, body, summary } = await visit(name);
-    if (process.env.PERF_PRINT) {
-      console.log(`${name}: ${summary.d1} queries, depth ${summary.depth}`);
-      for (const query of summary.queries ?? []) console.log(`  ${query.depth} ${query.phase} ${query.sql.slice(0, 120)}`);
-    }
-    expect({ status, start: status === 200 ? "" : body.slice(0, 300) }).toEqual({ status: 200, start: "" });
-    expect(body).toContain("data-space");
-    // No read twice: the same statement in one request would be a duplicate round trip (PERF-2 step 6).
-    const statements = (summary.queries ?? []).map((query) => query.statement);
-    expect(statements.filter((sql, index) => statements.indexOf(sql) !== index)).toEqual([]);
-    expect({ d1: summary.d1, depth: summary.depth }).toEqual({
-      d1: Math.min(summary.d1, BUDGETS[name].d1), depth: Math.min(summary.depth, BUDGETS[name].depth),
-    });
-  }, 60_000);
+  it.each(Object.keys(PAGES) as PageName[])(
+    "%s stays within its budget",
+    async (name) => {
+      const { status, body, summary } = await visit(name);
+      if (process.env.PERF_PRINT) {
+        console.log(`${name}: ${summary.d1} queries, depth ${summary.depth}`);
+        for (const query of summary.queries ?? [])
+          console.log(
+            `  ${query.depth} ${query.phase} ${query.sql.slice(0, 120)}`,
+          );
+      }
+      expect({
+        status,
+        start: status === 200 ? "" : body.slice(0, 300),
+      }).toEqual({ status: 200, start: "" });
+      expect(body).toContain("data-space");
+      // No read twice: the same statement in one request would be a duplicate round trip (PERF-2 step 6).
+      const statements = (summary.queries ?? []).map(
+        (query) => query.statement,
+      );
+      expect(
+        statements.filter((sql, index) => statements.indexOf(sql) !== index),
+      ).toEqual([]);
+      expect({ d1: summary.d1, depth: summary.depth }).toEqual({
+        d1: Math.min(summary.d1, BUDGETS[name].d1),
+        depth: Math.min(summary.depth, BUDGETS[name].depth),
+      });
+    },
+    60_000,
+  );
 });

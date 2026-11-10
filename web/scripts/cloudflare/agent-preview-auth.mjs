@@ -63,15 +63,23 @@ function deriveSecret(secret, environmentName, context) {
 }
 
 export function requirePreviewRunId(value) {
-  if (!/^(?:github-[1-9][0-9]*-[1-9][0-9]*|local-[a-f0-9]{32})$/.test(value ?? "")) {
-    throw new Error("AGENT_PREVIEW_RUN_ID must identify a GitHub run and attempt or a fresh local 128-bit nonce.");
+  if (
+    !/^(?:github-[1-9][0-9]*-[1-9][0-9]*|local-[a-f0-9]{32})$/.test(value ?? "")
+  ) {
+    throw new Error(
+      "AGENT_PREVIEW_RUN_ID must identify a GitHub run and attempt or a fresh local 128-bit nonce.",
+    );
   }
   return value;
 }
 
 export function deriveAgentPreviewToken(secret, environmentName, runId) {
   assertPreviewSecret(secret);
-  return deriveSecret(secret, environmentName, `${PREVIEW_TOKEN_CONTEXT}:v2:${requirePreviewRunId(runId)}`);
+  return deriveSecret(
+    secret,
+    environmentName,
+    `${PREVIEW_TOKEN_CONTEXT}:v2:${requirePreviewRunId(runId)}`,
+  );
 }
 
 export function deriveAgentPreviewAuthSecret(secret, environmentName) {
@@ -91,7 +99,7 @@ export function deriveAgentPreviewPersonaToken(
   secret,
   environmentName,
   persona,
-  runId
+  runId,
 ) {
   if (!Object.hasOwn(AGENT_PREVIEW_PERSONAS, persona)) {
     throw new Error(`Unknown agent preview persona "${persona}".`);
@@ -99,7 +107,7 @@ export function deriveAgentPreviewPersonaToken(
   return deriveSecret(
     secret,
     environmentName,
-    `${PREVIEW_PERSONA_TOKEN_CONTEXT}:v2:${persona}:${requirePreviewRunId(runId)}`
+    `${PREVIEW_PERSONA_TOKEN_CONTEXT}:v2:${persona}:${requirePreviewRunId(runId)}`,
   );
 }
 
@@ -228,7 +236,7 @@ export async function seedAgentPreviewFixtures({
   const publishedAt = createdAt;
   if (Boolean(environmentName) !== Boolean(previewSecret)) {
     throw new Error(
-      "Preview fixture persona sessions require both environmentName and previewSecret."
+      "Preview fixture persona sessions require both environmentName and previewSecret.",
     );
   }
   if (environmentName) {
@@ -254,12 +262,17 @@ export async function seedAgentPreviewFixtures({
       [
         sessionId,
         createdAt + 8 * 60 * 60,
-        deriveAgentPreviewPersonaToken(previewSecret, environmentName, persona, runId),
+        deriveAgentPreviewPersonaToken(
+          previewSecret,
+          environmentName,
+          persona,
+          runId,
+        ),
         `${AGENT_PREVIEW_SESSION_MARKER}:persona`,
         userId,
         createdAt,
         createdAt,
-      ]
+      ],
     );
   }
 
@@ -543,14 +556,14 @@ export async function seedAgentPreviewFixtures({
     databaseId,
     `DELETE FROM "studentProfile"
      WHERE "userId" IN (${studentJourneyFixtures.map(() => "?").join(", ")})`,
-    studentJourneyFixtures.map((fixture) => fixture.userId)
+    studentJourneyFixtures.map((fixture) => fixture.userId),
   );
 
   await executeQuery(
     databaseId,
     `DELETE FROM "programApplication"
      WHERE "userId" IN (${studentJourneyFixtures.map(() => "?").join(", ")})`,
-    studentJourneyFixtures.map((fixture) => fixture.userId)
+    studentJourneyFixtures.map((fixture) => fixture.userId),
   );
 
   for (const fixture of studentJourneyFixtures) {
@@ -564,7 +577,7 @@ export async function seedAgentPreviewFixtures({
          "email" = excluded."email",
          "emailVerified" = 1,
          "updatedAt" = excluded."updatedAt"`,
-      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt],
     );
 
     if (fixture.applicationId && fixture.applicationStatus) {
@@ -588,7 +601,7 @@ export async function seedAgentPreviewFixtures({
           fixture.completedAt,
           createdAt,
           createdAt,
-        ]
+        ],
       );
     }
 
@@ -627,7 +640,9 @@ export async function seedAgentPreviewFixtures({
     // Converge on every seed: the per-PR database survives pushes, and what a
     // journey granted, joined, wrote or confirmed must not reach the next run.
     // Deleting a journey cascades to the confirmations others made on it.
-    const rolePersonaUserIds = rolePersonaFixtures.map((fixture) => fixture.userId);
+    const rolePersonaUserIds = rolePersonaFixtures.map(
+      (fixture) => fixture.userId,
+    );
     const placeholders = rolePersonaUserIds.map(() => "?").join(", ");
     const rolePersonaRows = [
       ["UserRoles", "userId"],
@@ -644,7 +659,7 @@ export async function seedAgentPreviewFixtures({
       await executeQuery(
         databaseId,
         `DELETE FROM "${table}" WHERE "${column}" IN (${placeholders})`,
-        rolePersonaUserIds
+        rolePersonaUserIds,
       );
     }
 
@@ -659,7 +674,7 @@ export async function seedAgentPreviewFixtures({
            "email" = excluded."email",
            "emailVerified" = 1,
            "updatedAt" = excluded."updatedAt"`,
-        [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+        [fixture.userId, fixture.name, fixture.email, createdAt, createdAt],
       );
       await executeQuery(
         databaseId,
@@ -670,7 +685,13 @@ export async function seedAgentPreviewFixtures({
            "userId" = excluded."userId",
            "roleId" = excluded."roleId",
            "updatedAt" = excluded."updatedAt"`,
-        [fixture.userRoleId, fixture.userId, fixture.role, createdAt, createdAt]
+        [
+          fixture.userRoleId,
+          fixture.userId,
+          fixture.role,
+          createdAt,
+          createdAt,
+        ],
       );
       await upsertPersonaSession(fixture);
     }
@@ -779,9 +800,15 @@ export async function seedAgentPreviewFixtures({
     ],
   );
 
-  await executeQuery(databaseId,
+  await executeQuery(
+    databaseId,
     `UPDATE studentProfile SET bio=?,opportunityGoals=? WHERE userId=?`,
-    ["Synthetic preview profile. I build booking and payment tools for community clinics.","A first full-stack developer role","ttv-fixture-user-amina"]);
+    [
+      "Synthetic preview profile. I build booking and payment tools for community clinics.",
+      "A first full-stack developer role",
+      "ttv-fixture-user-amina",
+    ],
+  );
 
   // Public-reader and moderation fixtures. The second published post is kept
   // separate from the reader assertion so the admin mutation journey can
@@ -956,11 +983,11 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","moderationOutcome","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','amina-fixture/savanna-api','https://github.com/amina-fixture/savanna-api',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','amina-fixture/savanna-api','https://github.com/amina-fixture/savanna-api',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED','pass',?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
-       "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
+       "moderationOutcome" = 'pass', "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",
@@ -989,11 +1016,11 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `INSERT INTO "communityJourney"
-      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
+      ("userId","title","evidenceUrl","occurredAt","visibility","kind","state","moderationOutcome","id", "repoFullName", "repoUrl", "description", "repoDescription", "language",
        "topics", "stars", "sortOrder", "snapshotAt", "createdAt", "updatedAt")
-     VALUES ('ttv-fixture-user-amina','amina-fixture/react-dashboard','https://github.com/amina-fixture/react-dashboard',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED',?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+     VALUES ('ttv-fixture-user-amina','amina-fixture/react-dashboard','https://github.com/amina-fixture/react-dashboard',strftime('%Y-%m-%d', ?,'unixepoch'),'institution','repo','POSTED','pass',?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
-       "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
+       "moderationOutcome" = 'pass', "title" = excluded."title", "evidenceUrl" = excluded."evidenceUrl", "occurredAt" = excluded."occurredAt", "state" = excluded."state", "repoDescription" = excluded."repoDescription",
        "repoFullName" = excluded."repoFullName",
        "repoUrl" = excluded."repoUrl",
        "description" = excluded."description",

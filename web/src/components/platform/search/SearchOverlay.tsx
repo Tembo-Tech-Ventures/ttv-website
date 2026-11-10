@@ -1,17 +1,46 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { PiChatCircleText, PiFolderSimple, PiMagnifyingGlass, PiSparkle, PiVideoCamera, PiX } from "react-icons/pi";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import {
+  PiChatCircleText,
+  PiFolderSimple,
+  PiMagnifyingGlass,
+  PiSparkle,
+  PiVideoCamera,
+  PiX,
+} from "react-icons/pi";
 import type { Me } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { createAnnouncer } from "@/lib/platform/client/announcer";
-import { createSearchStore, SEARCH_GROUPS, useSearch, type SearchItem } from "@/lib/platform/client/search";
-import { Avatar, Button, ButtonLink, Pill, SpaceGlyph } from "@/components/platform/ui";
+import {
+  createSearchStore,
+  SEARCH_GROUPS,
+  useSearch,
+  type SearchItem,
+} from "@/lib/platform/client/search";
+import {
+  Avatar,
+  Button,
+  ButtonLink,
+  Pill,
+  SpaceGlyph,
+} from "@/components/platform/ui";
 import { onShellOverlay } from "@/components/platform/shell/overlays";
 import MaskedText from "@/components/channels/MaskedText";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
 import { signInHref } from "@/components/platform/overlays/sign-in";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { askTemboHref } from "./ask-handoff";
-import { clearRecentSearches, onShellSignOut, recentSearchKey } from "./recent-searches";
+import {
+  clearRecentSearches,
+  onShellSignOut,
+  recentSearchKey,
+} from "./recent-searches";
 import {
   GROUP_LABEL,
   highlight,
@@ -66,7 +95,14 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
       const mentor = person.roleBadges.some((badge) => badge.kind === "MENTOR");
       return (
         <>
-          <Avatar id={person.id} name={person.name} src={person.avatarUrl ?? undefined} size="lg" mentor={mentor} decorative />
+          <Avatar
+            id={person.id}
+            name={person.name}
+            src={person.avatarUrl ?? undefined}
+            size="lg"
+            mentor={mentor}
+            decorative
+          />
           <span className="search-option__body">
             <span className="search-option__title">
               <Marked text={person.name} query={query} />
@@ -77,7 +113,10 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
               </span>
             )}
             <Why entry={entry} query={query} />
-            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
+            <span className="search-option__meta">
+              {visibility.label}
+              {!entry.item.href && " · on TTV"}
+            </span>
           </span>
         </>
       );
@@ -103,7 +142,10 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
               )}
             </span>
             <Why entry={entry} query={query} />
-            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
+            <span className="search-option__meta">
+              {visibility.label}
+              {!entry.item.href && " · on TTV"}
+            </span>
           </span>
         </>
       );
@@ -122,7 +164,10 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
             <span className="search-option__text">
               “<Marked text={quote} query={query} />”
             </span>
-            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
+            <span className="search-option__meta">
+              {visibility.label}
+              {!entry.item.href && " · on TTV"}
+            </span>
           </span>
         </>
       );
@@ -137,9 +182,18 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
           <span className="search-option__body">
             <span className="search-option__title">{author.name}</span>
             <span className="search-option__text">
-              “<MaskedText text={excerpt} asNote={false} render={(words) => <Marked text={words} query={query} />} />”
+              “
+              <MaskedText
+                text={excerpt}
+                asNote={false}
+                render={(words) => <Marked text={words} query={query} />}
+              />
+              ”
             </span>
-            <span className="search-option__meta">{visibility.label}{!entry.item.href && " · on TTV"}</span>
+            <span className="search-option__meta">
+              {visibility.label}
+              {!entry.item.href && " · on TTV"}
+            </span>
           </span>
         </>
       );
@@ -151,7 +205,15 @@ type Store = ReturnType<typeof createSearchStore>;
 type State = ReturnType<Store["getState"]>;
 
 /** Searches this person opened results from, to run again. */
-function RecentSearches({ store, recent, onPick }: { store: Store; recent: readonly string[]; onPick: (query: string) => void }) {
+function RecentSearches({
+  store,
+  recent,
+  onPick,
+}: {
+  store: Store;
+  recent: readonly string[];
+  onPick: (query: string) => void;
+}) {
   return (
     <div className="search-recent" data-search-recent>
       <div className="search-recent__head">
@@ -163,7 +225,12 @@ function RecentSearches({ store, recent, onPick }: { store: Store; recent: reado
       <ul className="search-recent__list">
         {recent.map((query) => (
           <li key={query}>
-            <Button variant="ghost" icon={<PiMagnifyingGlass className="size-4 text-ink-muted" />} onClick={() => onPick(query)} className="search-recent__item">
+            <Button
+              variant="ghost"
+              icon={<PiMagnifyingGlass className="size-4 text-ink-muted" />}
+              onClick={() => onPick(query)}
+              className="search-recent__item"
+            >
               <span className="truncate">{query}</span>
             </Button>
           </li>
@@ -210,20 +277,31 @@ type ResultsProps = {
 function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
   const shown = state.status === "ready" && state.items.length > 0;
   const query = state.results?.query.q ?? state.q.trim();
-  const groups = SEARCH_GROUPS
-    .map((group) => ({
-      group,
-      entries: state.items.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.group === group),
-    }))
-    .filter(({ entries }) => entries.length > 0);
+  const groups = SEARCH_GROUPS.map((group) => ({
+    group,
+    entries: state.items
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry.group === group),
+  })).filter(({ entries }) => entries.length > 0);
 
   return (
-    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a combobox's popup: a native select cannot hold rich, grouped results
-    <div id={listboxId} role="listbox" aria-label="Results" hidden={!shown} className="search-results">
+    <div
+      id={listboxId}
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- combobox popup with rich results
+      role="listbox"
+      aria-label="Results"
+      hidden={!shown}
+      className="search-results"
+    >
       {shown &&
         groups.map(({ group, entries }) => (
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- an ARIA group of options inside the listbox; fieldset is not allowed there
-          <div key={group} role="group" aria-label={GROUP_LABEL[group]} className="search-group">
+          <div
+            key={group}
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- option group inside a combobox
+            role="group"
+            aria-label={GROUP_LABEL[group]}
+            className="search-group"
+          >
             <div aria-hidden="true" className="search-group__label">
               {GROUP_LABEL[group]}
             </div>
@@ -237,7 +315,9 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
                 role="option"
                 aria-selected={state.selected === index}
                 data-search-option={entry.group}
-                onClick={() => { if (entry.item.href) onOpen(index); }}
+                onClick={() => {
+                  if (entry.item.href) onOpen(index);
+                }}
                 className="search-option"
               >
                 <Option entry={entry} query={query} />
@@ -255,12 +335,34 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
 }
 
 /** Everything under the scopes: recent searches, progress, problems, nothing found, or the answers. */
-function Body({ store, state, coverage, listboxId, optionId, onOpen, onPick }: ResultsProps & { store: Store; coverage: string; onPick: (query: string) => void }) {
+function Body({
+  store,
+  state,
+  coverage,
+  listboxId,
+  optionId,
+  onOpen,
+  onPick,
+}: ResultsProps & {
+  store: Store;
+  coverage: string;
+  onPick: (query: string) => void;
+}) {
   const query = state.q.trim();
   const busy = state.status === "debouncing" || state.status === "loading";
   return (
-    <div className="search-overlay__results" aria-busy={busy || undefined} data-search-status={state.status}>
-      {!query && state.recentQueries.length > 0 && <RecentSearches store={store} recent={state.recentQueries} onPick={onPick} />}
+    <div
+      className="search-overlay__results"
+      aria-busy={busy || undefined}
+      data-search-status={state.status}
+    >
+      {!query && state.recentQueries.length > 0 && (
+        <RecentSearches
+          store={store}
+          recent={state.recentQueries}
+          onPick={onPick}
+        />
+      )}
       {!query && state.recentQueries.length === 0 && (
         <p className="search-overlay__status">Find {coverage}.</p>
       )}
@@ -272,10 +374,16 @@ function Body({ store, state, coverage, listboxId, optionId, onOpen, onPick }: R
       <ProblemNote store={store} state={state} />
       {state.status === "ready" && state.items.length === 0 && (
         <p className="search-overlay__status" data-search-empty>
-          Nothing matches “{state.results?.query.q ?? query}”{state.scope === "all" ? "." : " here."}
+          Nothing matches “{state.results?.query.q ?? query}”
+          {state.scope === "all" ? "." : " here."}
         </p>
       )}
-      <Results state={state} listboxId={listboxId} optionId={optionId} onOpen={onOpen} />
+      <Results
+        state={state}
+        listboxId={listboxId}
+        optionId={optionId}
+        onOpen={onOpen}
+      />
     </div>
   );
 }
@@ -297,7 +405,11 @@ type SearchOverlayProps = {
  * one of its results. "Ask Tembo" hands the words to the cohort assistant's
  * composer, unsent.
  */
-export default function SearchOverlay({ me, cohortLabel = null, client }: SearchOverlayProps) {
+export default function SearchOverlay({
+  me,
+  cohortLabel = null,
+  client,
+}: SearchOverlayProps) {
   const recentKey = recentSearchKey(me.user.id);
   const [store] = useState(() =>
     createSearchStore({
@@ -306,7 +418,9 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
       recentStorageKey: recentKey,
     }),
   );
-  const [announcer] = useState(() => createAnnouncer({ throttleMs: 600, dedupeMs: 3_000 }));
+  const [announcer] = useState(() =>
+    createAnnouncer({ throttleMs: 600, dedupeMs: 3_000 }),
+  );
   const state = useSearch(store);
   const dialog = useModalDialog(() => store.setOpen(false));
   const { show } = dialog;
@@ -352,7 +466,11 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
     let answer = 0;
     return store.subscribe(() => {
       const next = store.getState();
-      if (next.status !== previous && next.open && (next.status === "ready" || next.status === "error")) {
+      if (
+        next.status !== previous &&
+        next.open &&
+        (next.status === "ready" || next.status === "error")
+      ) {
         const count = next.items.length;
         const message =
           next.status === "error"
@@ -360,7 +478,11 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
             : count === 0
               ? "No results"
               : `${count} result${count === 1 ? "" : "s"}`;
-        announcer.announce(message, next.status === "error" ? "assertive" : "polite", `answer:${++answer}`);
+        announcer.announce(
+          message,
+          next.status === "error" ? "assertive" : "polite",
+          `answer:${++answer}`,
+        );
       }
       previous = next.status;
     });
@@ -368,7 +490,10 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
 
   /* Keep the chosen result in view as the arrows move through a long list. */
   useEffect(() => {
-    if (state.selected >= 0) document.getElementById(`${listboxId}-option-${state.selected}`)?.scrollIntoView({ block: "nearest" });
+    if (state.selected >= 0)
+      document
+        .getElementById(`${listboxId}-option-${state.selected}`)
+        ?.scrollIntoView({ block: "nearest" });
   }, [state.selected, listboxId]);
 
   function open(index: number) {
@@ -388,7 +513,8 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
       store.key(event.key);
     } else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      if (state.status === "ready" && state.items.length > 0) open(Math.max(0, state.selected));
+      if (state.status === "ready" && state.items.length > 0)
+        open(Math.max(0, state.selected));
     }
   }
 
@@ -399,14 +525,23 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
 
   return (
     <>
-      <dialog {...dialog.props} aria-labelledby={titleId} className="search-overlay" data-search-overlay data-ready={ready || undefined}>
+      <dialog
+        {...dialog.props}
+        aria-labelledby={titleId}
+        className="search-overlay"
+        data-search-overlay
+        data-ready={ready || undefined}
+      >
         <div className="search-overlay__sheet">
           <h2 id={titleId} className="sr-only">
             Search
           </h2>
           <div className="search-overlay__top">
             <div className="search-overlay__field">
-              <PiMagnifyingGlass aria-hidden="true" className="size-6 shrink-0 text-ink-secondary" />
+              <PiMagnifyingGlass
+                aria-hidden="true"
+                className="size-6 shrink-0 text-ink-secondary"
+              />
               <input
                 ref={input}
                 type="search"
@@ -415,7 +550,11 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
                 aria-expanded={shown}
                 aria-controls={listboxId}
                 aria-autocomplete="list"
-                aria-activedescendant={shown && state.selected >= 0 ? optionId(state.selected) : undefined}
+                aria-activedescendant={
+                  shown && state.selected >= 0
+                    ? optionId(state.selected)
+                    : undefined
+                }
                 autoComplete="off"
                 spellCheck={false}
                 enterKeyHint="search"
@@ -442,10 +581,18 @@ export default function SearchOverlay({ me, cohortLabel = null, client }: Search
             <fieldset className="search-scopes">
               <legend className="sr-only">Search in</legend>
               {scopesFor(me, cohortLabel).map(({ scope, label, glyph }) => (
-                <Pill key={scope} pressed={state.scope === scope} data-search-scope={scope} onClick={() => store.setScope(scope)}>
+                <Pill
+                  key={scope}
+                  pressed={state.scope === scope}
+                  data-search-scope={scope}
+                  onClick={() => store.setScope(scope)}
+                >
                   {glyph && (
                     <span aria-hidden="true" className="inline-flex">
-                      <SpaceGlyph space={glyph} person={{ id: me.user.id, name: me.user.name }} />
+                      <SpaceGlyph
+                        space={glyph}
+                        person={{ id: me.user.id, name: me.user.name }}
+                      />
                     </span>
                   )}
                   {label}

@@ -1,4 +1,5 @@
 ---
+import { parseTopicsJson } from "@/lib/talent/profile";
 import { reviewWork, listWorkReviews } from "@/lib/members/moderation";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
@@ -85,12 +86,14 @@ if (Astro.request.method === "POST") {
 const statusFilter = parseProfileStatus(Astro.url.searchParams.get("status"));
 const page = parsePage(Astro.url.searchParams.get("page"));
 const flash = takeFlash(Astro);
-const [workReview, { rows, total, review }, spaces] = await Promise.all([
-  listWorkReviews(env.DB),
+const [workRows, { rows, total, review }, spaces] = await Promise.all([
+  listWorkReviews(env.DB, "all"),
   readProfilesPage(db, { status: statusFilter, page }),
   resolveSpacePage(Astro.locals, "adminProfiles"),
 ]);
 
+const workReview = workRows.filter(w => !w.moderatorHidden);
+const hiddenWork = workRows.filter(w => w.moderatorHidden);
 const lastPage = lastPageOf(total);
 const statusLabel = (status: ProfileStatus) => statusTone("profile", status).label;
 const filterName = statusFilter ? statusLabel(statusFilter).toLowerCase() : null;
@@ -112,9 +115,9 @@ const reviewSections = [
   },
   {
     id: "unavailable",
-    title: "Published while the check was unavailable",
-    description: "These went live without a check. Read each one, then clear the flag or unpublish it.",
-    empty: "Nothing published without a check.",
+    title: "Profiles awaiting a completed check",
+    description: "These saved profiles need review. Read each one, then clear the flag or hide it.",
+    empty: "No profiles are awaiting a check.",
     profiles: review.unavailable,
   },
 ];
@@ -129,25 +132,25 @@ const title = page === 1 ? caption : `${caption}, page ${page}`;
     {flash && <Notice tone={flash.tone} title={flash.title}>{flash.message}</Notice>}
     {actionError && <Notice tone="danger" focusOnLoad title="Nothing changed">{actionError}</Notice>}
 
-    <Card as="section" aria-labelledby="work-review-heading" className="flex flex-col gap-4">
-      <h2 id="work-review-heading" class="text-lg">Work awaiting a human review</h2>
-      {workReview.map(work => <article>
+    {[{title:"Work awaiting a human review", items:workReview}, {title:"Work hidden by a moderator", items:hiddenWork}].map(section => <Card as="section" aria-label={section.title} className="flex flex-col gap-4">
+      <h2 class="text-lg">{section.title}</h2>
+      {section.items.map(work => <article>
         <h3 class="text-base">{work.title}</h3>
         <p>By {work.authorName}</p>
         <p>{work.description}</p>
         {work.blurb && work.blurb !== work.description && <p>{work.blurb}</p>}
-        {work.topics && <p>Topics: {work.topics}</p>}
-        <p>{work.moderationOutcome === "hold" ? "Hidden from other readers until reviewed." : "Posted while the content check was unavailable."}</p>
+        {work.topics && <p>Topics: {parseTopicsJson(work.topics).join(", ")}</p>}
+        <p>{work.moderatorHidden ? "A moderator took this down." : work.moderationOutcome === "hold" ? "Hidden from other readers until reviewed." : "Posted work awaiting a completed content check."}</p>
         <form method="POST" action={here} class="flex flex-wrap gap-2">
           <input type="hidden" name="form" value="work" />
           <input type="hidden" name="workId" value={work.id} />
           <input type="hidden" name="revision" value={String(work.version)} />
           <Button type="submit" name="decision" value="keep">Keep posted</Button>
-          <Button type="submit" name="decision" value="hide" variant="quiet">Make a private draft</Button>
+          <Button type="submit" name="decision" value="hide" variant="quiet">Take down</Button>
         </form>
       </article>)}
-      {workReview.length === 0 && <p>No work is waiting for review.</p>}
-    </Card>
+      {section.items.length === 0 && <p>No work in this list.</p>}
+    </Card>)}
 
     {
       reviewSections.map((section) => (

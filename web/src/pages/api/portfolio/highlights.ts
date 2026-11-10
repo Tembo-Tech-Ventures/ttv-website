@@ -127,7 +127,12 @@ async function persistHighlights(
   highlights: readonly ProfileHighlightValues[],
   repostSelectedDrafts = false,
 ): Promise<Response | null> {
-  const result = await replaceProfileHighlights(db, profile, highlights,repostSelectedDrafts);
+  const result = await replaceProfileHighlights(
+    db,
+    profile,
+    highlights,
+    repostSelectedDrafts,
+  );
 
   if (result.outcome === "suspended") {
     return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
@@ -143,6 +148,7 @@ async function persistHighlights(
   }
   if (highlights.length === 0) return null;
   const revisions = result.outcome === "saved" ? result.revisions : [];
+  if (revisions.length === 0) return null;
   const moderation = await moderateHighlights(
     request,
     sessionUserAgent,

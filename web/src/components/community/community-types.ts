@@ -1,3 +1,4 @@
+import type { WorkKind } from "@/lib/platform/contracts";
 /**
  * The shapes the community client (community-client.ts) reads and sends, kept apart from any view so the
  * server pages that use the client (Community home, Discover, Confirm work) carry no island with them.
@@ -12,7 +13,7 @@ export interface EditableCommunityProfile {
 }
 
 export interface WorkIdentity {
-  kind: import("@/lib/platform/contracts").WorkKind;
+  kind: WorkKind;
   repoFullName: string | null;
 }
 

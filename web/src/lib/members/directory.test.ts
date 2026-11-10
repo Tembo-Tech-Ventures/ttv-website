@@ -150,15 +150,11 @@ describe("directory eligibility and bounded reads", () => {
       }),
     );
   });
-  it("uses the same list for admins and ordinary signed-in callers", async () => {
+  it("hides held profiles from their owner and other signed-in callers", async () => {
     const { db } = world();
-    expect(await listMembers(db, { ...caller })).toEqual(
-      await listMembers(db, caller),
-    );
     expect(await readMember(db, caller, "member-01")).toBeNull();
     expect(await readMember(db, caller, "unknown")).toBeNull();
     expect(await readMember(db, { id: "member-01" }, "member-01")).toBeNull();
-    expect(await readMember(db, { ...caller }, "member-01")).toBeNull();
   });
   it("hides held work and drafts from other readers, and marks current confirmations", async () => {
     const { db } = world();

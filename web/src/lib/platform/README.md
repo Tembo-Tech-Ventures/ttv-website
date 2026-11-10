@@ -2,6 +2,17 @@
 
 See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
 
+Astra owns `contracts.ts`. Each exported Zod 4 schema has an inferred TypeScript
+type with the same PascalCase name. `ROUTES` uses camelCase keys and preserves
+the shared `RouteDef<P, Q, B, R>` / `defineRoute` structure. These files install
+no handlers, migrations, feature flags or runtime consumers.
+
+Propose changes by publishing **`contract-request <proposal>`** on SAM channel
+**`feature.platform-spaces`**. Agree the shape with the coordinator and affected
+lanes before Astra lands a small contract PR. Fixtures are **append-only** for
+all lanes: add a named scenario; do not rewrite an existing fixture to suit a
+new screen or test.
+
 ## Wire rules
 
 - Resource ids are opaque strings of 1–255 characters. Better Auth, imported
@@ -73,7 +84,7 @@ See [member visibility and work storage](../members/README.md) for the shared re
 - Onboarding (library `/reports/platform-onboarding-2026-11-01/SPEC.md` §5):
   intents choose routing and copy only and never reach `capabilitiesFor()`.
   `EXPLORING` stands alone; inferred intents are computed, never written.
-  Mentor and institution access are *access requests* (not `MentorRequest`,
+  Mentor and institution access are _access requests_ (not `MentorRequest`,
   which asks a mentor for time). Requester-facing shapes (`AccessRequestSummary`,
   `OnboardingState`, `access_decided` attention) never identify the deciding
   administrator: `decidedBy` exists only on `AdminAccessRequest`, and

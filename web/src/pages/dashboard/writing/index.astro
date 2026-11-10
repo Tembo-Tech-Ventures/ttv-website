@@ -103,7 +103,7 @@ const detail = (post: (typeof posts)[number]) =>
                       )}
                     </div>
                     <div class="flex shrink-0 items-center gap-3">
-                      <StatusChip domain="profile" status={post.status} />
+                      <StatusChip domain="post" status={post.status} />
                       <RowAction href={`${base}/${post.id}`} row={title}>{post.status === "DRAFT" ? "Edit" : "Open"}</RowAction>
                     </div>
                   </div>

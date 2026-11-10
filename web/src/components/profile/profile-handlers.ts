@@ -1,16 +1,12 @@
 import {
   pendingProfileModeration,
   checkedModerationColumns,
-  workModerationHighlights,
+  profileModerationState,
 } from "@/lib/members/moderation-state";
 import { and, eq, exists, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import { parseSkillsJson } from "@/lib/talent/profile";
-import {
-  profileModerationMessages,
-  type ProfileModerationState,
-} from "@/lib/moderation/clef";
+import { profileModerationMessages } from "@/lib/moderation/clef";
 import { publishesAfterModeration } from "@/lib/talent/profile-moderation";
 import {
   PROFILE_CHANGED_MESSAGE,
@@ -109,6 +105,8 @@ export async function saveProfileIdentity(
       user: { columns: { name: true, image: true } },
       work: {
         columns: {
+          title: true,
+          repoDescription: true,
           repoFullName: true,
           description: true,
           blurb: true,
@@ -137,19 +135,19 @@ export async function saveProfileIdentity(
 
   const proposedName = input.name ?? profile.publicName ?? profile.user.name;
   const proposedAvatarUrl = input.avatarUrl ?? profile.publicAvatarUrl;
-  const moderationState: ProfileModerationState = {
+  if (
+    proposedName === (profile.publicName ?? profile.user.name) &&
+    proposedAvatarUrl === profile.publicAvatarUrl
+  ) {
+    await db
+      .update(schema.user)
+      .set(userIdentityValues(input))
+      .where(eq(schema.user.id, userId));
+    return { success: true };
+  }
+  const moderationState = profileModerationState(profile, {
     displayName: proposedName,
-    handle: profile.handle,
-    headline: profile.headline,
-    bio: [profile.bio, profile.opportunityGoals].filter(Boolean).join("\n"),
-    location: profile.location,
-    country: profile.country,
-    skills: parseSkillsJson(profile.skills),
-    githubLogin: profile.githubLogin,
-    portfolioUrl: profile.portfolioUrl,
-    linkedinUrl: profile.linkedinUrl,
-    highlights: workModerationHighlights(profile.work),
-  };
+  });
   const saveTextFirst = profile.status === "DRAFT";
   // Saved profiles are visible to members. Save text first, then check
   // the exact new revision. Keep the previous safe avatar until its check ends.
@@ -195,21 +193,6 @@ export async function saveProfileIdentity(
       }
     : moderationValues;
   if (!publishesAfterModeration(moderation)) {
-    const updateResult = await db
-      .update(schema.studentProfile)
-      .set({
-        ...profileValues,
-        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-      })
-      .where(
-        and(
-          eq(schema.studentProfile.id, profile.id),
-          eq(schema.studentProfile.userId, userId),
-          eq(schema.studentProfile.status, "PUBLISHED"),
-          eq(schema.studentProfile.contentVersion, profile.contentVersion),
-        ),
-      );
-    if (!updateResult.meta.changes) return changedDuringCheck();
     return {
       success: false,
       error: "Your changes need attention before they can go live.",

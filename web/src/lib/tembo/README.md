@@ -2,6 +2,24 @@
 
 See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
 
+Tembo answers questions inside channels (B-3.1). Shipped dark behind the
+`tembo_channels` flag; every route also needs `channels`. Plan: SAM idea
+01M68GQAP1DCSVMRJMZS771ZRB, §3 "Tembo in channels". Wire contracts:
+`TemboAsk`, `TemboResponse`, `TemboFeedback`, `TemboUsage` and `Citation` in
+`src/lib/platform/contracts.ts`. Migration `0035_tembo.sql`.
+
+The private Ask Tembo page (`/api/chat`, B-3.2) is the same assistant, named
+"Ask Tembo privately" apart from a channel's "Ask Tembo here" button, which
+posts for the channel (QA3-03): `private-ask.ts` builds its prompt, and its
+scope comes from `capabilitiesFor` once, like channel access: the sessions of
+the person's cohorts (`cohortIds`), every cohort's for staff, or none yet. The
+prompt says which, so Tembo can say what it cannot see, and the page says it too
+(`PRIVATE_ASK_SEES`, `src/components/chat/AboutAskTembo.tsx`), with who can see
+a conversation, that conversations are kept with the account with no deleting
+yet, and that its requests go through the AI Gateway without opting out of its
+logs (unlike channel Tembo's `collectLog: false`). The `/api/chat` contract is
+unchanged.
+
 ## Routes
 
 `src/lib/channels/http.ts` serves both, with every rule of the channel APIs
@@ -12,10 +30,10 @@ writes; a `channels:write` personal access token acts as its (admin) owner and
 a `channels:read` one is 403; agent sessions act as their person. Restricted
 staging identities cannot reach either (they never post).
 
-| Route | Does |
-|---|---|
-| `POST /api/channels/:id/tembo` `{ messageId }` | Ask about one of your own messages in this channel. 202 `pending` (the answer follows after the response), then 200 `answer` with the posted message once it exists |
-| `POST /api/messages/:id/tembo-feedback` `{ feedback }` | "helpful" or "not_quite" on a Tembo answer you can see; one per person and answer, the latest kept |
+| Route                                                  | Does                                                                                                                                                                |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/channels/:id/tembo` `{ messageId }`         | Ask about one of your own messages in this channel. 202 `pending` (the answer follows after the response), then 200 `answer` with the posted message once it exists |
+| `POST /api/messages/:id/tembo-feedback` `{ feedback }` | "helpful" or "not_quite" on a Tembo answer you can see; one per person and answer, the latest kept                                                                  |
 
 A post that mentions `@tembo` (`mention.ts`: the word on its own, not
 `name@tembo.org`, `@tembotech` or `@tembo.co`) asks exactly as the route
@@ -84,11 +102,11 @@ The **channel alone** decides, never the asker: the answer is posted where
 every reader of the channel sees it, so an admin asking in a cohort channel
 reaches no more than its members.
 
-| Channel | Tools | Sources |
-|---|---|---|
-| COHORT | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages |
-| COMMUNITY | `search_projects`, `search_channel` | Eligible saved member profiles and their posted, unheld work; projects their owners shared in this channel, as shared there and while still shared; this channel's messages. Never recordings |
-| DIRECT | `search_channel` | This conversation only, and only when someone in it asks |
+| Channel   | Tools                               | Sources                                                                                                                                                                                                                               |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| COHORT    | `search_sessions`, `search_channel` | That program's complete session transcripts (its newest 60 sessions), and this channel's messages                                                                                                                                     |
+| COMMUNITY | `search_projects`, `search_channel` | Public builder profiles (the /talent rule: published, after a completed cohort) and their highlights; projects their owners shared in this channel, as shared there and while still shared; this channel's messages. Never recordings |
+| DIRECT    | `search_channel`                    | This conversation only, and only when someone in it asks                                                                                                                                                                              |
 
 Messages are read as a reader without privileges reads them: a person's (never
 Tembo's own), neither deleted nor hidden, not a reply under a hidden message,
@@ -96,8 +114,7 @@ and with contact details masked wherever a flag masks them
 (`bodyForReader(…, false)`, `src/lib/channels/moderation/mask.ts`), so Tembo
 never sees a masked span. A search hit that matched only inside a masked span is
 dropped. Nothing reads staff notes, feedback, applications, moderation events
-or evidence, private chats, other channels, or posted projects
-nobody shared here. With the question come the thread so far (its root and
+or evidence, private chats or messages from other channels. With the question come the thread so far (its root and
 latest replies) or, for a root message, the channel's latest messages.
 
 **A question is never evidence (QA3-01).** `search_channel` leaves out the
@@ -153,7 +170,7 @@ it can see there. Kept tags become `[1]`, `[2]`, … in order of first use, righ
 after the sentence they support, and the matching `Citation`s are stored with
 the message (the card links each `[n]` to `citations[n - 1]` and numbers its
 chips to match, QA3-02): `message`, `sessionClip`,
-`project` or `profile` (an eligible public `/talent/<handle>` page, or a text citation for a member without a public page, via `memberProfileHref`). Answers stop at
+`project` or `profile` (a signed-in member profile). Answers stop at
 2,000 characters, at a whole sentence.
 
 ### Posting

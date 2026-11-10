@@ -16,7 +16,9 @@ const profile: CommunityProfile = {
   goal: "",
   skills: [],
   claims: [
-    { kind:"contribution" as const, repoFullName:null,
+    {
+      kind: "contribution" as const,
+      repoFullName: null,
       id: "entry",
       version: 3,
       title: "Library",

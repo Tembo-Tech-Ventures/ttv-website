@@ -3,6 +3,7 @@ import { and, eq, sql, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import type { ProfileModerationState } from "@/lib/moderation/clef";
+import { profileModerationState } from "@/lib/members/moderation-state";
 import { parseTopicsJson } from "@/lib/talent/profile";
 
 export interface ProfileHighlightValues {
@@ -48,17 +49,8 @@ export function profileStateWithHighlights(
   skills: string[],
   highlights: readonly ProfileHighlightValues[],
 ): ProfileModerationState {
-  return {
-    displayName: profile.publicName ?? profile.user.name,
-    handle: profile.handle,
-    headline: profile.headline,
-    bio: profile.bio,
-    location: profile.location,
-    country: profile.country,
+  return profileModerationState(profile, {
     skills,
-    githubLogin: profile.githubLogin,
-    portfolioUrl: profile.portfolioUrl,
-    linkedinUrl: profile.linkedinUrl,
     highlights: highlights.map(
       ({ repoFullName, description, blurb, language, topics }) => ({
         repoFullName,
@@ -68,7 +60,7 @@ export function profileStateWithHighlights(
         topics: parseTopicsJson(topics),
       }),
     ),
-  };
+  });
 }
 
 function epochSeconds(value: Date | null): number | null {
@@ -96,7 +88,7 @@ export async function replaceProfileHighlights(
   const selected = JSON.stringify(highlights.map((h) => h.repoFullName));
   const retire = db
     .update(schema.communityJourney)
-    .set({ state: "DRAFT" })
+    .set({ state: "DRAFT", moderationReviewRequired: false })
     .where(
       and(
         eq(schema.communityJourney.userId, profile.userId),
@@ -116,9 +108,18 @@ export async function replaceProfileHighlights(
       evidenceUrl=excluded.evidenceUrl,occurredAt=excluded.occurredAt,state=CASE WHEN ${Number(repostSelectedDrafts)}=1 AND communityJourney.moderatorHidden=0 THEN 'POSTED' ELSE communityJourney.state END,repoUrl=excluded.repoUrl,
       repoDescription=excluded.repoDescription,language=excluded.language,topics=excluded.topics,stars=excluded.stars,
       pushedAt=excluded.pushedAt,blurb=excluded.blurb,sortOrder=excluded.sortOrder,snapshotAt=excluded.snapshotAt,
-      moderationOutcome=CASE WHEN communityJourney.moderationOutcome='hold' THEN 'hold' ELSE NULL END,moderationFlags=excluded.moderationFlags,
-      moderationScores=excluded.moderationScores,moderationCheckedAt=excluded.moderationCheckedAt,
-      moderationReviewRequired=excluded.moderationReviewRequired,version=communityJourney.version+CASE WHEN
+      moderationOutcome=CASE WHEN (communityJourney.title IS NOT excluded.title OR communityJourney.description IS NOT excluded.description OR
+        communityJourney.evidenceUrl IS NOT excluded.evidenceUrl OR communityJourney.repoDescription IS NOT excluded.repoDescription OR
+        communityJourney.language IS NOT excluded.language OR communityJourney.topics IS NOT excluded.topics OR
+        communityJourney.blurb IS NOT excluded.blurb) AND communityJourney.moderationOutcome IS NOT 'hold' THEN NULL ELSE communityJourney.moderationOutcome END,
+      moderationCheckedAt=CASE WHEN (communityJourney.title IS NOT excluded.title OR communityJourney.description IS NOT excluded.description OR
+        communityJourney.evidenceUrl IS NOT excluded.evidenceUrl OR communityJourney.repoDescription IS NOT excluded.repoDescription OR
+        communityJourney.language IS NOT excluded.language OR communityJourney.topics IS NOT excluded.topics OR
+        communityJourney.blurb IS NOT excluded.blurb) THEN NULL ELSE communityJourney.moderationCheckedAt END,
+      moderationReviewRequired=CASE WHEN communityJourney.moderatorHidden=1 OR (${Number(repostSelectedDrafts)}=0 AND communityJourney.state='DRAFT') THEN 0 WHEN (communityJourney.title IS NOT excluded.title OR communityJourney.description IS NOT excluded.description OR
+        communityJourney.evidenceUrl IS NOT excluded.evidenceUrl OR communityJourney.repoDescription IS NOT excluded.repoDescription OR
+        communityJourney.language IS NOT excluded.language OR communityJourney.topics IS NOT excluded.topics OR
+        communityJourney.blurb IS NOT excluded.blurb) OR communityJourney.moderationCheckedAt IS NULL OR communityJourney.moderationOutcome IN ('hold','error') THEN 1 ELSE communityJourney.moderationReviewRequired END,version=communityJourney.version+CASE WHEN
         communityJourney.title IS NOT excluded.title OR communityJourney.description IS NOT excluded.description OR
         communityJourney.evidenceUrl IS NOT excluded.evidenceUrl OR communityJourney.repoDescription IS NOT excluded.repoDescription OR
         communityJourney.language IS NOT excluded.language OR communityJourney.topics IS NOT excluded.topics OR
@@ -140,6 +141,7 @@ export async function replaceProfileHighlights(
         eq(schema.communityJourney.userId, profile.userId),
         eq(schema.communityJourney.state, "POSTED"),
         eq(schema.communityJourney.moderatorHidden, false),
+        sql`${schema.communityJourney.moderationCheckedAt} IS NULL`,
         inArray(
           schema.communityJourney.repoFullName,
           highlights.map((h) => h.repoFullName),

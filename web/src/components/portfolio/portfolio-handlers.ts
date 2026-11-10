@@ -1,7 +1,7 @@
 import {
   pendingProfileModeration,
   checkedModerationColumns,
-  workModerationHighlights,
+  profileModerationState,
 } from "@/lib/members/moderation-state";
 import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { and, eq, sql } from "drizzle-orm";
@@ -12,11 +12,7 @@ import {
   validateHandle,
   type HandleValidationError,
 } from "@/lib/talent/handles";
-import {
-  parseSkillsJson,
-  profileEditorSchema,
-  serializeSkills,
-} from "@/lib/talent/profile";
+import { profileEditorSchema, serializeSkills } from "@/lib/talent/profile";
 import {
   profileModerationMessages,
   type ProfileModerationResult,
@@ -81,7 +77,7 @@ interface ProfileValues {
   linkedinUrl: string | null;
 }
 
-interface CurrentProfile {
+interface CurrentProfile extends Partial<ProfileValues> {
   handle: string;
   publishedAt: Date | null;
   status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
@@ -196,19 +192,10 @@ async function savePublishedProfileEdit(
   current: CurrentProfile,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
-  const moderationState: ProfileModerationState = {
-    displayName: current.publicName ?? current.user.name,
-    handle: values.handle,
-    headline: values.headline,
-    bio: `${values.bio ?? ""}\n${values.opportunityGoals ?? ""}`,
-    location: values.location,
-    country: values.country,
-    skills,
-    githubLogin: current.githubLogin,
-    portfolioUrl: values.portfolioUrl,
-    linkedinUrl: values.linkedinUrl,
-    highlights: workModerationHighlights(current.work),
-  };
+  const moderationState = profileModerationState(
+    { ...current, ...values },
+    { skills },
+  );
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -217,21 +204,6 @@ async function savePublishedProfileEdit(
   const moderationValues = checkedModerationColumns(moderation);
 
   if (!publishesAfterModeration(moderation)) {
-    const updateResult = await db
-      .update(schema.studentProfile)
-      .set({
-        ...moderationValues,
-        contentVersion: sql`${schema.studentProfile.contentVersion}+1`,
-      })
-      .where(
-        and(
-          eq(schema.studentProfile.id, profileId),
-          eq(schema.studentProfile.userId, userId),
-          eq(schema.studentProfile.status, "PUBLISHED"),
-          eq(schema.studentProfile.contentVersion, current.contentVersion),
-        ),
-      );
-    if (!updateResult.meta.changes) return profileChangedDuringCheck();
     return {
       success: false,
       error: "Your changes need attention before they can go live.",
@@ -341,6 +313,14 @@ export async function saveProfile(
         eq(schema.studentProfile.userId, userId),
       ),
       columns: {
+        headline: true,
+        bio: true,
+        opportunityGoals: true,
+        location: true,
+        country: true,
+        skills: true,
+        portfolioUrl: true,
+        linkedinUrl: true,
         handle: true,
         publishedAt: true,
         status: true,
@@ -353,6 +333,8 @@ export async function saveProfile(
         user: { columns: { name: true, image: true } },
         work: {
           columns: {
+            title: true,
+            repoDescription: true,
             repoFullName: true,
             description: true,
             blurb: true,
@@ -394,23 +376,28 @@ export async function saveProfile(
     };
   }
 
-  const values = {
-    handle: handleResult.normalized,
-    headline: parsed.data.headline ?? null,
-    bio: parsed.data.bio ?? null,
-    opportunityGoals: parsed.data.opportunityGoals,
-    location: parsed.data.location ?? null,
-    country: parsed.data.country ?? null,
-    skills: serializeOptionalSkills(parsed.data.skills),
-    openToFreelance: parsed.data.openToFreelance ?? false,
-    openToRoles: parsed.data.openToRoles ?? false,
-    portfolioUrl: parsed.data.portfolioUrl || null,
-    linkedinUrl: parsed.data.linkedinUrl || null,
-  };
+  const values = editorValues(handleResult.normalized, parsed.data);
 
   if (existingProfileId) {
     if (!current) {
       return { success: false, error: "Profile not found" };
+    }
+
+    if (unchangedProfileText(current, values)) {
+      await db
+        .update(schema.studentProfile)
+        .set({
+          openToFreelance: values.openToFreelance,
+          openToRoles: values.openToRoles,
+        })
+        .where(
+          and(
+            eq(schema.studentProfile.id, existingProfileId),
+            eq(schema.studentProfile.userId, userId),
+            eq(schema.studentProfile.contentVersion, current.contentVersion),
+          ),
+        );
+      return { success: true };
     }
 
     if (current.status !== "DRAFT") {
@@ -455,18 +442,7 @@ async function moderateSavedProfile(
     with: { user: true },
   });
   if (!p) return { success: false, error: "Profile not found" };
-  const state: ProfileModerationState = {
-    displayName: p.user.name,
-    handle: p.handle,
-    headline: p.headline,
-    bio: `${p.bio ?? ""}\n${p.opportunityGoals}`,
-    location: p.location,
-    country: p.country,
-    skills: parseSkillsJson(p.skills),
-    githubLogin: p.githubLogin,
-    portfolioUrl: p.portfolioUrl,
-    linkedinUrl: p.linkedinUrl,
-  };
+  const state = profileModerationState(p);
   const result = await runContentCheck(checkContent, state, p.user.image);
   await db
     .update(schema.studentProfile)
@@ -508,9 +484,12 @@ export async function publishProfile(
     ),
     columns: {
       status: true,
+      moderationOutcome: true,
       handle: true,
       headline: true,
       bio: true,
+      opportunityGoals: true,
+      publicName: true,
       location: true,
       country: true,
       skills: true,
@@ -524,6 +503,8 @@ export async function publishProfile(
       user: { columns: { name: true, image: true } },
       work: {
         columns: {
+          title: true,
+          repoDescription: true,
           repoFullName: true,
           description: true,
           blurb: true,
@@ -545,19 +526,7 @@ export async function publishProfile(
     };
   }
 
-  const moderationState: ProfileModerationState = {
-    displayName: profile.user.name,
-    handle: profile.handle,
-    headline: profile.headline,
-    bio: profile.bio,
-    location: profile.location,
-    country: profile.country,
-    skills: parseSkillsJson(profile.skills),
-    githubLogin: profile.githubLogin,
-    portfolioUrl: profile.portfolioUrl,
-    linkedinUrl: profile.linkedinUrl,
-    highlights: workModerationHighlights(profile.work),
-  };
+  const moderationState = profileModerationState(profile);
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
@@ -597,7 +566,10 @@ export async function publishProfile(
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
 
-  if (!publishesAfterModeration(moderation)) {
+  if (
+    !publishesAfterModeration(moderation) ||
+    (moderation.outcome === "error" && profile.moderationOutcome === "hold")
+  ) {
     return {
       success: false,
       error: "Your profile needs attention before it can go live.",
@@ -611,5 +583,42 @@ export async function publishProfile(
     success: true,
     moderationOutcome: moderation.outcome,
     published: true,
+  };
+}
+
+function unchangedProfileText(current: CurrentProfile, values: ProfileValues) {
+  const textKeys = [
+    "handle",
+    "headline",
+    "bio",
+    "opportunityGoals",
+    "location",
+    "country",
+    "skills",
+    "portfolioUrl",
+    "linkedinUrl",
+  ] as const;
+  return (
+    current.status !== "SUSPENDED" &&
+    textKeys.every((key) => current[key] === values[key])
+  );
+}
+
+function editorValues(
+  handle: string,
+  data: ReturnType<typeof profileEditorSchema.parse>,
+): ProfileValues {
+  return {
+    handle: handle,
+    headline: data.headline ?? null,
+    bio: data.bio ?? null,
+    opportunityGoals: data.opportunityGoals,
+    location: data.location ?? null,
+    country: data.country ?? null,
+    skills: serializeOptionalSkills(data.skills),
+    openToFreelance: data.openToFreelance ?? false,
+    openToRoles: data.openToRoles ?? false,
+    portfolioUrl: data.portfolioUrl || null,
+    linkedinUrl: data.linkedinUrl || null,
   };
 }

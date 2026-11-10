@@ -7,7 +7,8 @@ import type { SpacePageContext } from "@/components/platform/spaces/space-page";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 
 vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
-const { opportunityFacts, profileOverviewFacts } = await import("./overview-server");
+const { opportunityFacts, profileOverviewFacts } =
+  await import("./overview-server");
 
 const databases: { close(): void }[] = [];
 afterEach(() => databases.splice(0).forEach((database) => database.close()));
@@ -16,7 +17,11 @@ afterEach(() => databases.splice(0).forEach((database) => database.close()));
 function seeded(status: "DRAFT" | "PUBLISHED" | "SUSPENDED" | null) {
   const { database, db } = createSqliteD1();
   databases.push(database);
-  for (const file of readdirSync(new URL("../../../lib/db/migrations/", import.meta.url)).filter((name) => name.endsWith(".sql")).toSorted()) {
+  for (const file of readdirSync(
+    new URL("../../../lib/db/migrations/", import.meta.url),
+  )
+    .filter((name) => name.endsWith(".sql"))
+    .toSorted()) {
     database.exec(readMigration(file));
   }
   database.exec(`INSERT INTO user(id,name,email) VALUES ('achieng','Achieng Otieno','achieng@example.test');
@@ -34,33 +39,76 @@ function seeded(status: "DRAFT" | "PUBLISHED" | "SUSPENDED" | null) {
 describe("opportunityFacts", () => {
   it("finds no project behind the page's own gate: no profile, a draft or a suspended one", async () => {
     for (const status of [null, "DRAFT", "SUSPENDED"] as const) {
-      await expect(opportunityFacts(seeded(status), "achieng")).resolves.toEqual([]);
+      await expect(
+        opportunityFacts(seeded(status), "achieng"),
+      ).resolves.toEqual([]);
     }
   });
 
   it("lists approved projects, newest first, with the person's raised hands, once the profile is published", async () => {
-    await expect(opportunityFacts(seeded("PUBLISHED"), "achieng")).resolves.toEqual([
-      { id: "savings", title: "Member savings tracker", organization: "Chama Savings", interested: false },
-      { id: "fees", title: "Fees reminder", organization: "Shule Bora", interested: true },
+    await expect(
+      opportunityFacts(seeded("PUBLISHED"), "achieng"),
+    ).resolves.toEqual([
+      {
+        id: "savings",
+        title: "Member savings tracker",
+        organization: "Chama Savings",
+        interested: false,
+      },
+      {
+        id: "fees",
+        title: "Fees reminder",
+        organization: "Shule Bora",
+        interested: true,
+      },
     ]);
   });
 
   it("reads another person's published profile as no gate at all", async () => {
-    await expect(opportunityFacts(seeded("PUBLISHED"), "someone-else")).resolves.toEqual([]);
+    await expect(
+      opportunityFacts(seeded("PUBLISHED"), "someone-else"),
+    ).resolves.toEqual([]);
   });
 });
 
-const PROJECTS = [{ id: "savings", title: "Member savings tracker", organization: "Chama Savings", interested: false }];
+const PROJECTS = [
+  {
+    id: "savings",
+    title: "Member savings tracker",
+    organization: "Chama Savings",
+    interested: false,
+  },
+];
 
 function reads(linkIds: StudentJourney["visibleLinkIds"]) {
   return {
-    journey: { state: "published", visibleLinkIds: linkIds, unreadLeadCount: 7, nextStep: null } as unknown as StudentJourney,
+    journey: {
+      state: "published",
+      visibleLinkIds: linkIds,
+      unreadLeadCount: 7,
+      nextStep: null,
+    } as unknown as StudentJourney,
     own: {
       profile: {
-        id: "profile", onPublicSite: 1, status: "PUBLISHED" as const, handle: "achieng-otieno", headline: null, bio: null, location: null, country: null,
-        skills: '["Python"]', publicName: null, publicAvatarUrl: null,
+        id: "profile",
+        onPublicSite: 1,
+        status: "PUBLISHED" as const,
+        handle: "achieng-otieno",
+        headline: null,
+        bio: null,
+        location: null,
+        country: null,
+        skills: '["Python"]',
+        publicName: null,
+        publicAvatarUrl: null,
       },
-      leads: [{ id: "lead", fromName: "Grace Wanjiru", organization: "Chama Savings" }],
+      leads: [
+        {
+          id: "lead",
+          fromName: "Grace Wanjiru",
+          organization: "Chama Savings",
+        },
+      ],
       drafts: [],
       opportunities: { gate: "published" as const, items: PROJECTS },
     },
@@ -70,13 +118,19 @@ function reads(linkIds: StudentJourney["visibleLinkIds"]) {
 }
 
 const CONTEXT = {
-  me: { user: { id: "achieng", name: "Achieng Otieno", avatarUrl: null }, flags: { channels: true, mentor_requests: true } },
+  me: {
+    user: { id: "achieng", name: "Achieng Otieno", avatarUrl: null },
+    flags: { channels: true, mentor_requests: true },
+  },
   onboarding: { framing: "builder" },
 } as unknown as SpacePageContext;
 
 describe("profileOverviewFacts", () => {
   it("takes eligibility and the unopened-message count from the journey the frame shares", () => {
-    const facts = profileOverviewFacts(reads(["home", "profile", "opportunities", "leads"]), CONTEXT);
+    const facts = profileOverviewFacts(
+      reads(["home", "profile", "opportunities", "leads"]),
+      CONTEXT,
+    );
     expect(facts).toMatchObject({
       person: { id: "achieng", name: "Achieng Otieno", image: null },
       eligible: true,

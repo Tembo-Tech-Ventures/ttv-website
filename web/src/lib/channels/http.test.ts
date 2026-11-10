@@ -1,18 +1,36 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ChannelList, ChannelRead, ErrorEnvelope, Message, MessageList, MessageReactions, ROUTES,
+  ChannelList,
+  ChannelRead,
+  ErrorEnvelope,
+  Message,
+  MessageList,
+  MessageReactions,
+  ROUTES,
 } from "@/lib/platform/contracts";
-import { CHANNEL_ACCESS_MATRIX, type ChannelTarget } from "@/lib/platform/server/capabilities.fixtures";
+import {
+  CHANNEL_ACCESS_MATRIX,
+  type ChannelTarget,
+} from "@/lib/platform/server/capabilities.fixtures";
 import type { ChannelOperation } from "./http";
-import { channelDatabase, flagging, post, VIEWER, type ChannelFixture } from "./test-support";
+import {
+  channelDatabase,
+  flagging,
+  post,
+  VIEWER,
+  type ChannelFixture,
+} from "./test-support";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/observability/errors")>(),
+  ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
   recordErrorInBackground: vi.fn(),
 }));
 
 const fixtures: ChannelFixture[] = [];
-afterEach(() => { fixtures.splice(0).forEach(({ database }) => database.close()); vi.restoreAllMocks(); });
+afterEach(() => {
+  fixtures.splice(0).forEach(({ database }) => database.close());
+  vi.restoreAllMocks();
+});
 function setup(...args: Parameters<typeof channelDatabase>) {
   const fixture = channelDatabase(...args);
   fixtures.push(fixture);
@@ -20,23 +38,44 @@ function setup(...args: Parameters<typeof channelDatabase>) {
 }
 const errorOf = (body: unknown) => ErrorEnvelope.parse(body).error;
 /** The locals of a request made with a personal access token of these scopes, owned by the caller. */
-const withToken = (scopes: string[]) => ({ locals: { personalAccessToken: { id: "synthetic-pat", scopes } } as never });
+const withToken = (scopes: string[]) => ({
+  locals: { personalAccessToken: { id: "synthetic-pat", scopes } } as never,
+});
 /** Flags as production reads them: from the database, no preview override. */
-const DATABASE_FLAGS = { PLATFORM_FLAGS_OVERRIDE: undefined, DEPLOYMENT_ENVIRONMENT: "production" };
+const DATABASE_FLAGS = {
+  PLATFORM_FLAGS_OVERRIDE: undefined,
+  DEPLOYMENT_ENVIRONMENT: "production",
+};
 
 /** The message routes; the moderation routes have their own tests (moderation/routes.test.ts). */
-type MessagingOperation = Exclude<ChannelOperation, "reportMessage" | "requestModerationReview" | "moderateMessage" | "undoModerationHide" | "listModerationQueue"
-  | "askTembo" | "temboFeedback">; // Tembo routes: src/lib/tembo/routes.test.ts
+type MessagingOperation = Exclude<
+  ChannelOperation,
+  | "reportMessage"
+  | "requestModerationReview"
+  | "moderateMessage"
+  | "undoModerationHide"
+  | "listModerationQueue"
+  | "askTembo"
+  | "temboFeedback"
+>; // Tembo routes: src/lib/tembo/routes.test.ts
 
 /** Every message route with a valid request for it, against a message Wanjiku wrote in #help. */
 function everyRoute(s: ChannelFixture) {
   const help = s.channel("help");
   const own = s.message("help", { author: VIEWER, body: "Mine" });
   return [
-    ["listChannels", {}], ["listMessages", { id: help }], ["listShareables", { id: help }], ["postMessage", { id: help, body: post() }],
-    ["markChannelRead", { id: help, body: { messageId: own } }], ["editMessage", { id: own, body: { body: "Changed" } }],
-    ["reactToMessage", { id: own, body: { kind: "useful", active: true } }], ["deleteMessage", { id: own }],
-  ] as const satisfies readonly (readonly [MessagingOperation, Parameters<ChannelFixture["call"]>[1]])[];
+    ["listChannels", {}],
+    ["listMessages", { id: help }],
+    ["listShareables", { id: help }],
+    ["postMessage", { id: help, body: post() }],
+    ["markChannelRead", { id: help, body: { messageId: own } }],
+    ["editMessage", { id: own, body: { body: "Changed" } }],
+    ["reactToMessage", { id: own, body: { kind: "useful", active: true } }],
+    ["deleteMessage", { id: own }],
+  ] as const satisfies readonly (readonly [
+    MessagingOperation,
+    Parameters<ChannelFixture["call"]>[1],
+  ])[];
 }
 
 describe("channel APIs: gates", () => {
@@ -44,59 +83,111 @@ describe("channel APIs: gates", () => {
     for (const audience of ["OFF", "STAFF"]) {
       const s = setup();
       s.agree();
-      s.database.exec(`UPDATE feature_flag SET audience = '${audience}' WHERE key = 'channels'`);
+      s.database.exec(
+        `UPDATE feature_flag SET audience = '${audience}' WHERE key = 'channels'`,
+      );
       for (const [operation, options] of everyRoute(s)) {
         const prepare = vi.spyOn(s.d1, "prepare");
-        const response = await s.call(operation, { ...options, env: DATABASE_FLAGS });
-        expect([response.status, errorOf(response.body).code], `${audience} ${operation}`).toEqual([404, "flag_off"]);
+        const response = await s.call(operation, {
+          ...options,
+          env: DATABASE_FLAGS,
+        });
+        expect(
+          [response.status, errorOf(response.body).code],
+          `${audience} ${operation}`,
+        ).toEqual([404, "flag_off"]);
         const queries = prepare.mock.calls.map(([query]) => query);
-        expect(queries.every((query) => /feature_flag|UserRoles/.test(query)), `${queries.join("\n")}`).toBe(true);
+        expect(
+          queries.every((query) => /feature_flag|UserRoles/.test(query)),
+          `${queries.join("\n")}`,
+        ).toBe(true);
         prepare.mockRestore();
       }
-      expect(s.database.prepare("SELECT body, deletedAt FROM channel_message").all()).toEqual([{ body: "Mine", deletedAt: null }]);
+      expect(
+        s.database.prepare("SELECT body, deletedAt FROM channel_message").all(),
+      ).toEqual([{ body: "Mine", deletedAt: null }]);
     }
   });
 
   it("open to staff at STAFF and to everyone at ALL", async () => {
     const admin = setup({ globalRoles: ["ADMIN"] });
-    admin.database.exec("UPDATE feature_flag SET audience = 'STAFF' WHERE key = 'channels'");
-    expect((await admin.call("listChannels", { env: DATABASE_FLAGS })).status).toBe(200);
+    admin.database.exec(
+      "UPDATE feature_flag SET audience = 'STAFF' WHERE key = 'channels'",
+    );
+    expect(
+      (await admin.call("listChannels", { env: DATABASE_FLAGS })).status,
+    ).toBe(200);
     const member = setup();
-    member.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    expect((await member.call("listChannels", { env: DATABASE_FLAGS })).status).toBe(200);
+    member.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
+    expect(
+      (await member.call("listChannels", { env: DATABASE_FLAGS })).status,
+    ).toBe(200);
   });
 
   it("are 404 signed out, 403 for personal access tokens without a channel scope, and refuse cross-origin writes", async () => {
     const s = setup();
     s.agree();
     for (const [operation, options] of everyRoute(s)) {
-      expect((await s.call(operation, { ...options, user: null })).status, `${operation}`).toBe(404);
-      for (const scopes of [["admin:read"], ["admin:read", "admin:write"], ["community:read", "community:write"]]) {
-        const token = await s.call(operation, { ...options, ...withToken(scopes) });
-        expect([token.status, errorOf(token.body).code], `${operation} ${scopes.join()}`).toEqual([403, "forbidden"]);
+      expect(
+        (await s.call(operation, { ...options, user: null })).status,
+        `${operation}`,
+      ).toBe(404);
+      for (const scopes of [
+        ["admin:read"],
+        ["admin:read", "admin:write"],
+        ["community:read", "community:write"],
+      ]) {
+        const token = await s.call(operation, {
+          ...options,
+          ...withToken(scopes),
+        });
+        expect(
+          [token.status, errorOf(token.body).code],
+          `${operation} ${scopes.join()}`,
+        ).toEqual([403, "forbidden"]);
       }
       const write = ROUTES[operation].method !== "GET";
       for (const origin of [null, "https://evil.example"]) {
         const response = await s.call(operation, { ...options, origin });
-        if (write) expect([response.status, errorOf(response.body).message], `${operation} ${origin}`).toEqual([403, "Same-origin request required."]);
+        if (write)
+          expect(
+            [response.status, errorOf(response.body).message],
+            `${operation} ${origin}`,
+          ).toEqual([403, "Same-origin request required."]);
         else expect(response.status, `${operation}`).toBe(200);
       }
     }
-    expect(s.database.prepare("SELECT body FROM channel_message").all()).toEqual([{ body: "Mine" }]);
+    expect(
+      s.database.prepare("SELECT body FROM channel_message").all(),
+    ).toEqual([{ body: "Mine" }]);
   });
 
   it("let a channels:read token read as its owner, and refuse its writes", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     s.agree();
     for (const [operation, options] of everyRoute(s)) {
-      const response = await s.call(operation, { ...options, ...withToken(["channels:read"]), origin: null });
-      if (ROUTES[operation].method === "GET") expect(response.status, `${operation}`).toBe(200);
+      const response = await s.call(operation, {
+        ...options,
+        ...withToken(["channels:read"]),
+        origin: null,
+      });
+      if (ROUTES[operation].method === "GET")
+        expect(response.status, `${operation}`).toBe(200);
       else {
-        expect([response.status, errorOf(response.body).message], `${operation}`)
-          .toEqual([403, "This personal access token does not grant channels:write."]);
+        expect(
+          [response.status, errorOf(response.body).message],
+          `${operation}`,
+        ).toEqual([
+          403,
+          "This personal access token does not grant channels:write.",
+        ]);
       }
     }
-    expect(s.database.prepare("SELECT body FROM channel_message").all()).toEqual([{ body: "Mine" }]);
+    expect(
+      s.database.prepare("SELECT body FROM channel_message").all(),
+    ).toEqual([{ body: "Mine" }]);
   });
 
   it("let a channels:write token write as its owner without an Origin, but never from another origin", async () => {
@@ -105,70 +196,172 @@ describe("channel APIs: gates", () => {
     const writer = withToken(["channels:read", "channels:write"]);
     for (const [operation, options] of everyRoute(s)) {
       if (ROUTES[operation].method === "GET") continue;
-      const crossOrigin = await s.call(operation, { ...options, ...writer, origin: "https://evil.example" });
-      expect([crossOrigin.status, errorOf(crossOrigin.body).message], `${operation}`).toEqual([403, "Same-origin request required."]);
-      const response = await s.call(operation, { ...options, ...writer, origin: null });
-      expect(response.status, `${operation}`).toBe(operation === "postMessage" ? 201 : 200);
+      const crossOrigin = await s.call(operation, {
+        ...options,
+        ...writer,
+        origin: "https://evil.example",
+      });
+      expect(
+        [crossOrigin.status, errorOf(crossOrigin.body).message],
+        `${operation}`,
+      ).toEqual([403, "Same-origin request required."]);
+      const response = await s.call(operation, {
+        ...options,
+        ...writer,
+        origin: null,
+      });
+      expect(response.status, `${operation}`).toBe(
+        operation === "postMessage" ? 201 : 200,
+      );
     }
-    expect(s.database.prepare("SELECT authorId, body, deletedAt IS NOT NULL AS deleted FROM channel_message ORDER BY seq").all()).toEqual([
-      { authorId: VIEWER, body: "", deleted: 1 }, { authorId: VIEWER, body: "Synthetic post", deleted: 0 },
+    expect(
+      s.database
+        .prepare(
+          "SELECT authorId, body, deletedAt IS NOT NULL AS deleted FROM channel_message ORDER BY seq",
+        )
+        .all(),
+    ).toEqual([
+      { authorId: VIEWER, body: "", deleted: 1 },
+      { authorId: VIEWER, body: "Synthetic post", deleted: 0 },
     ]);
-    expect(s.database.prepare("SELECT userId FROM channel_read").all()).toEqual([{ userId: VIEWER }]);
+    expect(s.database.prepare("SELECT userId FROM channel_read").all()).toEqual(
+      [{ userId: VIEWER }],
+    );
   });
 
   it("refuse every personal access token on the moderation decision and queue routes, even an admin's", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
-    const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
-    for (const scopes of [["channels:read", "channels:write"], ["admin:read", "admin:write"]]) {
+    const theirs = s.message("help", {
+      author: "synthetic-otieno",
+      body: "Theirs",
+    });
+    for (const scopes of [
+      ["channels:read", "channels:write"],
+      ["admin:read", "admin:write"],
+    ]) {
       const queue = await s.call("listModerationQueue", withToken(scopes));
-      expect([queue.status, errorOf(queue.body).code], `${scopes.join()}`).toEqual([403, "forbidden"]);
-      const hide = await s.call("moderateMessage", { id: theirs, body: { action: "hide", reason: "Synthetic" }, ...withToken(scopes), origin: null });
-      expect([hide.status, errorOf(hide.body).code], `${scopes.join()}`).toEqual([403, "forbidden"]);
+      expect(
+        [queue.status, errorOf(queue.body).code],
+        `${scopes.join()}`,
+      ).toEqual([403, "forbidden"]);
+      const hide = await s.call("moderateMessage", {
+        id: theirs,
+        body: { action: "hide", reason: "Synthetic" },
+        ...withToken(scopes),
+        origin: null,
+      });
+      expect(
+        [hide.status, errorOf(hide.body).code],
+        `${scopes.join()}`,
+      ).toEqual([403, "forbidden"]);
     }
-    expect(s.database.prepare("SELECT moderationState FROM channel_message").all()).toEqual([{ moderationState: "VISIBLE" }]);
+    expect(
+      s.database.prepare("SELECT moderationState FROM channel_message").all(),
+    ).toEqual([{ moderationState: "VISIBLE" }]);
   });
 
   it("let a channels:write token report a message and ask for a review of its owner's", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     s.agree();
-    const writer = { ...withToken(["channels:read", "channels:write"]), origin: null };
-    const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
-    expect((await s.call("reportMessage", { id: theirs, body: { reason: "Spam" }, ...withToken(["channels:read"]), origin: null })).status).toBe(403);
-    expect((await s.call("reportMessage", { id: theirs, body: { reason: "Spam" }, ...writer })).status).toBe(201);
+    const writer = {
+      ...withToken(["channels:read", "channels:write"]),
+      origin: null,
+    };
+    const theirs = s.message("help", {
+      author: "synthetic-otieno",
+      body: "Theirs",
+    });
+    expect(
+      (
+        await s.call("reportMessage", {
+          id: theirs,
+          body: { reason: "Spam" },
+          ...withToken(["channels:read"]),
+          origin: null,
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await s.call("reportMessage", {
+          id: theirs,
+          body: { reason: "Spam" },
+          ...writer,
+        })
+      ).status,
+    ).toBe(201);
     const own = s.message("help", { author: VIEWER, state: "HIDDEN" });
-    expect((await s.call("requestModerationReview", { id: own, body: {}, ...writer })).status).toBe(201);
+    expect(
+      (
+        await s.call("requestModerationReview", {
+          id: own,
+          body: {},
+          ...writer,
+        })
+      ).status,
+    ).toBe(201);
   });
 
   it("let a channels token see exactly what its owner's session sees, hidden messages included", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     s.message("help", { author: "synthetic-otieno", body: "Visible" });
-    s.message("help", { author: "synthetic-otieno", body: "Hidden from members", state: "HIDDEN" });
-    s.message("help", { author: "synthetic-otieno", body: "Flagged", state: "FLAGGED" });
-    const read = (options: Parameters<ChannelFixture["call"]>[1]) => s.call("listMessages", { id: s.channel("help"), ...options });
+    s.message("help", {
+      author: "synthetic-otieno",
+      body: "Hidden from members",
+      state: "HIDDEN",
+    });
+    s.message("help", {
+      author: "synthetic-otieno",
+      body: "Flagged",
+      state: "FLAGGED",
+    });
+    const read = (options: Parameters<ChannelFixture["call"]>[1]) =>
+      s.call("listMessages", { id: s.channel("help"), ...options });
     const session = await read({});
     const token = await read({ ...withToken(["channels:read"]), origin: null });
     expect(token).toEqual({ ...session, response: expect.anything() });
-    expect(MessageList.parse(token.body).items.map((item) => [item.body, item.moderation?.state])).toEqual([
-      ["Visible", "VISIBLE"], ["Hidden from members", "HIDDEN"], ["Flagged", "FLAGGED"],
+    expect(
+      MessageList.parse(token.body).items.map((item) => [
+        item.body,
+        item.moderation?.state,
+      ]),
+    ).toEqual([
+      ["Visible", "VISIBLE"],
+      ["Hidden from members", "HIDDEN"],
+      ["Flagged", "FLAGGED"],
     ]);
   });
 
   it("stop a channels token the moment its owner is no longer an admin", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
-    const token = { id: s.channel("help"), ...withToken(["channels:read"]), origin: null };
+    const token = {
+      id: s.channel("help"),
+      ...withToken(["channels:read"]),
+      origin: null,
+    };
     expect((await s.call("listMessages", token)).status).toBe(200);
     s.database.exec("DELETE FROM UserRoles");
     const refused = await s.call("listMessages", token);
-    expect([refused.status, errorOf(refused.body).message]).toEqual([403, "This personal access token works only while its owner is an admin."]);
+    expect([refused.status, errorOf(refused.body).message]).toEqual([
+      403,
+      "This personal access token works only while its owner is an admin.",
+    ]);
     // The same person's browser session keeps a member's access.
-    expect((await s.call("listMessages", { id: s.channel("help") })).status).toBe(200);
+    expect(
+      (await s.call("listMessages", { id: s.channel("help") })).status,
+    ).toBe(200);
   });
 
   it("let agent sessions act as their person", async () => {
     const s = setup();
     s.agree();
-    const response = await s.call("postMessage", { id: s.channel("help"), body: post(),
-      locals: { session: { userAgent: "ttv-agent:isolated-preview:persona" } } as never });
+    const response = await s.call("postMessage", {
+      id: s.channel("help"),
+      body: post(),
+      locals: {
+        session: { userAgent: "ttv-agent:isolated-preview:persona" },
+      } as never,
+    });
     expect(response.status).toBe(201);
   });
 });
@@ -176,38 +369,70 @@ describe("channel APIs: gates", () => {
 describe("channel APIs: access matrix", () => {
   /** The seeded channel standing in for each CHANNEL_TARGETS shape (communityStaff has no seed). */
   const SLUGS: Partial<Record<ChannelTarget, string>> = {
-    community: "help", communityArchived: "design-crit", cohortA: "cohort-04", cohortAAnnouncements: "c04-announcements",
-    cohortAArchived: "c04-help", cohortB: "cohort-05", cohortBAnnouncements: "c05-announcements",
+    community: "help",
+    communityArchived: "design-crit",
+    cohortA: "cohort-04",
+    cohortAAnnouncements: "c04-announcements",
+    cohortAArchived: "c04-help",
+    cohortB: "cohort-05",
+    cohortBAnnouncements: "c05-announcements",
   };
 
-  it.each(CHANNEL_ACCESS_MATRIX)("reads, posts and lists exactly per channelAccessFor: $name", async (fixture) => {
-    const s = setup(fixture);
-    s.agree();
-    s.database.exec(`UPDATE channel SET archivedAt = 5 WHERE slug IN ('design-crit', 'c04-help');
+  it.each(CHANNEL_ACCESS_MATRIX)(
+    "reads, posts and lists exactly per channelAccessFor: $name",
+    async (fixture) => {
+      const s = setup(fixture);
+      s.agree();
+      s.database
+        .exec(`UPDATE channel SET archivedAt = 5 WHERE slug IN ('design-crit', 'c04-help');
       INSERT INTO channel(id, kind, slug, name) VALUES ('direct-member', 'DIRECT', 'review', 'Review'), ('direct-other', 'DIRECT', 'review', 'Review');
       INSERT INTO channel_member(channelId, userId) VALUES ('direct-member', '${VIEWER}'), ('direct-other', 'synthetic-otieno');`);
-    const user = fixture.signedIn === false ? null : VIEWER;
-    const listed = await s.call("listChannels", { user });
-    const visible = user ? new Set(ChannelList.parse(listed.body).items.map((channel) => channel.id)) : new Set<string>();
-    const targets = { ...SLUGS, directMember: "direct-member", directOther: "direct-other" };
-    for (const [target, slug] of Object.entries(targets) as [ChannelTarget, string][]) {
-      const id = slug.startsWith("direct-") ? slug : s.channel(slug);
-      const letters = fixture.channels[target];
-      const label = `${fixture.name} ${target}`;
-      expect(visible.has(id), `${label}`).toBe(letters.includes("r"));
-      const read = await s.call("listMessages", { id, user });
-      expect(read.status, `${label}`).toBe(letters.includes("r") ? 200 : 404);
-      const sent = await s.call("postMessage", { id, user, body: post() });
-      expect(sent.status, `${label}`).toBe(letters.includes("p") ? 201 : letters.includes("r") ? 403 : 404);
-    }
-  });
+      const user = fixture.signedIn === false ? null : VIEWER;
+      const listed = await s.call("listChannels", { user });
+      const visible = user
+        ? new Set(
+            ChannelList.parse(listed.body).items.map((channel) => channel.id),
+          )
+        : new Set<string>();
+      const targets = {
+        ...SLUGS,
+        directMember: "direct-member",
+        directOther: "direct-other",
+      };
+      for (const [target, slug] of Object.entries(targets) as [
+        ChannelTarget,
+        string,
+      ][]) {
+        const id = slug.startsWith("direct-") ? slug : s.channel(slug);
+        const letters = fixture.channels[target];
+        const label = `${fixture.name} ${target}`;
+        expect(visible.has(id), `${label}`).toBe(letters.includes("r"));
+        const read = await s.call("listMessages", { id, user });
+        expect(read.status, `${label}`).toBe(letters.includes("r") ? 200 : 404);
+        const sent = await s.call("postMessage", { id, user, body: post() });
+        expect(sent.status, `${label}`).toBe(
+          letters.includes("p") ? 201 : letters.includes("r") ? 403 : 404,
+        );
+      }
+    },
+  );
 
   it("gives the same 404 for another cohort's channel and a channel that does not exist", async () => {
-    const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
-    const foreign = await s.call("listMessages", { id: s.channel("cohort-05") });
+    const s = setup({
+      applications: [{ programId: "cohort-a", status: "APPROVED" }],
+    });
+    const foreign = await s.call("listMessages", {
+      id: s.channel("cohort-05"),
+    });
     const missing = await s.call("listMessages", { id: "0".repeat(32) });
-    expect([foreign.status, foreign.body]).toEqual([missing.status, missing.body]);
-    expect(errorOf(foreign.body)).toEqual({ code: "not_found", message: "Channel not found." });
+    expect([foreign.status, foreign.body]).toEqual([
+      missing.status,
+      missing.body,
+    ]);
+    expect(errorOf(foreign.body)).toEqual({
+      code: "not_found",
+      message: "Channel not found.",
+    });
   });
 });
 
@@ -218,179 +443,401 @@ describe("channel APIs: contracts", () => {
     const help = s.channel("help");
     s.message("help");
     const channels = await s.call("listChannels");
-    expect(ChannelList.parse(channels.body).items.map((channel) => channel.slug))
-      .toEqual(["introductions", "show-your-work", "help", "opportunities", "design-crit"]);
-    const created = await s.call("postMessage", { id: help, body: post("Hello") });
+    expect(
+      ChannelList.parse(channels.body).items.map((channel) => channel.slug),
+    ).toEqual([
+      "introductions",
+      "show-your-work",
+      "help",
+      "opportunities",
+      "design-crit",
+    ]);
+    const created = await s.call("postMessage", {
+      id: help,
+      body: post("Hello"),
+    });
     const message = Message.parse(created.body);
-    expect(MessageList.parse((await s.call("listMessages", { id: help })).body).items.map((item) => item.body)).toEqual(["Synthetic message 1", "Hello"]);
-    expect(MessageList.parse((await s.call("listMessages", { id: help, query: `?thread=${message.id}` })).body).thread).toBe(message.id);
-    expect(ChannelRead.parse((await s.call("markChannelRead", { id: help, body: { messageId: message.id } })).body).unreadCount).toBe(0);
-    expect(Message.parse((await s.call("editMessage", { id: message.id, body: { body: "Hello again" } })).body).body).toBe("Hello again");
-    expect(MessageReactions.parse((await s.call("reactToMessage", { id: message.id, body: { kind: "agree", active: true } })).body).reactions)
-      .toEqual([{ kind: "agree", count: 1, mine: true }]);
-    expect(Message.parse((await s.call("deleteMessage", { id: message.id })).body).deleted).toBe(true);
-    for (const response of [channels, created]) expect(response.response.headers.get("Cache-Control")).toBe("no-store");
+    expect(
+      MessageList.parse(
+        (await s.call("listMessages", { id: help })).body,
+      ).items.map((item) => item.body),
+    ).toEqual(["Synthetic message 1", "Hello"]);
+    expect(
+      MessageList.parse(
+        (
+          await s.call("listMessages", {
+            id: help,
+            query: `?thread=${message.id}`,
+          })
+        ).body,
+      ).thread,
+    ).toBe(message.id);
+    expect(
+      ChannelRead.parse(
+        (
+          await s.call("markChannelRead", {
+            id: help,
+            body: { messageId: message.id },
+          })
+        ).body,
+      ).unreadCount,
+    ).toBe(0);
+    expect(
+      Message.parse(
+        (
+          await s.call("editMessage", {
+            id: message.id,
+            body: { body: "Hello again" },
+          })
+        ).body,
+      ).body,
+    ).toBe("Hello again");
+    expect(
+      MessageReactions.parse(
+        (
+          await s.call("reactToMessage", {
+            id: message.id,
+            body: { kind: "agree", active: true },
+          })
+        ).body,
+      ).reactions,
+    ).toEqual([{ kind: "agree", count: 1, mine: true }]);
+    expect(
+      Message.parse((await s.call("deleteMessage", { id: message.id })).body)
+        .deleted,
+    ).toBe(true);
+    for (const response of [channels, created])
+      expect(response.response.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it.each([
-    ["a duplicate parameter", "?thread=a&thread=b"], ["an unknown parameter", "?limit=5"], ["before and since together", "?before=a&since=b"],
-    ["an empty cursor", "?since="], ["a malformed cursor", "?since=not-a-cursor"],
+    ["a duplicate parameter", "?thread=a&thread=b"],
+    ["an unknown parameter", "?limit=5"],
+    ["before and since together", "?before=a&since=b"],
+    ["an empty cursor", "?since="],
+    ["a malformed cursor", "?since=not-a-cursor"],
   ])("refuse %s with 400 validation", async (_name, query) => {
     const s = setup();
-    const response = await s.call("listMessages", { id: s.channel("help"), query });
-    expect([response.status, errorOf(response.body).code]).toEqual([400, "validation"]);
+    const response = await s.call("listMessages", {
+      id: s.channel("help"),
+      query,
+    });
+    expect([response.status, errorOf(response.body).code]).toEqual([
+      400,
+      "validation",
+    ]);
   });
 
   it("answer an expired cursor with 410, so the store takes a fresh snapshot", async () => {
     const s = setup();
     const help = s.channel("help");
     s.message("help");
-    const page = MessageList.parse((await s.call("listMessages", { id: help })).body);
+    const page = MessageList.parse(
+      (await s.call("listMessages", { id: help })).body,
+    );
     s.database.exec("DELETE FROM channel_message");
-    const response = await s.call("listMessages", { id: help, query: `?since=${page.sinceCursor}` });
-    expect([response.status, errorOf(response.body).code]).toEqual([410, "validation"]);
+    const response = await s.call("listMessages", {
+      id: help,
+      query: `?since=${page.sinceCursor}`,
+    });
+    expect([response.status, errorOf(response.body).code]).toEqual([
+      410,
+      "validation",
+    ]);
   });
 
   it.each([
-    ["no body", undefined, 400], ["a blank body", { ...post(), body: "   " }, 400], ["an unknown field", { ...post(), pinned: true }, 400],
-    ["a bad nonce", { ...post(), clientNonce: "has spaces" }, 400], ["too long a message", { ...post(), body: "x".repeat(10_001) }, 400],
-    ["more than the byte limit", { ...post(), body: "😀".repeat(9_000), pad: "x".repeat(40_000) }, 413],
+    ["no body", undefined, 400],
+    ["a blank body", { ...post(), body: "   " }, 400],
+    ["an unknown field", { ...post(), pinned: true }, 400],
+    ["a bad nonce", { ...post(), clientNonce: "has spaces" }, 400],
+    ["too long a message", { ...post(), body: "x".repeat(10_001) }, 400],
+    [
+      "more than the byte limit",
+      { ...post(), body: "😀".repeat(9_000), pad: "x".repeat(40_000) },
+      413,
+    ],
   ])("refuse a post with %s", async (_name, body, status) => {
     const s = setup();
     s.agree();
-    const response = await s.call("postMessage", { id: s.channel("help"), body });
-    expect([response.status, errorOf(response.body).code]).toEqual([status, "validation"]);
-    expect(s.database.prepare("SELECT COUNT(*) AS n FROM channel_message").get()).toEqual({ n: 0 });
+    const response = await s.call("postMessage", {
+      id: s.channel("help"),
+      body,
+    });
+    expect([response.status, errorOf(response.body).code]).toEqual([
+      status,
+      "validation",
+    ]);
+    expect(
+      s.database.prepare("SELECT COUNT(*) AS n FROM channel_message").get(),
+    ).toEqual({ n: 0 });
   });
 
   it("accept the longest legal message", async () => {
     const s = setup();
     s.agree();
-    const response = await s.call("postMessage", { id: s.channel("help"), body: post("😀".repeat(5_000)) });
+    const response = await s.call("postMessage", {
+      id: s.channel("help"),
+      body: post("😀".repeat(5_000)),
+    });
     expect(response.status).toBe(201);
   });
 
   it("report unexpected failures as 500 server errors without details", async () => {
-    const { recordErrorInBackground } = await import("@/lib/observability/errors");
+    const { recordErrorInBackground } =
+      await import("@/lib/observability/errors");
     const s = setup();
     const help = s.channel("help");
     const prepare = s.d1.prepare.bind(s.d1);
-    const page = vi.spyOn(s.d1, "prepare").mockImplementation(((query: string) => {
-      if (query.includes("FROM channel_message m")) throw new Error("D1 exploded with a secret");
+    const page = vi.spyOn(s.d1, "prepare").mockImplementation(((
+      query: string,
+    ) => {
+      if (query.includes("FROM channel_message m"))
+        throw new Error("D1 exploded with a secret");
       return prepare(query);
     }) as typeof s.d1.prepare);
     const response = await s.call("listMessages", { id: help });
-    expect(page.mock.results.filter((result) => result.type === "throw")).toHaveLength(1);
-    expect([response.status, errorOf(response.body)]).toEqual([500, { code: "server", message: "Could not complete the channel request." }]);
-    expect(recordErrorInBackground).toHaveBeenCalledWith(undefined, expect.anything(), expect.objectContaining({ route: ROUTES.listMessages.path }));
+    expect(
+      page.mock.results.filter((result) => result.type === "throw"),
+    ).toHaveLength(1);
+    expect([response.status, errorOf(response.body)]).toEqual([
+      500,
+      { code: "server", message: "Could not complete the channel request." },
+    ]);
+    expect(recordErrorInBackground).toHaveBeenCalledWith(
+      undefined,
+      expect.anything(),
+      expect.objectContaining({ route: ROUTES.listMessages.path }),
+    );
   });
 });
 
 describe("channel APIs: query budget", () => {
   /** Statements per request with production flags (one flag read) and capabilities read once. */
   const BUDGET: Record<MessagingOperation, number> = {
-    listChannels: 5, listMessages: 6, listShareables: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 10,
+    listChannels: 5,
+    listMessages: 6,
+    listShareables: 6,
+    postMessage: 7,
+    markChannelRead: 8,
+    editMessage: 9,
+    reactToMessage: 10,
     deleteMessage: 9,
   };
 
-  it.each(Object.entries(BUDGET) as [MessagingOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
-    const s = setup();
-    s.agree();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    const options = Object.fromEntries(everyRoute(s))[operation];
-    const prepare = vi.spyOn(s.d1, "prepare");
-    const response = await s.call(operation, { ...options, env: DATABASE_FLAGS });
-    expect(response.status).toBeLessThan(300);
-    expect(prepare).toHaveBeenCalledTimes(budget);
-    expect(budget).toBeLessThanOrEqual(10);
-  });
+  it.each(Object.entries(BUDGET) as [MessagingOperation, number][])(
+    "%s issues at most %i statements",
+    async (operation, budget) => {
+      const s = setup();
+      s.agree();
+      s.database.exec(
+        "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+      );
+      const options = Object.fromEntries(everyRoute(s))[operation];
+      const prepare = vi.spyOn(s.d1, "prepare");
+      const response = await s.call(operation, {
+        ...options,
+        env: DATABASE_FLAGS,
+      });
+      expect(response.status).toBeLessThan(300);
+      expect(prepare).toHaveBeenCalledTimes(budget);
+      expect(budget).toBeLessThanOrEqual(10);
+    },
+  );
 
   it("a flagged post or edit costs one statement more, for its moderation event, and stays within 10", async () => {
     const s = setup();
     s.agree();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    s.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
     const screen = flagging(["Contact details"]);
     const own = s.message("help", { author: VIEWER });
     const prepare = vi.spyOn(s.d1, "prepare");
-    expect((await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS })).status).toBe(200);
+    expect(
+      (
+        await s.call("editMessage", {
+          id: own,
+          body: { body: "Flag me" },
+          screen,
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(200);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.editMessage + 1);
     prepare.mockClear();
-    expect((await s.call("postMessage", { id: s.channel("help"), body: post("Flag me too"), screen, env: DATABASE_FLAGS })).status).toBe(201);
+    expect(
+      (
+        await s.call("postMessage", {
+          id: s.channel("help"),
+          body: post("Flag me too"),
+          screen,
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(201);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
-    expect(Math.max(BUDGET.editMessage, BUDGET.postMessage) + 1).toBeLessThanOrEqual(10);
+    expect(
+      Math.max(BUDGET.editMessage, BUDGET.postMessage) + 1,
+    ).toBeLessThanOrEqual(10);
   });
 
   it("a post long enough to repeat costs the flag event's statement too, flagged or not", async () => {
     const s = setup();
     s.agree();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    s.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
     const prepare = vi.spyOn(s.d1, "prepare");
     const long = "A longer question about D1 paging";
-    expect((await s.call("postMessage", { id: s.channel("help"), body: post(long), env: DATABASE_FLAGS })).status).toBe(201);
+    expect(
+      (
+        await s.call("postMessage", {
+          id: s.channel("help"),
+          body: post(long),
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(201);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
     // After the response, Clef reads once and writes one batch of two, outside the request's budget.
     prepare.mockClear();
-    const run = vi.fn(async () => ({ answers: Object.fromEntries(["contact_details", "unrelated_promotion", "abusive"]
-      .map((q) => [q, { type: "noul", noul: 0.99 }])) }));
+    const run = vi.fn(async () => ({
+      answers: Object.fromEntries(
+        ["contact_details", "unrelated_promotion", "abusive"].map((q) => [
+          q,
+          { type: "noul", noul: 0.99 },
+        ]),
+      ),
+    }));
     expect(s.deferred).toHaveLength(1);
     s.deferred.splice(0);
-    await s.call("postMessage", { id: s.channel("introductions"), body: post(long), env: { ...DATABASE_FLAGS, AI: { run } as unknown as Ai, AI_GATEWAY_NAME: "gw" } });
+    await s.call("postMessage", {
+      id: s.channel("introductions"),
+      body: post(long),
+      env: {
+        ...DATABASE_FLAGS,
+        AI: { run } as unknown as Ai,
+        AI_GATEWAY_NAME: "gw",
+      },
+    });
     prepare.mockClear();
     await s.afterResponse();
     // Then attention reads its flags, and stops there while spaces is off.
     const queries = prepare.mock.calls.map(([query]) => query);
-    expect([run.mock.calls.length, queries.filter((query) => !query.includes("feature_flag")).length]).toEqual([1, 3]);
+    expect([
+      run.mock.calls.length,
+      queries.filter((query) => !query.includes("feature_flag")).length,
+    ]).toEqual([1, 3]);
   });
 
   it("refused writes stay within 10 statements too, flagged edits included", async () => {
     const s = setup();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    s.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
     const screen = flagging(["Contact details"]);
     const own = s.message("help", { author: VIEWER });
     const prepare = vi.spyOn(s.d1, "prepare");
     // No code of conduct agreement: the edit and the post are refused.
-    const edit = await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS });
+    const edit = await s.call("editMessage", {
+      id: own,
+      body: { body: "Flag me" },
+      screen,
+      env: DATABASE_FLAGS,
+    });
     expect([edit.status, prepare.mock.calls.length]).toEqual([403, 10]);
     prepare.mockClear();
-    const sent = await s.call("postMessage", { id: s.channel("help"), body: post("Flag me"), screen, env: DATABASE_FLAGS });
+    const sent = await s.call("postMessage", {
+      id: s.channel("help"),
+      body: post("Flag me"),
+      screen,
+      env: DATABASE_FLAGS,
+    });
     expect(sent.status).toBe(403);
     expect(prepare.mock.calls.length).toBeLessThanOrEqual(10);
   });
 
   it("embeds cost a post one statement and a page none; cohort shareables cost one more, for clips", async () => {
-    const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const s = setup({
+      applications: [{ programId: "cohort-a", status: "APPROVED" }],
+    });
     s.agree();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    s.database.exec(`INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    s.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
+    s.database
+      .exec(`INSERT OR IGNORE INTO studentProfile(id,userId,handle) SELECT id,id,id FROM user; INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
         ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution'),
         ('kiosk', '${VIEWER}', 'Kiosk', 'A kiosk', '2026-10-01', 'institution');
       INSERT INTO recording (id, programId, title, processingStatus) VALUES ('s9', 'cohort-a', 'Session 9', 'complete');
       INSERT INTO transcript_segment (id, recordingId, startTime, endTime, text) VALUES ('s9-0', 's9', 0, 30, 'Retries.');`);
-    const embeds = [{ type: "project", journeyId: "ledger", version: 1 }, { type: "project", journeyId: "kiosk", version: 1 },
-      { type: "sessionClip", recordingId: "s9", startSeconds: 0, durationSeconds: 30 }];
+    const embeds = [
+      { type: "project", journeyId: "ledger", version: 1 },
+      { type: "project", journeyId: "kiosk", version: 1 },
+      {
+        type: "sessionClip",
+        recordingId: "s9",
+        startSeconds: 0,
+        durationSeconds: 30,
+      },
+    ];
     const cohort = s.channel("cohort-04");
     const prepare = vi.spyOn(s.d1, "prepare");
-    expect((await s.call("postMessage", { id: cohort, body: { ...post(), embeds }, env: DATABASE_FLAGS })).status).toBe(201);
+    expect(
+      (
+        await s.call("postMessage", {
+          id: cohort,
+          body: { ...post(), embeds },
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(201);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
     prepare.mockClear();
-    const page = await s.call("listMessages", { id: cohort, env: DATABASE_FLAGS });
+    const page = await s.call("listMessages", {
+      id: cohort,
+      env: DATABASE_FLAGS,
+    });
     expect(MessageList.parse(page.body).items[0]?.embeds).toHaveLength(3);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.listMessages);
     prepare.mockClear();
-    expect((await s.call("listShareables", { id: cohort, query: "?q=retries", env: DATABASE_FLAGS })).status).toBe(200);
+    expect(
+      (
+        await s.call("listShareables", {
+          id: cohort,
+          query: "?q=retries",
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(200);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.listShareables + 1);
   });
 
   it("a thread page and a reply cost one statement more each", async () => {
     const s = setup();
     s.agree();
-    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    s.database.exec(
+      "UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'",
+    );
     const root = s.message("help");
     const prepare = vi.spyOn(s.d1, "prepare");
-    await s.call("listMessages", { id: s.channel("help"), query: `?thread=${root}`, env: DATABASE_FLAGS });
+    await s.call("listMessages", {
+      id: s.channel("help"),
+      query: `?thread=${root}`,
+      env: DATABASE_FLAGS,
+    });
     expect(prepare).toHaveBeenCalledTimes(BUDGET.listMessages + 1);
     prepare.mockClear();
-    expect((await s.call("postMessage", { id: s.channel("help"), body: post("Reply", root), env: DATABASE_FLAGS })).status).toBe(201);
+    expect(
+      (
+        await s.call("postMessage", {
+          id: s.channel("help"),
+          body: post("Reply", root),
+          env: DATABASE_FLAGS,
+        })
+      ).status,
+    ).toBe(201);
     expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
   });
 });

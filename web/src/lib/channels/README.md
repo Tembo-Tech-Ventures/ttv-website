@@ -2,21 +2,26 @@
 
 See [member visibility and work storage](../members/README.md) for the shared read and moderation rules.
 
+Human chat channels for cohorts and the community. Shipped dark behind the
+`channels` flag, which stays OFF until the coordinator switches it. Plan: SAM
+idea 01M68GQAP1DCSVMRJMZS771ZRB, §3; wire contracts in
+`src/lib/platform/contracts.ts`.
+
 ## Schema (B-2.1, migration `0028_channels.sql`)
 
 Timestamps are epoch milliseconds, like attention. Access is decided by
 `channelAccessFor` beside `capabilitiesFor` (B-2.2, below), never by these tables.
 
-| Table | Holds |
-|---|---|
-| `channel` | COHORT (exactly one program), COMMUNITY or DIRECT; slug, name, topic, postingPolicy ALL or STAFF, position, archivedAt, seedKey |
-| `channel_member` | DIRECT members and explicit extras only. Cohort and community membership is derived at read time |
-| `channel_message` | The message, its thread parent, author, client nonce, embeds and citations JSON, edit/delete times and moderation state |
-| `channel_read` | One read marker per person and channel |
-| `message_reaction` | One row per person, message and reaction from the fixed set (desired state, not a toggle) |
-| `message_report` | A member's report: one per person and message |
-| `moderation_event` | Append-only audit trail: who flagged, hid, restored or kept what, from which source, and why |
-| `channel_conduct` | (B-2.2, migration `0029_channel_conduct.sql`) One row per person: the latest code of conduct version they agreed to, and when |
+| Table              | Holds                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `channel`          | COHORT (exactly one program), COMMUNITY or DIRECT; slug, name, topic, postingPolicy ALL or STAFF, position, archivedAt, seedKey |
+| `channel_member`   | DIRECT members and explicit extras only. Cohort and community membership is derived at read time                                |
+| `channel_message`  | The message, its thread parent, author, client nonce, embeds and citations JSON, edit/delete times and moderation state         |
+| `channel_read`     | One read marker per person and channel                                                                                          |
+| `message_reaction` | One row per person, message and reaction from the fixed set (desired state, not a toggle)                                       |
+| `message_report`   | A member's report: one per person and message                                                                                   |
+| `moderation_event` | Append-only audit trail: who flagged, hid, restored or kept what, from which source, and why                                    |
+| `channel_conduct`  | (B-2.2, migration `0029_channel_conduct.sql`) One row per person: the latest code of conduct version they agreed to, and when   |
 
 ### Invariants the database enforces
 
@@ -60,11 +65,11 @@ channel belongs to, removes its messages and everything attached to them.
 decide through it; `CHANNEL_ACCESS_MATRIX` in `capabilities.fixtures.ts` is
 the parameterised role matrix every surface can reuse.
 
-| Channel | Reads | Posts | Moderates |
-|---|---|---|---|
-| COMMUNITY | Every signed-in person, institutions included | Everyone who reads it | Admins and global mentors |
-| COHORT | That program's members (APPROVED, AUDIT and COMPLETED, so alumni stay after the cohort ends), its INSTRUCTOR, TA and MENTOR assignments, and admins | Everyone who reads it | Its instructors, TAs and mentors, and admins |
-| DIRECT | Its two `channel_member` rows only: admins and every mentor outside it included get nothing (B-4.1) | Its members | Nobody in place: either member reports, and admins outside it decide that message alone (QA4-01) |
+| Channel   | Reads                                                                                                                                               | Posts                 | Moderates                                                                                        |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------ |
+| COMMUNITY | Every signed-in person, institutions included                                                                                                       | Everyone who reads it | Admins and global mentors                                                                        |
+| COHORT    | That program's members (APPROVED, AUDIT and COMPLETED, so alumni stay after the cohort ends), its INSTRUCTOR, TA and MENTOR assignments, and admins | Everyone who reads it | Its instructors, TAs and mentors, and admins                                                     |
+| DIRECT    | Its two `channel_member` rows only: admins and every mentor outside it included get nothing (B-4.1)                                                 | Its members           | Nobody in place: either member reports, and admins outside it decide that message alone (QA4-01) |
 
 - **postingPolicy STAFF** (the `cNN-announcements` channels): only admins,
   and on a cohort channel its instructors and TAs, post. Mentors and members
@@ -148,23 +153,23 @@ deleting your own message and read markers do not.
 `src/pages/api/messages/**`, validated against `ROUTES` in
 `src/lib/platform/contracts.ts` on the way in and out.
 
-| Route | Does |
-|---|---|
-| `GET /api/channels` | `listChannelsFor`, with unread counts |
-| `GET /api/channels/:id/messages?before\|since&thread` | A page of messages (below) |
-| `GET /api/channels/:id/shareables?q=` | What the caller can attach here (B-2.4, "Embeds" below) |
-| `POST /api/channels/:id/messages` | Post; idempotent on `clientNonce` (201 new, 200 repeat) |
-| `POST /api/channels/:id/read` | Move the read marker forward |
-| `PATCH /api/messages/:id` | The author edits |
-| `DELETE /api/messages/:id` | The author deletes; a placeholder stays |
-| `POST /api/messages/:id/reactions` | Set one fixed reaction on or off |
-| `POST /api/messages/:id/report` | Report a message (B-2.5): once per person, 201 new, 200 repeat |
-| `POST /api/messages/:id/review` | The author of a hidden message asks for a review (B-2.5) |
-| `POST /api/moderation/:messageId` | Hide (channel moderators and admins), restore or keep (admins) (B-2.5) |
-| `POST /api/moderation/:messageId/undo` | The moderator who hid a message takes the hide back while no admin has decided (B-3.2, QA2-11); body `{}` |
-| `GET /api/moderation/queue?state&cursor` | The admin moderation queue (B-2.5); admins only, 403 otherwise |
-| `POST /api/channels/:id/tembo` | Ask Tembo about your own message (B-3.1; `src/lib/tembo/README.md`); also needs `tembo_channels` |
-| `POST /api/messages/:id/tembo-feedback` | "helpful" or "not quite" on a Tembo answer (B-3.1); also needs `tembo_channels` |
+| Route                                                 | Does                                                                                                      |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `GET /api/channels`                                   | `listChannelsFor`, with unread counts                                                                     |
+| `GET /api/channels/:id/messages?before\|since&thread` | A page of messages (below)                                                                                |
+| `GET /api/channels/:id/shareables?q=`                 | What the caller can attach here (B-2.4, "Embeds" below)                                                   |
+| `POST /api/channels/:id/messages`                     | Post; idempotent on `clientNonce` (201 new, 200 repeat)                                                   |
+| `POST /api/channels/:id/read`                         | Move the read marker forward                                                                              |
+| `PATCH /api/messages/:id`                             | The author edits                                                                                          |
+| `DELETE /api/messages/:id`                            | The author deletes; a placeholder stays                                                                   |
+| `POST /api/messages/:id/reactions`                    | Set one fixed reaction on or off                                                                          |
+| `POST /api/messages/:id/report`                       | Report a message (B-2.5): once per person, 201 new, 200 repeat                                            |
+| `POST /api/messages/:id/review`                       | The author of a hidden message asks for a review (B-2.5)                                                  |
+| `POST /api/moderation/:messageId`                     | Hide (channel moderators and admins), restore or keep (admins) (B-2.5)                                    |
+| `POST /api/moderation/:messageId/undo`                | The moderator who hid a message takes the hide back while no admin has decided (B-3.2, QA2-11); body `{}` |
+| `GET /api/moderation/queue?state&cursor`              | The admin moderation queue (B-2.5); admins only, 403 otherwise                                            |
+| `POST /api/channels/:id/tembo`                        | Ask Tembo about your own message (B-3.1; `src/lib/tembo/README.md`); also needs `tembo_channels`          |
+| `POST /api/messages/:id/tembo-feedback`               | "helpful" or "not quite" on a Tembo answer (B-3.1); also needs `tembo_channels`                           |
 
 Every route:
 
@@ -222,7 +227,7 @@ channel's change counter, all from one snapshot.
   existed before the advanced checkpoint): only an opaque id, and evicting an
   unknown id is a no-op. Items come back in position order.
 - A since page's `beforeCursor` reaches the messages older than the oldest
-  message the page *adds* (edits in it are of messages already cached), or is
+  message the page _adds_ (edits in it are of messages already cached), or is
   null when it adds none. This is the window the channel store files the
   delta under.
 - Cursors are opaque and bound to their feed and direction: another channel's
@@ -317,14 +322,14 @@ hidden by a machine: a flagged message stays visible until a person decides
 `moderation/detectors.ts` is pure and synchronous. `detectFindings(body)`
 returns findings, each with a plain-language reason and an allowlist key:
 
-| Finding | Reason | Key |
-|---|---|---|
-| Phone numbers: Kenyan 07xx/01xx and landlines, +254/254/00254, spaced, dotted, dashed, bracketed, spelled out in English or Swahili ("double seven" too), mixed, fullwidth or keycap digits; international numbers with + or 00; North American (555) 234-5678 | Shares a phone number | `phone:+254712345678` |
-| Email addresses, also name [at] domain [dot] org, and name at gmail dot com for webmail domains | Shares an email address | `email:…` |
-| WhatsApp and Telegram links: chat.whatsapp.com, wa.me, wa.link, api.whatsapp.com/send, whatsapp.com/channel, t.me, telegram.me, tg:// and whatsapp:// | Links to a WhatsApp or Telegram chat | `link:host/path` |
-| Link shorteners (bit.ly, tinyurl.com, t.co, …) | Uses a shortened link | `link:host/path` |
-| Five or more distinct `@` mentions | Mentions many people at once | none |
-| The same text (20+ characters) by the same person in three channels within an hour | Posted the same message in several channels | none |
+| Finding                                                                                                                                                                                                                                                        | Reason                                      | Key                   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------- |
+| Phone numbers: Kenyan 07xx/01xx and landlines, +254/254/00254, spaced, dotted, dashed, bracketed, spelled out in English or Swahili ("double seven" too), mixed, fullwidth or keycap digits; international numbers with + or 00; North American (555) 234-5678 | Shares a phone number                       | `phone:+254712345678` |
+| Email addresses, also name [at] domain [dot] org, and name at gmail dot com for webmail domains                                                                                                                                                                | Shares an email address                     | `email:…`             |
+| WhatsApp and Telegram links: chat.whatsapp.com, wa.me, wa.link, api.whatsapp.com/send, whatsapp.com/channel, t.me, telegram.me, tg:// and whatsapp://                                                                                                          | Links to a WhatsApp or Telegram chat        | `link:host/path`      |
+| Link shorteners (bit.ly, tinyurl.com, t.co, …)                                                                                                                                                                                                                 | Uses a shortened link                       | `link:host/path`      |
+| Five or more distinct `@` mentions                                                                                                                                                                                                                             | Mentions many people at once                | none                  |
+| The same text (20+ characters) by the same person in three channels within an hour                                                                                                                                                                             | Posted the same message in several channels | none                  |
 
 A digit run counts as a phone number only when it starts and ends where the
 author's own grouping does, and has a phone number's shape. So years, dates,
@@ -572,13 +577,13 @@ the server resolves them in one statement, stores what readers will see in
 never change embeds; deleting a message clears them. Link previews are off in
 v1.
 
-| Work | Shared when | Refused |
-|---|---|---|
-| Project (`journeyId` + `version`) | It is the poster's own published project (`communityJourney.state = 'POSTED', unheld and with an eligible saved profile`) at its current revision | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one |
+| Work                                                                  | Shared when                                                                                                                                                | Refused                                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project (`journeyId` + `version`)                                     | It is the poster's own published project (`communityJourney.state = 'POSTED'`, with no moderation hold) at its current revision                            | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one                |
 | Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording is that program's, complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
 
 - **Whose consent.** A project's owner sharing it is the consent for that
-  channel's readers, so nobody shares another person's work (posted work follows the shared eligibility predicate; see `src/lib/search/README.md`).
+  channel's readers, so nobody shares another person's work (see the shared member visibility rules linked above).
   A clip goes only where every reader can see the recording: every reader of
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
   admins) has that cohort's recordings.
@@ -587,11 +592,11 @@ v1.
   evidence link (`link: null` without one, or for anything else: no TTV page
   is open to every reader, coordinator seq 382). It is a snapshot of the
   shared revision: an owner who edits the project to remove something must
-  return it to draft, or delete the message, to take the old text out of the
+  make it private, or delete the message, to take the old text out of the
   channel. A clip keeps the recording's title and a quotation of the
   transcript segments overlapping its window (280 characters).
-- **Screened.** Work receives Clef publish-then-check when saved. The channel also screens
-  each shared snapshot: the moderation screen gets the body followed by each
+- **Screened.** Projects are not moderated where they are written, and every
+  reader sees them, so the moderation screen gets the body followed by each
   shared project's title, summary and link (`screeningText`). Contact details
   and invite links in attached work are flagged like those in the body. Clip
   quotations are the session's own words and are not screened. Edits change
@@ -604,7 +609,7 @@ v1.
   quotation. A project's confirmations are read live: each mentor's latest
   confirmation at or before the shared revision, with the revision it
   confirmed. An edited project keeps showing the revision that was shared;
-  posting a draft again brings its card back.
+  publishing a private project again brings its card back.
 - **Not pushed.** A change to the work alone does not move the message, so a
   `since` poll does not carry it: an open page shows the change when it next
   reads that message (a fresh latest page, or any change to the message).

@@ -37,19 +37,23 @@ const timestamps = {
 
 // ─── User (matches better-auth expected schema) ────────────
 
-export const user = sqliteTable("user", {
-  id: cuid("id"),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: integer("emailVerified", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  image: text("image"),
-  ...timestamps,
-}, (table) => [
-  // Channel mentions (@Full Name) resolve people by name, case-insensitively (migration 0032).
-  index("user_name_lower_idx").on(sql`lower(${table.name})`),
-]);
+export const user = sqliteTable(
+  "user",
+  {
+    id: cuid("id"),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: integer("emailVerified", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    image: text("image"),
+    ...timestamps,
+  },
+  (table) => [
+    // Channel mentions (@Full Name) resolve people by name, case-insensitively (migration 0032).
+    index("user_name_lower_idx").on(sql`lower(${table.name})`),
+  ],
+);
 
 export const userRelations = relations(user, ({ many, one }) => ({
   accounts: many(account),
@@ -74,108 +78,242 @@ export const featureFlag = sqliteTable(
       .notNull()
       .default("OFF"),
     updatedAt: timestamps.updatedAt,
-    updatedBy: text("updatedBy").references(() => user.id, { onDelete: "set null" }),
+    updatedBy: text("updatedBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
-    check("feature_flag_audience_check", sql`${table.audience} IN ('OFF', 'STAFF', 'ALL')`),
-  ]
+    check(
+      "feature_flag_audience_check",
+      sql`${table.audience} IN ('OFF', 'STAFF', 'ALL')`,
+    ),
+  ],
 );
 
 // ─── Onboarding (src/lib/onboarding/README.md) ─────────────
 // Timestamps are epoch milliseconds, like attention, and are written by the
 // domain. Intents choose routing and copy only; capabilitiesFor never reads them.
 
-export const memberIntent = sqliteTable("member_intent", {
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  intent: text("intent", { enum: ["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"] }).notNull(),
-  createdAt: integer("createdAt").notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.userId, table.intent] }),
-  check("member_intent_intent_check", sql`${table.intent} IN ('MEMBER','MENTOR','INSTITUTION','EXPLORING')`),
-  check("member_intent_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const memberIntent = sqliteTable(
+  "member_intent",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    intent: text("intent", {
+      enum: ["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"],
+    }).notNull(),
+    createdAt: integer("createdAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.intent] }),
+    check(
+      "member_intent_intent_check",
+      sql`${table.intent} IN ('MEMBER','MENTOR','INSTITUTION','EXPLORING')`,
+    ),
+    check("member_intent_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /** NEW only for accounts created while onboarding is open; no row means an account from before rollout. */
-export const memberOnboarding = sqliteTable("member_onboarding", {
-  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-  stage: text("stage", { enum: ["NEW", "DONE"] }).notNull(),
-  completedAt: integer("completedAt"),
-  promptDismissedAt: integer("promptDismissedAt"),
-  createdAt: integer("createdAt").notNull(),
-  updatedAt: integer("updatedAt").notNull(),
-}, (table) => [
-  check("member_onboarding_stage_check", sql`${table.stage} IN ('NEW','DONE')`),
-  check("member_onboarding_done_check", sql`${table.stage} = 'DONE' OR (${table.completedAt} IS NULL AND ${table.promptDismissedAt} IS NULL)`),
-  check("member_onboarding_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
-]);
+export const memberOnboarding = sqliteTable(
+  "member_onboarding",
+  {
+    userId: text("userId")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    stage: text("stage", { enum: ["NEW", "DONE"] }).notNull(),
+    completedAt: integer("completedAt"),
+    promptDismissedAt: integer("promptDismissedAt"),
+    createdAt: integer("createdAt").notNull(),
+    updatedAt: integer("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "member_onboarding_stage_check",
+      sql`${table.stage} IN ('NEW','DONE')`,
+    ),
+    check(
+      "member_onboarding_done_check",
+      sql`${table.stage} = 'DONE' OR (${table.completedAt} IS NULL AND ${table.promptDismissedAt} IS NULL)`,
+    ),
+    check(
+      "member_onboarding_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
 
 /** A request for a global MENTOR or INSTITUTION role. decidedBy is audit-only and never reaches the requester. */
-export const accessRequest = sqliteTable("access_request", {
-  id: cuid("id"),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  role: text("role", { enum: ["MENTOR", "INSTITUTION"] }).notNull(),
-  status: text("status", { enum: ["PENDING", "APPROVED", "DECLINED", "WITHDRAWN"] }).notNull().default("PENDING"),
-  note: text("note").notNull(),
-  organisation: text("organisation"),
-  organisationRole: text("organisationRole"),
-  link: text("link"),
-  scopeAcknowledgedAt: integer("scopeAcknowledgedAt"),
-  decisionId: text("decisionId"),
-  /** Set by the withdrawal itself, so the statements batched with it act only for that call. */
-  withdrawalId: text("withdrawalId"),
-  decisionMessage: text("decisionMessage"),
-  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
-  decidedAt: integer("decidedAt"),
-  requesterSeenAt: integer("requesterSeenAt"),
-  createdAt: integer("createdAt").notNull(),
-  updatedAt: integer("updatedAt").notNull(),
-}, (table) => [
-  uniqueIndex("access_request_pending_idx").on(table.userId, table.role).where(sql`${table.status} = 'PENDING'`),
-  uniqueIndex("access_request_decision_idx").on(table.decisionId).where(sql`${table.decisionId} IS NOT NULL`),
-  index("access_request_queue_idx").on(table.status, table.createdAt),
-  index("access_request_user_idx").on(table.userId, table.role, table.createdAt),
-  check("access_request_role_check", sql`${table.role} IN ('MENTOR','INSTITUTION')`),
-  check("access_request_status_check", sql`${table.status} IN ('PENDING','APPROVED','DECLINED','WITHDRAWN')`),
-  check("access_request_note_check", sql`length(trim(${table.note})) >= 20 AND length(${table.note}) <= 600`),
-  check("access_request_institution_check", sql`${table.role} <> 'INSTITUTION' OR (${table.organisation} IS NOT NULL AND ${table.scopeAcknowledgedAt} IS NOT NULL)`),
-  check("access_request_mentor_check", sql`${table.role} <> 'MENTOR' OR (${table.organisation} IS NULL AND ${table.organisationRole} IS NULL AND ${table.scopeAcknowledgedAt} IS NULL)`),
-  check("access_request_organisation_check", sql`${table.organisation} IS NULL OR (length(trim(${table.organisation})) > 0 AND length(${table.organisation}) <= 200)`),
-  check("access_request_organisation_role_check", sql`${table.organisationRole} IS NULL OR (length(trim(${table.organisationRole})) > 0 AND length(${table.organisationRole}) <= 200)`),
-  check("access_request_link_check", sql`${table.link} IS NULL OR length(${table.link}) <= 2048`),
-  check("access_request_decided_check", sql`(${table.status} IN ('APPROVED','DECLINED')) = (${table.decidedAt} IS NOT NULL)`),
-  check("access_request_message_check", sql`${table.decisionMessage} IS NULL OR (${table.status} IN ('APPROVED','DECLINED') AND length(trim(${table.decisionMessage})) > 0 AND length(${table.decisionMessage}) <= 600)`),
-  check("access_request_withdrawal_check", sql`${table.withdrawalId} IS NULL OR ${table.status} = 'WITHDRAWN'`),
-  check("access_request_seen_check", sql`${table.requesterSeenAt} IS NULL OR ${table.status} IN ('APPROVED','DECLINED')`),
-  check("access_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
-]);
+export const accessRequest = sqliteTable(
+  "access_request",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["MENTOR", "INSTITUTION"] }).notNull(),
+    status: text("status", {
+      enum: ["PENDING", "APPROVED", "DECLINED", "WITHDRAWN"],
+    })
+      .notNull()
+      .default("PENDING"),
+    note: text("note").notNull(),
+    organisation: text("organisation"),
+    organisationRole: text("organisationRole"),
+    link: text("link"),
+    scopeAcknowledgedAt: integer("scopeAcknowledgedAt"),
+    decisionId: text("decisionId"),
+    /** Set by the withdrawal itself, so the statements batched with it act only for that call. */
+    withdrawalId: text("withdrawalId"),
+    decisionMessage: text("decisionMessage"),
+    decidedBy: text("decidedBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: integer("decidedAt"),
+    requesterSeenAt: integer("requesterSeenAt"),
+    createdAt: integer("createdAt").notNull(),
+    updatedAt: integer("updatedAt").notNull(),
+  },
+  (table) => [
+    uniqueIndex("access_request_pending_idx")
+      .on(table.userId, table.role)
+      .where(sql`${table.status} = 'PENDING'`),
+    uniqueIndex("access_request_decision_idx")
+      .on(table.decisionId)
+      .where(sql`${table.decisionId} IS NOT NULL`),
+    index("access_request_queue_idx").on(table.status, table.createdAt),
+    index("access_request_user_idx").on(
+      table.userId,
+      table.role,
+      table.createdAt,
+    ),
+    check(
+      "access_request_role_check",
+      sql`${table.role} IN ('MENTOR','INSTITUTION')`,
+    ),
+    check(
+      "access_request_status_check",
+      sql`${table.status} IN ('PENDING','APPROVED','DECLINED','WITHDRAWN')`,
+    ),
+    check(
+      "access_request_note_check",
+      sql`length(trim(${table.note})) >= 20 AND length(${table.note}) <= 600`,
+    ),
+    check(
+      "access_request_institution_check",
+      sql`${table.role} <> 'INSTITUTION' OR (${table.organisation} IS NOT NULL AND ${table.scopeAcknowledgedAt} IS NOT NULL)`,
+    ),
+    check(
+      "access_request_mentor_check",
+      sql`${table.role} <> 'MENTOR' OR (${table.organisation} IS NULL AND ${table.organisationRole} IS NULL AND ${table.scopeAcknowledgedAt} IS NULL)`,
+    ),
+    check(
+      "access_request_organisation_check",
+      sql`${table.organisation} IS NULL OR (length(trim(${table.organisation})) > 0 AND length(${table.organisation}) <= 200)`,
+    ),
+    check(
+      "access_request_organisation_role_check",
+      sql`${table.organisationRole} IS NULL OR (length(trim(${table.organisationRole})) > 0 AND length(${table.organisationRole}) <= 200)`,
+    ),
+    check(
+      "access_request_link_check",
+      sql`${table.link} IS NULL OR length(${table.link}) <= 2048`,
+    ),
+    check(
+      "access_request_decided_check",
+      sql`(${table.status} IN ('APPROVED','DECLINED')) = (${table.decidedAt} IS NOT NULL)`,
+    ),
+    check(
+      "access_request_message_check",
+      sql`${table.decisionMessage} IS NULL OR (${table.status} IN ('APPROVED','DECLINED') AND length(trim(${table.decisionMessage})) > 0 AND length(${table.decisionMessage}) <= 600)`,
+    ),
+    check(
+      "access_request_withdrawal_check",
+      sql`${table.withdrawalId} IS NULL OR ${table.status} = 'WITHDRAWN'`,
+    ),
+    check(
+      "access_request_seen_check",
+      sql`${table.requesterSeenAt} IS NULL OR ${table.status} IN ('APPROVED','DECLINED')`,
+    ),
+    check(
+      "access_request_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
 
 // ─── Attention ───────────────────────────────────────────
 
 /** Attention timestamps are wire-format epoch milliseconds, not Unix seconds. */
-export const attentionItem = sqliteTable("attention_item", {
-  id: cuid("id"),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  eventKey: text("eventKey").notNull(),
-  kind: text("kind").notNull(),
-  space: text("space", { enum: ["cohort", "community", "mentoring", "discover", "admin", "profile"] }).notNull(),
-  category: text("category", { enum: ["mentions", "requests", "updates"] }).notNull(),
-  subjectKind: text("subjectKind").notNull(),
-  subjectId: text("subjectId").notNull(),
-  subjectHref: text("subjectHref").notNull(),
-  subjectLabel: text("subjectLabel").notNull(),
-  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
-  summary: text("summary").notNull(),
-  createdAt: integer("createdAt").notNull(),
-  readAt: integer("readAt"),
-}, table => [
-  uniqueIndex("attention_item_user_event_idx").on(table.userId, table.eventKey),
-  index("attention_item_unread_idx").on(table.userId, table.readAt, table.space),
-  index("attention_item_page_idx").on(table.userId, table.createdAt, table.id),
-  index("attention_item_filter_page_idx").on(table.userId, table.category, table.createdAt, table.id),
-  check("attention_item_space_check", sql`${table.space} IN ('cohort','community','mentoring','discover','admin','profile')`),
-  check("attention_item_category_check", sql`${table.category} IN ('mentions','requests','updates')`),
-  check("attention_item_time_check", sql`${table.createdAt} >= 0 AND (${table.readAt} IS NULL OR ${table.readAt} >= ${table.createdAt})`),
-]);
+export const attentionItem = sqliteTable(
+  "attention_item",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    eventKey: text("eventKey").notNull(),
+    kind: text("kind").notNull(),
+    space: text("space", {
+      enum: [
+        "cohort",
+        "community",
+        "mentoring",
+        "discover",
+        "admin",
+        "profile",
+      ],
+    }).notNull(),
+    category: text("category", {
+      enum: ["mentions", "requests", "updates"],
+    }).notNull(),
+    subjectKind: text("subjectKind").notNull(),
+    subjectId: text("subjectId").notNull(),
+    subjectHref: text("subjectHref").notNull(),
+    subjectLabel: text("subjectLabel").notNull(),
+    actorId: text("actorId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    summary: text("summary").notNull(),
+    createdAt: integer("createdAt").notNull(),
+    readAt: integer("readAt"),
+  },
+  (table) => [
+    uniqueIndex("attention_item_user_event_idx").on(
+      table.userId,
+      table.eventKey,
+    ),
+    index("attention_item_unread_idx").on(
+      table.userId,
+      table.readAt,
+      table.space,
+    ),
+    index("attention_item_page_idx").on(
+      table.userId,
+      table.createdAt,
+      table.id,
+    ),
+    index("attention_item_filter_page_idx").on(
+      table.userId,
+      table.category,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "attention_item_space_check",
+      sql`${table.space} IN ('cohort','community','mentoring','discover','admin','profile')`,
+    ),
+    check(
+      "attention_item_category_check",
+      sql`${table.category} IN ('mentions','requests','updates')`,
+    ),
+    check(
+      "attention_item_time_check",
+      sql`${table.createdAt} >= 0 AND (${table.readAt} IS NULL OR ${table.readAt} >= ${table.createdAt})`,
+    ),
+  ],
+);
 
 // ─── Account (matches better-auth expected schema) ─────────
 
@@ -383,8 +521,15 @@ export const programRole = sqliteTable(
       table.userId,
       table.name,
     ),
-    index("programRole_userId_programId_name_idx").on(table.userId, table.programId, table.name),
-    check("programRole_name_check", sql`${table.name} IN ('INSTRUCTOR', 'TA', 'MENTOR')`),
+    index("programRole_userId_programId_name_idx").on(
+      table.userId,
+      table.programId,
+      table.name,
+    ),
+    check(
+      "programRole_name_check",
+      sql`${table.name} IN ('INSTRUCTOR', 'TA', 'MENTOR')`,
+    ),
   ],
 );
 
@@ -436,7 +581,11 @@ export const programApplication = sqliteTable(
       table.programId,
       table.userId,
     ),
-    index("programApplication_userId_programId_status_idx").on(table.userId, table.programId, table.status),
+    index("programApplication_userId_programId_status_idx").on(
+      table.userId,
+      table.programId,
+      table.status,
+    ),
   ],
 );
 
@@ -460,36 +609,40 @@ export const programApplicationRelations = relations(
 
 // ─── Recording ─────────────────────────────────────────────
 
-export const recording = sqliteTable("recording", {
-  id: cuid("id"),
-  programId: text("programId").references(() => program.id),
-  title: text("title").notNull(),
-  description: text("description"),
-  driveFileId: text("driveFileId").unique(),
-  r2VideoKey: text("r2VideoKey"),
-  r2AudioKey: text("r2AudioKey"),
-  durationSeconds: integer("durationSeconds"),
-  fileSizeBytes: integer("fileSizeBytes"),
-  recordedAt: integer("recordedAt", { mode: "timestamp" }),
-  processingStatus: text("processingStatus", {
-    enum: [
-      "pending",
-      "queued",
-      "downloading",
-      "extracting_audio",
-      "transcribing",
-      "embedding",
-      "complete",
-      "failed",
-    ],
-  })
-    .notNull()
-    .default("pending"),
-  processingError: text("processingError"),
-  transcriptText: text("transcriptText"),
-  transcriptVtt: text("transcriptVtt"),
-  ...timestamps,
-}, (table) => [index("recording_program_idx").on(table.programId)]);
+export const recording = sqliteTable(
+  "recording",
+  {
+    id: cuid("id"),
+    programId: text("programId").references(() => program.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    driveFileId: text("driveFileId").unique(),
+    r2VideoKey: text("r2VideoKey"),
+    r2AudioKey: text("r2AudioKey"),
+    durationSeconds: integer("durationSeconds"),
+    fileSizeBytes: integer("fileSizeBytes"),
+    recordedAt: integer("recordedAt", { mode: "timestamp" }),
+    processingStatus: text("processingStatus", {
+      enum: [
+        "pending",
+        "queued",
+        "downloading",
+        "extracting_audio",
+        "transcribing",
+        "embedding",
+        "complete",
+        "failed",
+      ],
+    })
+      .notNull()
+      .default("pending"),
+    processingError: text("processingError"),
+    transcriptText: text("transcriptText"),
+    transcriptVtt: text("transcriptVtt"),
+    ...timestamps,
+  },
+  (table) => [index("recording_program_idx").on(table.programId)],
+);
 
 export const recordingRelations = relations(recording, ({ one, many }) => ({
   program: one(program, {
@@ -616,21 +769,31 @@ export const platformAlert = sqliteTable(
 
 // ─── TranscriptSegment ─────────────────────────────────────
 
-export const transcriptSegment = sqliteTable("transcript_segment", {
-  id: cuid("id"),
-  recordingId: text("recordingId")
-    .notNull()
-    .references(() => recording.id, { onDelete: "cascade" }),
-  startTime: real("startTime").notNull(),
-  endTime: real("endTime").notNull(),
-  speaker: text("speaker"),
-  text: text("text").notNull(),
-  chunkIndex: integer("chunkIndex"),
-  vectorId: text("vectorId"),
-  createdAt: integer("createdAt", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-}, (table) => [index("transcript_segment_recording_time_idx").on(table.recordingId, table.startTime, table.id)]);
+export const transcriptSegment = sqliteTable(
+  "transcript_segment",
+  {
+    id: cuid("id"),
+    recordingId: text("recordingId")
+      .notNull()
+      .references(() => recording.id, { onDelete: "cascade" }),
+    startTime: real("startTime").notNull(),
+    endTime: real("endTime").notNull(),
+    speaker: text("speaker"),
+    text: text("text").notNull(),
+    chunkIndex: integer("chunkIndex"),
+    vectorId: text("vectorId"),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("transcript_segment_recording_time_idx").on(
+      table.recordingId,
+      table.startTime,
+      table.id,
+    ),
+  ],
+);
 
 export const transcriptSegmentRelations = relations(
   transcriptSegment,
@@ -669,25 +832,32 @@ export const chatSessionRelations = relations(chatSession, ({ one, many }) => ({
 
 // ─── ChatMessage ───────────────────────────────────────────
 
-export const chatMessage = sqliteTable("chat_message", {
-  id: cuid("id"),
-  sessionId: text("sessionId").references(() => chatSession.id, {
-    onDelete: "cascade",
-  }),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  role: text("role", { enum: ["user", "assistant"] }).notNull(),
-  content: text("content").notNull(),
-  citations: text("citations"),
-  createdAt: integer("createdAt", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-}, (table) => [
-  // Serves a conversation's transcript, Recent's message counts and the
-  // empty-conversation check in saveChatExchange.
-  index("chat_message_sessionId_createdAt_idx").on(table.sessionId, table.createdAt),
-]);
+export const chatMessage = sqliteTable(
+  "chat_message",
+  {
+    id: cuid("id"),
+    sessionId: text("sessionId").references(() => chatSession.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    citations: text("citations"),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    // Serves a conversation's transcript, Recent's message counts and the
+    // empty-conversation check in saveChatExchange.
+    index("chat_message_sessionId_createdAt_idx").on(
+      table.sessionId,
+      table.createdAt,
+    ),
+  ],
+);
 
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
   session: one(chatSession, {
@@ -1036,7 +1206,10 @@ export const feedbackTheme = sqliteTable(
     ...timestamps,
   },
   (table) => [
-    index("feedback_theme_status_updatedAt_idx").on(table.status, table.updatedAt),
+    index("feedback_theme_status_updatedAt_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
     check(
       "feedback_theme_kind_check",
       sql`${table.kind} in ('BUG', 'CONFUSING', 'IDEA', 'PRAISE', 'OTHER')`,
@@ -1101,7 +1274,9 @@ export const feedback = sqliteTable(
      * Personal or wellbeing content. Never attached to a theme and never
      * summarised anywhere public; the owner handles it directly.
      */
-    sensitive: integer("sensitive", { mode: "boolean" }).notNull().default(false),
+    sensitive: integer("sensitive", { mode: "boolean" })
+      .notNull()
+      .default(false),
     ...timestamps,
   },
   (table) => [
@@ -1116,9 +1291,18 @@ export const feedback = sqliteTable(
       "feedback_status_check",
       sql`${table.status} in ('NEW', 'IN_PROGRESS', 'RESOLVED', 'DECLINED')`,
     ),
-    check("feedback_message_length_check", sql`length(${table.message}) <= 5000`),
-    check("feedback_pageUrl_length_check", sql`length(${table.pageUrl}) <= 2000`),
-    check("feedback_context_length_check", sql`length(${table.context}) <= 20000`),
+    check(
+      "feedback_message_length_check",
+      sql`length(${table.message}) <= 5000`,
+    ),
+    check(
+      "feedback_pageUrl_length_check",
+      sql`length(${table.pageUrl}) <= 2000`,
+    ),
+    check(
+      "feedback_context_length_check",
+      sql`length(${table.context}) <= 20000`,
+    ),
     check(
       "feedback_response_length_check",
       sql`${table.response} is null or length(${table.response}) <= 2000`,
@@ -1241,8 +1425,10 @@ export const communityJourney = sqliteTable(
     ),
     index("communityJourney_userId_state_idx").on(table.userId, table.state),
     index("communityJourney_review_idx")
-      .on(table.updatedAt)
-      .where(sql`${table.moderationReviewRequired}=1`),
+      .on(table.moderationOutcome, table.updatedAt, table.id)
+      .where(
+        sql`${table.moderationReviewRequired}=1 AND ${table.state}='POSTED' AND ${table.moderatorHidden}=0`,
+      ),
     check(
       "communityJourney_visibility_check",
       sql`${table.visibility} IN ('institution', 'private')`,
@@ -1301,25 +1487,58 @@ export const communityConfirmationRelations = relations(
  * waits again. Only the mentor's own Confirm page reads it; it is never a
  * signal about the member (src/lib/mentoring/README.md).
  */
-export const communitySetAside = sqliteTable("communitySetAside", {
-  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  journeyId: text("journeyId").notNull().references(() => communityJourney.id, { onDelete: "cascade" }),
-  journeyVersion: integer("journeyVersion").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
-}, (table) => [
-  primaryKey({ columns: [table.mentorId, table.journeyId, table.journeyVersion] }),
-  index("communitySetAside_journeyId_idx").on(table.journeyId),
-  check("communitySetAside_journeyVersion_check", sql`${table.journeyVersion} >= 1`),
-]);
+export const communitySetAside = sqliteTable(
+  "communitySetAside",
+  {
+    mentorId: text("mentorId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    journeyId: text("journeyId")
+      .notNull()
+      .references(() => communityJourney.id, { onDelete: "cascade" }),
+    journeyVersion: integer("journeyVersion").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.mentorId, table.journeyId, table.journeyVersion],
+    }),
+    index("communitySetAside_journeyId_idx").on(table.journeyId),
+    check(
+      "communitySetAside_journeyVersion_check",
+      sql`${table.journeyVersion} >= 1`,
+    ),
+  ],
+);
 
 // Registry membership is required for synthetic staging authority; names alone never grant it.
-export const stagingFixtureIdentity = sqliteTable("stagingFixtureIdentity", {
-  userId: text("userId").primaryKey().references(() => user.id, {onDelete:"cascade"}),
-  sessionId: text("sessionId").notNull().unique().references(() => session.id, {onDelete:"cascade"}),
-  runId: text("runId").notNull(),
-  persona: text("persona", {enum:["member","otherMember","mentor","institution","unapprovedInstitution","admin"]}).notNull(),
-  expiresAt: integer("expiresAt").notNull(),
-}, table => [index("stagingFixtureIdentity_runId_idx").on(table.runId)]);
+export const stagingFixtureIdentity = sqliteTable(
+  "stagingFixtureIdentity",
+  {
+    userId: text("userId")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sessionId: text("sessionId")
+      .notNull()
+      .unique()
+      .references(() => session.id, { onDelete: "cascade" }),
+    runId: text("runId").notNull(),
+    persona: text("persona", {
+      enum: [
+        "member",
+        "otherMember",
+        "mentor",
+        "institution",
+        "unapprovedInstitution",
+        "admin",
+      ],
+    }).notNull(),
+    expiresAt: integer("expiresAt").notNull(),
+  },
+  (table) => [index("stagingFixtureIdentity_runId_idx").on(table.runId)],
+);
 
 // One approved retained-persona QA run; revocation tombstone prevents reissuance.
 export const stagingQaRun = sqliteTable("stagingQaRun", {
@@ -1331,94 +1550,168 @@ export const stagingQaRun = sqliteTable("stagingQaRun", {
   keyFingerprint: text("keyFingerprint").notNull(),
   seedDigest: text("seedDigest").notNull(),
 });
-export const stagingQaSession = sqliteTable("stagingQaSession", {
-  tokenHash: text("tokenHash").notNull().unique(),
-  sessionId: text("sessionId").primaryKey().references(() => session.id, {onDelete:"cascade"}),
-  runId: text("runId").notNull().references(() => stagingQaRun.id),
-  userId: text("userId").notNull().references(() => user.id),
-  persona: text("persona").notNull(),
-}, table => [uniqueIndex("stagingQaSession_run_user_idx").on(table.runId, table.userId)]);
-export const stagingQaResource = sqliteTable("stagingQaResource", {
-  id: text("id").primaryKey(),
-  runId: text("runId").notNull().references(() => stagingQaRun.id),
-  kind: text("kind", {enum:["journey","confirmation"]}).notNull(),
-  userId: text("userId").notNull().references(() => user.id),
-}, table => [index("stagingQaResource_run_idx").on(table.runId)]);
+export const stagingQaSession = sqliteTable(
+  "stagingQaSession",
+  {
+    tokenHash: text("tokenHash").notNull().unique(),
+    sessionId: text("sessionId")
+      .primaryKey()
+      .references(() => session.id, { onDelete: "cascade" }),
+    runId: text("runId")
+      .notNull()
+      .references(() => stagingQaRun.id),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    persona: text("persona").notNull(),
+  },
+  (table) => [
+    uniqueIndex("stagingQaSession_run_user_idx").on(table.runId, table.userId),
+  ],
+);
+export const stagingQaResource = sqliteTable(
+  "stagingQaResource",
+  {
+    id: text("id").primaryKey(),
+    runId: text("runId")
+      .notNull()
+      .references(() => stagingQaRun.id),
+    kind: text("kind", { enum: ["journey", "confirmation"] }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+  },
+  (table) => [index("stagingQaResource_run_idx").on(table.runId)],
+);
 
 // One staging login a SAM agent made with its OIDC token (src/lib/sam-login/README.md). The row is
 // the session's authority: middleware accepts a persona session only while its login is live. No
 // foreign keys, so the audit trail and the spent token id outlive the session and the persona.
-export const stagingSamLogin = sqliteTable("staging_sam_login", {
-  id: text("id").primaryKey(),
-  /** The SAM token's id: each token signs in once. */
-  jti: text("jti").notNull().unique(),
-  samProjectId: text("samProjectId").notNull(),
-  samUserId: text("samUserId").notNull(),
-  samSubject: text("samSubject").notNull(),
-  samTaskId: text("samTaskId"),
-  samWorkspaceId: text("samWorkspaceId"),
-  samAgentSessionId: text("samAgentSessionId"),
-  persona: text("persona").notNull(),
-  userId: text("userId").notNull(),
-  sessionId: text("sessionId").notNull().unique(),
-  createdAt: integer("createdAt").notNull(),
-  expiresAt: integer("expiresAt").notNull(),
-  revokedAt: integer("revokedAt"),
-}, table => [
-  index("staging_sam_login_sam_user_idx").on(table.samUserId, table.createdAt),
-  check("staging_sam_login_time_check", sql`${table.expiresAt} > ${table.createdAt}`),
-]);
+export const stagingSamLogin = sqliteTable(
+  "staging_sam_login",
+  {
+    id: text("id").primaryKey(),
+    /** The SAM token's id: each token signs in once. */
+    jti: text("jti").notNull().unique(),
+    samProjectId: text("samProjectId").notNull(),
+    samUserId: text("samUserId").notNull(),
+    samSubject: text("samSubject").notNull(),
+    samTaskId: text("samTaskId"),
+    samWorkspaceId: text("samWorkspaceId"),
+    samAgentSessionId: text("samAgentSessionId"),
+    persona: text("persona").notNull(),
+    userId: text("userId").notNull(),
+    sessionId: text("sessionId").notNull().unique(),
+    createdAt: integer("createdAt").notNull(),
+    expiresAt: integer("expiresAt").notNull(),
+    revokedAt: integer("revokedAt"),
+  },
+  (table) => [
+    index("staging_sam_login_sam_user_idx").on(
+      table.samUserId,
+      table.createdAt,
+    ),
+    check(
+      "staging_sam_login_time_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
 
 // ─── Channels (src/lib/channels/README.md) ─────────────────
 // Timestamps are epoch milliseconds, like attention. Cohort and community
 // membership is derived at read time; channel_member holds DIRECT members and
 // explicit extras only. Access rules live in capabilitiesFor, never here.
 
-const epochMs = (name: string) => integer(name).notNull().default(sql`(unixepoch() * 1000)`);
+const epochMs = (name: string) =>
+  integer(name)
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`);
 const jsonArray = (name: string) => text(name).notNull().default("[]");
-const isJsonArray = (column: AnySQLiteColumn) => sql`json_valid(${column}) AND json_type(${column}) = 'array'`;
+const isJsonArray = (column: AnySQLiteColumn) =>
+  sql`json_valid(${column}) AND json_type(${column}) = 'array'`;
 
-export const channel = sqliteTable("channel", {
-  id: cuid("id"),
-  kind: text("kind", { enum: ["COHORT", "COMMUNITY", "DIRECT"] }).notNull(),
-  programId: text("programId").references(() => program.id, { onDelete: "cascade" }),
-  slug: text("slug").notNull(),
-  name: text("name").notNull(),
-  topic: text("topic").notNull().default(""),
-  postingPolicy: text("postingPolicy", { enum: ["ALL", "STAFF"] }).notNull().default("ALL"),
-  /** Display order within a space (cohort channels within their cohort); ties sort by name. */
-  position: integer("position").notNull().default(0),
-  /** Stable identity of a channel the platform created, so seeding never duplicates a renamed channel. */
-  seedKey: text("seedKey"),
-  archivedAt: integer("archivedAt"),
-  createdAt: epochMs("createdAt"),
-  updatedAt: epochMs("updatedAt"),
-}, (table) => [
-  uniqueIndex("channel_slug_idx").on(table.slug).where(sql`${table.kind} <> 'DIRECT'`),
-  uniqueIndex("channel_seedKey_idx").on(table.seedKey),
-  index("channel_kind_idx").on(table.kind, table.programId),
-  index("channel_programId_idx").on(table.programId),
-  check("channel_kind_check", sql`${table.kind} IN ('COHORT','COMMUNITY','DIRECT')`),
-  check("channel_program_check", sql`(${table.kind} = 'COHORT') = (${table.programId} IS NOT NULL)`),
-  check("channel_postingPolicy_check", sql`${table.postingPolicy} IN ('ALL','STAFF')`),
-  check("channel_slug_check", sql`length(${table.slug}) BETWEEN 1 AND 80 AND ${table.slug} GLOB '[a-z0-9]*' AND ${table.slug} NOT GLOB '*[^a-z0-9-]*' AND ${table.slug} NOT GLOB '*-'`),
-  check("channel_name_check", sql`length(trim(${table.name})) > 0 AND length(${table.name}) <= 80`),
-  check("channel_topic_check", sql`length(${table.topic}) <= 280`),
-  check("channel_position_check", sql`${table.position} >= 0`),
-  check("channel_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND (${table.archivedAt} IS NULL OR ${table.archivedAt} >= 0)`),
-]);
+export const channel = sqliteTable(
+  "channel",
+  {
+    id: cuid("id"),
+    kind: text("kind", { enum: ["COHORT", "COMMUNITY", "DIRECT"] }).notNull(),
+    programId: text("programId").references(() => program.id, {
+      onDelete: "cascade",
+    }),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    topic: text("topic").notNull().default(""),
+    postingPolicy: text("postingPolicy", { enum: ["ALL", "STAFF"] })
+      .notNull()
+      .default("ALL"),
+    /** Display order within a space (cohort channels within their cohort); ties sort by name. */
+    position: integer("position").notNull().default(0),
+    /** Stable identity of a channel the platform created, so seeding never duplicates a renamed channel. */
+    seedKey: text("seedKey"),
+    archivedAt: integer("archivedAt"),
+    createdAt: epochMs("createdAt"),
+    updatedAt: epochMs("updatedAt"),
+  },
+  (table) => [
+    uniqueIndex("channel_slug_idx")
+      .on(table.slug)
+      .where(sql`${table.kind} <> 'DIRECT'`),
+    uniqueIndex("channel_seedKey_idx").on(table.seedKey),
+    index("channel_kind_idx").on(table.kind, table.programId),
+    index("channel_programId_idx").on(table.programId),
+    check(
+      "channel_kind_check",
+      sql`${table.kind} IN ('COHORT','COMMUNITY','DIRECT')`,
+    ),
+    check(
+      "channel_program_check",
+      sql`(${table.kind} = 'COHORT') = (${table.programId} IS NOT NULL)`,
+    ),
+    check(
+      "channel_postingPolicy_check",
+      sql`${table.postingPolicy} IN ('ALL','STAFF')`,
+    ),
+    check(
+      "channel_slug_check",
+      sql`length(${table.slug}) BETWEEN 1 AND 80 AND ${table.slug} GLOB '[a-z0-9]*' AND ${table.slug} NOT GLOB '*[^a-z0-9-]*' AND ${table.slug} NOT GLOB '*-'`,
+    ),
+    check(
+      "channel_name_check",
+      sql`length(trim(${table.name})) > 0 AND length(${table.name}) <= 80`,
+    ),
+    check("channel_topic_check", sql`length(${table.topic}) <= 280`),
+    check("channel_position_check", sql`${table.position} >= 0`),
+    check(
+      "channel_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND (${table.archivedAt} IS NULL OR ${table.archivedAt} >= 0)`,
+    ),
+  ],
+);
 
-export const channelMember = sqliteTable("channel_member", {
-  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  addedBy: text("addedBy").references(() => user.id, { onDelete: "set null" }),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  primaryKey({ columns: [table.channelId, table.userId] }),
-  index("channel_member_userId_idx").on(table.userId, table.channelId),
-  index("channel_member_addedBy_idx").on(table.addedBy).where(sql`${table.addedBy} IS NOT NULL`),
-  check("channel_member_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const channelMember = sqliteTable(
+  "channel_member",
+  {
+    channelId: text("channelId")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    addedBy: text("addedBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.channelId, table.userId] }),
+    index("channel_member_userId_idx").on(table.userId, table.channelId),
+    index("channel_member_addedBy_idx")
+      .on(table.addedBy)
+      .where(sql`${table.addedBy} IS NOT NULL`),
+    check("channel_member_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /**
  * seq and changeSeq come from one per-channel counter (MAX(changeSeq) + 1,
@@ -1427,147 +1720,293 @@ export const channelMember = sqliteTable("channel_member", {
  * latest change. Paging reads seq; `since` polling reads changeSeq, so edits,
  * deletions and moderation reach clients that already hold the message.
  */
-export const channelMessage = sqliteTable("channel_message", {
-  id: cuid("id"),
-  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
-  // Threads are one level deep; the composite key below keeps a reply in its parent's channel.
-  parentId: text("parentId"),
-  seq: integer("seq").notNull(),
-  changeSeq: integer("changeSeq").notNull(),
-  authorKind: text("authorKind", { enum: ["USER", "TEMBO"] }).notNull().default("USER"),
-  // Null for Tembo, and for a person whose account was deleted ("Deleted user").
-  authorId: text("authorId").references(() => user.id, { onDelete: "set null" }),
-  clientNonce: text("clientNonce"),
-  body: text("body").notNull(),
-  embeds: jsonArray("embeds"),
-  citations: jsonArray("citations"),
-  moderationState: text("moderationState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull().default("VISIBLE"),
-  moderationReasons: jsonArray("moderationReasons"),
-  hiddenBy: text("hiddenBy").references(() => user.id, { onDelete: "set null" }),
-  hiddenAt: integer("hiddenAt"),
-  editedAt: integer("editedAt"),
-  deletedAt: integer("deletedAt"),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  foreignKey({ columns: [table.parentId, table.channelId], foreignColumns: [table.id, table.channelId] }).onDelete("cascade"),
-  uniqueIndex("channel_message_channel_id_idx").on(table.channelId, table.id),
-  uniqueIndex("channel_message_seq_idx").on(table.channelId, table.seq),
-  uniqueIndex("channel_message_changeSeq_idx").on(table.channelId, table.changeSeq),
-  index("channel_message_thread_idx").on(table.channelId, table.parentId, table.seq),
-  uniqueIndex("channel_message_nonce_idx").on(table.authorId, table.clientNonce),
-  index("channel_message_hiddenBy_idx").on(table.hiddenBy).where(sql`${table.hiddenBy} IS NOT NULL`),
-  // B-2.3 posting rate limits: one person's recent messages, in any channel.
-  index("channel_message_author_idx").on(table.authorId, table.createdAt).where(sql`${table.authorId} IS NOT NULL`),
-  check("channel_message_seq_check", sql`${table.seq} >= 1 AND ${table.changeSeq} >= ${table.seq}`),
-  check("channel_message_authorKind_check", sql`${table.authorKind} IN ('USER','TEMBO')`),
-  // Tembo has no account, and only ever answers inside the thread that asked.
-  check("channel_message_tembo_check", sql`${table.authorKind} = 'USER' OR (${table.authorId} IS NULL AND ${table.parentId} IS NOT NULL)`),
-  check("channel_message_nonce_check", sql`${table.clientNonce} IS NULL OR (length(${table.clientNonce}) BETWEEN 1 AND 128 AND ${table.clientNonce} NOT GLOB '*[^A-Za-z0-9_-]*')`),
-  check("channel_message_body_check", sql`length(${table.body}) <= 10000 AND (${table.deletedAt} IS NOT NULL OR length(trim(${table.body}, ' ' || char(9, 10, 13))) > 0)`),
-  check("channel_message_embeds_check", isJsonArray(table.embeds)),
-  check("channel_message_citations_check", isJsonArray(table.citations)),
-  check("channel_message_moderation_check", sql`${table.moderationState} IN ('VISIBLE','FLAGGED','HIDDEN')`),
-  // Flagging or hiding always says why; only hidden messages carry who and when.
-  check("channel_message_reasons_check", sql`${isJsonArray(table.moderationReasons)} AND (${table.moderationState} = 'VISIBLE' OR json_array_length(${table.moderationReasons}) > 0)`),
-  check("channel_message_hidden_check", sql`(${table.moderationState} = 'HIDDEN') = (${table.hiddenAt} IS NOT NULL) AND (${table.hiddenBy} IS NULL OR ${table.moderationState} = 'HIDDEN')`),
-  check("channel_message_time_check", sql`${table.createdAt} >= 0 AND coalesce(${table.editedAt}, 0) >= 0 AND coalesce(${table.deletedAt}, 0) >= 0 AND coalesce(${table.hiddenAt}, 0) >= 0`),
-]);
+export const channelMessage = sqliteTable(
+  "channel_message",
+  {
+    id: cuid("id"),
+    channelId: text("channelId")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    // Threads are one level deep; the composite key below keeps a reply in its parent's channel.
+    parentId: text("parentId"),
+    seq: integer("seq").notNull(),
+    changeSeq: integer("changeSeq").notNull(),
+    authorKind: text("authorKind", { enum: ["USER", "TEMBO"] })
+      .notNull()
+      .default("USER"),
+    // Null for Tembo, and for a person whose account was deleted ("Deleted user").
+    authorId: text("authorId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    clientNonce: text("clientNonce"),
+    body: text("body").notNull(),
+    embeds: jsonArray("embeds"),
+    citations: jsonArray("citations"),
+    moderationState: text("moderationState", {
+      enum: ["VISIBLE", "FLAGGED", "HIDDEN"],
+    })
+      .notNull()
+      .default("VISIBLE"),
+    moderationReasons: jsonArray("moderationReasons"),
+    hiddenBy: text("hiddenBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    hiddenAt: integer("hiddenAt"),
+    editedAt: integer("editedAt"),
+    deletedAt: integer("deletedAt"),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.parentId, table.channelId],
+      foreignColumns: [table.id, table.channelId],
+    }).onDelete("cascade"),
+    uniqueIndex("channel_message_channel_id_idx").on(table.channelId, table.id),
+    uniqueIndex("channel_message_seq_idx").on(table.channelId, table.seq),
+    uniqueIndex("channel_message_changeSeq_idx").on(
+      table.channelId,
+      table.changeSeq,
+    ),
+    index("channel_message_thread_idx").on(
+      table.channelId,
+      table.parentId,
+      table.seq,
+    ),
+    uniqueIndex("channel_message_nonce_idx").on(
+      table.authorId,
+      table.clientNonce,
+    ),
+    index("channel_message_hiddenBy_idx")
+      .on(table.hiddenBy)
+      .where(sql`${table.hiddenBy} IS NOT NULL`),
+    // B-2.3 posting rate limits: one person's recent messages, in any channel.
+    index("channel_message_author_idx")
+      .on(table.authorId, table.createdAt)
+      .where(sql`${table.authorId} IS NOT NULL`),
+    check(
+      "channel_message_seq_check",
+      sql`${table.seq} >= 1 AND ${table.changeSeq} >= ${table.seq}`,
+    ),
+    check(
+      "channel_message_authorKind_check",
+      sql`${table.authorKind} IN ('USER','TEMBO')`,
+    ),
+    // Tembo has no account, and only ever answers inside the thread that asked.
+    check(
+      "channel_message_tembo_check",
+      sql`${table.authorKind} = 'USER' OR (${table.authorId} IS NULL AND ${table.parentId} IS NOT NULL)`,
+    ),
+    check(
+      "channel_message_nonce_check",
+      sql`${table.clientNonce} IS NULL OR (length(${table.clientNonce}) BETWEEN 1 AND 128 AND ${table.clientNonce} NOT GLOB '*[^A-Za-z0-9_-]*')`,
+    ),
+    check(
+      "channel_message_body_check",
+      sql`length(${table.body}) <= 10000 AND (${table.deletedAt} IS NOT NULL OR length(trim(${table.body}, ' ' || char(9, 10, 13))) > 0)`,
+    ),
+    check("channel_message_embeds_check", isJsonArray(table.embeds)),
+    check("channel_message_citations_check", isJsonArray(table.citations)),
+    check(
+      "channel_message_moderation_check",
+      sql`${table.moderationState} IN ('VISIBLE','FLAGGED','HIDDEN')`,
+    ),
+    // Flagging or hiding always says why; only hidden messages carry who and when.
+    check(
+      "channel_message_reasons_check",
+      sql`${isJsonArray(table.moderationReasons)} AND (${table.moderationState} = 'VISIBLE' OR json_array_length(${table.moderationReasons}) > 0)`,
+    ),
+    check(
+      "channel_message_hidden_check",
+      sql`(${table.moderationState} = 'HIDDEN') = (${table.hiddenAt} IS NOT NULL) AND (${table.hiddenBy} IS NULL OR ${table.moderationState} = 'HIDDEN')`,
+    ),
+    check(
+      "channel_message_time_check",
+      sql`${table.createdAt} >= 0 AND coalesce(${table.editedAt}, 0) >= 0 AND coalesce(${table.deletedAt}, 0) >= 0 AND coalesce(${table.hiddenAt}, 0) >= 0`,
+    ),
+  ],
+);
 
 /** One read marker per person and channel; unread counts compare seq with the marked message's. */
-export const channelRead = sqliteTable("channel_read", {
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
-  lastReadMessageId: text("lastReadMessageId").notNull(),
-  readAt: integer("readAt").notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.userId, table.channelId] }),
-  // The marked message must belong to the channel it marks.
-  foreignKey({ columns: [table.channelId, table.lastReadMessageId], foreignColumns: [channelMessage.channelId, channelMessage.id] }).onDelete("cascade"),
-  index("channel_read_channelId_idx").on(table.channelId, table.lastReadMessageId),
-  check("channel_read_time_check", sql`${table.readAt} >= 0`),
-]);
+export const channelRead = sqliteTable(
+  "channel_read",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    channelId: text("channelId")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    lastReadMessageId: text("lastReadMessageId").notNull(),
+    readAt: integer("readAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.channelId] }),
+    // The marked message must belong to the channel it marks.
+    foreignKey({
+      columns: [table.channelId, table.lastReadMessageId],
+      foreignColumns: [channelMessage.channelId, channelMessage.id],
+    }).onDelete("cascade"),
+    index("channel_read_channelId_idx").on(
+      table.channelId,
+      table.lastReadMessageId,
+    ),
+    check("channel_read_time_check", sql`${table.readAt} >= 0`),
+  ],
+);
 
 /** Desired state, not a toggle: one row per person, message and reaction from the fixed set. */
-export const messageReaction = sqliteTable("message_reaction", {
-  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["useful", "learned", "thanks", "agree", "congrats"] }).notNull(),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  primaryKey({ columns: [table.messageId, table.userId, table.kind] }),
-  index("message_reaction_userId_idx").on(table.userId),
-  check("message_reaction_kind_check", sql`${table.kind} IN ('useful','learned','thanks','agree','congrats')`),
-  check("message_reaction_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const messageReaction = sqliteTable(
+  "message_reaction",
+  {
+    messageId: text("messageId")
+      .notNull()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", {
+      enum: ["useful", "learned", "thanks", "agree", "congrats"],
+    }).notNull(),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.userId, table.kind] }),
+    index("message_reaction_userId_idx").on(table.userId),
+    check(
+      "message_reaction_kind_check",
+      sql`${table.kind} IN ('useful','learned','thanks','agree','congrats')`,
+    ),
+    check("message_reaction_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /** A member's report. One per person and message, so repeated reports never inflate the count. */
-export const messageReport = sqliteTable("message_report", {
-  id: cuid("id"),
-  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
-  reporterId: text("reporterId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  reason: text("reason").notNull(),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  uniqueIndex("message_report_message_reporter_idx").on(table.messageId, table.reporterId),
-  index("message_report_reporter_idx").on(table.reporterId, table.createdAt),
-  check("message_report_reason_check", sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`),
-  check("message_report_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const messageReport = sqliteTable(
+  "message_report",
+  {
+    id: cuid("id"),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    reporterId: text("reporterId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    uniqueIndex("message_report_message_reporter_idx").on(
+      table.messageId,
+      table.reporterId,
+    ),
+    index("message_report_reporter_idx").on(table.reporterId, table.createdAt),
+    check(
+      "message_report_reason_check",
+      sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`,
+    ),
+    check("message_report_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /**
  * Append-only audit trail: who flagged, hid, restored or kept what, and why.
  * Automated sources have no actor; a deleted moderator's events keep their source.
  */
-export const moderationEvent = sqliteTable("moderation_event", {
-  id: cuid("id"),
-  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
-  action: text("action", { enum: ["FLAG", "HIDE", "RESTORE", "KEEP"] }).notNull(),
-  source: text("source", { enum: ["DETECTOR", "CLEF", "REPORT", "MENTOR", "ADMIN"] }).notNull(),
-  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
-  fromState: text("fromState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull(),
-  toState: text("toState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull(),
-  reasons: text("reasons").notNull(),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  index("moderation_event_message_idx").on(table.messageId, table.createdAt),
-  index("moderation_event_actor_idx").on(table.actorId, table.createdAt),
-  check("moderation_event_action_check", sql`${table.action} IN ('FLAG','HIDE','RESTORE','KEEP')`),
-  check("moderation_event_source_check", sql`${table.source} IN ('DETECTOR','CLEF','REPORT','MENTOR','ADMIN')`),
-  check("moderation_event_state_check", sql`${table.fromState} IN ('VISIBLE','FLAGGED','HIDDEN') AND ${table.toState} IN ('VISIBLE','FLAGGED','HIDDEN')`),
-  check("moderation_event_actor_check", sql`${table.source} NOT IN ('DETECTOR','CLEF') OR ${table.actorId} IS NULL`),
-  check("moderation_event_reasons_check", sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`),
-  check("moderation_event_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const moderationEvent = sqliteTable(
+  "moderation_event",
+  {
+    id: cuid("id"),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    action: text("action", {
+      enum: ["FLAG", "HIDE", "RESTORE", "KEEP"],
+    }).notNull(),
+    source: text("source", {
+      enum: ["DETECTOR", "CLEF", "REPORT", "MENTOR", "ADMIN"],
+    }).notNull(),
+    actorId: text("actorId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    fromState: text("fromState", {
+      enum: ["VISIBLE", "FLAGGED", "HIDDEN"],
+    }).notNull(),
+    toState: text("toState", {
+      enum: ["VISIBLE", "FLAGGED", "HIDDEN"],
+    }).notNull(),
+    reasons: text("reasons").notNull(),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    index("moderation_event_message_idx").on(table.messageId, table.createdAt),
+    index("moderation_event_actor_idx").on(table.actorId, table.createdAt),
+    check(
+      "moderation_event_action_check",
+      sql`${table.action} IN ('FLAG','HIDE','RESTORE','KEEP')`,
+    ),
+    check(
+      "moderation_event_source_check",
+      sql`${table.source} IN ('DETECTOR','CLEF','REPORT','MENTOR','ADMIN')`,
+    ),
+    check(
+      "moderation_event_state_check",
+      sql`${table.fromState} IN ('VISIBLE','FLAGGED','HIDDEN') AND ${table.toState} IN ('VISIBLE','FLAGGED','HIDDEN')`,
+    ),
+    check(
+      "moderation_event_actor_check",
+      sql`${table.source} NOT IN ('DETECTOR','CLEF') OR ${table.actorId} IS NULL`,
+    ),
+    check(
+      "moderation_event_reasons_check",
+      sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`,
+    ),
+    check("moderation_event_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /**
  * A person's agreement to "How we talk to each other" (B-2.2): the latest version they accepted.
  * A new CONDUCT_VERSION (src/lib/channels/conduct.ts) asks everyone again.
  */
-export const channelConduct = sqliteTable("channel_conduct", {
-  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-  version: integer("version").notNull(),
-  acknowledgedAt: integer("acknowledgedAt").notNull(),
-}, (table) => [
-  check("channel_conduct_version_check", sql`${table.version} >= 1`),
-  check("channel_conduct_time_check", sql`${table.acknowledgedAt} >= 0`),
-]);
+export const channelConduct = sqliteTable(
+  "channel_conduct",
+  {
+    userId: text("userId")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    acknowledgedAt: integer("acknowledgedAt").notNull(),
+  },
+  (table) => [
+    check("channel_conduct_version_check", sql`${table.version} >= 1`),
+    check("channel_conduct_time_check", sql`${table.acknowledgedAt} >= 0`),
+  ],
+);
 
 /**
  * Recent edits and reaction changes, one row each, for their rate limits (src/lib/channels/README.md).
  * A trigger prunes each person's rows older than an hour as new ones arrive (migration 0031).
  */
-export const channelAction = sqliteTable("channel_action", {
-  id: cuid("id"),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["EDIT", "REACT"] }).notNull(),
-  at: integer("at").notNull(),
-}, (table) => [
-  index("channel_action_user_idx").on(table.userId, table.kind, table.at),
-  index("channel_action_channelId_idx").on(table.channelId),
-  check("channel_action_kind_check", sql`${table.kind} IN ('EDIT','REACT')`),
-  check("channel_action_time_check", sql`${table.at} >= 0`),
-]);
+export const channelAction = sqliteTable(
+  "channel_action",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    channelId: text("channelId")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["EDIT", "REACT"] }).notNull(),
+    at: integer("at").notNull(),
+  },
+  (table) => [
+    index("channel_action_user_idx").on(table.userId, table.kind, table.at),
+    index("channel_action_channelId_idx").on(table.channelId),
+    check("channel_action_kind_check", sql`${table.kind} IN ('EDIT','REACT')`),
+    check("channel_action_time_check", sql`${table.at} >= 0`),
+  ],
+);
 
 /**
  * Moderation evidence (B-2.5, migration 0032): texts a message had, kept for moderators only. A trigger
@@ -1575,93 +2014,179 @@ export const channelAction = sqliteTable("channel_action", {
  * flagged, hidden or reported. Edits and deletes of messages nobody flagged or reported are pruned
  * after 14 days as new versions arrive; the rest stay with the message.
  */
-export const channelMessageVersion = sqliteTable("channel_message_version", {
-  id: cuid("id"),
-  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
-  body: text("body").notNull(),
-  cause: text("cause", { enum: ["EDIT", "DELETE", "FLAG", "REPORT", "HIDE"] }).notNull(),
-  capturedAt: integer("capturedAt").notNull(),
-  // 1 once the message has any moderation event or report: then nothing of it is pruned.
-  retained: integer("retained").notNull().default(0),
-}, (table) => [
-  index("channel_message_version_message_idx").on(table.messageId, table.capturedAt),
-  // Only what may expire, so pruning never reads retained evidence.
-  index("channel_message_version_expiry_idx").on(table.capturedAt).where(sql`${table.cause} IN ('EDIT','DELETE') AND ${table.retained} = 0`),
-  check("channel_message_version_cause_check", sql`${table.cause} IN ('EDIT','DELETE','FLAG','REPORT','HIDE')`),
-  check("channel_message_version_body_check", sql`length(${table.body}) BETWEEN 1 AND 10000`),
-  check("channel_message_version_time_check", sql`${table.capturedAt} >= 0`),
-  check("channel_message_version_retained_check", sql`${table.retained} IN (0, 1)`),
-]);
+export const channelMessageVersion = sqliteTable(
+  "channel_message_version",
+  {
+    id: cuid("id"),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    cause: text("cause", {
+      enum: ["EDIT", "DELETE", "FLAG", "REPORT", "HIDE"],
+    }).notNull(),
+    capturedAt: integer("capturedAt").notNull(),
+    // 1 once the message has any moderation event or report: then nothing of it is pruned.
+    retained: integer("retained").notNull().default(0),
+  },
+  (table) => [
+    index("channel_message_version_message_idx").on(
+      table.messageId,
+      table.capturedAt,
+    ),
+    // Only what may expire, so pruning never reads retained evidence.
+    index("channel_message_version_expiry_idx")
+      .on(table.capturedAt)
+      .where(
+        sql`${table.cause} IN ('EDIT','DELETE') AND ${table.retained} = 0`,
+      ),
+    check(
+      "channel_message_version_cause_check",
+      sql`${table.cause} IN ('EDIT','DELETE','FLAG','REPORT','HIDE')`,
+    ),
+    check(
+      "channel_message_version_body_check",
+      sql`length(${table.body}) BETWEEN 1 AND 10000`,
+    ),
+    check("channel_message_version_time_check", sql`${table.capturedAt} >= 0`),
+    check(
+      "channel_message_version_retained_check",
+      sql`${table.retained} IN (0, 1)`,
+    ),
+  ],
+);
 
 /**
  * The admin moderation queue (B-2.5): one case per message, kept by a trigger on moderation_event.
  * Flags, reports and moderator hides open or add to a PENDING case; an admin's decision closes it
  * (DECIDED), and a later signal reopens it as a new case.
  */
-export const moderationCase = sqliteTable("moderation_case", {
-  messageId: text("messageId").primaryKey().references(() => channelMessage.id, { onDelete: "cascade" }),
-  state: text("state", { enum: ["PENDING", "DECIDED"] }).notNull(),
-  source: text("source", { enum: ["AI_FLAG", "REPORT", "MENTOR_HIDE", "ADMIN_HIDE"] }).notNull(),
-  reasons: text("reasons").notNull(),
-  reportCount: integer("reportCount").notNull().default(0),
-  // The moderator who hid it, for MENTOR_HIDE and ADMIN_HIDE.
-  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
-  // When the case first opened. A signal after an admin's decision reopens it: reopenedAt is the
-  // latest such signal, and openedAt stays, so the queue's order never moves under a reader (migration 0034).
-  openedAt: integer("openedAt").notNull(),
-  reopenedAt: integer("reopenedAt"),
-  updatedAt: integer("updatedAt").notNull(),
-  decision: text("decision", { enum: ["HIDE", "RESTORE", "KEEP"] }),
-  decisionReason: text("decisionReason"),
-  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
-  decidedAt: integer("decidedAt"),
-  // The author's "Ask for review" of a hidden message.
-  reviewRequestedAt: integer("reviewRequestedAt"),
-  reviewNote: text("reviewNote"),
-}, (table) => [
-  index("moderation_case_queue_idx").on(table.state, table.openedAt, table.messageId),
-  index("moderation_case_actorId_idx").on(table.actorId).where(sql`${table.actorId} IS NOT NULL`),
-  index("moderation_case_decidedBy_idx").on(table.decidedBy).where(sql`${table.decidedBy} IS NOT NULL`),
-  check("moderation_case_state_check", sql`${table.state} IN ('PENDING','DECIDED')`),
-  check("moderation_case_source_check", sql`${table.source} IN ('AI_FLAG','REPORT','MENTOR_HIDE','ADMIN_HIDE')`),
-  check("moderation_case_reasons_check", sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`),
-  check("moderation_case_reportCount_check", sql`${table.reportCount} >= 0`),
-  // Decided exactly when an admin's decision, its reason and its time are recorded.
-  check("moderation_case_decision_check", sql`(${table.decision} IS NULL OR ${table.decision} IN ('HIDE','RESTORE','KEEP')) AND (${table.state} = 'DECIDED') = (${table.decision} IS NOT NULL AND ${table.decisionReason} IS NOT NULL AND ${table.decidedAt} IS NOT NULL)`),
-  check("moderation_case_review_check", sql`${table.reviewNote} IS NULL OR (${table.reviewRequestedAt} IS NOT NULL AND length(trim(${table.reviewNote})) > 0 AND length(${table.reviewNote}) <= 1000)`),
-  check("moderation_case_time_check", sql`${table.openedAt} >= 0 AND ${table.updatedAt} >= ${table.openedAt} AND coalesce(${table.decidedAt}, 0) >= 0 AND coalesce(${table.reviewRequestedAt}, 0) >= 0`),
-]);
+export const moderationCase = sqliteTable(
+  "moderation_case",
+  {
+    messageId: text("messageId")
+      .primaryKey()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    state: text("state", { enum: ["PENDING", "DECIDED"] }).notNull(),
+    source: text("source", {
+      enum: ["AI_FLAG", "REPORT", "MENTOR_HIDE", "ADMIN_HIDE"],
+    }).notNull(),
+    reasons: text("reasons").notNull(),
+    reportCount: integer("reportCount").notNull().default(0),
+    // The moderator who hid it, for MENTOR_HIDE and ADMIN_HIDE.
+    actorId: text("actorId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    // When the case first opened. A signal after an admin's decision reopens it: reopenedAt is the
+    // latest such signal, and openedAt stays, so the queue's order never moves under a reader (migration 0034).
+    openedAt: integer("openedAt").notNull(),
+    reopenedAt: integer("reopenedAt"),
+    updatedAt: integer("updatedAt").notNull(),
+    decision: text("decision", { enum: ["HIDE", "RESTORE", "KEEP"] }),
+    decisionReason: text("decisionReason"),
+    decidedBy: text("decidedBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: integer("decidedAt"),
+    // The author's "Ask for review" of a hidden message.
+    reviewRequestedAt: integer("reviewRequestedAt"),
+    reviewNote: text("reviewNote"),
+  },
+  (table) => [
+    index("moderation_case_queue_idx").on(
+      table.state,
+      table.openedAt,
+      table.messageId,
+    ),
+    index("moderation_case_actorId_idx")
+      .on(table.actorId)
+      .where(sql`${table.actorId} IS NOT NULL`),
+    index("moderation_case_decidedBy_idx")
+      .on(table.decidedBy)
+      .where(sql`${table.decidedBy} IS NOT NULL`),
+    check(
+      "moderation_case_state_check",
+      sql`${table.state} IN ('PENDING','DECIDED')`,
+    ),
+    check(
+      "moderation_case_source_check",
+      sql`${table.source} IN ('AI_FLAG','REPORT','MENTOR_HIDE','ADMIN_HIDE')`,
+    ),
+    check(
+      "moderation_case_reasons_check",
+      sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`,
+    ),
+    check("moderation_case_reportCount_check", sql`${table.reportCount} >= 0`),
+    // Decided exactly when an admin's decision, its reason and its time are recorded.
+    check(
+      "moderation_case_decision_check",
+      sql`(${table.decision} IS NULL OR ${table.decision} IN ('HIDE','RESTORE','KEEP')) AND (${table.state} = 'DECIDED') = (${table.decision} IS NOT NULL AND ${table.decisionReason} IS NOT NULL AND ${table.decidedAt} IS NOT NULL)`,
+    ),
+    check(
+      "moderation_case_review_check",
+      sql`${table.reviewNote} IS NULL OR (${table.reviewRequestedAt} IS NOT NULL AND length(trim(${table.reviewNote})) > 0 AND length(${table.reviewNote}) <= 1000)`,
+    ),
+    check(
+      "moderation_case_time_check",
+      sql`${table.openedAt} >= 0 AND ${table.updatedAt} >= ${table.openedAt} AND coalesce(${table.decidedAt}, 0) >= 0 AND coalesce(${table.reviewRequestedAt}, 0) >= 0`,
+    ),
+  ],
+);
 
 /**
  * What an admin's "fine as is" allowlisted (B-2.5): the whole text (`text:<sha-256>`) and each
  * detector finding in it (`phone:+254…`, `email:…`, `link:…`), so the same words are not flagged again.
  */
-export const moderationAllowlist = sqliteTable("moderation_allowlist", {
-  key: text("key").primaryKey(),
-  messageId: text("messageId").references(() => channelMessage.id, { onDelete: "set null" }),
-  createdBy: text("createdBy").references(() => user.id, { onDelete: "set null" }),
-  createdAt: integer("createdAt").notNull(),
-}, (table) => [
-  index("moderation_allowlist_messageId_idx").on(table.messageId).where(sql`${table.messageId} IS NOT NULL`),
-  index("moderation_allowlist_createdBy_idx").on(table.createdBy).where(sql`${table.createdBy} IS NOT NULL`),
-  check("moderation_allowlist_key_check", sql`length(${table.key}) <= 2048 AND (${table.key} GLOB 'text:[0-9a-f]*' OR ${table.key} GLOB 'phone:+[0-9]*' OR ${table.key} GLOB 'phone:0[0-9]*' OR ${table.key} GLOB 'email:?*@?*' OR ${table.key} GLOB 'link:?*')`),
-  check("moderation_allowlist_time_check", sql`${table.createdAt} >= 0`),
-]);
+export const moderationAllowlist = sqliteTable(
+  "moderation_allowlist",
+  {
+    key: text("key").primaryKey(),
+    messageId: text("messageId").references(() => channelMessage.id, {
+      onDelete: "set null",
+    }),
+    createdBy: text("createdBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: integer("createdAt").notNull(),
+  },
+  (table) => [
+    index("moderation_allowlist_messageId_idx")
+      .on(table.messageId)
+      .where(sql`${table.messageId} IS NOT NULL`),
+    index("moderation_allowlist_createdBy_idx")
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} IS NOT NULL`),
+    check(
+      "moderation_allowlist_key_check",
+      sql`length(${table.key}) <= 2048 AND (${table.key} GLOB 'text:[0-9a-f]*' OR ${table.key} GLOB 'phone:+[0-9]*' OR ${table.key} GLOB 'phone:0[0-9]*' OR ${table.key} GLOB 'email:?*@?*' OR ${table.key} GLOB 'link:?*')`,
+    ),
+    check("moderation_allowlist_time_check", sql`${table.createdAt} >= 0`),
+  ],
+);
 
 /**
  * Tembo in channels (B-3.1, migration 0035; src/lib/tembo/README.md). Accepted questions per person
  * per day, the day being Africa/Nairobi's calendar date (`YYYY-MM-DD`). Counted when a question is
  * accepted, and given back when Tembo could not answer it.
  */
-export const temboUsage = sqliteTable("tembo_usage", {
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  day: text("day").notNull(),
-  count: integer("count").notNull().default(0),
-}, (table) => [
-  primaryKey({ columns: [table.userId, table.day] }),
-  check("tembo_usage_day_check", sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
-  check("tembo_usage_count_check", sql`${table.count} >= 0`),
-]);
+export const temboUsage = sqliteTable(
+  "tembo_usage",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.day] }),
+    check(
+      "tembo_usage_day_check",
+      sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check("tembo_usage_count_check", sql`${table.count} >= 0`),
+  ],
+);
 
 /**
  * One question to Tembo per asking message, so asking twice (a mention and the Ask button, or a
@@ -1669,47 +2194,99 @@ export const temboUsage = sqliteTable("tembo_usage", {
  * PENDING row that a later ask may claim again after a while. The answer is a TEMBO message in the
  * asking message's thread.
  */
-export const temboAsk = sqliteTable("tembo_ask", {
-  messageId: text("messageId").primaryKey().references(() => channelMessage.id, { onDelete: "cascade" }),
-  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  day: text("day").notNull(),
-  status: text("status", { enum: ["PENDING", "ANSWERED", "FAILED"] }).notNull(),
-  claim: text("claim").notNull(),
-  answerId: text("answerId").references(() => channelMessage.id, { onDelete: "set null" }),
-  claimedAt: integer("claimedAt").notNull(),
-  createdAt: integer("createdAt").notNull(),
-  updatedAt: integer("updatedAt").notNull(),
-}, (table) => [
-  index("tembo_ask_channelId_idx").on(table.channelId),
-  index("tembo_ask_userId_idx").on(table.userId),
-  uniqueIndex("tembo_ask_answerId_idx").on(table.answerId).where(sql`${table.answerId} IS NOT NULL`),
-  check("tembo_ask_status_check", sql`${table.status} IN ('PENDING','ANSWERED','FAILED')`),
-  check("tembo_ask_answer_check", sql`${table.answerId} IS NULL OR ${table.status} = 'ANSWERED'`),
-  check("tembo_ask_day_check", sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
-  check("tembo_ask_time_check", sql`${table.claimedAt} >= 0 AND ${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
-]);
+export const temboAsk = sqliteTable(
+  "tembo_ask",
+  {
+    messageId: text("messageId")
+      .primaryKey()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    channelId: text("channelId")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    day: text("day").notNull(),
+    status: text("status", {
+      enum: ["PENDING", "ANSWERED", "FAILED"],
+    }).notNull(),
+    claim: text("claim").notNull(),
+    answerId: text("answerId").references(() => channelMessage.id, {
+      onDelete: "set null",
+    }),
+    claimedAt: integer("claimedAt").notNull(),
+    createdAt: integer("createdAt").notNull(),
+    updatedAt: integer("updatedAt").notNull(),
+  },
+  (table) => [
+    index("tembo_ask_channelId_idx").on(table.channelId),
+    index("tembo_ask_userId_idx").on(table.userId),
+    uniqueIndex("tembo_ask_answerId_idx")
+      .on(table.answerId)
+      .where(sql`${table.answerId} IS NOT NULL`),
+    check(
+      "tembo_ask_status_check",
+      sql`${table.status} IN ('PENDING','ANSWERED','FAILED')`,
+    ),
+    check(
+      "tembo_ask_answer_check",
+      sql`${table.answerId} IS NULL OR ${table.status} = 'ANSWERED'`,
+    ),
+    check(
+      "tembo_ask_day_check",
+      sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "tembo_ask_time_check",
+      sql`${table.claimedAt} >= 0 AND ${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
 
 /** "Helpful" or "not quite" on a Tembo answer: one per person and answer, the latest choice kept. */
-export const temboFeedback = sqliteTable("tembo_feedback", {
-  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
-  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["helpful", "not_quite"] }).notNull(),
-  createdAt: integer("createdAt").notNull(),
-  updatedAt: integer("updatedAt").notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.messageId, table.userId] }),
-  index("tembo_feedback_userId_idx").on(table.userId),
-  check("tembo_feedback_kind_check", sql`${table.kind} IN ('helpful','not_quite')`),
-  check("tembo_feedback_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
-]);
+export const temboFeedback = sqliteTable(
+  "tembo_feedback",
+  {
+    messageId: text("messageId")
+      .notNull()
+      .references(() => channelMessage.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["helpful", "not_quite"] }).notNull(),
+    createdAt: integer("createdAt").notNull(),
+    updatedAt: integer("updatedAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.userId] }),
+    index("tembo_feedback_userId_idx").on(table.userId),
+    check(
+      "tembo_feedback_kind_check",
+      sql`${table.kind} IN ('helpful','not_quite')`,
+    ),
+    check(
+      "tembo_feedback_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
 
 // ─── Mentor connections (B-4.1; src/lib/mentoring/README.md) ─────────────────
 // Epoch milliseconds, like channels. Who may read or act on a row is decided in
 // src/lib/mentoring, never here.
 
-const MENTOR_FORMATS = ["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"] as const;
-const MENTOR_REQUEST_STATUSES = ["PENDING", "ACCEPTED", "REDIRECTED", "DECLINED", "WITHDRAWN"] as const;
+const MENTOR_FORMATS = [
+  "WRITTEN_REVIEW",
+  "CALL_30_MIN",
+  "QUICK_QUESTION",
+] as const;
+const MENTOR_REQUEST_STATUSES = [
+  "PENDING",
+  "ACCEPTED",
+  "REDIRECTED",
+  "DECLINED",
+  "WITHDRAWN",
+] as const;
 /** Every format, the offer of a mentor who has not chosen. */
 const ALL_MENTOR_FORMATS = JSON.stringify(MENTOR_FORMATS);
 
@@ -1717,25 +2294,45 @@ const ALL_MENTOR_FORMATS = JSON.stringify(MENTOR_FORMATS);
  * A mentor's availability: one row per person, written only by themselves. Only people with the
  * MENTOR role are listed, so a row outlives a revoked role without showing anyone.
  */
-export const mentorProfile = sqliteTable("mentor_profile", {
-  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-  headline: text("headline").notNull(),
-  bio: text("bio").notNull().default(""),
-  areas: jsonArray("areas"),
-  formats: text("formats").notNull().default(ALL_MENTOR_FORMATS),
-  monthlyCapacity: integer("monthlyCapacity").notNull().default(0),
-  paused: integer("paused", { mode: "boolean" }).notNull().default(sql`0`),
-  createdAt: epochMs("createdAt"),
-  updatedAt: epochMs("updatedAt"),
-}, (table) => [
-  check("mentor_profile_headline_check", sql`length(trim(${table.headline})) > 0 AND length(${table.headline}) <= 120`),
-  check("mentor_profile_bio_check", sql`length(${table.bio}) <= 2000`),
-  check("mentor_profile_areas_check", isJsonArray(table.areas)),
-  check("mentor_profile_formats_check", sql`${isJsonArray(table.formats)} AND json_array_length(${table.formats}) > 0`),
-  check("mentor_profile_capacity_check", sql`${table.monthlyCapacity} BETWEEN 0 AND 20`),
-  check("mentor_profile_paused_check", sql`${table.paused} IN (0, 1)`),
-  check("mentor_profile_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
-]);
+export const mentorProfile = sqliteTable(
+  "mentor_profile",
+  {
+    userId: text("userId")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    headline: text("headline").notNull(),
+    bio: text("bio").notNull().default(""),
+    areas: jsonArray("areas"),
+    formats: text("formats").notNull().default(ALL_MENTOR_FORMATS),
+    monthlyCapacity: integer("monthlyCapacity").notNull().default(0),
+    paused: integer("paused", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
+    createdAt: epochMs("createdAt"),
+    updatedAt: epochMs("updatedAt"),
+  },
+  (table) => [
+    check(
+      "mentor_profile_headline_check",
+      sql`length(trim(${table.headline})) > 0 AND length(${table.headline}) <= 120`,
+    ),
+    check("mentor_profile_bio_check", sql`length(${table.bio}) <= 2000`),
+    check("mentor_profile_areas_check", isJsonArray(table.areas)),
+    check(
+      "mentor_profile_formats_check",
+      sql`${isJsonArray(table.formats)} AND json_array_length(${table.formats}) > 0`,
+    ),
+    check(
+      "mentor_profile_capacity_check",
+      sql`${table.monthlyCapacity} BETWEEN 0 AND 20`,
+    ),
+    check("mentor_profile_paused_check", sql`${table.paused} IN (0, 1)`),
+    check(
+      "mentor_profile_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
 
 /**
  * A member asking a mentor for time. PENDING until the mentor accepts, redirects or declines it, or
@@ -1745,47 +2342,111 @@ export const mentorProfile = sqliteTable("mentor_profile", {
  * opened. noteReasons are the moderation detectors' findings on the note, which mask contact details
  * for the mentor as in a channel.
  */
-export const mentorRequest = sqliteTable("mentor_request", {
-  id: cuid("id"),
-  requesterId: text("requesterId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  status: text("status", { enum: MENTOR_REQUEST_STATUSES }).notNull().default("PENDING"),
-  format: text("format", { enum: MENTOR_FORMATS }).notNull(),
-  note: text("note").notNull(),
-  noteReasons: jsonArray("noteReasons"),
-  journeyId: text("journeyId").references(() => communityJourney.id, { onDelete: "set null" }),
-  journeyVersion: integer("journeyVersion"),
-  project: text("project"),
-  // A conversation is never deleted while a request points at it.
-  channelId: text("channelId").references(() => channel.id),
-  redirectedToId: text("redirectedToId").references(() => user.id, { onDelete: "set null" }),
-  responseNote: text("responseNote"),
-  acceptedAt: integer("acceptedAt"),
-  decidedAt: integer("decidedAt"),
-  createdAt: epochMs("createdAt"),
-  updatedAt: epochMs("updatedAt"),
-}, (table) => [
-  // No second PENDING request to the same mentor (B-4.1).
-  uniqueIndex("mentor_request_pending_idx").on(table.requesterId, table.mentorId).where(sql`${table.status} = 'PENDING'`),
-  // The mentor's list, newest first, and their spots: pending requests and this month's acceptances.
-  index("mentor_request_mentor_idx").on(table.mentorId, table.createdAt, table.id),
-  index("mentor_request_mentor_status_idx").on(table.mentorId, table.status, table.acceptedAt),
-  index("mentor_request_requester_idx").on(table.requesterId, table.createdAt, table.id),
-  index("mentor_request_channelId_idx").on(table.channelId).where(sql`${table.channelId} IS NOT NULL`),
-  index("mentor_request_journeyId_idx").on(table.journeyId).where(sql`${table.journeyId} IS NOT NULL`),
-  index("mentor_request_redirectedToId_idx").on(table.redirectedToId).where(sql`${table.redirectedToId} IS NOT NULL`),
-  check("mentor_request_parties_check", sql`${table.requesterId} <> ${table.mentorId}`),
-  check("mentor_request_status_check", sql`${table.status} IN ('PENDING','ACCEPTED','REDIRECTED','DECLINED','WITHDRAWN')`),
-  check("mentor_request_format_check", sql`${table.format} IN ('WRITTEN_REVIEW','CALL_30_MIN','QUICK_QUESTION')`),
-  check("mentor_request_note_check", sql`length(trim(${table.note})) > 0 AND length(${table.note}) <= 2000`),
-  check("mentor_request_noteReasons_check", isJsonArray(table.noteReasons)),
-  check("mentor_request_project_check", sql`(${table.project} IS NULL) = (${table.journeyVersion} IS NULL) AND (${table.project} IS NULL OR json_valid(${table.project})) AND coalesce(${table.journeyVersion}, 1) >= 1`),
-  check("mentor_request_accepted_check", sql`(${table.status} = 'ACCEPTED') = (${table.acceptedAt} IS NOT NULL) AND (${table.status} = 'ACCEPTED') = (${table.channelId} IS NOT NULL)`),
-  check("mentor_request_decided_check", sql`(${table.status} = 'PENDING') = (${table.decidedAt} IS NULL)`),
-  check("mentor_request_redirect_check", sql`${table.redirectedToId} IS NULL OR ${table.status} = 'REDIRECTED'`),
-  check("mentor_request_response_check", sql`${table.responseNote} IS NULL OR (${table.status} IN ('REDIRECTED','DECLINED') AND length(trim(${table.responseNote})) > 0 AND length(${table.responseNote}) <= 2000)`),
-  check("mentor_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.decidedAt}, ${table.createdAt}) >= ${table.createdAt} AND coalesce(${table.acceptedAt}, 0) >= 0`),
-]);
+export const mentorRequest = sqliteTable(
+  "mentor_request",
+  {
+    id: cuid("id"),
+    requesterId: text("requesterId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mentorId: text("mentorId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    status: text("status", { enum: MENTOR_REQUEST_STATUSES })
+      .notNull()
+      .default("PENDING"),
+    format: text("format", { enum: MENTOR_FORMATS }).notNull(),
+    note: text("note").notNull(),
+    noteReasons: jsonArray("noteReasons"),
+    journeyId: text("journeyId").references(() => communityJourney.id, {
+      onDelete: "set null",
+    }),
+    journeyVersion: integer("journeyVersion"),
+    project: text("project"),
+    // A conversation is never deleted while a request points at it.
+    channelId: text("channelId").references(() => channel.id),
+    redirectedToId: text("redirectedToId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    responseNote: text("responseNote"),
+    acceptedAt: integer("acceptedAt"),
+    decidedAt: integer("decidedAt"),
+    createdAt: epochMs("createdAt"),
+    updatedAt: epochMs("updatedAt"),
+  },
+  (table) => [
+    // No second PENDING request to the same mentor (B-4.1).
+    uniqueIndex("mentor_request_pending_idx")
+      .on(table.requesterId, table.mentorId)
+      .where(sql`${table.status} = 'PENDING'`),
+    // The mentor's list, newest first, and their spots: pending requests and this month's acceptances.
+    index("mentor_request_mentor_idx").on(
+      table.mentorId,
+      table.createdAt,
+      table.id,
+    ),
+    index("mentor_request_mentor_status_idx").on(
+      table.mentorId,
+      table.status,
+      table.acceptedAt,
+    ),
+    index("mentor_request_requester_idx").on(
+      table.requesterId,
+      table.createdAt,
+      table.id,
+    ),
+    index("mentor_request_channelId_idx")
+      .on(table.channelId)
+      .where(sql`${table.channelId} IS NOT NULL`),
+    index("mentor_request_journeyId_idx")
+      .on(table.journeyId)
+      .where(sql`${table.journeyId} IS NOT NULL`),
+    index("mentor_request_redirectedToId_idx")
+      .on(table.redirectedToId)
+      .where(sql`${table.redirectedToId} IS NOT NULL`),
+    check(
+      "mentor_request_parties_check",
+      sql`${table.requesterId} <> ${table.mentorId}`,
+    ),
+    check(
+      "mentor_request_status_check",
+      sql`${table.status} IN ('PENDING','ACCEPTED','REDIRECTED','DECLINED','WITHDRAWN')`,
+    ),
+    check(
+      "mentor_request_format_check",
+      sql`${table.format} IN ('WRITTEN_REVIEW','CALL_30_MIN','QUICK_QUESTION')`,
+    ),
+    check(
+      "mentor_request_note_check",
+      sql`length(trim(${table.note})) > 0 AND length(${table.note}) <= 2000`,
+    ),
+    check("mentor_request_noteReasons_check", isJsonArray(table.noteReasons)),
+    check(
+      "mentor_request_project_check",
+      sql`(${table.project} IS NULL) = (${table.journeyVersion} IS NULL) AND (${table.project} IS NULL OR json_valid(${table.project})) AND coalesce(${table.journeyVersion}, 1) >= 1`,
+    ),
+    check(
+      "mentor_request_accepted_check",
+      sql`(${table.status} = 'ACCEPTED') = (${table.acceptedAt} IS NOT NULL) AND (${table.status} = 'ACCEPTED') = (${table.channelId} IS NOT NULL)`,
+    ),
+    check(
+      "mentor_request_decided_check",
+      sql`(${table.status} = 'PENDING') = (${table.decidedAt} IS NULL)`,
+    ),
+    check(
+      "mentor_request_redirect_check",
+      sql`${table.redirectedToId} IS NULL OR ${table.status} = 'REDIRECTED'`,
+    ),
+    check(
+      "mentor_request_response_check",
+      sql`${table.responseNote} IS NULL OR (${table.status} IN ('REDIRECTED','DECLINED') AND length(trim(${table.responseNote})) > 0 AND length(${table.responseNote}) <= 2000)`,
+    ),
+    check(
+      "mentor_request_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.decidedAt}, ${table.createdAt}) >= ${table.createdAt} AND coalesce(${table.acceptedAt}, 0) >= 0`,
+    ),
+  ],
+);
 
 const MENTOR_REQUEST_CASE_STATES = ["OPEN", "DECIDED"] as const;
 const MENTOR_REQUEST_DECISIONS = ["KEEP", "REMOVE"] as const;
@@ -1797,40 +2458,82 @@ const MENTOR_REQUEST_DECISIONS = ["KEEP", "REMOVE"] as const;
  * closes it (WITHDRAWN, closedRequest) if it still waits. While OPEN the request holds no spot and the mentor cannot act on
  * it. A report after a KEEP opens it again (openedAt), keeping the earlier decision until the next.
  */
-export const mentorRequestCase = sqliteTable("mentor_request_case", {
-  requestId: text("requestId").primaryKey().references(() => mentorRequest.id, { onDelete: "cascade" }),
-  state: text("state", { enum: MENTOR_REQUEST_CASE_STATES }).notNull().default("OPEN"),
-  clefReasons: jsonArray("clefReasons"),
-  openedAt: integer("openedAt").notNull(),
-  decision: text("decision", { enum: MENTOR_REQUEST_DECISIONS }),
-  decisionReason: text("decisionReason"),
-  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
-  decidedAt: integer("decidedAt"),
-  // 1 when the REMOVE closed a waiting request; 0 when its asker had withdrawn it first.
-  closedRequest: integer("closedRequest").notNull().default(0),
-  createdAt: epochMs("createdAt"),
-  updatedAt: epochMs("updatedAt"),
-}, (table) => [
-  // The admin queue: one state, oldest first.
-  index("mentor_request_case_queue_idx").on(table.state, table.openedAt, table.requestId),
-  index("mentor_request_case_decidedBy_idx").on(table.decidedBy).where(sql`${table.decidedBy} IS NOT NULL`),
-  check("mentor_request_case_state_check", sql`${table.state} IN ('OPEN','DECIDED')`),
-  check("mentor_request_case_clefReasons_check", isJsonArray(table.clefReasons)),
-  check("mentor_request_case_decision_check", sql`(${table.decision} IS NULL OR ${table.decision} IN ('KEEP','REMOVE'))
+export const mentorRequestCase = sqliteTable(
+  "mentor_request_case",
+  {
+    requestId: text("requestId")
+      .primaryKey()
+      .references(() => mentorRequest.id, { onDelete: "cascade" }),
+    state: text("state", { enum: MENTOR_REQUEST_CASE_STATES })
+      .notNull()
+      .default("OPEN"),
+    clefReasons: jsonArray("clefReasons"),
+    openedAt: integer("openedAt").notNull(),
+    decision: text("decision", { enum: MENTOR_REQUEST_DECISIONS }),
+    decisionReason: text("decisionReason"),
+    decidedBy: text("decidedBy").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: integer("decidedAt"),
+    // 1 when the REMOVE closed a waiting request; 0 when its asker had withdrawn it first.
+    closedRequest: integer("closedRequest").notNull().default(0),
+    createdAt: epochMs("createdAt"),
+    updatedAt: epochMs("updatedAt"),
+  },
+  (table) => [
+    // The admin queue: one state, oldest first.
+    index("mentor_request_case_queue_idx").on(
+      table.state,
+      table.openedAt,
+      table.requestId,
+    ),
+    index("mentor_request_case_decidedBy_idx")
+      .on(table.decidedBy)
+      .where(sql`${table.decidedBy} IS NOT NULL`),
+    check(
+      "mentor_request_case_state_check",
+      sql`${table.state} IN ('OPEN','DECIDED')`,
+    ),
+    check(
+      "mentor_request_case_clefReasons_check",
+      isJsonArray(table.clefReasons),
+    ),
+    check(
+      "mentor_request_case_decision_check",
+      sql`(${table.decision} IS NULL OR ${table.decision} IN ('KEEP','REMOVE'))
     AND (${table.decision} IS NULL) = (${table.decidedAt} IS NULL) AND (${table.decision} IS NULL) = (${table.decisionReason} IS NULL)
     AND (${table.state} = 'OPEN' OR ${table.decision} IS NOT NULL)
-    AND (${table.decisionReason} IS NULL OR (length(trim(${table.decisionReason})) > 0 AND length(${table.decisionReason}) <= 2000))`),
-  check("mentor_request_case_closed_check", sql`${table.closedRequest} IN (0, 1) AND (${table.closedRequest} = 0 OR ${table.decision} = 'REMOVE')`),
-  check("mentor_request_case_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.openedAt} >= 0`),
-]);
+    AND (${table.decisionReason} IS NULL OR (length(trim(${table.decisionReason})) > 0 AND length(${table.decisionReason}) <= 2000))`,
+    ),
+    check(
+      "mentor_request_case_closed_check",
+      sql`${table.closedRequest} IN (0, 1) AND (${table.closedRequest} = 0 OR ${table.decision} = 'REMOVE')`,
+    ),
+    check(
+      "mentor_request_case_time_check",
+      sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.openedAt} >= 0`,
+    ),
+  ],
+);
 
 /** The mentor's report of a request's note: one per request, since only its mentor may report it. */
-export const mentorRequestReport = sqliteTable("mentor_request_report", {
-  requestId: text("requestId").primaryKey().references(() => mentorRequest.id, { onDelete: "cascade" }),
-  reporterId: text("reporterId").notNull().references(() => user.id, { onDelete: "cascade" }),
-  reason: text("reason").notNull(),
-  createdAt: epochMs("createdAt"),
-}, (table) => [
-  index("mentor_request_report_reporterId_idx").on(table.reporterId),
-  check("mentor_request_report_reason_check", sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`),
-]);
+export const mentorRequestReport = sqliteTable(
+  "mentor_request_report",
+  {
+    requestId: text("requestId")
+      .primaryKey()
+      .references(() => mentorRequest.id, { onDelete: "cascade" }),
+    reporterId: text("reporterId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    createdAt: epochMs("createdAt"),
+  },
+  (table) => [
+    index("mentor_request_report_reporterId_idx").on(table.reporterId),
+    check(
+      "mentor_request_report_reason_check",
+      sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`,
+    ),
+  ],
+);
