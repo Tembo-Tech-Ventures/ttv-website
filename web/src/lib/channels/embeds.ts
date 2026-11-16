@@ -58,14 +58,20 @@ type Segment = [number, string, string];
 const isSegment = (value: unknown): value is Segment => Array.isArray(value) && typeof value[0] === "number"
   && typeof value[1] === "string" && typeof value[2] === "string";
 
+/**
+ * Nested JSON as it reaches us, also when a subquery has turned it into text: SQLite 3.54 (Node
+ * 22.23.5's node:sqlite) no longer carries the JSON subtype out of a scalar subquery, so an object
+ * a subquery builds arrives inside json_group_array as a string. Text that isn't JSON stays as it is.
+ */
+function jsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value) as unknown; } catch { return value; }
+}
+
 /** json_group_array output, also when a subquery has turned nested JSON into text. */
 function jsonList(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
+  const parsed = jsonValue(value);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 /** What was said in a clip's window, in order: the quotation a clip card shows. */
@@ -267,9 +273,11 @@ export const embedAccessColumn = (program: string) => `(SELECT json_group_array(
 
 /**
  * A project's access check: its confirmations, and its owner's handle where the check carries one
- * (embedAccessColumn's object). A bare list of confirmations (a mentor request's) has no handle.
+ * (embedAccessColumn's object, which a newer SQLite hands over as text). A bare list of
+ * confirmations (a mentor request's) has no handle.
  */
-function projectAccess(check: unknown): { rows: unknown; handle: string | null } {
+function projectAccess(stored: unknown): { rows: unknown; handle: string | null } {
+  const check = jsonValue(stored);
   if (check && typeof check === "object" && !Array.isArray(check) && "confirmations" in check) {
     const { confirmations: rows, handle } = check as { confirmations: unknown; handle?: unknown };
     return { rows, handle: typeof handle === "string" && handle ? handle : null };

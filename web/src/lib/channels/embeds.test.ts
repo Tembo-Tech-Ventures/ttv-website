@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ChannelShareables, ErrorEnvelope, Message, MessageList, type EmbedRef, type MessageEmbedView, type SessionClipEmbed,
 } from "@/lib/platform/contracts";
-import { CLIP_SECONDS, SHAREABLE_LIMITS } from "./embeds";
+import { CLIP_SECONDS, embedsForReader, SHAREABLE_LIMITS } from "./embeds";
 import type { MessageScreen } from "./moderation/screen";
 import { channelDatabase, flagging, post, VIEWER, type ChannelFixture } from "./test-support";
 
@@ -533,4 +533,39 @@ it("keeps migrated work shareable when its owner had no saved profile", async ()
   expect(backfill).toBeTruthy();
   s.database.exec(backfill!);
   expect((await s.share("help", [s.project("legacy-work")])).status).toBe(201);
+});
+
+/**
+ * The page's access column (embedAccessColumn) builds each project's check in a scalar subquery.
+ * SQLite up to 3.53 hands that object to json_group_array as JSON; SQLite 3.54 (Node 22.23.5's
+ * node:sqlite, and D1 once it upgrades) hands it over as text. Readers see the same card either way.
+ */
+describe("embedsForReader: the access check as SQLite hands it over", () => {
+  const stored = { type: "project", journeyId: "ledger", version: 2, title: "Chama ledger", summary: "A ledger.",
+    skills: [], link: "https://example.com/ledger", confirmations: [] };
+  const check = { confirmations: [["synthetic-faith", "Faith Njeri", 2], ["synthetic-achieng", "Achieng Atieno", 1]], handle: "wanjiku" };
+  const card = {
+    ...stored, memberHref: "/dashboard/community/members/wanjiku#work-ledger",
+    confirmations: [
+      { mentorId: "synthetic-faith", mentorName: "Faith Njeri", version: 2 },
+      { mentorId: "synthetic-achieng", mentorName: "Achieng Atieno", version: 1 },
+    ],
+  };
+
+  it.each([
+    ["as JSON (SQLite 3.53 and earlier)", JSON.stringify([check])],
+    ["as text (SQLite 3.54)", JSON.stringify([JSON.stringify(check)])],
+  ])("keeps a project's confirmations and member link when the check arrives %s", (_shape, access) => {
+    expect(embedsForReader([stored], access)).toEqual([card]);
+  });
+
+  it("still shows work that is gone as unavailable, and a bare list of confirmations without a link", () => {
+    expect(embedsForReader([stored], JSON.stringify([null]))).toEqual([{ type: "unavailable", was: "project" }]);
+    const { memberHref: _link, ...withoutLink } = card;
+    expect(embedsForReader([stored], JSON.stringify([JSON.stringify(check.confirmations)]))).toEqual([withoutLink]);
+  });
+
+  it("treats a check that is not JSON as carrying nothing", () => {
+    expect(embedsForReader([stored], JSON.stringify(["not json"]))).toEqual([{ ...stored, confirmations: [] }]);
+  });
 });
