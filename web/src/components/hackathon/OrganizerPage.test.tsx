@@ -27,6 +27,11 @@ describe("read-only organizer overview", () => {
       /Astro.locals|cloudflare:workers|client:|fetch\(/,
     );
   });
+  it("names the models the community AI runs today", () => {
+    // GLM 5.3 Flash was retired on 2026-11-20; chat moved to Gemma 4 like assessment.
+    expect(html).toContain("Chat and evidence assessment both use Gemma 4");
+    expect(html).not.toContain("GLM");
+  });
   it("ships static diagrams with accessible descriptions and no executable/external resources", () => {
     for (const name of ["journeys", "architecture"]) {
       const svg = readFileSync(

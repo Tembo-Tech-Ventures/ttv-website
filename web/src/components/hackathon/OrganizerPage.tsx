@@ -257,12 +257,12 @@ export default function OrganizerPage() {
               <summary>How search and optional AI differ</summary>
               <p>
                 Directory search uses literal text matching and AND across exact
-                skill tags. Optional GLM comparison examines a bounded result
+                skill tags. Optional AI comparison examines a bounded result
                 set. It is not semantic search or a ranking of all members.
               </p>
               <p>
-                Chat uses GLM 5.3 Flash; evidence assessment uses Gemma
-                4. Both use Cloudflare AI Gateway. Ratings describe evidence
+                Chat and evidence assessment both use Gemma 4 through
+                Cloudflare AI Gateway. Ratings describe evidence
                 support. Missing evidence stays unknown.
               </p>
             </details>

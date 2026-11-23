@@ -47,7 +47,7 @@ describe("staging personas on application migrations", () => {
       if(init.method==='POST'){
         modelRequests++;const id=DEMO_PERSONAS.noncohort;
         const citation={kind:'journey',id:`${id}-journey-1`,userId:id,version:1};
-        return Response.json({grounded:true,orderedProfiles:[{userId:id,name:'Fictional David',reason:'Published work',missingEvidence:['Testing unknown']}],evaluatedCandidates:1,answer:'Missing evidence remains unknown.',citations:[citation],retrievedSources:[citation],execution:{model:'@cf/zai-org/glm-5.3-flash',modelSteps:2,executedToolCalls:2}});
+        return Response.json({grounded:true,orderedProfiles:[{userId:id,name:'Fictional David',reason:'Published work',missingEvidence:['Testing unknown']}],evaluatedCandidates:1,answer:'Missing evidence remains unknown.',citations:[citation],retrievedSources:[citation],execution:{model:'@cf/google/gemma-4-26b-a4b-it',modelSteps:2,executedToolCalls:2}});
       }
       return handleCommunityRequest(new globalThis.Request(url,init),new URL(url).pathname.slice('/api/community/'.length),{id:user.id,fixture:identity,scopes:['community:read','institution:read']},d1,{DEPLOYMENT_ENVIRONMENT:'staging'});
     };
