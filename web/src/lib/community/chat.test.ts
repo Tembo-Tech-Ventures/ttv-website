@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { runCommunityChat } from "./chat";
 import type { CommunityService } from "./service";
-import { COMMUNITY_CHAT_MODEL } from "./chat-agent";
+import { CloudflareAIError } from "agents/models/ai-sdk";
+import { COMMUNITY_CHAT_MODEL, describeChatFailure } from "./chat-agent";
 const complete = vi.fn();
 const nativeRun = vi.fn(async (model, body, options) => {
  const value = await complete(model, body.messages, { tools: body.tools, maxTokens: body.max_tokens, temperature: body.temperature, options });
@@ -12,14 +13,16 @@ function service(institution = false) { return { access: vi.fn().mockResolvedVal
 function call(name: string, args: unknown) { return { id: "c", type: "function" as const, function: { name, arguments: JSON.stringify(args) } }; }
 const done = { content: "Summary", toolCalls: [], finishReason: "stop" };
 beforeEach(() => { complete.mockReset(); nativeRun.mockClear(); });
-it("pins chat to GLM with explicit Gateway, low reasoning and no provider key", async () => {
+it("pins chat to Gemma 4 with explicit Gateway, thinking off and no provider key", async () => {
  complete.mockResolvedValueOnce(done);
  await runCommunityChat(env,service(),{message:"Explain my evidence"});
  expect(complete.mock.calls[0][0]).toBe(COMMUNITY_CHAT_MODEL);
  expect(complete.mock.calls[0][2]).toMatchObject({maxTokens:1200,temperature:0});
  const [model, body, options] = nativeRun.mock.calls.at(-1)!;
  expect(model).toBe(COMMUNITY_CHAT_MODEL);
- expect(body.reasoning_effort).toBe("low");
+ expect(model).toBe("@cf/google/gemma-4-26b-a4b-it");
+ expect(body).not.toHaveProperty("reasoning_effort");
+ expect(body.chat_template_kwargs).toEqual({enable_thinking:false});
  expect(options.gateway).toMatchObject({id:"gateway",skipCache:true,collectLog:false,requestTimeoutMs:20000,retries:{maxAttempts:1}});
  expect(options.signal).toBeInstanceOf(AbortSignal);
  expect(env.AI_GATEWAY_MODEL).toBe("configured");
@@ -164,9 +167,37 @@ it("never executes more than six tools or tools after the final model step", asy
  expect(complete).toHaveBeenCalledTimes(3); expect(s.getOwnProfile).toHaveBeenCalledTimes(6); expect(result.execution).toMatchObject({model:COMMUNITY_CHAT_MODEL,modelSteps:3,executedToolCalls:6}); expect(result.limited).toBe(true);
 });
 it("sanitizes transport errors without application retry or evidence claims", async () => {
- complete.mockRejectedValue(new Error("PRIVATE credential/body"));
- await expect(runCommunityChat(env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
- expect(complete).toHaveBeenCalledOnce();
+ const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+ try {
+  complete.mockRejectedValue(new Error("PRIVATE credential/body"));
+  await expect(runCommunityChat(env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
+  expect(complete).toHaveBeenCalledOnce();
+  expect(log).toHaveBeenCalledOnce();
+  expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE");
+ } finally { log.mockRestore(); }
+});
+// A retired model answers 410 with code 5028 (2026-11-20). The page shows only a generic error,
+// so the Worker log is where it shows: status and code, never the prompt, body or evidence.
+it("logs a retired model's 410 and code 5028 without prompts, evidence or provider text", async () => {
+ const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+ const run = vi.fn(async () => Response.json({ success: false, errors: [{ code: 5028, message: "PRIVATE provider text Bearer secret-token" }] }, { status: 410 }));
+ try {
+  await expect(runCommunityChat({...env,AI:{run}} as unknown as Env,service(),{message:"PRIVATE question about evidence"})).rejects.toThrow("Community chat unavailable.");
+  expect(run).toHaveBeenCalledOnce();
+  expect(log).toHaveBeenCalledExactlyOnceWith({ message: "Community chat model call failed.", event: "community_chat.model_failed",
+   model: COMMUNITY_CHAT_MODEL, modelSteps: 1, executedToolCalls: 0, errorName: "CloudflareAIError", status: 410, kind: "unknown", code: 5028 });
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE|secret|Bearer/);
+ } finally { log.mockRestore(); }
+});
+it("logs a thrown binding error by its Workers AI code alone", async () => {
+ const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+ const run = vi.fn(async () => { throw new Error("5028: PRIVATE model text"); });
+ try {
+  await expect(runCommunityChat({...env,AI:{run}} as unknown as Env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
+  expect(log).toHaveBeenCalledExactlyOnceWith({ message: "Community chat model call failed.", event: "community_chat.model_failed",
+   model: COMMUNITY_CHAT_MODEL, modelSteps: 1, executedToolCalls: 0, errorName: "CloudflareAIError", kind: "unknown", code: 5028 });
+  expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE");
+ } finally { log.mockRestore(); }
 });
 it("fails closed on completion-token exhaustion even with otherwise grounded JSON", async () => {
  const run = vi.fn(async()=>Response.json({choices:[{message:{content:JSON.stringify({answer:"Must not publish truncated answer",citations:[{kind:"profile",id:"self",version:2}]})},finish_reason:"length"}]}));
@@ -180,14 +211,22 @@ it("bounds raw provider output before SDK parsing and never retries it", async (
  await expect(runCommunityChat({...env,AI:{run}} as unknown as Env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
  expect(run).toHaveBeenCalledOnce(); expect(cancelled).toBe(true);
 });
+it("describes a wrapped provider error by its safe fields and anything else by its class", () => {
+ const provider = new CloudflareAIError({ code: "provider-error", status: 503, data: { errors: [{ code: 3040, message: "PRIVATE" }] }, message: "PRIVATE body", model: COMMUNITY_CHAT_MODEL, requestBodyValues: { messages: "PRIVATE" }, url: "workers-ai-binding" });
+ expect(describeChatFailure(new Error("PRIVATE wrapper", { cause: provider }))).toEqual({ errorName: "CloudflareAIError", status: 503, kind: "provider-error", code: 3040 });
+ expect(describeChatFailure(new TypeError("PRIVATE"))).toEqual({ errorName: "TypeError" });
+ expect(describeChatFailure("PRIVATE string")).toEqual({ errorName: "Error" });
+});
 it("honors an already aborted run before inference", async () => {
  const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(()=>AbortSignal.abort());
+ const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
  try {
   const result=await runCommunityChat(env,service(),{message:"hello"});
   expect(result.grounded).toBe(false); expect(result.limited).toBe(true);
   expect(result.execution.executedToolCalls).toBe(0);
   expect(complete).not.toHaveBeenCalled();
- } finally { timeout.mockRestore(); }
+  expect(log).not.toHaveBeenCalled();
+ } finally { timeout.mockRestore(); log.mockRestore(); }
 });
 // Aborts end the run as limited, as before the AI SDK loop; other provider errors still fail.
 it("ends a run cancelled after a tool step as limited without an answer", async () => {

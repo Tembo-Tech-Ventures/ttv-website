@@ -211,3 +211,34 @@ returns no answer and is marked limited. Any other provider error still fails
 the request with the generic message. `chat.test.ts` drives the real loop
 through a mocked native binding. Its cases passed against both loops, and the
 three cancellation and step-2 error cases were checked against Mastra first.
+
+### Gemma 4 instead of the retired GLM 5.3 Flash (23 November 2026)
+
+Cloudflare retired `@cf/zai-org/glm-5.3-flash`, with 23 other Workers AI models, on
+20 November 2026 ([changelog](https://developers.cloudflare.com/changelog/post/2026-11-05-planned-model-deprecations/)).
+A retired model answers HTTP 410 with error code 5028. Discover's "Explore evidence", the
+community REST chat and the MCP chat then failed with the generic "could not be completed"
+message, and nothing reached the Worker log. The only signal was the Discover ask failing on
+every PR preview.
+
+The chat now runs `@cf/google/gemma-4-26b-a4b-it`, the model assessment and the native
+community adapter already use, and the smaller replacement Cloudflare suggests. Gemma's
+thinking is on by default, and its input schema has no reasoning effort. So the chat turns
+thinking off (`chat_template_kwargs.enable_thinking: false`, through the provider's
+`reasoningEffort: null`), as every other Gemma call here does. Everything else is unchanged:
+the same prompt, Gateway options, 64KB stream cap, three model steps, six serialized tools,
+1,200 output tokens, timeouts, zero retries and grounding checks.
+
+Two guards come with the move:
+
+- `web/src/lib/ai/retired-models.test.ts` fails when `src/`, `scripts/`, `e2e/`,
+  `wrangler.jsonc` or a workflow names a retired `@cf/` model. Add each new retirement there
+  when Cloudflare announces it.
+- A failed model call now logs one structured line, `community_chat.model_failed`. It holds the
+  model, steps, executed tools, the error class, the HTTP status, the provider's failure kind
+  and the Workers AI code (5028 for a retired model). It never holds a message, body, request
+  or header, because those can carry prompts, evidence and credentials.
+
+On a preview, `e2e/platform-discover.spec.ts` requires the Discover ask to come back grounded,
+with cited evidence. A second test asks the chat to search for a member, and requires at least
+one executed tool, at most three model steps and a grounded, cited answer from Gemma.

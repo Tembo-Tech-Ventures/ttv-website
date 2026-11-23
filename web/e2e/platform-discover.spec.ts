@@ -7,8 +7,9 @@ import { personaSession, signIn } from "./platform-personas";
  * Discover on the kit (style-guide rollout M16): the kit title and a sentence, the two ways in as a
  * PillNav, kit fields and cards, one peach action per view, and no island. An institution looks a
  * member up by name, opens their work and asks Tembo about it without JavaScript. Locally there is
- * no AI binding, so Tembo's answer fails and the page keeps the question; a preview answers.
- * Render-level detail is in src/pages/dashboard/_tests/discover.render.test.ts.
+ * no AI binding, so Tembo's answer fails and the page keeps the question; a preview answers, with
+ * cited evidence, from the live model. Render-level detail is in
+ * src/pages/dashboard/_tests/discover.render.test.ts.
  */
 const EVIDENCE_DIR = "test-results/evidence/platform-discover";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -17,6 +18,13 @@ const PATH = "/dashboard/discover";
 // Lookup lists saved profiles only: locally the seeded alumna, on an agent preview Amina
 // Fixture, whose profile agent-preview-auth.mjs saves for the institution persona to find.
 const MEMBER = PREVIEW ? "Amina" : "Achieng";
+// The community chat's Workers AI model (src/lib/community/chat-agent.ts); retired ids fail
+// src/lib/ai/retired-models.test.ts before they reach a preview.
+const CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+// The chat allows a 60 s run (three model steps of at most 20 s), so a live answer needs more
+// than the 30 s per-test timeout in playwright.config.ts.
+const LIVE_ANSWER_MS = 70_000;
+const LIVE_TEST_MS = 120_000;
 
 const main = (page: Page) => page.locator("#spaces-main");
 const evidence = (name: string) => `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
@@ -59,6 +67,7 @@ test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
   test("an institution looks a member up, opens their work and asks Tembo about it", async ({ page, baseURL }) => {
+    if (PREVIEW) test.setTimeout(LIVE_TEST_MS);
     await page.setViewportSize({ width: 390, height: 844 });
     await signedIn(page, baseURL);
     await open(page, PATH, { script: false });
@@ -79,7 +88,11 @@ test.describe("without JavaScript", () => {
     await main(page).getByRole("button", { name: "Explore evidence" }).click();
     const ask = main(page).locator("[data-discover-ask]");
     if (PREVIEW) {
-      await expect(main(page).locator("[data-discover-answer]")).toBeVisible({ timeout: 70_000 });
+      const answer = main(page).locator("[data-discover-answer]");
+      await expect(answer).toBeVisible({ timeout: LIVE_ANSWER_MS });
+      // Only a grounded answer lists the evidence it cited; an ungrounded one says it could not answer.
+      await expect(answer.getByRole("list", { name: "Cited community evidence" }).getByRole("listitem").first()).toBeVisible();
+      await page.screenshot({ path: evidence("answer") });
     } else {
       // No AI binding locally: the failure is said, and the question kept.
       await expect(ask.locator("[data-notice='danger']")).toBeFocused();
@@ -101,4 +114,26 @@ test.describe("without JavaScript", () => {
     // The opportunity was posted: it is in no address.
     expect(new URL(page.url()).search).toBe("");
   });
+});
+
+// The live model's tool loop, which the page above may not need (it hands Tembo the selected
+// person's evidence up front): searching for someone takes at least one tool call, at most three
+// model steps, and an answer that cites what the tools returned. One project is enough.
+test("Tembo searches members with its tools and cites what it read", async ({ page, baseURL }, testInfo) => {
+  test.skip(!PREVIEW || testInfo.project.name !== "chromium", "The live model runs only on a preview, once.");
+  test.setTimeout(LIVE_TEST_MS);
+  await signedIn(page, baseURL);
+  const response = await page.request.post("/api/community/chat", {
+    headers: { Origin: new URL(baseURL!).origin },
+    data: { message: `Search for ${MEMBER} and read their published profile. What have they built?` },
+    timeout: LIVE_ANSWER_MS,
+  });
+  expect(response.status()).toBe(200);
+  const chat = await response.json() as { grounded: boolean; citations: unknown[]; execution: { model: string; modelSteps: number; executedToolCalls: number; toolNames: string[] } };
+  expect(chat.execution.model).toBe(CHAT_MODEL);
+  expect(chat.execution.toolNames).toContain("search_profiles");
+  expect(chat.execution.executedToolCalls).toBeGreaterThanOrEqual(1);
+  expect(chat.execution.modelSteps).toBeLessThanOrEqual(3);
+  expect(chat.grounded).toBe(true);
+  expect(chat.citations.length).toBeGreaterThanOrEqual(1);
 });

@@ -18,7 +18,7 @@ export async function sealCommunityEvidence(expectedVersion) {
   const chatted = manifest.modelCalls === "one-bounded-desktop-chat";
   const chat = manifest.chat;
   if (chatted) {
-    if (chat?.model !== "@cf/zai-org/glm-5.3-flash" || !Number.isInteger(chat.modelSteps) || chat.modelSteps < 1 || chat.modelSteps > 3 || !Number.isInteger(chat.executedToolCalls) || chat.executedToolCalls < 1 || chat.executedToolCalls > 6 || !Number.isInteger(chat.citationCount) || chat.citationCount < 1 || chat.citationCount > 30) throw new Error("Chat evidence incomplete.");
+    if (chat?.model !== "@cf/google/gemma-4-26b-a4b-it" || !Number.isInteger(chat.modelSteps) || chat.modelSteps < 1 || chat.modelSteps > 3 || !Number.isInteger(chat.executedToolCalls) || chat.executedToolCalls < 1 || chat.executedToolCalls > 6 || !Number.isInteger(chat.citationCount) || chat.citationCount < 1 || chat.citationCount > 30) throw new Error("Chat evidence incomplete.");
     const image = await lstat(join(directory, CHAT_EVIDENCE_FILE));
     if (!image.isFile() || image.isSymbolicLink()) throw new Error("Evidence file rejected.");
   }

@@ -24,7 +24,7 @@ describe("community evidence publication boundary", () => {
     expect(JSON.stringify(receipt)).not.toContain("private");
   });
   it("seals only bounded chat metadata and rejects missing actual tool execution", async () => {
-    const chat = { model: "@cf/zai-org/glm-5.3-flash", modelSteps: 2, executedToolCalls: 1, citationCount: 2, privatePrompt: "private" };
+    const chat = { model: "@cf/google/gemma-4-26b-a4b-it", modelSteps: 2, executedToolCalls: 1, citationCount: 2, privatePrompt: "private" };
     readFile.mockResolvedValue(JSON.stringify({ ...valid, modelCalls: "one-bounded-desktop-chat", chat }));
     await sealCommunityEvidence(sha);
     const receipt = JSON.parse(writeFile.mock.calls[0][1]);

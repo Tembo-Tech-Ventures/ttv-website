@@ -10,7 +10,7 @@ export function validateBrowserChat(payload, memberId, entries, profileVersion) 
   assert.ok(typeof payload.answer === "string" && payload.answer.length > 0 && payload.answer.length <= 12000);
   assert.deepEqual(payload.assessments, []);
   const execution = payload.execution;
-  assert.equal(execution?.model, "@cf/zai-org/glm-5.3-flash");
+  assert.equal(execution?.model, "@cf/google/gemma-4-26b-a4b-it");
   assert.ok(Number.isInteger(execution.modelSteps) && execution.modelSteps >= 1 && execution.modelSteps <= 3);
   assert.ok(Number.isInteger(execution.executedToolCalls) && execution.executedToolCalls >= 1 && execution.executedToolCalls <= 6);
   assert.ok(Array.isArray(payload.citations) && payload.citations.length > 0 && payload.citations.length <= 30);
