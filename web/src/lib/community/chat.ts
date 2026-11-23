@@ -98,10 +98,28 @@ const answerInput = z.object({
 function ungrounded(sources: Map<string, EvidenceCitation>, limited = false, groundingFailure = limited ? "execution_limit" : "invalid_structure") {
   return { orderedProfiles: [] as Array<z.infer<typeof orderedProfileInput> & {name:string;citations:Array<{kind:EvidenceCitation["kind"];id:string;version:number;url:string|null}>}>, evaluatedCandidates:0, answer: "I could not produce an evidence-grounded answer. Please narrow your question or request published evidence.", citations: [] as EvidenceCitation[], retrievedSources: [...sources.values()], grounded: false, groundingFailure, error: "ungrounded_answer", aiGenerated: true, limited };
 }
+/**
+ * The final answer as JSON. Gemma 4 may wrap it in one Markdown code fence; that wrapper alone is
+ * removed. Prose around the JSON is still invalid, and the JSON still meets answerInput strictly.
+ */
+function answerJson(content: string | null): unknown {
+  const text = (content ?? "").trim();
+  const fenced = /^```(?:json)?[ \t]*\n([\s\S]*?)\n?```$/i.exec(text);
+  return JSON.parse(fenced ? fenced[1] : text);
+}
+
+/** How a non-JSON answer was shaped, for the Worker log: never its text, which repeats evidence. */
+function logAnswerShape(content: string | null) {
+  const text = (content ?? "").trim();
+  const kind = (char: string | undefined) => char === undefined ? "none" : /[{}[\]`]/.test(char) ? char : /\p{L}/u.test(char) ? "letter" : "other";
+  console.warn({ message: "Community chat answer was not JSON.", event: "community_chat.invalid_json",
+    length: text.length, first: kind(text[0]), last: kind(text.at(-1)), fenced: text.includes("```") });
+}
+
 function groundedAnswer(content: string | null, sources: Map<string, EvidenceCitation>, orderCandidates?: Map<string,string>, readEvidence?: Map<string,SelectedEvidence>) {
   try {
     let parsed: unknown;
-    try { parsed = JSON.parse(content ?? ""); } catch { return ungrounded(sources, false, "invalid_json"); }
+    try { parsed = answerJson(content); } catch { logAnswerShape(content); return ungrounded(sources, false, "invalid_json"); }
     const answer = answerInput.parse(parsed);
     const citations = answer.citations.map((ref) => sources.get(`${ref.kind}:${ref.id}`));
     if (citations.some((source, i) => !source || source.version !== answer.citations[i].version)) return ungrounded(sources, false, "invalid_citation");

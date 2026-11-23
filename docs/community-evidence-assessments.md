@@ -239,6 +239,14 @@ Two guards come with the move:
   and the Workers AI code (5028 for a retired model). It never holds a message, body, request
   or header, because those can carry prompts, evidence and credentials.
 
+The first preview run showed the tool loop working on Gemma: `search_profiles`, then
+`get_profile`, then an answer on the third step. But the answer was not bare JSON, so it
+failed grounding as `invalid_json`. The parser now removes a single Markdown code fence
+around the answer, if there is one. Prose around the JSON is still invalid, and the JSON
+inside still has to pass the strict answer schema and the delivered-citation checks. A
+non-JSON answer logs `community_chat.invalid_json` with its shape only: its length, the
+classes of its first and last characters, and whether it has a fence.
+
 On a preview, `e2e/platform-discover.spec.ts` requires the Discover ask to come back grounded,
 with cited evidence. A second test asks the chat to search for a member, and requires at least
 one executed tool, at most three model steps and a grounded, cited answer from Gemma.

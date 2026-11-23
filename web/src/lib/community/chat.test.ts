@@ -139,6 +139,31 @@ it("does not ground a no-tool answer from invented references", async () => {
  complete.mockResolvedValueOnce(groundedContent([{kind:"profile",id:"self",version:2}]));
  const r = await runCommunityChat(env,service(),{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]); expect(r.retrievedSources).toEqual([]);
 });
+// Gemma 4 can wrap its JSON in one Markdown fence (seen live on preview agent-pr-426, 2026-11-23).
+it.each(["```json\n%s\n```","```\n%s\n```","  ```JSON\n%s```  "])("grounds a fenced answer %j by the same checks", async wrapper => {
+ const answer = JSON.stringify({ answer: "Documented contribution text is available.", citations: [{kind:"journey",id:"j",version:3}] });
+ complete.mockResolvedValueOnce({ content: null, toolCalls: [call("get_own_profile", {})], finishReason: null }).mockResolvedValueOnce({ ...done, content: wrapper.replace("%s", answer) });
+ const r = await runCommunityChat(env,service(),{message:"My evidence"});
+ expect(r.grounded).toBe(true); expect(r.citations[0]).toMatchObject({id:"j",version:3});
+});
+it.each([
+ 'Here is the answer: {"answer":"Claim","citations":[{"kind":"journey","id":"j","version":3}]}',
+ '```json\n{"answer":"Claim","citations":[{"kind":"journey","id":"j","version":3}]}\n```\nPRIVATE extra prose',
+ '```json\n```json\n{"answer":"Claim","citations":[{"kind":"journey","id":"j","version":3}]}\n```\n```',
+])("still fails closed on prose or a doubled fence around the JSON %#, logging its shape alone", async content => {
+ const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+ try {
+  complete.mockResolvedValueOnce({ content: null, toolCalls: [call("get_own_profile", {})], finishReason: null }).mockResolvedValueOnce({ ...done, content });
+  const r = await runCommunityChat(env,service(),{message:"My evidence"});
+  expect(r.grounded).toBe(false); expect(r.groundingFailure).toBe("invalid_json"); expect(r.citations).toEqual([]);
+  expect(log).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ event: "community_chat.invalid_json", length: content.trim().length }));
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/Claim|PRIVATE|Here is|citations/);
+ } finally { log.mockRestore(); }
+});
+it("does not ground a fenced answer that cites evidence nobody delivered", async () => {
+ complete.mockResolvedValueOnce({ ...done, content: "```json\n" + JSON.stringify({ answer: "Invented", citations: [{kind:"journey",id:"j",version:3}] }) + "\n```" });
+ const r = await runCommunityChat(env,service(),{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.groundingFailure).toBe("invalid_citation");
+});
 it.each(["plain prose",'{"answer":"Claim","citations":[]}',"not JSON"])("fails closed on malformed or uncited answer %s", async content => {
  complete.mockResolvedValueOnce({...done,content}); const r = await runCommunityChat(env,service(),{message:"hello"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]);
 });
