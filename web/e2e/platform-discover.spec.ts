@@ -129,11 +129,14 @@ test("Tembo searches members with its tools and cites what it read", async ({ pa
     timeout: LIVE_ANSWER_MS,
   });
   expect(response.status()).toBe(200);
-  const chat = await response.json() as { grounded: boolean; citations: unknown[]; execution: { model: string; modelSteps: number; executedToolCalls: number; toolNames: string[] } };
-  expect(chat.execution.model).toBe(CHAT_MODEL);
-  expect(chat.execution.toolNames).toContain("search_profiles");
-  expect(chat.execution.executedToolCalls).toBeGreaterThanOrEqual(1);
-  expect(chat.execution.modelSteps).toBeLessThanOrEqual(3);
-  expect(chat.grounded).toBe(true);
-  expect(chat.citations.length).toBeGreaterThanOrEqual(1);
+  const chat = await response.json() as { grounded: boolean; groundingFailure: string | null; limited: boolean; citations: unknown[]; execution: { model: string; modelSteps: number; executedToolCalls: number; toolNames: string[] } };
+  // Why an answer was not grounded, without the answer text: enough to tell a model change from a fixture one.
+  const outcome = JSON.stringify({ groundingFailure: chat.groundingFailure, limited: chat.limited, citations: chat.citations.length, execution: chat.execution });
+  await testInfo.attach("chat-outcome.json", { body: outcome, contentType: "application/json" });
+  expect(chat.execution.model, outcome).toBe(CHAT_MODEL);
+  expect(chat.execution.toolNames, outcome).toContain("search_profiles");
+  expect(chat.execution.executedToolCalls, outcome).toBeGreaterThanOrEqual(1);
+  expect(chat.execution.modelSteps, outcome).toBeLessThanOrEqual(3);
+  expect(chat.grounded, outcome).toBe(true);
+  expect(chat.citations.length, outcome).toBeGreaterThanOrEqual(1);
 });
