@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { runCommunityChat } from "./chat";
 import type { CommunityService } from "./service";
+import { APICallError } from "ai";
 import { CloudflareAIError } from "agents/models/ai-sdk";
 import { COMMUNITY_CHAT_MODEL, describeChatFailure } from "./chat-agent";
 const complete = vi.fn();
@@ -165,7 +166,10 @@ it("does not ground a fenced answer that cites evidence nobody delivered", async
  const r = await runCommunityChat(env,service(),{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.groundingFailure).toBe("invalid_citation");
 });
 it.each(["plain prose",'{"answer":"Claim","citations":[]}',"not JSON"])("fails closed on malformed or uncited answer %s", async content => {
- complete.mockResolvedValueOnce({...done,content}); const r = await runCommunityChat(env,service(),{message:"hello"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]);
+ const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+ try {
+  complete.mockResolvedValueOnce({...done,content}); const r = await runCommunityChat(env,service(),{message:"hello"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]);
+ } finally { log.mockRestore(); }
 });
 it.each([false,true])("never registers oversized dropped evidence, selected=%s", async selected => {
  const s = service(true); const p = {userId:"chosen",version:2,bio:"x".repeat(61000)};
@@ -240,6 +244,7 @@ it("describes a wrapped provider error by its safe fields and anything else by i
  const provider = new CloudflareAIError({ code: "provider-error", status: 503, data: { errors: [{ code: 3040, message: "PRIVATE" }] }, message: "PRIVATE body", model: COMMUNITY_CHAT_MODEL, requestBodyValues: { messages: "PRIVATE" }, url: "workers-ai-binding" });
  expect(describeChatFailure(new Error("PRIVATE wrapper", { cause: provider }))).toEqual({ errorName: "CloudflareAIError", status: 503, kind: "provider-error", code: 3040 });
  expect(describeChatFailure(new TypeError("PRIVATE"))).toEqual({ errorName: "TypeError" });
+ expect(describeChatFailure(new APICallError({ message: "PRIVATE", url: "workers-ai-binding", requestBodyValues: {}, statusCode: 429 }))).toEqual({ errorName: "AI_APICallError", status: 429 });
  expect(describeChatFailure("PRIVATE string")).toEqual({ errorName: "Error" });
 });
 it("honors an already aborted run before inference", async () => {

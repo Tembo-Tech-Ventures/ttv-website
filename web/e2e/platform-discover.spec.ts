@@ -66,7 +66,7 @@ for (const width of [1440, 320]) {
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("an institution looks a member up, opens their work and asks Tembo about it", async ({ page, baseURL }) => {
+  test("an institution looks a member up, opens their work and asks Tembo about it", async ({ page, baseURL }, testInfo) => {
     if (PREVIEW) test.setTimeout(LIVE_TEST_MS);
     await page.setViewportSize({ width: 390, height: 844 });
     await signedIn(page, baseURL);
@@ -91,7 +91,10 @@ test.describe("without JavaScript", () => {
       const answer = main(page).locator("[data-discover-answer]");
       await expect(answer).toBeVisible({ timeout: LIVE_ANSWER_MS });
       // Only a grounded answer lists the evidence it cited; an ungrounded one says it could not answer.
-      await expect(answer.getByRole("list", { name: "Cited community evidence" }).getByRole("listitem").first()).toBeVisible();
+      // Grounding is decided on the server, whatever the viewport, so one project holds the live model to it.
+      if (testInfo.project.name === "chromium") {
+        await expect(answer.getByRole("list", { name: "Cited community evidence" }).getByRole("listitem").first()).toBeVisible();
+      }
       await page.screenshot({ path: evidence("answer") });
     } else {
       // No AI binding locally: the failure is said, and the question kept.

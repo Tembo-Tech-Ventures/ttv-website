@@ -45,8 +45,9 @@ const SCANNED = ["src", "scripts", "e2e", "wrangler.jsonc", "../.github/workflow
 const SKIPPED_DIRS = new Set(["node_modules", "dist", ".astro", ".wrangler", "test-results"]);
 const TEXT_FILE = /\.(?:[cm]?[jt]sx?|astro|jsonc?|ya?ml|toml|sql|md)$/;
 const THIS_FILE = resolve(import.meta.filename);
-// The id stops before a quote, a backtick or a space; `workers-ai/@cf/…` and `"@cf/…"` both match.
-const MODEL_ID = /@cf\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+/g;
+// The id stops before a quote, a backtick or a space, and ends on a letter or digit, so a sentence's
+// full stop is not read into it; `workers-ai/@cf/…` and `"@cf/…"` both match.
+const MODEL_ID = /@cf\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]*[A-Za-z0-9]/g;
 
 function files(path: string): string[] {
   if (!statSync(path, { throwIfNoEntry: false })) return [];
@@ -89,6 +90,7 @@ describe("retired Workers AI models", () => {
     ['export const MODEL = "@cf/zai-org/glm-5.3-flash";', "@cf/zai-org/glm-5.3-flash"],
     ['const model = "workers-ai/@cf/meta/llama-3.2-3b-instruct";', "@cf/meta/llama-3.2-3b-instruct"],
     ["run(`@cf/Google/Gemma-7b-it-lora`, input)", "@cf/Google/Gemma-7b-it-lora"],
+    ["// Chat ran on @cf/zai-org/glm-5.3-flash.", "@cf/zai-org/glm-5.3-flash"],
   ])("flags a retired id written as %s", (text, id) => {
     expect(retiredIn(text)).toEqual([{ id, line: 1 }]);
   });

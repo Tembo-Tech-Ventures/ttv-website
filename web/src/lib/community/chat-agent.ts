@@ -11,7 +11,7 @@ import { requireCommunityGateway } from "./native-gateway";
 export const COMMUNITY_CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
 const FAILURE_KINDS = new Set(["auth", "rate-limit", "not-found", "bad-request", "provider-error", "gateway-error", "unknown"]);
-const ERROR_NAME = /^[A-Za-z]{1,60}$/;
+const ERROR_NAME = /^[A-Za-z_]{1,60}$/;
 
 /**
  * What a failed model call may say in the Worker log: the error's class, the HTTP status, the
