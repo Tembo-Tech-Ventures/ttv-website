@@ -4,6 +4,7 @@ import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtu
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
 import { searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
 import { searchDatabase } from "./test-support";
+import { recordingScopeSql } from "@/lib/recordings/access";
 
 const databases: ReturnType<typeof searchDatabase>[] = [];
 function setup(...args: Parameters<typeof searchDatabase>) { const s = searchDatabase(...args); databases.push(s); return s; }
@@ -21,15 +22,20 @@ describe("authorized source retrieval", () => {
     expect(result.messages).toEqual([]);
     expect(result.people.map(p => p.person.id)).toEqual(["synthetic-ineligible", "synthetic-otieno", "synthetic-private"]);
     expect(result.projects.map(p => p.journeyId)).toEqual(["project-synthetic-ineligible", "project-synthetic-otieno", "project-synthetic-private"]);
-    expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
-    expect(result.sessionMoments.every(m => m.visibility.kind === "COHORT" && m.visibility.label === "Only you and your cohort")).toBe(true);
+    // The recording access policy: the caller's cohorts; for admins every cohort's and those with no cohort.
+    const { isAdmin, cohortIds } = fixture.expected;
+    expect(result.sessionMoments.map(m => m.programId)).toEqual(isAdmin ? ["cohort-a", "cohort-b", null] : cohortIds);
+    expect(result.sessionMoments.map(m => m.visibility)).toEqual(result.sessionMoments.map(m => m.programId === null
+      ? { kind: "PRIVATE", label: "Only admins" } : { kind: "COHORT", label: "Only you and your cohort" }));
     const retrieved = JSON.stringify(s.retrieved);
-    expect(retrieved).not.toMatch(/secret project|secret staff|secret admissions|Private auth name|pending secret|unscoped secret/);
-    if (!fixture.expected.cohortIds.includes("cohort-b")) expect(retrieved).not.toContain("Webhook cohort B secret");
+    expect(retrieved).not.toMatch(/secret project|secret staff|secret admissions|Private auth name|pending secret/);
+    if (!isAdmin) expect(retrieved).not.toContain("unscoped secret");
+    if (!isAdmin && !cohortIds.includes("cohort-b")) expect(retrieved).not.toContain("Webhook cohort B secret");
     const transcript = s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"));
-    if (fixture.expected.cohortIds.length > 0) expect(transcript?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
+    const reads = isAdmin || cohortIds.length > 0;
+    if (reads) expect(transcript?.sql).toContain(recordingScopeSql(fixture.expected, s.actor, "r"));
     else expect(transcript).toBeUndefined();
-    expect(s.queries).toHaveLength(fixture.expected.cohortIds.length > 0 ? 6 : 5);
+    expect(s.queries).toHaveLength(reads ? 6 : 5);
   });
 
   it.each(["SUSPENDED"])("denies %s profiles and their projects even to an institution", async status => {
@@ -104,7 +110,7 @@ describe("authorized source retrieval", () => {
     expect(result.sessionMoments.every(m => m.quote.length <= 500)).toBe(true);
     const retrieval = s.queries[3]!;
     const plan = s.database.prepare("EXPLAIN QUERY PLAN " + retrieval.sql).all(...retrieval.values as SQLInputValue[]).map(r => r.detail).join("\n");
-    expect(plan).toContain("SEARCH recording USING INDEX recording_program_idx (programId=?)");
+    expect(plan).toContain("SEARCH r USING INDEX recording_program_idx (programId=?)");
     expect(plan).toContain("SEARCH s USING INDEX transcript_segment_recording_time_idx (recordingId=?");
     expect(plan).not.toMatch(/SCAN s\b|SCAN transcript_segment\b/);
     s.database.exec("UPDATE transcript_segment SET text='Unique late evidence' WHERE id='a-0700'");

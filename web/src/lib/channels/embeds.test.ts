@@ -493,7 +493,7 @@ describe("embeds: query plans", () => {
     expect(plan).toContain("recording_program_idx");
     expect(plan).not.toMatch(/SCAN (j|r|s|c|cu|recording|transcript_segment|communityJourney|communityConfirmation)\b/);
     // `q` reads only the newest sessions' transcripts: a bounded co-routine, then each one's segments by index.
-    expect(plan).toMatch(/CO-ROUTINE recent\nSEARCH recording USING INDEX recording_program_idx[\s\S]*SCAN recent\nSEARCH s USING INDEX transcript_segment_recording_time_idx/);
+    expect(plan).toMatch(/CO-ROUTINE recent\nSEARCH r USING INDEX recording_program_idx[\s\S]*SCAN recent\nSEARCH s USING INDEX transcript_segment_recording_time_idx/);
   });
 });
 it.each(["ADMIN", "MENTOR"] as const)(

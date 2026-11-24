@@ -2,6 +2,7 @@ import type { APIContext } from "astro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SearchResults, SearchScope } from "@/lib/platform/contracts";
 import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtures";
+import { recordingScopeSql } from "@/lib/recordings/access";
 import { searchRequest } from "./http";
 import { searchDatabase } from "./test-support";
 
@@ -28,15 +29,16 @@ describe("GET /api/search", () => {
     expect(response.status).toBe(fixture.signedIn === false ? 404 : 200);
     if (fixture.signedIn !== false) {
       const result = SearchResults.parse(await response.json());
-      expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
+      // The recording access policy: the caller's cohorts; for admins every cohort's and those with no cohort.
+      expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.isAdmin ? ["cohort-a", "cohort-b", null] : fixture.expected.cohortIds);
       expect(result.projects).toHaveLength(3);
       expect(result.people.map(p => p.person.id)).toEqual(["synthetic-ineligible", "synthetic-otieno", "synthetic-private"]);
       // Everyone signed in reads the community; cohort B's channel, its people and admins.
       const readsCohortB = fixture.expected.isAdmin || fixture.expected.cohortIds.includes("cohort-b");
       expect(result.messages.map(m => m.id)).toEqual(readsCohortB ? ["message-cohort-b", "message-help"] : ["message-help"]);
       const retrieval = s.queries.filter(q => q.sql.includes("CROSS JOIN transcript_segment"));
-      expect(retrieval).toHaveLength(fixture.expected.cohortIds.length > 0 ? 1 : 0);
-      if (retrieval.length > 0) expect(retrieval[0]?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
+      expect(retrieval).toHaveLength(fixture.expected.isAdmin || fixture.expected.cohortIds.length > 0 ? 1 : 0);
+      if (retrieval.length > 0) expect(retrieval[0]?.sql).toContain(recordingScopeSql(fixture.expected, s.actor, "r"));
     } else expect(s.queries).toEqual([]);
     expect(env.VECTORIZE.query).not.toHaveBeenCalled(); expect(env.AI.run).not.toHaveBeenCalled();
   });
@@ -84,14 +86,20 @@ describe("GET /api/search", () => {
     const result = SearchResults.parse(await (await searchRequest(context(`q=Webhook&scope=${scope}&programId=cohort-a`), environment(s))).json());
     expect(result.people).toEqual([]); expect(result.projects).toEqual([]); expect(result.messages).toEqual([]);
     expect(result.sessionMoments.map(m => m.programId)).toEqual(["cohort-a"]);
-    expect(s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"))?.values[0]).toBe('["cohort-a"]');
+    expect(s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"))?.values).toEqual(["Webhook", "Webhook", "cohort-a"]);
     expect(JSON.stringify(s.retrieved)).not.toContain("Webhook cohort B secret");
   });
 
   it.each(["cohort-b", "does-not-exist"])("does not reveal unauthorized program existence: %s", async programId => {
-    const s = setup({ globalRoles: ["ADMIN"], applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const s = setup({ globalRoles: ["MENTOR"], applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const response = await searchRequest(context(`q=Webhook&scope=all&programId=${programId}`), environment(s));
     expect(response.status).toBe(403); expect(s.queries).toHaveLength(3); expect(s.retrieved).toEqual([]);
+  });
+
+  it("lets an admin narrow to any cohort, whose recordings they may all watch", async () => {
+    const s = setup({ globalRoles: ["ADMIN"], applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const result = SearchResults.parse(await (await searchRequest(context("q=Webhook&scope=sessionMoments&programId=cohort-b"), environment(s))).json());
+    expect(result.sessionMoments.map(m => [m.recordingId, m.programId])).toEqual([["recording-b", "cohort-b"]]);
   });
 
   it.each(["community", "people", "projects", "messages"])("rejects incompatible program with %s", async scope => {

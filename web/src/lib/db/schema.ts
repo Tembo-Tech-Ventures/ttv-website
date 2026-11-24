@@ -460,6 +460,9 @@ export const programApplicationRelations = relations(
 
 // ─── Recording ─────────────────────────────────────────────
 
+/** A recording's audience: its cohort, a direct conversation, the community, or admins only. */
+export const RECORDING_ACCESS_SCOPES = ["COHORT", "DIRECT", "COMMUNITY", "ADMIN_ONLY"] as const;
+
 export const recording = sqliteTable("recording", {
   id: cuid("id"),
   programId: text("programId").references(() => program.id),
@@ -488,6 +491,15 @@ export const recording = sqliteTable("recording", {
   processingError: text("processingError"),
   transcriptText: text("transcriptText"),
   transcriptVtt: text("transcriptVtt"),
+  /**
+   * Who may watch it and read its transcript (lib/recordings/access.ts). Migration 0042's triggers
+   * allow only these values, and keep a COHORT or ADMIN_ONLY recording's scope following its cohort.
+   */
+  accessScope: text("accessScope", { enum: RECORDING_ACCESS_SCOPES }).notNull().default("ADMIN_ONLY"),
+  /** Deleted: nobody may watch it or read it, admins included. */
+  deletedAt: integer("deletedAt", { mode: "timestamp" }),
+  /** Hidden: only admins and the cohort's instructors and TAs may watch it or read it. */
+  hiddenAt: integer("hiddenAt", { mode: "timestamp" }),
   ...timestamps,
 }, (table) => [index("recording_program_idx").on(table.programId)]);
 

@@ -580,13 +580,14 @@ v1.
 | Work | Shared when | Refused |
 |---|---|---|
 | Project (`journeyId` + `version`) | It is the poster's own posted project (`communityJourney.state = 'POSTED'`, with no moderation hold) at its current revision | Missing or someone else's: 400 “This project can't be shared here.” Other 400 refusals: “A moderator took this work down.”; “This work is held for a human review.”; “This project is a private draft. Publish it before you share it.”; “This work cannot be shared while its profile is unavailable.” Another revision: 409 `conflict` “This project has changed since you picked it. Pick it again to share the latest revision.” |
-| Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording is that program's, complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
+| Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording access policy shows the recording to the whole cohort (`cohortAudience` in `src/lib/recordings/access.ts`: that program's, neither deleted nor hidden), complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
 
 - **Whose consent.** A project's owner sharing it is the consent for that
   channel's readers, so nobody shares another person's work (see the shared member visibility rules linked above).
   A clip goes only where every reader can see the recording: every reader of
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
-  admins) has that cohort's recordings.
+  admins) has that cohort's visible recordings. A hidden recording, which only
+  its hosts and admins see, is never shared or shown.
 - **Stored.** A project keeps its title, a summary of its description (500
   characters), no skills (projects have none of their own) and its https
   evidence link (`link: null` without one, or for anything else: no TTV page
@@ -604,7 +605,7 @@ v1.
 - **On every read** (`embedAccessColumn`, a column of the page's own
   statement, so pages cost no extra statement): a project must still exist,
   belong to the message's author and be published; a recording must still be
-  complete and in the channel's cohort. Otherwise the reader, author
+  complete and visible to the channel's whole cohort (`cohortAudienceSql`). Otherwise the reader, author
   included, gets `{type: "unavailable", was}` with no title, ids or
   quotation. A project's confirmations are read live: each mentor's latest
   confirmation at or before the shared revision, with the revision it

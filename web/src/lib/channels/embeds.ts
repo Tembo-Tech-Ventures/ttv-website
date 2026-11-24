@@ -1,5 +1,6 @@
 import { memberEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
 import { memberWorkHref } from "@/lib/members/links";
+import { cohortAudience, cohortAudienceSql, recordingAccessFor, transcriptReady, transcriptReadySql } from "@/lib/recordings/access";
 import {
   ExternalLink, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
@@ -16,7 +17,8 @@ import type { ReadContext } from "./messages";
  * - A project is the poster's own published (not private) project at its current revision. Its
  *   owner sharing it is the consent for the channel's readers; nobody shares another person's work.
  * - A session clip is shared only where every reader can see the recording: that program's own
- *   cohort channels (canShareSessionClip), from a complete recording with a transcript there.
+ *   cohort channels (canShareSessionClip), from a complete recording with a transcript there that the
+ *   recording access policy shows the whole cohort (lib/recordings/access.ts, cohortAudience).
  * - Link previews are off in v1.
  */
 
@@ -157,7 +159,9 @@ interface ResolvedRow {
   moderatorHidden?: number;
   currentVersion: number | null;
   journeyTitle: string | null; description: string | null; evidenceUrl: string | null;
-  programId: string | null; processingStatus: string | null; recordingTitle: string | null;
+  recordingId: string | null; programId: string | null; accessScope: string | null;
+  recordingDeletedAt: number | null; recordingHiddenAt: number | null;
+  processingStatus: string | null; recordingTitle: string | null;
   recordingSeconds: number | null; segments: unknown;
 }
 
@@ -189,9 +193,12 @@ function resolveProject(ownerId: string, ref: ProjectEmbedRef, row: ProjectRow):
 }
 
 function resolveClip(ctx: ReadContext, ref: Extract<EmbedRef, { type: "sessionClip" }>, row: ResolvedRow): MessageEmbed {
-  // A missing recording and another cohort's give the same answer.
-  if (row.programId === null || row.programId !== ctx.channel.programId) throw new ChannelError("validation", CLIP_REFUSED, 400);
-  if (row.processingStatus !== "complete") throw new ChannelError("validation", "This session isn't ready to share yet.", 400);
+  // A missing recording and one not every reader of this cohort channel may see give the same answer.
+  const program = ctx.channel.programId;
+  if (row.recordingId === null || row.accessScope === null || program === null || !recordingAccessFor(cohortAudience(program), {
+    programId: row.programId, accessScope: row.accessScope, deletedAt: row.recordingDeletedAt, hiddenAt: row.recordingHiddenAt,
+  }, { userId: null })) throw new ChannelError("validation", CLIP_REFUSED, 400);
+  if (row.processingStatus === null || !transcriptReady({ processingStatus: row.processingStatus })) throw new ChannelError("validation", "This session isn't ready to share yet.", 400);
   if (row.recordingSeconds !== null && ref.startSeconds + ref.durationSeconds > row.recordingSeconds + END_TOLERANCE_SECONDS) {
     throw new ChannelError("validation", "That clip runs past the end of the session.", 400);
   }
@@ -230,7 +237,8 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
   const ref = (path: string) => `json_extract(e.value, '$.${path}')`;
   const { results } = await ctx.db.prepare(`SELECT e.key AS position,
       j.userId AS ownerId, ${postedWorkEligibility("j", true)} AS posted, j.state,j.moderationOutcome,j.moderatorHidden, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
-      r.programId, r.processingStatus, r.title AS recordingTitle, r.durationSeconds AS recordingSeconds,
+      r.id AS recordingId, r.programId, r.accessScope, r.deletedAt AS recordingDeletedAt, r.hiddenAt AS recordingHiddenAt,
+      r.processingStatus, r.title AS recordingTitle, r.durationSeconds AS recordingSeconds,
       CASE WHEN r.id IS NULL THEN NULL ELSE ${segmentsIn("r.id", ref("startSeconds"), `${ref("startSeconds")} + ${ref("durationSeconds")}`)} END AS segments
     FROM json_each(?1) e
     LEFT JOIN communityJourney j ON ${ref("type")} = 'project' AND j.id = ${ref("journeyId")}
@@ -258,9 +266,9 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * Per stored embed, whether this reader may still see it, in one correlated column of the page's
  * own statement: a JSON array with null where the work is gone, and otherwise, for a project, its
  * confirmations at or before the shared revision. ?3 is the channel's program. A project must still
- * exist, belong to the message's author and be published; a recording must still be complete and in
- * this channel's cohort. Every reader of a cohort channel can see that cohort's recordings, so the
- * channel decides for all of them. Deleted messages carry no embeds and cost nothing here. A project's
+ * exist, belong to the message's author and be published; a recording must still be complete, and one
+ * every reader of this cohort channel may see (the recording access policy's cohort audience: the
+ * cohort's own, neither deleted nor hidden), so the channel decides for all of them. Deleted messages carry no embeds and cost nothing here. A project's
  * author handle comes only while the Members directory lists them: staff-shared work has no member page.
  */
 export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
@@ -268,7 +276,7 @@ export const embedAccessColumn = (program: string) => `(SELECT json_group_array(
         'handle', (SELECT p.handle FROM studentProfile p WHERE p.userId = j.userId AND ${memberEligibility("p.userId")})) FROM communityJourney j
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j", true)})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
-      WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ${program} AND r.processingStatus = 'complete')
+      WHERE r.id = json_extract(e.value, '$.recordingId') AND ${cohortAudienceSql("r", program)} AND ${transcriptReadySql("r")})
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**
@@ -346,13 +354,13 @@ async function shareableClips(ctx: ReadContext, q: string | undefined): Promise<
   const recordings = (r: string) => `SELECT ${r}.id AS recordingId, ${r}.title, ${r}.durationSeconds AS recordingSeconds,
     coalesce(${r}.recordedAt, ${r}.createdAt) AS newest`;
   const moments = q === undefined
-    ? `${recordings("r")}, 0 AS startSeconds FROM recording r WHERE r.programId = ?1 AND r.processingStatus = 'complete'
+    ? `${recordings("r")}, 0 AS startSeconds FROM recording r WHERE ${cohortAudienceSql("r", "?1")} AND ${transcriptReadySql("r")}
           AND EXISTS (SELECT 1 FROM transcript_segment s WHERE s.recordingId = r.id AND s.startTime < ${CLIP_SECONDS})
         ORDER BY newest DESC, r.id LIMIT ?2`
     // Case-insensitive substring, as in platform search; instr has no wildcards to escape. Only the
     // newest sessions' transcripts are read (?4).
     : `${recordings("recent")}, CAST(s.startTime AS INTEGER) AS startSeconds
-        FROM (SELECT * FROM recording WHERE programId = ?1 AND processingStatus = 'complete'
+        FROM (SELECT * FROM recording r WHERE ${cohortAudienceSql("r", "?1")} AND ${transcriptReadySql("r")}
           ORDER BY coalesce(recordedAt, createdAt) DESC, id LIMIT ?4) recent
         JOIN transcript_segment s ON s.recordingId = recent.id
         WHERE s.startTime >= 0 AND instr(lower(s.text), lower(?3)) > 0

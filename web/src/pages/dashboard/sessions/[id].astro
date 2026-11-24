@@ -1,7 +1,9 @@
 ---
 /**
  * Cohort → Sessions → one session: its title, then the player and the transcript beside it. Each
- * transcript line links to `?t=`, which the player starts from.
+ * transcript line links to `?t=`, which the player starts from. The player shows whenever the video
+ * is stored, the transcript once processing is complete. A recording that is missing and one the
+ * recording access policy refuses are the same 404.
  */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
@@ -10,7 +12,7 @@ import { BackLink, EmptyState, PageTitle, StatusChip } from "@/components/platfo
 import SessionViewer from "@/components/recordings/SessionViewer";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { parseTimestampParam } from "@/lib/recordings/time-utils";
-import { programAccessible } from "@/lib/recordings/access";
+import { recordingAccessFor, transcriptReady } from "@/lib/recordings/access";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
@@ -20,7 +22,8 @@ const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 const sessionsHref = SPACE_PAGE_PATHS.sessions;
-if (!id) return Astro.redirect(sessionsHref);
+const notFound = () => new Response("Not found.", { status: 404, headers: { "Cache-Control": "no-store", Vary: "Cookie" } });
+if (!id) return notFound();
 
 // The recording and the person's cohorts (read once per request, shared with the space context)
 // start together, beside the space context rather than after it.
@@ -36,11 +39,11 @@ const spaces = resolved?.[0] ?? null;
 // Without the spaces shell (a token, or a context that failed to load) the page still checks access.
 const [recording, capabilities] = resolved?.[1] ?? await reads;
 
-if (!recording || !programAccessible(capabilities.cohortIds, user.id, recording.programId)) {
-  return Astro.redirect(sessionsHref);
-}
+if (!recording || !recordingAccessFor(capabilities, recording, { userId: user.id })) return notFound();
 
-const ready = recording.processingStatus === "complete";
+const ready = transcriptReady(recording);
+// A complete transcript without a stored video keeps its lines; the player then says it can't play.
+const viewable = recording.r2VideoKey !== null || ready;
 const failed = recording.processingStatus === "failed";
 const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
 // The video's accessible name is the page's h1.
@@ -61,19 +64,19 @@ const TITLE_ID = "session-title";
       )}
     </div>
 
-    {ready ? (
+    {viewable ? (
       <SessionViewer
         client:load
         labelledBy={TITLE_ID}
         videoUrl={`/api/recordings/${recording.id}/video`}
         initialTime={initialTime}
-        segments={recording.segments.map((segment) => ({
+        segments={ready ? recording.segments.map((segment) => ({
           id: segment.id,
           startTime: segment.startTime,
           endTime: segment.endTime,
           text: segment.text,
           speaker: segment.speaker,
-        }))}
+        })) : []}
       />
     ) : failed ? (
       <EmptyState title="This recording couldn't be processed" headingLevel={2}>

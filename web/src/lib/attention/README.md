@@ -5,7 +5,8 @@ authorized unread attention items, with
 all six `SpaceId` keys (including zeroes). The caller owns authentication,
 `capabilitiesFor` (once), and the `spaces` flag check. Pass those current canonical
 capabilities into the helper. Inaccessible spaces are zero; source ownership and
-current cohort recording access are checked in the same indexed SQL query.
+current recording access (the recording access policy, `recordingScopeSql` in
+`src/lib/recordings/access.ts`) are checked in the same indexed SQL query.
 Deleted sources and unsupported future subject types fail closed. `/api/attention`, `/count`, and
 `/read` enforce those checks and return 404 when disabled. `/api/platform/me` and
 `getSpaceContext` reuse this helper with the same canonical capabilities; their

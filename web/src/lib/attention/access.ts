@@ -5,9 +5,11 @@ import {
 } from "@/lib/db/schema";
 import { HELD, MENTOR_SEES } from "@/lib/mentoring/visibility";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
+import { recordingScopeSql } from "@/lib/recordings/access";
 
 /**
  * Shared by list/count/read: historical notification delivery never preserves revoked access.
+ * Recordings: while the recording access policy still admits the person (lib/recordings/access.ts).
  * Access requests: the requester sees their decision; administrators see a request only while it is
  * still pending, so a request another administrator decided, or its owner withdrew, leaves every bell.
  * Messages (B-2.5): a hidden-message notice while the author's message stays hidden; an admin's
@@ -31,8 +33,7 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
         .innerJoin(studentProfile, eq(profileContact.profileId, studentProfile.id))
         .where(and(eq(profileContact.id, attentionItem.subjectId), eq(studentProfile.userId, userId))))),
       and(eq(attentionItem.subjectKind, "recording"), exists(db.select({ id: recording.id }).from(recording)
-        .where(and(eq(recording.id, attentionItem.subjectId), capabilities.isAdmin ? sql`1`
-          : sql`${recording.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`)))),
+        .where(and(eq(recording.id, attentionItem.subjectId), sql.raw(recordingScopeSql(capabilities, userId)))))),
       and(eq(attentionItem.subjectKind, "message"), exists(db.select({ id: channelMessage.id }).from(channelMessage)
         .innerJoin(channel, eq(channel.id, channelMessage.channelId))
         .where(and(eq(channelMessage.id, attentionItem.subjectId), sql`${channelMessage.deletedAt} IS NULL`, or(

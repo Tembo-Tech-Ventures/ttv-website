@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 
 const mocks = vi.hoisted(() => ({
   env: {
@@ -9,50 +10,45 @@ const mocks = vi.hoisted(() => ({
     },
   },
   drizzle: vi.fn(),
-  userCanAccessProgram: vi.fn(),
+  requestCapabilities: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: mocks.drizzle }));
-vi.mock("@/lib/recordings/access", () => ({
-  userCanAccessProgram: mocks.userCanAccessProgram,
+vi.mock("@/lib/platform/server/request-capabilities", () => ({
+  requestCapabilities: mocks.requestCapabilities,
 }));
 
 import { GET } from "./video";
 
-function createDatabase(recording: Record<string, unknown> | undefined) {
-  return {
-    query: {
-      recording: {
-        findFirst: vi.fn().mockResolvedValue(recording),
-      },
-    },
-  };
+const student: PlatformCapabilities = {
+  spaces: ["cohort", "community", "profile"], cohortIds: ["program-audit"], mentorCohortIds: [], teachingCohortIds: [],
+  isMentor: false, isInstitution: false, isAdmin: false,
+};
+const admin: PlatformCapabilities = { ...student, spaces: ["cohort", "community", "discover", "admin", "profile"], cohortIds: [], isAdmin: true };
+
+function useRecording(recording: Record<string, unknown> | undefined) {
+  mocks.drizzle.mockReturnValue({
+    query: { recording: { findFirst: vi.fn().mockResolvedValue(recording) } },
+  });
 }
 
-function context({
-  user = { id: "user-1" },
-  isAdmin = false,
-}: {
-  user?: Record<string, unknown> | null;
-  isAdmin?: boolean;
-} = {}) {
+/** The route's context. locals.isAdmin is false, as middleware leaves it outside /admin. */
+function context({ user = { id: "user-1" }, range }: { user?: Record<string, unknown> | null; range?: string } = {}) {
   return {
     params: { id: "recording-1" },
-    request: new Request("https://example.com/api/recordings/recording-1/video"),
-    locals: { user, isAdmin },
+    request: new Request("https://example.com/api/recordings/recording-1/video", { headers: range ? { range } : {} }),
+    locals: { user, isAdmin: false },
   } as unknown as Parameters<typeof GET>[0];
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.drizzle.mockReturnValue(
-    createDatabase({
-      id: "recording-1",
-      programId: "program-audit",
-      r2VideoKey: "recordings/video.mp4",
-    })
-  );
+  useRecording({
+    programId: "program-audit", accessScope: "COHORT", deletedAt: null, hiddenAt: null,
+    r2VideoKey: "recordings/video.mp4",
+  });
+  mocks.requestCapabilities.mockResolvedValue(student);
   mocks.env.BUCKET.head.mockResolvedValue({ size: 5 });
   mocks.env.BUCKET.get.mockResolvedValue({
     body: "video",
@@ -66,35 +62,61 @@ describe("GET /api/recordings/[id]/video", () => {
 
     expect(response.status).toBe(401);
     expect(mocks.drizzle).not.toHaveBeenCalled();
-    expect(mocks.userCanAccessProgram).not.toHaveBeenCalled();
+    expect(mocks.requestCapabilities).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when the shared cohort access helper denies the program", async () => {
-    mocks.userCanAccessProgram.mockResolvedValue(false);
+  it("answers a recording the policy refuses exactly as a missing one, before touching the bucket", async () => {
+    mocks.requestCapabilities.mockResolvedValue({ ...student, cohortIds: ["another-program"] });
+    const refused = await GET(context());
+    useRecording(undefined);
+    const missing = await GET(context());
 
-    const response = await GET(context());
-
-    expect(response.status).toBe(403);
-    expect(mocks.userCanAccessProgram).toHaveBeenCalledWith(
-      expect.anything(),
-      "user-1",
-      "program-audit"
-    );
+    expect([refused.status, missing.status]).toEqual([404, 404]);
+    expect(await refused.json()).toEqual(await missing.json());
     expect(mocks.env.BUCKET.head).not.toHaveBeenCalled();
   });
 
-  it("streams a recording when the shared cohort access helper grants the program", async () => {
-    mocks.userCanAccessProgram.mockResolvedValue(true);
-
+  it("streams a recording in the caller's cohort, at any processing status", async () => {
     const response = await GET(context());
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("video/mp4");
     await expect(response.text()).resolves.toBe("video");
-    expect(mocks.userCanAccessProgram).toHaveBeenCalledWith(
-      expect.anything(),
-      "user-1",
-      "program-audit"
-    );
+  });
+
+  it("streams any cohort's recording to an admin, though middleware sets locals.isAdmin only under /admin", async () => {
+    mocks.requestCapabilities.mockResolvedValue(admin);
+
+    expect((await GET(context())).status).toBe(200);
+  });
+
+  it("plays a recording with no cohort to admins only", async () => {
+    useRecording({ programId: null, accessScope: "ADMIN_ONLY", deletedAt: null, hiddenAt: null, r2VideoKey: "recordings/loose.mp4" });
+    expect((await GET(context())).status).toBe(404);
+
+    mocks.requestCapabilities.mockResolvedValue(admin);
+    expect((await GET(context())).status).toBe(200);
+  });
+
+  it("plays a deleted recording to nobody, admins included", async () => {
+    useRecording({ programId: "program-audit", accessScope: "COHORT", deletedAt: new Date(0), hiddenAt: null, r2VideoKey: "recordings/video.mp4" });
+    mocks.requestCapabilities.mockResolvedValue(admin);
+
+    expect((await GET(context())).status).toBe(404);
+  });
+
+  it("is a 404 while no video is stored", async () => {
+    useRecording({ programId: "program-audit", accessScope: "COHORT", deletedAt: null, hiddenAt: null, r2VideoKey: null });
+
+    expect((await GET(context())).status).toBe(404);
+    expect(mocks.env.BUCKET.head).not.toHaveBeenCalled();
+  });
+
+  it("serves a byte range", async () => {
+    const response = await GET(context({ range: "bytes=1-3" }));
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 1-3/5");
+    expect(mocks.env.BUCKET.get).toHaveBeenCalledWith("recordings/video.mp4", { range: { offset: 1, length: 3 } });
   });
 });

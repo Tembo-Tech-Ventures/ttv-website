@@ -262,7 +262,7 @@ describe("POST /api/chat", () => {
     mocks.executeTool.mockResolvedValue("[]");
     await POST(context());
     expect(mocks.executeTool).toHaveBeenCalledWith("list_recordings", {},
-      expect.objectContaining({ userId: "user-1", programIds: ["program-1", "program-2"], isAdmin: false }));
+      expect.objectContaining({ userId: "user-1", capabilities: expect.objectContaining({ cohortIds: ["program-1", "program-2"], isAdmin: false }) }));
   });
 
   it("runs the agent loop when the model requests tool calls", async () => {

@@ -18,7 +18,7 @@ const user = { id: "synthetic-wanjiku", name: "Wanjiku Njeri", email: "synthetic
 
 beforeEach(() => {
   fixture = createCapabilityDatabase();
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql"]) {
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql", "0042_recording_access.sql"]) {
     fixture.database.exec(readMigration(migration));
   }
   fixture.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
