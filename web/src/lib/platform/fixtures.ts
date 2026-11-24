@@ -5,11 +5,12 @@
  */
 import type {
   AccessRequestSummary, AdminAccessRequest, AdminAccessRequestList, AttentionCount, AttentionList, AuthorSummary, Channel, ChannelList,
-  ConductAcknowledgement, FlagsAdmin, Me,
+  ConductAcknowledgement, FlagsAdmin, Me, Meeting, MeetingJoin,
   MentorAvailability, MentorDirectory, MentorRequest, Message, MessageList,
   ModerationQueue, OnboardingState, PersonSummary, ProjectEmbed, RoleBadge, SearchResults,
   SessionClipEmbed, SpaceId, TemboResponse, WorthAnotherLook,
 } from "./contracts";
+import { CALL_LIMIT_MINUTES } from "@/lib/meetings/rules";
 
 export const FIXTURE_NOTICE = "Synthetic demo: fictional people, work and conversations. Not production data.";
 export const FIXTURE_NOW = Date.parse("2026-11-03T07:00:00Z");
@@ -477,3 +478,26 @@ export const worthAnotherLook: WorthAnotherLook = {
     confirmedVersion: 2, currentVersion: 3, href: "/dashboard/mentoring/confirm",
   }],
 };
+
+/** In-app calls: Cohort 04's Thursday session, as Wanjiku sees it before Faith opens it, then live with her seat in it. */
+const opened = FIXTURE_NOW + 58 * minute;
+const thursdaySession: Meeting = {
+  id: id(1001), channelId: channels.cohort04.id, purpose: "SESSION", title: "Week 9: payments and retries",
+  scheduledStartAt: FIXTURE_NOW + 60 * minute, bookedMinutes: 60, limitMinutes: CALL_LIMIT_MINUTES, recordingPolicy: "ALWAYS", state: "SCHEDULED",
+  openedAt: null, hardEndAt: null, endedAt: null, endReason: null, seatsHeld: 0,
+  you: { canJoin: false, canHost: false, seat: null, role: null }, now: FIXTURE_NOW,
+};
+export const meetings = {
+  scheduled: thursdaySession,
+  live: {
+    ...thursdaySession, state: "LIVE", openedAt: opened, hardEndAt: opened + CALL_LIMIT_MINUTES * minute, seatsHeld: 6,
+    you: { canJoin: true, canHost: false, seat: "HELD", role: "MEMBER" }, now: FIXTURE_NOW + 61 * minute,
+  },
+  ended: {
+    ...thursdaySession, state: "ENDED", openedAt: opened, hardEndAt: opened + CALL_LIMIT_MINUTES * minute,
+    endedAt: FIXTURE_NOW + 121 * minute, endReason: "HOST_ENDED", now: FIXTURE_NOW + 122 * minute,
+  },
+} satisfies Record<string, Meeting>;
+/** The fake provider's token for Wanjiku's seat: synthetic, and never a real provider's. */
+export const meetingJoin: MeetingJoin = { meeting: meetings.live, provider: "fake", token: "fake.synthetic-wanjiku-thursday" };
+

@@ -20,6 +20,7 @@ const schemas = {
   accessRequests: z.record(z.string(), C.AccessRequestSummary), onboardingByPersona: z.record(z.string(), C.OnboardingState),
   adminAccessRequests: z.record(z.string(), C.AdminAccessRequestList), accessAttention: z.record(z.string(), C.AttentionList),
   conductAcknowledgements: z.record(z.string(), C.ConductAcknowledgement), worthAnotherLook: C.WorthAnotherLook,
+  meetings: z.record(z.string(), C.Meeting), meetingJoin: C.MeetingJoin,
 } satisfies Record<keyof typeof F, z.ZodType>;
 
 describe("synthetic fixtures", () => {

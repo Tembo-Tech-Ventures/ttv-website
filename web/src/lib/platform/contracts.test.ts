@@ -38,6 +38,11 @@ const onboardingEndpoints = [
   "POST /api/platform/access-requests/:id/withdraw", "POST /api/platform/access-requests/:id/dismiss",
   "GET /api/admin/access-requests", "POST /api/admin/access-requests/:id/decision",
 ];
+/** In-app calls P3b: the meeting routes (ARCHITECTURE section 4.1 names the join). */
+const meetingEndpoints = [
+  "POST /api/meetings", "GET /api/meetings/:id", "POST /api/meetings/:id/join", "POST /api/meetings/:id/leave",
+  "POST /api/meetings/:id/remove", "POST /api/meetings/:id/end",
+];
 const post: C.PostMessage = {
   body: "Could you review this?", clientNonce: "test-nonce-1", parentId: null,
   embeds: [{ type: "project", journeyId: F.fixtureIds.chamaLedger, version: 3 }],
@@ -120,12 +125,19 @@ const routeExamples = {
   listAccessRequests: { query: { status: "PENDING" }, response: F.adminAccessRequests.pending },
   decideAccessRequest: { params: { id: declined.id }, body: { decision: "decline", message: "Thanks for offering, Peter. We can't add this right now." },
     response: declined },
+  createMeeting: { body: { purpose: "SESSION", channelId: F.channels.cohort04.id, title: F.meetings.scheduled.title,
+    scheduledStartAt: F.meetings.scheduled.scheduledStartAt, bookedMinutes: 60 }, response: F.meetings.scheduled },
+  getMeeting: { params: { id: F.meetings.live.id }, response: F.meetings.live },
+  joinMeeting: { params: { id: F.meetings.live.id }, body: {}, response: F.meetingJoin },
+  leaveMeeting: { params: { id: F.meetings.live.id }, body: {}, response: { ...F.meetings.live, seatsHeld: 5, you: { ...F.meetings.live.you, seat: "RELEASED" } } },
+  removeFromMeeting: { params: { id: F.meetings.live.id }, body: { userId: F.people.brian.id }, response: F.meetings.live },
+  endMeeting: { params: { id: F.meetings.live.id }, body: {}, response: F.meetings.ended },
 } satisfies { [K in keyof typeof C.ROUTES]: RouteExample<(typeof C.ROUTES)[K]> };
 
 describe("route registry", () => {
-  it("covers every plan endpoint, the agreed additions and the onboarding routes, and nothing else", () => {
+  it("covers every plan endpoint, the agreed additions, the onboarding and the meeting routes, and nothing else", () => {
     const actual = Object.values(C.ROUTES).map((r) => `${r.method} ${r.path}`);
-    expect(actual.toSorted()).toEqual([...planEndpoints, ...additionalEndpoints, ...onboardingEndpoints].toSorted());
+    expect(actual.toSorted()).toEqual([...planEndpoints, ...additionalEndpoints, ...onboardingEndpoints, ...meetingEndpoints].toSorted());
     expect(new Set(actual).size).toBe(actual.length);
   });
 

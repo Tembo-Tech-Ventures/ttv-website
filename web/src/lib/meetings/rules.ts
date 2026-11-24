@@ -15,6 +15,12 @@ export const CHECKIN_LIMIT_MINUTES = 30;
 export const MAX_PEOPLE_PER_CALL = 15;
 /** Of those places, how many are always kept for a host. */
 export const SEATS_KEPT_FOR_HOST = 1;
+/** A cohort session or an event with no host in it for this long ends ("No host is here"). */
+export const NO_HOST_END_MINUTES = 5;
+/** A call between two people that the second person never joins ends this long after it opened. */
+export const NOBODY_CAME_END_MINUTES = 15;
+/** A call with nobody in it ends this long after the last person left. */
+export const EMPTY_ROOM_END_MINUTES = 2;
 /** Estimated recording spend in a UTC month that alerts admins, once, in US dollars. */
 export const RECORDING_ALERT_USD = 10;
 /** Estimated recording spend in a UTC month above which no new recording starts, in US dollars. */
@@ -69,3 +75,7 @@ export const CALL_PROPOSAL_PURPOSES = ["CHECKIN", "CALL"] as const satisfies rea
 export type CallProposalPurpose = (typeof CALL_PROPOSAL_PURPOSES)[number];
 /** The most times one suggestion offers. */
 export const MAX_PROPOSED_TIMES = 3;
+
+/** Which provider minted a join token, so the room loads the matching client (provider.ts). */
+export const CALL_PROVIDER_KINDS = ["fake", "realtimekit"] as const;
+export type CallProviderKind = (typeof CALL_PROVIDER_KINDS)[number];

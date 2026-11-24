@@ -81,7 +81,7 @@ describe("the details form", () => {
     expect(recordedAtField(moment)).toBe("2026-11-03");
     expect(recordedAtField(null)).toBe("");
     const values = { title: "Week 4", programId: "", recordedAt: "2026-11-03", description: "" };
-    const current = { recordedAt: moment, programId: null, accessScope: "ADMIN_ONLY" };
+    const current = { recordedAt: moment, programId: null, accessScope: "ADMIN_ONLY", scopeChosen: true };
     expect(detailsUpdate(values, current)).toEqual({ title: "Week 4", description: null, programId: null, recordedAt: moment });
     expect(detailsUpdate({ ...values, recordedAt: "2026-11-04" }, current).recordedAt).toEqual(new Date(Date.UTC(2026, 10, 4)));
     expect(detailsUpdate({ ...values, recordedAt: "" }, current).recordedAt).toBeNull();
@@ -89,22 +89,56 @@ describe("the details form", () => {
 
   it("gives a recording with no cohort the cohort the admin chooses, moves a cohort's with it, and never widens otherwise", () => {
     const values = { title: "Week 4", programId: "cohort-b", recordedAt: "", description: "" };
-    const at = (programId: string | null, accessScope: string) => detailsUpdate(values, { recordedAt: null, programId, accessScope });
+    const at = (programId: string | null, accessScope: string) => detailsUpdate(values, { recordedAt: null, programId, accessScope, scopeChosen: true });
     // Into a cohort, or to another one: that cohort's.
-    expect(at(null, "ADMIN_ONLY")).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
+    expect(at(null, "ADMIN_ONLY")).toMatchObject({ programId: "cohort-b", accessScope: "COHORT", scopeChosen: true });
     expect(at("cohort-a", "COHORT")).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
     // Out of every cohort: admins only.
-    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "COHORT" }))
+    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "COHORT", scopeChosen: true }))
       .toMatchObject({ programId: null, accessScope: "ADMIN_ONLY" });
     // The cohort as it was, admins only within a cohort, or a conversation's or the community's recording: the scope isn't written.
     expect(at("cohort-b", "ADMIN_ONLY")).not.toHaveProperty("accessScope");
     expect(at("cohort-a", "ADMIN_ONLY")).not.toHaveProperty("accessScope");
-    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "ADMIN_ONLY" })).not.toHaveProperty("accessScope");
+    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "ADMIN_ONLY", scopeChosen: true })).not.toHaveProperty("accessScope");
     expect(at(null, "DIRECT")).not.toHaveProperty("accessScope");
     expect(at(null, "COMMUNITY")).not.toHaveProperty("accessScope");
     // A new upload starts with no cohort and admins only.
     expect(detailsUpdate(values, NEW_UPLOAD)).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
     expect(detailsUpdate({ ...values, programId: "" }, NEW_UPLOAD)).not.toHaveProperty("accessScope");
+  });
+
+  it("puts a recording the deploy window left admins only within its cohort back in that cohort on any save", () => {
+    const values = { title: "Week 4", programId: "cohort-b", recordedAt: "", description: "" };
+    const stranded = { recordedAt: null, programId: "cohort-b", accessScope: "ADMIN_ONLY", scopeChosen: null };
+    // Saving it unchanged is enough; choosing another cohort or none follows the choice.
+    expect(detailsUpdate(values, stranded)).toMatchObject({ programId: "cohort-b", accessScope: "COHORT", scopeChosen: true });
+    expect(detailsUpdate({ ...values, programId: "cohort-a" }, stranded)).toMatchObject({ programId: "cohort-a", accessScope: "COHORT" });
+    expect(detailsUpdate({ ...values, programId: "" }, stranded)).toMatchObject({ programId: null, accessScope: "ADMIN_ONLY", scopeChosen: true });
+    // A scope this Worker chose is kept, and an unchosen one is never widened outside a cohort or from another scope.
+    expect(detailsUpdate(values, { ...stranded, scopeChosen: true })).not.toHaveProperty("accessScope");
+    expect(detailsUpdate(values, { ...stranded, scopeChosen: false })).not.toHaveProperty("accessScope");
+    for (const accessScope of ["DIRECT", "COMMUNITY"]) expect(detailsUpdate(values, { ...stranded, accessScope })).not.toHaveProperty("accessScope");
+  });
+
+  it("widens the deploy window's row on the real schema, and only that row", async () => {
+    const db = seeded();
+    const raw = db.$client;
+    // An upload with no cohort from a Worker before 0043 (no scopeChosen), then given a cohort on its page:
+    // 0043's triggers keep it admins only.
+    await raw.prepare(`INSERT INTO recording (id, title, processingStatus, accessScope) VALUES ('old-upload', 'Week 5', 'complete', 'ADMIN_ONLY')`).run();
+    await raw.prepare(`UPDATE recording SET programId = 'cohort-08' WHERE id = 'old-upload'`).run();
+    // An upload this Worker kept admins only within a cohort.
+    await raw.prepare(`INSERT INTO recording (id, programId, title, processingStatus, accessScope, scopeChosen)
+      VALUES ('kept', 'cohort-08', 'Week 6', 'complete', 'ADMIN_ONLY', 1)`).run();
+    const scope = async (id: string) => (await db.query.recording.findFirst({ where: eq(schema.recording.id, id), columns: { accessScope: true, scopeChosen: true } }))!;
+    expect(await scope("old-upload")).toEqual({ accessScope: "ADMIN_ONLY", scopeChosen: null });
+    for (const id of ["old-upload", "kept"]) {
+      const { recording } = (await readRecordingDetail(db, id))!;
+      const values = { title: recording.title, programId: recording.programId ?? "", recordedAt: recordedAtField(recording.recordedAt), description: "" };
+      await db.update(schema.recording).set(detailsUpdate(values, recording)).where(eq(schema.recording.id, id));
+    }
+    expect(await scope("old-upload")).toEqual({ accessScope: "COHORT", scopeChosen: true });
+    expect(await scope("kept")).toEqual({ accessScope: "ADMIN_ONLY", scopeChosen: true });
   });
 });
 
