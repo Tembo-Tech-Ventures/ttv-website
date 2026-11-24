@@ -68,8 +68,35 @@ describe("scheduling cohort sessions", () => {
     // Another host sending the same token writes nothing and learns nothing.
     await expect(sixThursdaysSkippingOne(s, token, PEOPLE.amina)).rejects.toMatchObject({ status: 404 });
     expect(rows(s)).toHaveLength(5);
+    // The same token with anything changed writes nothing and is never reported as scheduled.
+    const faith = await caller(s, PEOPLE.faith);
+    const sent = (input: { startTimes: number[]; title?: string; bookedMinutes?: number }) => scheduleSessions(ctx(s), faith, {
+      programId: "cohort-a", token, title: input.title ?? "Testing payment callbacks", startTimes: input.startTimes, bookedMinutes: input.bookedMinutes ?? 45,
+    });
+    const chosen = THURSDAYS.filter((date) => date !== THURSDAYS[3]).map((date) => at(date));
+    const conflict = { status: 409, message: "This form was already sent. Open Schedule a session again." };
+    await expect(sent({ startTimes: chosen.slice(0, 4) })).rejects.toMatchObject(conflict);
+    await expect(sent({ startTimes: chosen, title: "Renamed" })).rejects.toMatchObject(conflict);
+    await expect(sent({ startTimes: chosen, bookedMinutes: 60 })).rejects.toMatchObject(conflict);
+    // A series sent again as just once.
+    await expect(sent({ startTimes: [chosen[0]] })).rejects.toMatchObject(conflict);
+    expect(rows(s)).toHaveLength(5);
+    expect(notes(s)).toHaveLength(1);
     // A token that isn't a form's own is refused before anything is read.
     await expect(sixThursdaysSkippingOne(s, "../not-a-token")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("reserves a one-off's token whole: sent again as a series, it writes nothing", async () => {
+    const s = meetingDatabase();
+    const faith = await caller(s, PEOPLE.faith);
+    const token = createId();
+    const input = { programId: "cohort-a", token, title: "Office hours", bookedMinutes: 60 };
+    await scheduleSessions(ctx(s), faith, { ...input, startTimes: [at("2026-11-26")] });
+    await expect(scheduleSessions(ctx(s), faith, { ...input, startTimes: THURSDAYS.map((date) => at(date)) }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(await scheduleSessions(ctx(s), faith, { ...input, startTimes: [at("2026-11-26")] })).toMatchObject({ meetingIds: [token], note: "posted" });
+    expect(rows(s)).toHaveLength(1);
+    expect(notes(s)).toHaveLength(1);
   });
 
   it("puts a title on one line", async () => {

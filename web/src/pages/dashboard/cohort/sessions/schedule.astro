@@ -54,13 +54,17 @@ let failure: { message: string; conduct: boolean } | null = null;
 if (method === "POST") {
   const reading = readSchedule(await Astro.request.formData(), now);
   if (reading.values.cohort && !hosted(reading.values.cohort)) return sessionPageResponse(404);
-  // A form without its own token (never one this page drew) gets a new one for its next send.
-  values = SCHEDULE_TOKEN.test(reading.values.token) ? reading.values : { ...reading.values, token: createId() };
+  // A form without its own token (never one this page drew) is shown again with a new one, never scheduled.
+  const tokened = SCHEDULE_TOKEN.test(reading.values.token);
+  values = tokened ? reading.values : { ...reading.values, token: createId() };
   if (reading.kind === "invalid") {
     errors = reading.errors;
     Astro.response.status = 400;
   } else if (reading.kind === "preview") {
     preview = reading.dates;
+  } else if (!tokened) {
+    failure = { message: "This form had expired, so nothing was scheduled. Check it and press Schedule again.", conduct: false };
+    Astro.response.status = 400;
   } else {
     const capabilities = await requestCapabilities(db, Astro.locals);
     try {

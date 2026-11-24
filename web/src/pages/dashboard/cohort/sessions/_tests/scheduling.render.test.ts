@@ -166,6 +166,21 @@ describe("scheduling a cohort session without JavaScript", () => {
     expect(notes()).toHaveLength(1);
   });
 
+  it("shows a form sent again with changes as already sent, and a form with no token again, scheduling nothing", async () => {
+    seeded();
+    const { final } = await scheduleSix();
+    const changed = await visit("schedule", SCHEDULE, PEOPLE.faith, { ...final, title: "Renamed", repeat: "once" });
+    expect(changed.status).toBe(409);
+    expect(main(changed.body).textContent).toContain("This form was already sent. Open Schedule a session again.");
+    const tokenless = await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, repeat: "once", token: "", intent: "schedule" });
+    expect(tokenless.status).toBe(400);
+    const page = main(tokenless.body);
+    expect(page.textContent).toContain("This form had expired, so nothing was scheduled.");
+    expect(tokenOf(page)).toMatch(/^[a-z0-9]{20,32}$/);
+    expect(meetings()).toHaveLength(5);
+    expect(notes()).toHaveLength(1);
+  });
+
   it("shows one date on Preview dates and schedules nothing until Schedule", async () => {
     seeded();
     const once = { ...SERIES, repeat: "once" };

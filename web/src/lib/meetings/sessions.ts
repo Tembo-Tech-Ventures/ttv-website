@@ -224,6 +224,11 @@ export interface Scheduled {
 
 /** A schedule form's token: a cuid, as createId makes. */
 export const SCHEDULE_TOKEN = /^[a-z0-9]{20,32}$/;
+/**
+ * The rows a token holds, `param` naming it: one date's id, a series' id, or a series date `token-n`
+ * (a range on the primary key: "-" sorts just before ".", and a token is letters and digits).
+ */
+const HOLDS_TOKEN = (param: string) => `(id = ${param} OR seriesId = ${param} OR (id > ${param} || '-' AND id < ${param} || '.'))`;
 
 /**
  * Schedules one session, or a weekly series of separate dates, in the cohort's main channel, then
@@ -231,10 +236,13 @@ export const SCHEDULE_TOKEN = /^[a-z0-9]{20,32}$/;
  * caller hosts this cohort, every date is still to come and within the limits, the title and length.
  * `cohorts` is the caller's hostableCohorts when the page already read them.
  *
- * Idempotent on the form's token: every date's id comes from it, and the dates are written in one
- * statement that writes nothing if any of them exists. The same form again (a double submit, a
- * retry) finds its own dates and answers as the first did, posting the note only if it never was.
- * A token naming dates someone else scheduled, or in another channel, is the same 404.
+ * Idempotent on the form's token, which is reserved whole: every date's id comes from it, and the
+ * dates are written in one statement that writes nothing if anything already holds the token (its own
+ * id, its series, or a date `token-n`). The same form again (a double submit, a retry) finds exactly
+ * its own dates (the same starts, title and length) and answers as the first did, posting the note
+ * only if it never was. The same token with anything else changed (Back, edit, send again) is a 409:
+ * nothing is written and nothing is reported as scheduled. A token holding someone else's dates, or
+ * dates in another channel, is the same 404.
  */
 export async function scheduleSessions(
   ctx: SessionContext, caller: SessionCaller, input: ScheduleInput, { cohorts }: { cohorts?: readonly HostableCohort[] } = {},
@@ -253,21 +261,25 @@ export async function scheduleSessions(
   const seriesId = starts.length > 1 ? input.token : null;
   const ids = starts.length > 1 ? starts.map((_, index) => `${input.token}-${index + 1}`) : [input.token];
   const rows = JSON.stringify(ids.map((id, index) => ({ id, start: starts[index] })));
-  // One statement: every date, or none of them when any already exists.
+  // One statement: every date, or none of them when anything already holds the token (?9).
   const { results } = await ctx.db.prepare(`INSERT INTO meeting (id, channelId, purpose, title, seriesId,
       scheduledStartAt, bookedMinutes, limitMinutes, recordingPolicy, state, createdBy, createdAt, updatedAt)
     SELECT json_extract(r.value, '$.id'), ?2, 'SESSION', ?3, ?4, json_extract(r.value, '$.start'), ?5, ?6, 'ALWAYS', 'SCHEDULED', ?7, ?8, ?8
     FROM json_each(?1) r
-    WHERE NOT EXISTS (SELECT 1 FROM meeting WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?1)))
+    WHERE NOT EXISTS (SELECT 1 FROM meeting WHERE ${HOLDS_TOKEN("?9")})
     RETURNING id`).bind(
-    rows, cohort.channel.id, title, seriesId, input.bookedMinutes, LIMIT_MINUTES.SESSION, caller.userId, ctx.now,
+    rows, cohort.channel.id, title, seriesId, input.bookedMinutes, LIMIT_MINUTES.SESSION, caller.userId, ctx.now, input.token,
   ).all<{ id: string }>();
   if (results.length !== ids.length) {
-    // Nothing was written: this form was sent before. Only the caller's own dates, in this channel, count.
-    const { results: found } = await ctx.db.prepare(`SELECT id FROM meeting
-      WHERE id IN (SELECT value FROM json_each(?1)) AND createdBy = ?2 AND channelId = ?3 AND purpose = 'SESSION'`)
-      .bind(JSON.stringify(ids), caller.userId, cohort.channel.id).all<{ id: string }>();
-    if (found.length !== ids.length) throw notFound();
+    // Nothing was written: this token was sent before. It is a replay only when it holds exactly this.
+    const { results: held } = await ctx.db.prepare(`SELECT id, channelId, purpose, title, scheduledStartAt, bookedMinutes, createdBy
+      FROM meeting WHERE ${HOLDS_TOKEN("?1")}`).bind(input.token)
+      .all<{ id: string; channelId: string; purpose: string; title: string; scheduledStartAt: number; bookedMinutes: number; createdBy: string | null }>();
+    if (held.some((row) => row.createdBy !== caller.userId || row.channelId !== cohort.channel.id || row.purpose !== "SESSION")) throw notFound();
+    const start = new Map(ids.map((id, index) => [id, starts[index]]));
+    const same = held.length === ids.length && held.every((row) =>
+      start.get(row.id) === row.scheduledStartAt && row.title === title && row.bookedMinutes === input.bookedMinutes);
+    if (!same) throw new ChannelError("conflict", "This form was already sent. Open Schedule a session again.", 409);
   }
   const body = scheduledNote({ title, starts, minutes: input.bookedMinutes, skipped: input.skipped ?? [], now: ctx.now });
   const note = await postNote(ctx, caller, cohort.channel, body, `session-scheduled-${input.token}`);
