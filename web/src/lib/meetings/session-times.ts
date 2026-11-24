@@ -122,5 +122,9 @@ export function lengthLabel(minutes: number): string {
 
 /** A title on one line: control characters and runs of white space become one space (a session's note is one line). */
 export function cleanTitle(title: string): string {
-  return title.replace(/[\u0000-\u001F\u007F\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+  const oneLine = [...title].map((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029 ? " " : char;
+  }).join("");
+  return oneLine.replace(/\s+/g, " ").trim();
 }
