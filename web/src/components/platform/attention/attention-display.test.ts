@@ -85,7 +85,10 @@ describe("attentionEmpty", () => {
 
 describe("attentionViewer", () => {
   it("reads an administrator from the Admin space and onboarding from the person's own flag", () => {
-    const flags = { spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: true };
+    const flags = {
+      spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: true,
+      meetings: false, meeting_checkins: false, meeting_events: false,
+    };
     const capabilities = { cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: false, isAdmin: true };
     expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags, capabilities })).toEqual({ admin: true, onboarding: true, mentor: false });
     expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, onboarding: false }, capabilities: { ...capabilities, isMentor: true } }))

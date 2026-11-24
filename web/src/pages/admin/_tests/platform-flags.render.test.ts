@@ -2,7 +2,7 @@ import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { loadRenderers } from "astro:container";
 import { getContainerRenderer } from "@astrojs/react/container-renderer";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FlagAudience, FlagKey } from "@/lib/platform/contracts";
+import { FlagKey, type FlagAudience } from "@/lib/platform/contracts";
 
 /*
  * /admin/platform-flags on the style guide: the page's markup, with its reads mocked. Changing a flag
@@ -18,6 +18,7 @@ const { default: Page } = await import("../platform-flags.astro");
 
 const AUDIENCES: Record<FlagKey, FlagAudience> = {
   spaces: "ALL", onboarding: "STAFF", channels: "OFF", tembo_channels: "OFF", mentor_requests: "OFF",
+  meetings: "OFF", meeting_checkins: "OFF", meeting_events: "OFF",
 };
 function flags(audiences: Partial<Record<FlagKey, FlagAudience>> = {}, updatedAt = 0) {
   return {
@@ -54,7 +55,7 @@ describe("the feature flags page on the style guide", () => {
     expect(status).toBe(200);
     expect(count(body, /<h1\b/g)).toBe(1);
     expect(body).toMatch(/<h1 [^>]*>Feature flags<\/h1>/);
-    expect(count(body, /<h2 class="font-body[^"]*">/g)).toBe(5);
+    expect(count(body, /<h2 class="font-body[^"]*">/g)).toBe(FlagKey.options.length);
   });
 
   it("marks the current audience as the selected pill, never peach, and offers the other two as ghost buttons", async () => {

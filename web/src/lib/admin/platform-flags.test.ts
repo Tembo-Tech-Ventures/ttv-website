@@ -35,6 +35,29 @@ describe("dependencyWarnings", () => {
     ]);
   });
 
+  it("warns once for each flag a call flag needs that reaches fewer people", () => {
+    const checkins = dependencyWarnings(audiences({ meeting_checkins: "ALL", meetings: "STAFF", spaces: "ALL", channels: "ALL" }));
+    expect(checkins.map(({ key, requires }) => [key, requires])).toEqual([
+      ["meeting_checkins", "meetings"],
+      ["meeting_checkins", "mentor_requests"],
+    ]);
+    expect(checkins.find(({ requires }) => requires === "mentor_requests")?.message)
+      .toBe("Calls between two people needs Mentor requests, which is Off. Set Mentor requests to Everyone too, or Calls between two people won't work for everyone it is set for.");
+    expect(dependencyWarnings(audiences({ meetings: "STAFF", meeting_events: "STAFF" })).map(({ key, requires }) => [key, requires])).toEqual([
+      ["meetings", "channels"],
+      ["meetings", "spaces"],
+    ]);
+    expect(dependencyWarnings(audiences({ meetings: "STAFF", channels: "STAFF", spaces: "STAFF", meeting_events: "STAFF" }))).toEqual([]);
+  });
+
+  it("warns about every flag the server makes depend on another, and Tembo in channels", () => {
+    const everyFlag = (audience: FlagAudience) => audiences(Object.fromEntries(FlagKey.options.map((key) => [key, audience])));
+    const warned = dependencyWarnings(everyFlag("ALL").map((flag) => ({ ...flag, audience: ["spaces", "channels"].includes(flag.key) ? "OFF" : "ALL" })));
+    expect(warned.map(({ key, requires }) => `${key}>${requires}`)).toEqual([
+      "tembo_channels>channels", "mentor_requests>channels", "onboarding>spaces", "meetings>channels", "meetings>spaces",
+    ]);
+  });
+
   it("is quiet when each flag reaches no more people than the flag it needs", () => {
     expect(dependencyWarnings(audiences({}))).toEqual([]);
     expect(dependencyWarnings(audiences({ spaces: "STAFF", onboarding: "STAFF" }))).toEqual([]);

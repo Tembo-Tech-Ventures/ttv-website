@@ -3,7 +3,10 @@ import type { IconType } from "react-icons";
 import {
   PiAt,
   PiBriefcase,
+  PiBroadcast,
   PiChatCircleText,
+  PiClock,
+  PiCurrencyDollar,
   PiEnvelopeSimple,
   PiEyeSlash,
   PiHandshake,
@@ -11,6 +14,7 @@ import {
   PiPaperPlaneTilt,
   PiSealCheck,
   PiShieldCheck,
+  PiTrash,
   PiUserPlus,
   PiVideoCamera,
 } from "react-icons/pi";
@@ -39,6 +43,10 @@ const KIND_ICON: Record<AttentionKind, IconType> = {
   access_request: PiUserPlus,
   access_decided: PiKey,
   moderation_decided: PiShieldCheck,
+  meeting_soon: PiClock,
+  meeting_live: PiBroadcast,
+  recording_deleted: PiTrash,
+  recording_spend_alert: PiCurrencyDollar,
 };
 
 type Viewer = { id: string; name: string; src?: string };

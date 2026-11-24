@@ -22,6 +22,8 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 const PAGE = "/admin/platform-flags";
 const API = "/api/admin/platform-flags";
+/** Every flag, in the order the page lists them: what is live first, each after the ones it builds on. */
+const FLAGS = ["spaces", "onboarding", "channels", "tembo_channels", "mentor_requests", "meetings", "meeting_checkins", "meeting_events"];
 type Audience = "OFF" | "STAFF" | "ALL";
 
 const staff = personaSession("staff");
@@ -102,15 +104,14 @@ test("lists every flag with what it controls, who sees it and who changed it, cl
   // The page title is the screen's one h1; each flag is a section heading (style guide).
   await expect(page.getByRole("heading", { level: 1, name: "Feature flags" })).toBeVisible();
   const flags = page.getByRole("list", { name: "Platform feature flags" }).locator("[data-flag]");
-  expect(await flags.evaluateAll((items) => items.map((item) => item.getAttribute("data-flag"))))
-    .toEqual(["spaces", "onboarding", "channels", "tembo_channels", "mentor_requests"]);
+  expect(await flags.evaluateAll((items) => items.map((item) => item.getAttribute("data-flag")))).toEqual(FLAGS);
 
   const spaces = row(page, "spaces");
   await expect(spaces.getByRole("heading", { level: 2, name: "Spaces" })).toBeVisible();
   await expect(spaces).toContainText("tabs for Cohort, Community, Mentoring and Discover");
   await expect(spaces.locator("[data-flag-changed]")).toHaveText(/^(Never changed\.|Changed \d{1,2} \w{3} \d{4}, \d{2}:\d{2} Nairobi time.+)$/);
   // Each flag shows its setting, and offers the other two by name.
-  for (const key of ["spaces", "onboarding", "channels", "tembo_channels", "mentor_requests"]) {
+  for (const key of FLAGS) {
     const flag = row(page, key);
     const audience = await flag.getAttribute("data-audience");
     await expect(flag.locator("[data-flag-current]")).toHaveText(`${{ OFF: "Off", STAFF: "Staff", ALL: "Everyone" }[audience!]} (current)`);

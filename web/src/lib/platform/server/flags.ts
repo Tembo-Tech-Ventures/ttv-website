@@ -28,10 +28,18 @@ const requestFlags = new WeakMap<object, {
 }>();
 
 /**
- * A flag listed here is effective only while the flag it builds on is: onboarding on spaces
- * (onboarding SPEC §6), and mentor requests on channels, because accepting one opens a conversation.
+ * A flag listed here is effective only while every flag it builds on is, and theirs in turn:
+ * onboarding on spaces (onboarding SPEC §6); mentor requests on channels, because accepting one opens
+ * a conversation; calls on channels and spaces, because a call's card and chat live in a channel;
+ * check-ins on calls and mentor requests; events on calls.
  */
-const REQUIRES: Partial<Record<FlagKey, FlagKey>> = { onboarding: "spaces", mentor_requests: "channels" };
+export const REQUIRES: Readonly<Partial<Record<FlagKey, readonly FlagKey[]>>> = {
+  onboarding: ["spaces"],
+  mentor_requests: ["channels"],
+  meetings: ["channels", "spaces"],
+  meeting_checkins: ["meetings", "mentor_requests"],
+  meeting_events: ["meetings"],
+};
 const FLAG_KEY_PLACEHOLDERS = FlagKey.options.map(() => "?").join(", ");
 
 function uniformFlags(enabled: boolean): Flags {
@@ -59,11 +67,25 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
   for (const flag of results) {
     flags[flag.key] = flag.audience === "ALL" || (flag.audience === "STAFF" && isAdmin);
   }
-  for (const key of FlagKey.options) {
-    const required = REQUIRES[key];
-    if (required) flags[key] &&= flags[required];
-  }
-  return Object.freeze(flags);
+  return Object.freeze(effective(flags));
+}
+
+/**
+ * Each flag on only while it and everything it builds on, however deep, is on for this person. A
+ * flag being resolved counts as off meanwhile, so a cycle (which flags.test.ts forbids) turns its
+ * flags off rather than looping.
+ */
+export function effective(own: Readonly<Flags>): Flags {
+  const resolved = new Map<FlagKey, boolean>();
+  const resolve = (key: FlagKey): boolean => {
+    const known = resolved.get(key);
+    if (known !== undefined) return known;
+    resolved.set(key, false);
+    const on = own[key] && (REQUIRES[key] ?? []).every(resolve);
+    resolved.set(key, on);
+    return on;
+  };
+  return Object.fromEntries(FlagKey.options.map((key) => [key, resolve(key)])) as Flags;
 }
 
 /**

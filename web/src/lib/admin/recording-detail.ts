@@ -1,6 +1,7 @@
 import { and, count, eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
+import { cohortScope } from "@/lib/recordings/access";
 
 /*
  * One recording for the admin: its details, its processing, and its transcript.
@@ -68,17 +69,26 @@ function parseDay(value: string): Date | null {
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 }
 
+/** What a new upload is before its details: no cohort, admins only. */
+export const NEW_UPLOAD = { recordedAt: null, programId: null, accessScope: "ADMIN_ONLY" } as const;
+
 /**
  * The row to write for valid details. A date the admin left as it was keeps the
  * moment it was recorded (an import knows the time, the field only the day).
+ * Choosing another cohort, or none, moves a cohort's or an admins-only recording's
+ * audience with it, as the admin asked; the database no longer does this itself
+ * (migration 0043), and a conversation's or the community's recording keeps its own.
  */
-export function detailsUpdate(values: DetailsValues, current: { recordedAt: Date | null }) {
+export function detailsUpdate(values: DetailsValues, current: { recordedAt: Date | null; programId: string | null; accessScope: string }) {
   const unchanged = values.recordedAt === recordedAtField(current.recordedAt);
+  const programId = values.programId || null;
+  const moved = programId !== current.programId && (current.accessScope === "COHORT" || current.accessScope === "ADMIN_ONLY");
   return {
     title: values.title,
     description: values.description || null,
-    programId: values.programId || null,
+    programId,
     recordedAt: unchanged ? current.recordedAt : parseDay(values.recordedAt),
+    ...(moved ? { accessScope: cohortScope(programId) } : {}),
   };
 }
 

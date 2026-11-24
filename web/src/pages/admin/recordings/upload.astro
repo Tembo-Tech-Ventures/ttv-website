@@ -19,7 +19,7 @@ import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
 import { redirectWithFlash } from "@/lib/platform/server/flash";
 import { RECORDINGS_PATH } from "@/lib/admin/recordings";
-import { TITLE_MAX, detailsFromForm, detailsUpdate, type DetailsErrors, type DetailsValues } from "@/lib/admin/recording-detail";
+import { NEW_UPLOAD, TITLE_MAX, detailsFromForm, detailsUpdate, type DetailsErrors, type DetailsValues } from "@/lib/admin/recording-detail";
 import { videoContentType, videoFromForm, videoKey } from "@/lib/admin/recording-upload";
 
 const db = drizzle(env.DB, { schema });
@@ -58,7 +58,8 @@ if (Astro.request.method === "POST") {
         stored = true;
         await db.insert(schema.recording).values({
           id,
-          ...detailsUpdate(values, { recordedAt: null }),
+          accessScope: NEW_UPLOAD.accessScope,
+          ...detailsUpdate(values, NEW_UPLOAD),
           r2VideoKey,
           fileSizeBytes: video.file.size,
           processingStatus: "queued",

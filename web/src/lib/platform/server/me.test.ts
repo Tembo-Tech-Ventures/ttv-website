@@ -1,6 +1,6 @@
 import { addMemberSchema } from "@/test/member-schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readMigration } from "@/test/sqlite-d1";
+import { featureFlagSeeds, readMigration } from "@/test/sqlite-d1";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
 import { ErrorEnvelope, FlagKey, Me, ROUTES, SPACE_ORDER, type RoleBadge } from "../contracts";
 import { CAPABILITY_ROLE_MATRIX, type CapabilityCase } from "./capabilities.fixtures";
@@ -36,6 +36,7 @@ function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql", "0042_recording_access.sql"]) {
     result.database.exec(readMigration(migration));
   }
+  result.database.exec(featureFlagSeeds());
   addMemberSchema(result.database);
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   const user: AuthUser | null = result.user ? {
