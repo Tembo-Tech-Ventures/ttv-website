@@ -46,14 +46,20 @@ function uniformFlags(enabled: boolean): Flags {
   return Object.fromEntries(FlagKey.options.map((key) => [key, enabled])) as Flags;
 }
 
-async function resolveFlags(ctx: FlagContext): Promise<Flags> {
-  if (!ctx.user) return Object.freeze(uniformFlags(false));
-  // Match scripts/cloudflare/lib.mjs normalizeSlug: these aliases target the
-  // same production resources. Never trust the unnormalised deployment label.
-  const environment = (ctx.env.DEPLOYMENT_ENVIRONMENT ?? "")
+/**
+ * Whether this Worker serves production. Matches scripts/cloudflare/lib.mjs normalizeSlug: these
+ * aliases target the same production resources. Never trust the unnormalised deployment label.
+ */
+export function isProduction(env: Pick<Cloudflare.Env, "DEPLOYMENT_ENVIRONMENT">): boolean {
+  const environment = (env.DEPLOYMENT_ENVIRONMENT ?? "")
     .toLowerCase().replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
-  if (environment !== "production" && ctx.env.PLATFORM_FLAGS_OVERRIDE === "all") {
+  return environment === "production";
+}
+
+async function resolveFlags(ctx: FlagContext): Promise<Flags> {
+  if (!ctx.user) return Object.freeze(uniformFlags(false));
+  if (!isProduction(ctx.env) && ctx.env.PLATFORM_FLAGS_OVERRIDE === "all") {
     return Object.freeze(uniformFlags(true));
   }
 

@@ -63,8 +63,9 @@ previews have applied it), so scopes fail closed:
   rule: with a cohort, it is that cohort's (`recording_unscoped_insert`);
 - a `COHORT` recording moved out of every cohort becomes `ADMIN_ONLY` (`recording_cohort_scope_leave`);
   nothing else follows a cohort change. The admin recording page gives a recording with no cohort
-  the cohort the admin chooses (`detailsUpdate`). Known gap, accepted: on the old Worker's page
-  (deploy window or rollback) that stays admins only; see `src/lib/meetings/README.md`.
+  the cohort the admin chooses (`detailsUpdate`). On the old Worker's page (deploy window or
+  rollback) that stays admins only, with no `scopeChosen`; the next save on the current Worker puts
+  it in its cohort, even with nothing changed. See `src/lib/meetings/README.md`.
 
 0043 also added `channelId` (a DIRECT or COMMUNITY recording's channel, `SET NULL` with it, which
 then admits nobody) and `meetingId` (the call it came from); see `src/lib/meetings/README.md`.

@@ -69,8 +69,11 @@ function parseDay(value: string): Date | null {
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 }
 
-/** What a new upload is before its details: no cohort, admins only. */
-export const NEW_UPLOAD = { recordedAt: null, programId: null, accessScope: "ADMIN_ONLY" } as const;
+/** What a new upload is before its details: no cohort, admins only, a scope this Worker chose. */
+export const NEW_UPLOAD = { recordedAt: null, programId: null, accessScope: "ADMIN_ONLY", scopeChosen: true } as const;
+
+/** What detailsUpdate reads of the recording as it is. scopeChosen is null on a row no Worker since migration 0043 has scoped. */
+export type DetailsCurrent = { recordedAt: Date | null; programId: string | null; accessScope: string; scopeChosen: boolean | null };
 
 /**
  * The row to write for valid details. A date the admin left as it was keeps the
@@ -78,20 +81,26 @@ export const NEW_UPLOAD = { recordedAt: null, programId: null, accessScope: "ADM
  * Choosing a cohort for a recording that had none makes it that cohort's, as the
  * admin asked; a cohort's recording moves with its cohort, or becomes admins only
  * with none. The database no longer widens anything itself (migration 0043). A
- * recording kept admins only within a cohort stays so, and a conversation's or the
- * community's recording keeps its own scope.
+ * recording this Worker kept admins only within a cohort stays so, and a
+ * conversation's or the community's recording keeps its own scope.
+ *
+ * One row is put right on any save, even with nothing changed: admins only within
+ * a cohort, with no scope chosen. Only a Worker from before 0043 giving a recording
+ * a cohort while 0043 was applied (the deploy window, or a rollback) leaves one, since
+ * its page relied on 0042's widening trigger. Every scope this writes is chosen.
  */
-export function detailsUpdate(values: DetailsValues, current: { recordedAt: Date | null; programId: string | null; accessScope: string }) {
+export function detailsUpdate(values: DetailsValues, current: DetailsCurrent) {
   const unchanged = values.recordedAt === recordedAtField(current.recordedAt);
   const programId = values.programId || null;
   const moved = programId !== current.programId
     && (current.accessScope === "COHORT" || (current.accessScope === "ADMIN_ONLY" && current.programId === null));
+  const stranded = current.scopeChosen === null && current.accessScope === "ADMIN_ONLY" && current.programId !== null;
   return {
     title: values.title,
     description: values.description || null,
     programId,
     recordedAt: unchanged ? current.recordedAt : parseDay(values.recordedAt),
-    ...(moved ? { accessScope: cohortScope(programId) } : {}),
+    ...(moved || stranded ? { accessScope: cohortScope(programId), scopeChosen: true } : {}),
   };
 }
 

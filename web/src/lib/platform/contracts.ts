@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { inSpaceOrder, SPACE_ORDER } from "./space-order";
 import {
-  CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS, MEETING_PURPOSES,
-  MEETING_RECORDING_POLICIES, MEETING_RECORDING_STATES, MEETING_SEAT_ROLES, MEETING_SEAT_STATES, MEETING_STATES,
+  CALL_LIMIT_MINUTES, CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, CALL_PROVIDER_KINDS, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS,
+  MEETING_PURPOSES, MEETING_RECORDING_POLICIES, MEETING_RECORDING_STATES, MEETING_SEAT_ROLES, MEETING_SEAT_STATES, MEETING_STATES,
 } from "@/lib/meetings/rules";
 
 /** Wire contracts only. No handlers, database dependencies, or access decisions. */
@@ -780,6 +780,63 @@ export type AccessDecisionKind = z.infer<typeof AccessDecisionKind>;
 export const AccessDecision = z.strictObject({ decision: AccessDecisionKind, message: DecisionMessage.optional() });
 export type AccessDecision = z.infer<typeof AccessDecision>;
 
+// In-app calls: the meeting routes (lib/meetings/README.md, "The API"). Same-origin browser
+// sessions only; personal access tokens are refused. The server works out every role, provider id
+// and recording setting: a body naming one (a role, a seat, a preset) is refused like any other.
+const MeetingTitle = NonEmptyText.max(120);
+const BookedMinutes = z.int().min(1).max(CALL_LIMIT_MINUTES);
+/** Who minted a join token, so the room loads the matching client. */
+export const CallProviderKind = z.enum(CALL_PROVIDER_KINDS);
+export type CallProviderKind = z.infer<typeof CallProviderKind>;
+/**
+ * The caller in a call: whether they may take a seat right now (a host may also open a scheduled
+ * call), whether they host it, and their seat, if they have one. A REMOVED seat never joins again.
+ */
+export const MeetingViewer = z.object({
+  canJoin: z.boolean(), canHost: z.boolean(), seat: MeetingSeatState.nullable(), role: MeetingSeatRole.nullable(),
+});
+export type MeetingViewer = z.infer<typeof MeetingViewer>;
+/**
+ * One call as its channel's readers see it. hardEndAt is when the server ends it (a check-in's is set
+ * once both people are in); `now` is the server's clock, which the countdown runs from. Nothing here
+ * names the provider, or who else holds a seat: no record of who attended is kept or sent.
+ */
+export const Meeting = z.object({
+  id: Id, channelId: Id, purpose: MeetingPurpose, title: MeetingTitle, scheduledStartAt: Timestamp,
+  bookedMinutes: BookedMinutes, limitMinutes: BookedMinutes, recordingPolicy: MeetingRecordingPolicy, state: MeetingState,
+  openedAt: Timestamp.nullable(), hardEndAt: Timestamp.nullable(), endedAt: Timestamp.nullable(), endReason: MeetingEndReason.nullable(),
+  seatsHeld: Count, you: MeetingViewer, now: Timestamp,
+}).refine((m) => m.bookedMinutes <= m.limitMinutes, "A call is booked within its limit")
+  .refine((m) => (m.state === "ENDED") === (m.endedAt !== null) && (m.state === "ENDED") === (m.endReason !== null),
+    "Only an ended call has an end and a reason")
+  .refine((m) => (m.state === "SCHEDULED" || m.state === "CANCELLED") === (m.openedAt === null), "A call opened once it went live");
+export type Meeting = z.infer<typeof Meeting>;
+const scheduledMeeting = { channelId: Id, title: MeetingTitle, scheduledStartAt: Timestamp, bookedMinutes: BookedMinutes };
+/**
+ * A new call in a channel the caller hosts in: a cohort session in a cohort channel, a call in a
+ * direct conversation (flag meeting_checkins), an event in a community channel (flag meeting_events),
+ * whose host chooses whether it is recorded. Check-ins come from a suggested call (a later slice).
+ */
+export const CreateMeeting = z.discriminatedUnion("purpose", [
+  z.strictObject({ purpose: z.literal("SESSION"), ...scheduledMeeting }),
+  z.strictObject({ purpose: z.literal("CALL"), ...scheduledMeeting }),
+  z.strictObject({ purpose: z.literal("EVENT"), ...scheduledMeeting, record: z.boolean() }),
+]);
+export type CreateMeeting = z.infer<typeof CreateMeeting>;
+/** Join, leave and end take nothing: the server knows who is asking, and what they may do. */
+export const JoinMeeting = z.strictObject({});
+export type JoinMeeting = z.infer<typeof JoinMeeting>;
+export const LeaveMeeting = z.strictObject({});
+export type LeaveMeeting = z.infer<typeof LeaveMeeting>;
+export const EndMeeting = z.strictObject({});
+export type EndMeeting = z.infer<typeof EndMeeting>;
+/** A host removes a member from the call; they can't rejoin it. */
+export const RemoveFromMeeting = z.strictObject({ userId: Id });
+export type RemoveFromMeeting = z.infer<typeof RemoveFromMeeting>;
+/** A held seat's token, for this tab only: answered with Cache-Control no-store, and revoked when the seat goes. */
+export const MeetingJoin = z.object({ meeting: Meeting, provider: CallProviderKind, token: z.string().min(1).max(4096) });
+export type MeetingJoin = z.infer<typeof MeetingJoin>;
+
 /** These are contracts for future handlers, not installed API routes. */
 export const ROUTES = {
   getMe: defineRoute({ method: "GET", path: "/api/platform/me", response: Me, idempotent: true }),
@@ -828,4 +885,11 @@ export const ROUTES = {
   // Not flag-gated, so pending requests are never stranded when onboarding is switched off.
   listAccessRequests: defineRoute({ method: "GET", path: "/api/admin/access-requests", query: AdminAccessRequestQuery, response: AdminAccessRequestList, idempotent: true }),
   decideAccessRequest: defineRoute({ method: "POST", path: "/api/admin/access-requests/:id/decision", params: IdParams, body: AccessDecision, response: AdminAccessRequest, idempotent: false }),
+  // In-app calls: every refusal is the same 404, and only a host may remove or end.
+  createMeeting: defineRoute({ method: "POST", path: "/api/meetings", body: CreateMeeting, response: Meeting, idempotent: false }),
+  getMeeting: defineRoute({ method: "GET", path: "/api/meetings/:id", params: IdParams, response: Meeting, idempotent: true }),
+  joinMeeting: defineRoute({ method: "POST", path: "/api/meetings/:id/join", params: IdParams, body: JoinMeeting, response: MeetingJoin, idempotent: false }),
+  leaveMeeting: defineRoute({ method: "POST", path: "/api/meetings/:id/leave", params: IdParams, body: LeaveMeeting, response: Meeting, idempotent: true }),
+  removeFromMeeting: defineRoute({ method: "POST", path: "/api/meetings/:id/remove", params: IdParams, body: RemoveFromMeeting, response: Meeting, idempotent: true }),
+  endMeeting: defineRoute({ method: "POST", path: "/api/meetings/:id/end", params: IdParams, body: EndMeeting, response: Meeting, idempotent: true }),
 };
