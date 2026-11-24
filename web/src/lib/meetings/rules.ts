@@ -26,6 +26,13 @@ export const RECORDING_ALERT_USD = 10;
 /** Estimated recording spend in a UTC month above which no new recording starts, in US dollars. */
 export const RECORDING_LIMIT_USD = 25;
 
+/** A cohort session is booked in steps of this many minutes, from one step up to CALL_LIMIT_MINUTES. */
+export const SESSION_LENGTH_STEP_MINUTES = 15;
+/** The most weeks one weekly series of cohort sessions covers: about a cohort and a half. */
+export const SESSION_SERIES_MAX_WEEKS = 26;
+/** How far ahead a cohort session may be booked, in days. */
+export const SESSION_BOOK_AHEAD_DAYS = 366;
+
 /** What a call is for: a cohort session, a check-in on one piece of work, a call between two people, a community event. */
 export const MEETING_PURPOSES = ["SESSION", "CHECKIN", "CALL", "EVENT"] as const;
 export type MeetingPurpose = (typeof MEETING_PURPOSES)[number];

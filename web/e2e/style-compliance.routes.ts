@@ -55,13 +55,17 @@ export interface StyleRoute {
 }
 
 /** A detail page under `base`: one more segment, never one of the static pages beside it. */
-const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes)$)[^/?#]+$`);
+const ID = (base: string) => new RegExp(`^${base}/(?!(?:new|import|upload|themes|schedule)$)[^/?#]+$`);
 
 export const STYLE_ROUTES: readonly StyleRoute[] = [
   // Cohort
   { path: "/dashboard/cohort", persona: "student" },
   { path: "/dashboard/cohort/sessions", persona: "student" },
   { path: "/dashboard/cohort/sessions/[id]", persona: "student", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions") } },
+  // Scheduling cohort sessions (flag `meetings`): an admin hosts every cohort. A date's page is reached
+  // from "Coming up", so it is skipped where nothing is scheduled.
+  { path: "/dashboard/cohort/sessions/schedule", persona: "staff" },
+  { path: "/dashboard/cohort/sessions/upcoming/[id]", persona: "staff", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions/upcoming") } },
   { path: "/dashboard/cohort/ask", persona: "student", namedH1: true },
   { path: "/dashboard/cohort/apply", persona: "community" },
   { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ } },

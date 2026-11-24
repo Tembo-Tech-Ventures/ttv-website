@@ -3,8 +3,8 @@ import { validateHandle } from "@/lib/talent/handles";
 import { existsSync } from "node:fs";
 import {
   canonicalSpacePath, channelPagePath, channelRoute, CONDUCT_PATH, conversationRoute, isAvailableSpacePath, isChannelPagePath,
-  isMemberPagePath, isMentorPagePath, isNewSpacePath, legacySpacePath, memberRoute, MEMBERS_PATH, MENTOR_PAGE_PATHS, spaceForPath,
-  SPACE_REDIRECTS,
+  isMemberPagePath, isMentorPagePath, isNewSpacePath, isSessionPlanPath, legacySpacePath, memberRoute, MEMBERS_PATH, MENTOR_PAGE_PATHS,
+  sessionCalendarPath, sessionDatePath, sessionDateRoute, SESSION_SCHEDULE_PATH, spaceForPath, SPACE_REDIRECTS,
 } from "./space-routes";
 
 const redirects = [
@@ -185,6 +185,32 @@ describe("member directory pages", () => {
       const valid = validateHandle(handle);
       const shaped = valid.ok || valid.error === "reserved";
       expect(memberRoute(`${MEMBERS_PATH}/${handle}`) !== null, `${handle}`).toBe(shaped);
+    }
+  });
+});
+
+describe("cohort session scheduling pages (in-app calls P8)", () => {
+  it("serves the form, a date's page and its calendar file in Cohort, at their own paths, never rewritten", () => {
+    for (const path of [SESSION_SCHEDULE_PATH, sessionDatePath("synthetic-meeting"), sessionCalendarPath("synthetic-meeting")]) {
+      expect(isSessionPlanPath(path)).toBe(true);
+      expect(isAvailableSpacePath(path)).toBe(true);
+      expect(isNewSpacePath(path)).toBe(true);
+      expect(spaceForPath(path)).toBe("cohort");
+      expect(legacySpacePath(path)).toBe(path);
+    }
+    expect(sessionDateRoute("/dashboard/cohort/sessions/upcoming/synthetic-meeting/calendar.ics")).toEqual({ id: "synthetic-meeting", calendar: true });
+    expect(sessionDateRoute("/dashboard/cohort/sessions/upcoming/synthetic-meeting/")).toEqual({ id: "synthetic-meeting", calendar: false });
+    // A recording's viewer is still the one-segment path beside them.
+    expect(legacySpacePath("/dashboard/cohort/sessions/synthetic-recording")).toBe("/dashboard/sessions/synthetic-recording");
+    expect(existsSync(new URL("../../../pages/dashboard/cohort/sessions/schedule.astro", import.meta.url))).toBe(true);
+    expect(existsSync(new URL("../../../pages/dashboard/cohort/sessions/upcoming/[id].astro", import.meta.url))).toBe(true);
+    expect(existsSync(new URL("../../../pages/dashboard/cohort/sessions/upcoming/[id]/calendar.ics.ts", import.meta.url))).toBe(true);
+  });
+
+  it("matches nothing near them, and never decodes an id", () => {
+    for (const path of ["/dashboard/cohort/sessions/upcoming", "/dashboard/cohort/sessions/upcoming/a/b", "/dashboard/cohort/sessions/upcoming/a%2Fb",
+      "/dashboard/cohort/sessions/upcoming/a/calendar", "/dashboard/cohort/sessions/schedule/x", "/dashboard/sessions/upcoming/a"]) {
+      expect(isSessionPlanPath(path)).toBe(false);
     }
   });
 });

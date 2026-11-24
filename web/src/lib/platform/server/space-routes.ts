@@ -93,6 +93,31 @@ export function isMemberPagePath(pathname: string): boolean {
   return normalizeSpacePath(pathname) === MEMBERS_PATH || memberRoute(pathname) !== null;
 }
 
+/**
+ * Cohort session scheduling (in-app calls P8): the schedule form, one date's edit and cancel page, and
+ * its calendar file, under the cohort's Sessions page. Canonical pages of their own, never rewritten to
+ * a legacy path (a recording id is never "schedule"), and they exist only while `meetings` is on for
+ * the caller (space-routing.ts). Each page also checks the flag and that the caller hosts or sees the
+ * session, and answers the same 404 otherwise.
+ */
+export const SESSION_SCHEDULE_PATH = `${SPACE_PATHS.cohort}/sessions/schedule`;
+export const UPCOMING_SESSIONS_PATH = `${SPACE_PATHS.cohort}/sessions/upcoming`;
+const SESSION_ID = /^[A-Za-z0-9_-]{1,255}$/;
+
+/** The session a canonical session date path names, and whether it is its calendar file. The id is never decoded. */
+export function sessionDateRoute(pathname: string): { id: string; calendar: boolean } | null {
+  const match = /^\/dashboard\/cohort\/sessions\/upcoming\/([^/]+)(\/calendar\.ics)?$/.exec(normalizeSpacePath(pathname));
+  return match && SESSION_ID.test(match[1]) ? { id: match[1], calendar: match[2] !== undefined } : null;
+}
+
+/** One date's page (edit, and cancel with `?confirm=cancel`), and its calendar file. */
+export const sessionDatePath = (id: string) => `${UPCOMING_SESSIONS_PATH}/${encodeURIComponent(id)}`;
+export const sessionCalendarPath = (id: string) => `${sessionDatePath(id)}/calendar.ics`;
+
+export function isSessionPlanPath(pathname: string): boolean {
+  return normalizeSpacePath(pathname) === SESSION_SCHEDULE_PATH || sessionDateRoute(pathname) !== null;
+}
+
 export const SPACE_REDIRECTS = [
   ["/dashboard/apply", "/dashboard/cohort/apply"],
   ["/dashboard/application/:id", "/dashboard/cohort/application/:id"],
@@ -134,6 +159,7 @@ export function canonicalSpacePath(pathname: string): string | null {
 /** Temporary render targets until U-1.2 migrates the pages; also bounds allowlist aliases. */
 export function legacySpacePath(pathname: string): string {
   const path = normalizeSpacePath(pathname);
+  if (isSessionPlanPath(path)) return path;
   if (path === SPACE_PATHS.cohort) return "/dashboard";
   if (path === SPACE_PATHS.mentoring) return "/dashboard/mentorship";
   for (const [legacy, canonical] of SPACE_REDIRECTS) {
@@ -165,5 +191,6 @@ export function isAvailableSpacePath(pathname: string): boolean {
     || legacySpacePath(path) !== path
     || isChannelPagePath(path)
     || isMentorPagePath(path)
-    || isMemberPagePath(path);
+    || isMemberPagePath(path)
+    || isSessionPlanPath(path);
 }

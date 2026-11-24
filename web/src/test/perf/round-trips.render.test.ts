@@ -75,6 +75,9 @@ function seeded() {
     INSERT INTO channel_member(channelId,userId) VALUES ('${DIRECT}','${STUDENT}'),('${DIRECT}','${ADMIN}');
     INSERT INTO channel_message(id,channelId,seq,changeSeq,authorId,body) VALUES
       ('cohort-hello','${cohortChannel.id}',1,1,'${STUDENT}','Habari, cohort'),('direct-hello','${DIRECT}',1,1,'${ADMIN}','Karibu');`);
+  // One cohort session still to come, for "Coming up" and its edit page.
+  sqlite.exec(`INSERT INTO meeting (id, channelId, purpose, title, scheduledStartAt, bookedMinutes, limitMinutes, recordingPolicy, state, createdAt, updatedAt)
+    VALUES ('session', '${cohortChannel.id}', 'SESSION', 'Week 4: Deploying', 4102000000000, 60, 90, 'ALWAYS', 'SCHEDULED', 0, 0);`);
   return { db: withRoundTrips(withRaw(sqlite, db)), cohortChannel: cohortChannel.slug };
 }
 
@@ -86,6 +89,9 @@ beforeAll(async () => {
 const PAGES = {
   "cohort overview": { path: () => "/dashboard/cohort", page: () => import("@/pages/dashboard/index.astro"), user: STUDENT },
   "cohort sessions": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: STUDENT },
+  "cohort sessions, a host": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: ADMIN },
+  "schedule a session": { path: () => "/dashboard/cohort/sessions/schedule", page: () => import("@/pages/dashboard/cohort/sessions/schedule.astro"), user: ADMIN },
+  "edit a session": { path: () => "/dashboard/cohort/sessions/upcoming/session", page: () => import("@/pages/dashboard/cohort/sessions/upcoming/[id].astro"), user: ADMIN, id: "session" },
   "session viewer": { path: () => "/dashboard/cohort/sessions/recording", page: () => import("@/pages/dashboard/sessions/[id].astro"), user: STUDENT, id: "recording" },
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
@@ -203,8 +209,15 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "frame only, profile": { d1: 16, depth: 2 },
   "frame only, admin": { d1: 13, depth: 2 },
   "cohort overview": { d1: 16, depth: 2 },
-  // Its one read of its own is the recordings, once the router has the space context.
-  "cohort sessions": { d1: 15, depth: 3 },
+  // Its reads of its own are the recordings and, while `meetings` is on, the sessions coming up (one
+  // more since in-app calls P8), together once the router has the space context.
+  "cohort sessions": { d1: 16, depth: 3 },
+  // A host pays no more: whether they may schedule comes from the request's capabilities.
+  "cohort sessions, a host": { d1: 13, depth: 3 },
+  // The cohorts the caller hosts, one read beside the recordings' place (in-app calls P8).
+  "schedule a session": { d1: 12, depth: 3 },
+  // The session with its channel and cohort, one read once the space context says `meetings` is on.
+  "edit a session": { d1: 12, depth: 3 },
   // The recording and its transcript are one read, started beside the space context; the access check
   // reuses the request's capabilities. The same before the style-guide rollout, where the router's own
   // reads already set the floor.

@@ -1,0 +1,120 @@
+import { SESSION_LENGTH_STEP_MINUTES, CALL_LIMIT_MINUTES } from "./rules";
+
+/**
+ * Cohort session times (README.md beside this file, "Scheduling cohort sessions"). Times are entered
+ * in Nairobi time, where most members are, and stored as the exact moment (epoch milliseconds). Pages
+ * write them in Nairobi time with "EAT" beside them; the browser adds the reader's own time where it
+ * differs (`data-local-time`), and the calendar file carries the moment itself, so calendars show it
+ * in local time on their own.
+ */
+
+export const SESSION_TIME_ZONE = "Africa/Nairobi";
+export const SESSION_ZONE_LABEL = "EAT";
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+
+/** The lengths a session can be booked for: every step up to the call limit, in minutes. */
+export const SESSION_LENGTHS: readonly number[] = Array.from(
+  { length: Math.floor(CALL_LIMIT_MINUTES / SESSION_LENGTH_STEP_MINUTES) },
+  (_, index) => (index + 1) * SESSION_LENGTH_STEP_MINUTES,
+);
+
+const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const TIME = /^(\d{2}):(\d{2})$/;
+
+const wallParts = new Intl.DateTimeFormat("en-GB", {
+  timeZone: SESSION_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
+/** The Nairobi wall clock at `ms`, written as if it were UTC. */
+function wallClock(ms: number): number {
+  const parts = Object.fromEntries(wallParts.formatToParts(new Date(ms)).map(({ type, value }) => [type, Number(value)]));
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+}
+
+/** A calendar date ("2026-11-27") as midnight UTC, or null when it is not a real date. */
+function calendarDay(date: string): number | null {
+  const match = DATE.exec(date);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  const ms = Date.UTC(year, month - 1, day);
+  const back = new Date(ms);
+  return back.getUTCFullYear() === year && back.getUTCMonth() === month - 1 && back.getUTCDate() === day ? ms : null;
+}
+
+/**
+ * The moment a Nairobi date and time name ("2026-11-27", "18:00"), or null when either is not real.
+ * Kenya keeps one offset all year, but the zone database decides, so a change there is followed.
+ */
+export function nairobiMoment(date: string, time: string): number | null {
+  const day = calendarDay(date);
+  const clock = TIME.exec(time);
+  if (day === null || !clock) return null;
+  const [hour, minute] = clock.slice(1).map(Number);
+  if (hour > 23 || minute > 59) return null;
+  const wall = day + (hour * 60 + minute) * MINUTE_MS;
+  let guess = wall - (wallClock(wall) - wall);
+  guess = wall - (wallClock(guess) - guess);
+  return wallClock(guess) === wall ? guess : null;
+}
+
+/** A moment's Nairobi date and time, as the form's fields take them: { date: "2026-11-27", time: "18:00" }. */
+export function nairobiFields(ms: number): { date: string; time: string } {
+  const iso = new Date(wallClock(ms)).toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
+
+/** The dates of a weekly series: the first and then every 7 days, `weeks` dates in all. */
+export function weeklyDates(first: string, weeks: number): string[] {
+  const start = calendarDay(first);
+  if (start === null || weeks < 1) return [];
+  return Array.from({ length: weeks }, (_, week) => new Date(start + week * 7 * DAY_MS).toISOString().slice(0, 10));
+}
+
+const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" });
+const shortDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: SESSION_TIME_ZONE });
+const shortDayYear = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: SESSION_TIME_ZONE });
+const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: SESSION_TIME_ZONE });
+const dayNumber = new Intl.DateTimeFormat("en-GB", { day: "numeric", timeZone: SESSION_TIME_ZONE });
+const weekdayShort = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: SESSION_TIME_ZONE });
+const monthShort = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: SESSION_TIME_ZONE });
+const clockTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: SESSION_TIME_ZONE });
+const yearOf = new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: SESSION_TIME_ZONE });
+
+/** The weekday of a calendar date: "Thursday". */
+export function weekdayOf(date: string): string {
+  const day = calendarDay(date);
+  return day === null ? "" : weekday.format(day);
+}
+
+/** A session's day, in Nairobi time: "Thu 27 Nov", with the year when it is not this year's. */
+export function sessionDay(ms: number, now: number): string {
+  return (yearOf.format(ms) === yearOf.format(now) ? shortDay : shortDayYear).format(ms).replace(",", "");
+}
+
+/** A calendar date as a session's day: "Thu 27 Nov". */
+export function sessionDate(date: string, now: number): string {
+  const ms = nairobiMoment(date, "12:00");
+  return ms === null ? date : sessionDay(ms, now);
+}
+
+/** A day and month, in Nairobi time: "27 Nov". */
+export const shortDate = (ms: number) => dayMonth.format(ms);
+/** The parts of a session's date block: { day: "27", weekday: "Thu", month: "Nov" }. */
+export const dateBlock = (ms: number) => ({ day: dayNumber.format(ms), weekday: weekdayShort.format(ms), month: monthShort.format(ms) });
+/** A Nairobi clock time: "18:00". */
+export const sessionClock = (ms: number) => clockTime.format(ms);
+
+/** When a session runs, in Nairobi time: "18:00–18:45 EAT". */
+export function sessionHours(startAt: number, minutes: number): string {
+  return `${sessionClock(startAt)}–${sessionClock(startAt + minutes * MINUTE_MS)} ${SESSION_ZONE_LABEL}`;
+}
+
+/** A length in words: "45 minutes", "1 hour", "1 hour 30 minutes". */
+export function lengthLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  const parts = [hours > 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : "", rest > 0 ? `${rest} minutes` : ""];
+  return parts.filter(Boolean).join(" ");
+}

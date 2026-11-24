@@ -84,7 +84,9 @@ describe("the Sessions page", () => {
     const page = main(body);
     expect(page.querySelector("h1")?.textContent).toBe("Sessions");
     const empty = page.querySelector("[data-empty-state]");
-    expect(empty?.querySelector("h2")?.textContent).toBe("No recordings yet");
+    // Under the "Recordings" heading, with "Coming up" above it while `meetings` is on.
+    expect(page.querySelector("h2")?.textContent).toBe("Recordings");
+    expect(empty?.querySelector("h3")?.textContent).toBe("No recordings yet");
     expect(empty?.textContent).toContain("after each session");
     expect(page.querySelector("[data-session-list]")).toBeNull();
   });
@@ -93,7 +95,7 @@ describe("the Sessions page", () => {
     seeded(RECORDINGS);
     const page = main((await visit()).body);
     const cards = [...page.querySelectorAll("[data-session-card]")];
-    expect(cards.map((card) => card.querySelector("h2")?.textContent)).toEqual([
+    expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual([
       "Week 5: Observability", "Week 4: Deploying", "Week 3: Testing a service",
     ]);
     for (const card of cards) {
@@ -117,9 +119,9 @@ describe("the Sessions page", () => {
       INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
       INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','synthetic-amina',id FROM Roles WHERE name='ADMIN';`);
     const cards = [...main((await visit()).body).querySelectorAll("[data-session-card]")];
-    expect(cards.map((card) => card.querySelector("h2")?.textContent)).not.toContain("Unsorted upload");
+    expect(cards.map((card) => card.querySelector("h3")?.textContent)).not.toContain("Unsorted upload");
     const adminCards = [...main((await visit("synthetic-amina")).body).querySelectorAll("[data-session-card]")];
-    expect(adminCards.map((card) => [card.querySelector("h2")?.textContent, card.querySelector("p")?.textContent])).toEqual([
+    expect(adminCards.map((card) => [card.querySelector("h3")?.textContent, card.querySelector("p")?.textContent])).toEqual([
       ["Unsorted upload", "No cohort"], ["Week 5: Observability", "Cohort 07"], ["Week 4: Deploying", "Cohort 07"], ["Week 3: Testing a service", "Cohort 07"],
     ]);
   });
