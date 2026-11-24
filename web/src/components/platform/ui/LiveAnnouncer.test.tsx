@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,6 +94,17 @@ describe("createLiveAnnouncer", () => {
     voice.dispose();
   });
 
+  it("tells apart two people with the same name by their id", () => {
+    const voice = createLiveAnnouncer();
+    const heard = listen(voice);
+    voice.gather("joined", "Kevin Omondi", { sentence: join, id: "user-7" });
+    voice.gather("joined", "Kevin Omondi", { sentence: join, id: "user-31" });
+    voice.gather("joined", "Kevin Omondi", { sentence: join, id: "user-7" });
+    vi.advanceTimersByTime(2_000);
+    expect(heard).toEqual(["polite: Kevin Omondi and Kevin Omondi joined"]);
+    voice.dispose();
+  });
+
   it("keeps bursts of different kinds apart", () => {
     const voice = createLiveAnnouncer({ gatherMs: 1_000 });
     const heard = listen(voice);
@@ -140,7 +151,7 @@ describe("LiveAnnouncer", () => {
   it("draws empty polite and assertive regions on the server, before anything is said", () => {
     const html = renderToStaticMarkup(<LiveAnnouncer name="call" />);
     expect(html).toBe(
-      '<div class="sr-only" data-live-announcer="call"><output aria-live="polite" aria-atomic="true"></output><div role="alert" aria-live="assertive" aria-atomic="true"></div></div>',
+      '<div class="sr-only" data-live-announcer="call"><output aria-live="polite" aria-atomic="true"></output><div role="alert" aria-atomic="true"></div></div>',
     );
   });
 
@@ -179,6 +190,30 @@ describe("LiveAnnouncer", () => {
       voice!.say("Faith Njeri joined");
     });
     expect(polite.firstElementChild).not.toBe(first);
+  });
+
+  it("keeps speaking under StrictMode, whose rehearsal unmount disposes the first announcer", async () => {
+    let voice: LiveAnnouncerVoice | null = null;
+    function Inside() {
+      voice = useAnnouncer();
+      return null;
+    }
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <LiveAnnouncer name="call">
+            <Inside />
+          </LiveAnnouncer>
+        </StrictMode>,
+      ),
+    );
+    expect(voice!.disposed).toBe(false);
+    let said = false;
+    await act(async () => {
+      said = voice!.say("Recording started", { priority: "assertive" });
+    });
+    expect(said).toBe(true);
+    expect(container.querySelector("[role=alert]")!.textContent).toBe("Recording started");
   });
 
   it("uses an announcer it is given, and leaves it running when it unmounts", async () => {

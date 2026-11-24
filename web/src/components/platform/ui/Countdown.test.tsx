@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
+import { act, StrictMode } from "react";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLiveAnnouncer, type LiveAnnouncerVoice } from "./announcer";
 import Countdown from "./Countdown";
-import { CALL_WARNINGS, CHECK_IN_WARNINGS, dueWarning, nextChange, timeLeft, urgency, warningMessage } from "./countdown";
+import { CALL_WARNINGS, CHECK_IN_WARNINGS, armWarnings, dueWarning, nextChange, timeLeft, urgency, warningMessage } from "./countdown";
 import LiveAnnouncer from "./LiveAnnouncer";
 
 const MINUTE = 60_000;
@@ -73,6 +73,16 @@ describe("when it looks again", () => {
     expect(nextChange(15, CALL_WARNINGS, true)).toBe(5_005);
   });
 
+  it("arms warnings when it starts or its end moves: spent once past by more than the grace, armed again once ahead", () => {
+    expect([...armWarnings(4 * 60, CALL_WARNINGS, new Set())].toSorted((a, b) => a - b)).toEqual([300, 900]);
+    // Stepped over by less than 2 seconds: still to be said.
+    expect([...armWarnings(299, CALL_WARNINGS, new Set([900]))]).toEqual([900]);
+    // Said already: stays said.
+    expect([...armWarnings(299, CALL_WARNINGS, new Set([900, 300]))].toSorted((a, b) => a - b)).toEqual([300, 900]);
+    // The end moved later: what it moved back before is armed again.
+    expect([...armWarnings(10 * 60, CALL_WARNINGS, new Set([900, 300]))]).toEqual([900]);
+  });
+
   it("says only the latest of several warnings crossed while asleep, and spends them all", () => {
     expect(dueWarning(30, CALL_WARNINGS, new Set([900]))).toEqual({ say: CALL_WARNINGS[2], spend: [300, 60] });
     expect(dueWarning(30, CALL_WARNINGS, new Set([900, 300, 60]))).toEqual({ say: null, spend: [] });
@@ -136,7 +146,8 @@ describe("Countdown", () => {
 
   it("shows when it ends and the time left, in tabular numerals, as a timer", async () => {
     await mount(<Countdown endsAt={START + 12 * MINUTE + 30_000} />);
-    expect(countdown().textContent).toContain("Ends at 18:59");
+    // 18:59:30, rounded up to the minute as the minutes left are.
+    expect(countdown().textContent).toContain("Ends at 19:00");
     expect(shown()).toBe("13 min left");
     expect(timer().querySelector(".sr-only")!.textContent).toBe("13 minutes left");
     expect(countdown().className).toContain("tabular-nums");
@@ -191,6 +202,41 @@ describe("Countdown", () => {
     expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
     await mount(<Countdown endsAt={START + 5 * MINUTE + 2_000} warnings={[...CALL_WARNINGS]} subject="The call" />);
     await advance(30_000);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+  });
+
+  it("says a warning once when the server corrects the end across it", async () => {
+    await mount(<Countdown endsAt={START + 5 * MINUTE + 500} warnings="call" />);
+    expect(heard).toEqual([]);
+    // The server's clock says it ends 700 ms sooner: 4:59.8 left, just past the 5-minute warning.
+    await mount(<Countdown endsAt={START + 5 * MINUTE - 200} warnings="call" />);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+    // Corrected again, back and forth across it: it is not said twice.
+    await mount(<Countdown endsAt={START + 5 * MINUTE - 900} warnings="call" />);
+    await advance(30_000);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+    // The same holds for the last warnings.
+    await mount(<Countdown endsAt={Date.now() + 60_400} warnings="call" />);
+    await mount(<Countdown endsAt={Date.now() + 59_700} warnings="call" />);
+    expect(heard.at(-1)).toBe("assertive: The call ends in 1 minute.");
+    await advance(50_000);
+    await mount(<Countdown endsAt={Date.now() + 9_000} warnings="call" />);
+    expect(heard.slice(1)).toEqual(["assertive: The call ends in 1 minute.", "assertive: The call ends in 10 seconds."]);
+  });
+
+  it("says a warning again when the end is put back past it", async () => {
+    await mount(<Countdown endsAt={START + 5 * MINUTE + 1_000} warnings="call" />);
+    await advance(1_100);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+    // A host extends the call by ten minutes.
+    await mount(<Countdown endsAt={START + 15 * MINUTE + 1_000} warnings="call" />);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+    await advance(10 * MINUTE + 100);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes.", "polite: The call ends in 5 minutes."]);
+  });
+
+  it("says a warning it starts within 2 seconds of", async () => {
+    await mount(<Countdown endsAt={START + 5 * MINUTE - 1_500} warnings="call" />);
     expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
   });
 
@@ -281,10 +327,51 @@ describe("Countdown", () => {
     });
   });
 
-  it("renders on the server, in its resting state, with no clock running", () => {
-    const html = renderToStaticMarkup(<Countdown endsAt={START + 15 * MINUTE} now={() => START} />);
-    expect(html).toContain("Ends at 19:02");
-    expect(html).toContain("15 min left");
-    expect(html).toContain('role="timer"');
+  it("runs the same under StrictMode, saying each warning once", async () => {
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <LiveAnnouncer voice={voice}>
+            <Countdown endsAt={START + 61_000} warnings="call" />
+          </LiveAnnouncer>
+        </StrictMode>,
+      ),
+    );
+    await advance(61_000);
+    expect(heard).toEqual(["assertive: The call ends in 1 minute.", "assertive: The call ends in 10 seconds."]);
+  });
+
+  it("draws the time left on the server only when told when the server drew it", () => {
+    const told = renderToStaticMarkup(<Countdown endsAt={START + 15 * MINUTE} renderedAt={START} />);
+    expect(told).toContain("Ends at 19:02");
+    expect(told).toContain("15 min left");
+    expect(told).toContain('role="timer"');
+    // Without it, only what can't go stale: when it ends.
+    const untold = renderToStaticMarkup(<Countdown endsAt={START + 15 * MINUTE} />);
+    expect(untold).toContain("Ends at 19:02");
+    expect(untold).not.toContain("min left");
+    expect(untold).toContain('data-urgency="calm"');
+  });
+
+  it("hydrates without a mismatch, then shows the urgency the browser's clock finds", async () => {
+    const node = <Countdown endsAt={START + 6 * MINUTE} />;
+    const page = document.createElement("div");
+    document.body.appendChild(page);
+    page.innerHTML = renderToString(node);
+    // The page reaches the browser two minutes after the server drew it: past the 5-minute mark.
+    vi.setSystemTime(START + 2 * MINUTE);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    let hydrated!: Root;
+    await act(async () => {
+      hydrated = hydrateRoot(page, node);
+    });
+    expect(errors.mock.calls.map((call) => String(call[0]).slice(0, 300))).toEqual([]);
+    errors.mockRestore();
+    const drawn = page.querySelector<HTMLElement>("[data-countdown]")!;
+    expect(drawn.dataset.urgency).toBe("soon");
+    expect(drawn.className).toContain("text-warning-ink");
+    expect(drawn.querySelector("[role=timer] [aria-hidden]")!.textContent).toBe("4 min left");
+    await act(async () => hydrated.unmount());
+    page.remove();
   });
 });

@@ -79,7 +79,6 @@ const { wanjiku, david, joseph, lucy, kevin, faith, brian } = GUIDE_PEOPLE;
 
 /** A fixed moment for the countdowns, so the server draws the same page every time: 18:47 in Nairobi. */
 const COUNTDOWN_NOW = Date.UTC(2026, 10, 26, 15, 47);
-const countdownClock = () => COUNTDOWN_NOW;
 
 function Row({ children, label }: { children: ReactNode; label?: string }) {
   return (
@@ -759,10 +758,10 @@ const asking = confirmingAction(Astro.url, ["remove-mentor"]);
     use: [
       "A confirm step inside a React island that must keep its place, where a page load would lose what is happening: “End for everyone?” in a call.",
       "The title asks the question and names the thing; the words under it say what happens; the action says it again on its button.",
-      "In an island, open it with open and close it in onClose. On a static page, open it with a dialogOpener button, and put the action in its own form.",
+      "In an island, always open it with open and close it in onClose. On a static page, open it with a dialogOpener button, and put the action in its own form.",
     ],
     avoid: [
-      "A confirm on an ordinary page: ConfirmStep works in every browser without script, and keeps its address.",
+      "A confirm on an ordinary page: ConfirmStep works in every browser without script, and keeps its address. A static dialogOpener needs the browser's invoker commands (2025 on); older browsers can't open it at all.",
       "A form or a task that matters on its own. Give it a page.",
       "A dialog that opens another dialog.",
     ],
@@ -833,13 +832,13 @@ voice?.gather("joined", person.name, { sentence: (names) => groupSentence(names,
     specimen: () => (
       <Specimens>
         <Row label="More than 5 minutes left">
-          <Countdown endsAt={COUNTDOWN_NOW + 15 * 60_000} now={countdownClock} />
+          <Countdown endsAt={COUNTDOWN_NOW + 15 * 60_000} renderedAt={COUNTDOWN_NOW} />
         </Row>
         <Row label="5 minutes or less">
-          <Countdown endsAt={COUNTDOWN_NOW + 4 * 60_000} now={countdownClock} />
+          <Countdown endsAt={COUNTDOWN_NOW + 4 * 60_000} renderedAt={COUNTDOWN_NOW} />
         </Row>
         <Row label="The last minute">
-          <Countdown endsAt={COUNTDOWN_NOW + 42_000} now={countdownClock} />
+          <Countdown endsAt={COUNTDOWN_NOW + 42_000} renderedAt={COUNTDOWN_NOW} />
         </Row>
       </Specimens>
     ),
@@ -854,7 +853,7 @@ voice?.gather("joined", person.name, { sentence: (names) => groupSentence(names,
       "Warnings without a LiveAnnouncer around it: they would have nowhere to be said.",
     ],
     access: [
-      "A timer, which screen readers don't read as it changes. Only its warnings are said, each once, and none already past when it starts.",
+      "A timer, which screen readers don't read as it changes. Only its warnings are said, each once, even when the server corrects the end; none more than 2 seconds past when it starts.",
       "Tabular numerals, so the figures don't jump; minutes change once a minute, and the last minute moves in steps of ten seconds under reduced motion.",
       "From 5 minutes the ink turns to warning and the icon to a warning sign; the words always say how long, so colour is never the only signal.",
     ],

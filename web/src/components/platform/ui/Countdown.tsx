@@ -3,6 +3,7 @@ import { PiTimer, PiWarningCircle } from "react-icons/pi";
 import {
   CALL_WARNINGS,
   CHECK_IN_WARNINGS,
+  armWarnings,
   dueWarning,
   nextChange,
   timeLeft,
@@ -33,6 +34,14 @@ type CountdownProps = {
   onEnd?: () => void;
   /** The clock, for tests and for a caller that corrects for the server's. */
   now?: () => number;
+  /**
+   * When the server drew the page, in epoch milliseconds. With it, the server
+   * draws the time left as it was then, and the browser's first render, which
+   * must match, does the same before its clock takes over. Without it, the
+   * time left is drawn only once the browser's clock runs, so a page that
+   * hydrates a minute later never shows a stale state.
+   */
+  renderedAt?: number;
   className?: string;
 };
 
@@ -63,8 +72,9 @@ function usePrefersReducedMotion(): boolean {
   );
 }
 
+/** The end, to the minute, rounded up as the minutes left are: 18:59:30 is "19:00", beside "13 min left" at 18:47. */
 const endTime = (end: number, timeZone: string) =>
-  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(end);
+  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(Math.ceil(end / 60_000) * 60_000);
 
 /**
  * The time left before something ends, such as a call: "Ends at 19:02 · 12
@@ -76,7 +86,8 @@ const endTime = (end: number, timeZone: string) =>
  *
  * It is a `timer`, which screen readers don't read as it changes. What they
  * hear are the `warnings`, each said once through the nearest `LiveAnnouncer`:
- * never every second, and never one already past when it started.
+ * never every second, never one more than 2 seconds past when it started, and
+ * still once when the server moves the end (`armWarnings`).
  */
 export default function Countdown({
   endsAt,
@@ -86,38 +97,39 @@ export default function Countdown({
   timeZone = "Africa/Nairobi",
   onEnd,
   now,
+  renderedAt,
   className,
 }: CountdownProps) {
   const end = typeof endsAt === "number" ? endsAt : endsAt.getTime();
-  const clock = now ?? Date.now;
   const reduced = usePrefersReducedMotion();
   const voice = useAnnouncer();
   const list = warnings === "call" ? CALL_WARNINGS : warnings === "check-in" ? CHECK_IN_WARNINGS : (warnings ?? NO_WARNINGS);
-  const [seconds, setSeconds] = useState(() => (end - clock()) / 1000);
+  // Null until the browser's clock runs, unless the server said when it drew the page.
+  const [seconds, setSeconds] = useState<number | null>(() => (renderedAt === undefined ? null : (end - renderedAt) / 1000));
 
   // The latest of everything the clock reads, so a new callback or list does not restart it.
-  const latest = useRef({ voice, onEnd, subject, clock, list });
+  const latest = useRef({ voice, onEnd, subject, clock: now ?? Date.now, list });
   useEffect(() => {
-    latest.current = { voice, onEnd, subject, clock, list };
+    latest.current = { voice, onEnd, subject, clock: now ?? Date.now, list };
   });
   const warningKey = list.map((warning) => `${warning.at}:${warning.priority}`).join(",");
+  /** The warnings said or no longer news, kept across a corrected end, so none is lost or said twice. */
+  const spent = useRef<Set<number> | null>(null);
 
   useEffect(() => {
     const read = () => (end - latest.current.clock()) / 1000;
-    const spent = new Set<number>();
     let ended = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Warnings already past when it starts are not news: they are spent without a word.
-    const start = read();
-    for (const warning of latest.current.list) if (start <= warning.at) spent.add(warning.at);
+    spent.current = armWarnings(read(), latest.current.list, spent.current ?? new Set());
 
     function tick() {
       clearTimeout(timer);
       const left = read();
       setSeconds(left);
       const { voice: speaker, subject: what, list: due } = latest.current;
-      const { say, spend } = dueWarning(left, due, spent);
-      for (const at of spend) spent.add(at);
+      const used = spent.current!;
+      const { say, spend } = dueWarning(left, due, used);
+      for (const at of spend) used.add(at);
       if (say) speaker?.say(warningMessage(say.at, what), { priority: say.priority, key: `countdown:${end}:${say.at}` });
       if (left <= 0) {
         if (!ended) latest.current.onEnd?.();
@@ -139,8 +151,8 @@ export default function Countdown({
     };
   }, [end, reduced, warningKey]);
 
-  const level = urgency(seconds);
-  const { shown, spoken } = timeLeft(seconds, reduced);
+  const level = seconds === null ? "calm" : urgency(seconds);
+  const told = seconds === null ? null : timeLeft(seconds, reduced);
   const Icon = level === "calm" ? PiTimer : PiWarningCircle;
 
   return (
@@ -161,12 +173,12 @@ export default function Countdown({
         </>
       )}
       <span role="timer">
-        <span aria-hidden="true" suppressHydrationWarning>
-          {shown}
-        </span>
-        <span className="sr-only" suppressHydrationWarning>
-          {spoken}
-        </span>
+        {told && (
+          <>
+            <span aria-hidden="true">{told.shown}</span>
+            <span className="sr-only">{told.spoken}</span>
+          </>
+        )}
       </span>
     </p>
   );

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, useRef, useState } from "react";
+import { act, StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -281,6 +281,86 @@ describe("Dialog in a React island", () => {
     });
     await press(button("Warn"));
     expect(inside().textContent).toBe("1 minute left");
+  });
+});
+
+describe("Dialog, edge cases", () => {
+  it("returns focus on close under StrictMode, whose rehearsal unmount moves nothing", async () => {
+    const onClose = vi.fn();
+    await mount(
+      <StrictMode>
+        <EndForEveryone onClose={onClose} />
+      </StrictMode>,
+    );
+    const trigger = await openEnd();
+    expect(document.activeElement).toBe(button("Cancel"));
+    await key(document.activeElement!, "Escape");
+    expect(dialog().open).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("keeps focus inside when it mounts open under StrictMode, and gives it back on close", async () => {
+    const outside = document.createElement("button");
+    outside.textContent = "Leave";
+    document.body.appendChild(outside);
+    outside.focus();
+    function OpenAtOnce() {
+      const [open, setOpen] = useState(true);
+      return <Dialog id="at-once" title="Stop recording?" open={open} onClose={() => setOpen(false)} />;
+    }
+    await mount(
+      <StrictMode>
+        <OpenAtOnce />
+      </StrictMode>,
+    );
+    expect(dialog().open).toBe(true);
+    expect(document.activeElement).toBe(button("Cancel"));
+    await key(document.activeElement!, "Escape");
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
+  it("ignores a close event that arrives after it was opened again", async () => {
+    const onClose = vi.fn();
+    let setOpen!: (open: boolean) => void;
+    function Flicker() {
+      const [open, set] = useState(true);
+      setOpen = set;
+      return <Dialog id="flicker" title="Stop recording?" open={open} onClose={onClose} />;
+    }
+    await mount(<Flicker />);
+    await act(async () => setOpen(false));
+    await act(async () => setOpen(true));
+    expect(dialog().open).toBe(true);
+    // A browser fires close after the fact: here it lands once the dialog is open again.
+    await act(async () => {
+      dialog().dispatchEvent(new Event("close"));
+    });
+    expect(dialog().open).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("does not call onClose when the caller closed it", async () => {
+    const onClose = vi.fn();
+    let setOpen!: (open: boolean) => void;
+    function Closed() {
+      const [open, set] = useState(true);
+      setOpen = set;
+      return <Dialog id="closed" title="Stop recording?" open={open} onClose={onClose} />;
+    }
+    await mount(<Closed />);
+    await act(async () => setOpen(false));
+    expect(dialog().open).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("leaves an Escape that ends an input method's composition alone", async () => {
+    await mount(<EndForEveryone />);
+    await openEnd();
+    const escape = await key(document.activeElement!, "Escape", { isComposing: true });
+    expect(escape.defaultPrevented).toBe(false);
+    expect(dialog().open).toBe(true);
   });
 });
 

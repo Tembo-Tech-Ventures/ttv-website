@@ -12,6 +12,8 @@ export type GatherOptions = {
   /** The one sentence for everything gathered: `(names) => groupSentence(names, "joined")`. */
   sentence: (items: readonly string[]) => string;
   priority?: Politeness;
+  /** Who or what the item is, when its words may not be unique: two people can share a name. The item itself by default. */
+  id?: string;
 };
 
 /**
@@ -43,37 +45,43 @@ export function groupSentence(names: readonly string[], verb: string): string {
 export function createLiveAnnouncer({ gatherMs = 2_000, ...options }: LiveAnnouncerOptions = {}) {
   if (!Number.isFinite(gatherMs) || gatherMs < 0) throw new RangeError("Invalid gatherMs");
   const voice = createAnnouncer(options);
-  const groups = new Map<string, { items: string[]; options: GatherOptions; timer: ReturnType<typeof setTimeout> }>();
+  const groups = new Map<string, { items: Map<string, string>; options: GatherOptions; timer: ReturnType<typeof setTimeout> }>();
   let disposed = false;
 
   function speakGroup(key: string) {
     const group = groups.get(key);
     groups.delete(key);
     if (!group || disposed) return;
-    voice.announce(group.options.sentence(group.items), group.options.priority ?? "polite");
+    voice.announce(group.options.sentence([...group.items.values()]), group.options.priority ?? "polite");
   }
 
   return {
     /** The latest message, for the live regions. */
     store: voice.store,
+    /** Whether `dispose` has run: `LiveAnnouncer` makes a new one when React remounts it (StrictMode). */
+    get disposed() {
+      return disposed;
+    },
     /** Says `message` once. Returns false when it was empty or a repeat, and so not said. */
     say(message: string, { priority = "polite", key }: { priority?: Politeness; key?: string } = {}): boolean {
       return voice.announce(message, priority, key);
     },
     /**
      * Adds `item` to the burst named `key`; the burst is said as one sentence
-     * when `gatherMs` has passed since its first item. The same item twice in
-     * one burst counts once. The latest `how` wins.
+     * when `gatherMs` has passed since its first item. The same item (by
+     * `how.id`, else its words) twice in one burst counts once. The latest
+     * `how` wins.
      */
     gather(key: string, item: string, how: GatherOptions): void {
       if (disposed || !item.trim()) return;
+      const id = how.id ?? item;
       const group = groups.get(key);
       if (group) {
-        if (!group.items.includes(item)) group.items.push(item);
+        if (!group.items.has(id)) group.items.set(id, item);
         group.options = how;
         return;
       }
-      groups.set(key, { items: [item], options: how, timer: setTimeout(() => speakGroup(key), gatherMs) });
+      groups.set(key, { items: new Map([[id, item]]), options: how, timer: setTimeout(() => speakGroup(key), gatherMs) });
     },
     /** Stops for good: nothing pending is said, and nothing new is taken. */
     dispose(): void {

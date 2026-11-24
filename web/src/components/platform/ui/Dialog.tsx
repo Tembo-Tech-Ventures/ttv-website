@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, type SyntheticEvent } from "react";
 import Button from "./Button";
 import { cx } from "./cx";
 import { cycleTab, tabbable } from "./focus";
@@ -20,9 +20,14 @@ type DialogProps = {
   actions?: ReactNode;
   /** The words on the way out. */
   cancelLabel?: string;
-  /** In a React island: whether it is open. Leave it out on a static page, where `dialogOpener` opens it. */
+  /**
+   * In a React island: whether it is open. Islands always control it this
+   * way: a dialog opened by the browser (`dialogOpener`) has no React state to
+   * follow, so it cannot carry a `LiveAnnouncer`'s regions. Leave it out on a
+   * static page, where `dialogOpener` opens it.
+   */
   open?: boolean;
-  /** Called once whenever it closes by itself: Escape, the way out, or a press on the backdrop. Set `open` to false. */
+  /** Called once whenever it closes by itself: Escape, the way out, or a press on the backdrop. Set `open` to false. Not called when `open` closed it. */
   onClose?: () => void;
   /** Where focus starts. The first control by default, which is the way out when there is nothing to fill in. */
   initialFocus?: RefObject<HTMLElement | null>;
@@ -56,8 +61,9 @@ export function dialogOpener(id: string) {
  * It is drawn in the tone of the sheet it sits in (`--space-tone`), or the
  * community sheet's outside one.
  *
- * While it is open inside a `LiveAnnouncer`, it carries the announcer's live
- * regions too, so what the page says is still heard past the modal.
+ * While it is open (through `open`) inside a `LiveAnnouncer`, it carries the
+ * announcer's live regions too, so what the page says is still heard past the
+ * modal.
  */
 export default function Dialog({
   id,
@@ -74,6 +80,8 @@ export default function Dialog({
   const ref = useRef<HTMLDialogElement>(null);
   /** The control that had focus when it opened, while it is open. */
   const opener = useRef<HTMLElement | null>(null);
+  /** Why the close under way is happening: the caller set `open` to false, or not (Escape, the way out, the backdrop, the browser). */
+  const closedByCaller = useRef(false);
   const restore = useRef(() => {});
   restore.current = () => {
     const back = returnFocus?.current ?? opener.current;
@@ -87,25 +95,33 @@ export default function Dialog({
     if (!dialog || !controlled) return;
     if (open && !dialog.open) {
       opener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+      closedByCaller.current = false;
       dialog.showModal();
       (initialFocus?.current ?? tabbable(dialog)[0] ?? dialog).focus();
     } else if (!open && dialog.open) {
+      closedByCaller.current = true;
       dialog.close();
     }
   }, [open, controlled, initialFocus]);
 
-  // Taken away while open (its island re-rendered without it): focus still goes back.
-  useEffect(() => () => {
-    if (opener.current) restore.current();
+  useEffect(() => {
+    const dialog = ref.current;
+    return () => {
+      // Taken away while open (its island re-rendered without it): focus still goes back. React runs
+      // this after the element has left the page; StrictMode's rehearsal leaves it in place, so nothing moves.
+      if (opener.current && !dialog?.isConnected) restore.current();
+    };
   }, []);
 
   function close() {
+    closedByCaller.current = false;
     ref.current?.close();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-    // A part inside that handles Escape itself (an open Menu) prevents it, and the dialog stays.
-    if (event.key === "Escape" && !event.defaultPrevented) {
+    // A part inside that handles Escape itself (an open Menu) prevents it, and the dialog stays. Escape
+    // that ends an input method's composition is the composition's.
+    if (event.key === "Escape" && !event.defaultPrevented && !event.nativeEvent.isComposing) {
       event.preventDefault();
       close();
       return;
@@ -118,9 +134,14 @@ export default function Dialog({
     if (event.target === event.currentTarget) close();
   }
 
-  function handleClose() {
+  function handleClose(event: SyntheticEvent<HTMLDialogElement>) {
+    const byCaller = closedByCaller.current;
+    closedByCaller.current = false;
+    // A browser fires close after the fact. Opened again since (closed and reopened in quick succession),
+    // the event is stale: the dialog is open, and nobody asked to close it now.
+    if (event.currentTarget.open) return;
     restore.current();
-    if (open) onClose?.();
+    if (!byCaller) onClose?.();
   }
 
   return (

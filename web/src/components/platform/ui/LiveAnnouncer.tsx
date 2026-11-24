@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/platform/client/store";
 import { createLiveAnnouncer, type LiveAnnouncerOptions, type LiveAnnouncerVoice } from "./announcer";
 
@@ -27,7 +27,7 @@ function Regions({ voice, after = 0, name }: { voice: LiveAnnouncerVoice; after?
       <output aria-live="polite" aria-atomic="true">
         {shown?.priority === "polite" && <span key={shown.id}>{shown.message}</span>}
       </output>
-      <div role="alert" aria-live="assertive" aria-atomic="true">
+      <div role="alert" aria-atomic="true">
         {shown?.priority === "assertive" && <span key={shown.id}>{shown.message}</span>}
       </div>
     </div>
@@ -64,10 +64,20 @@ type LiveAnnouncerProps = {
  * anything is said into them. It renders nothing visible.
  */
 export default function LiveAnnouncer({ voice, options, name = "page", children }: LiveAnnouncerProps) {
-  const [own] = useState(() => (voice ? null : createLiveAnnouncer(options)));
+  // Its pace is fixed for its life, so a new options object never restarts it.
+  const pace = useRef(options);
+  const [own, setOwn] = useState(() => (voice ? null : createLiveAnnouncer(pace.current)));
   const active = voice ?? own!;
   // The announcer it made is its own to stop; one it was given belongs to the caller.
-  useEffect(() => (own ? () => own.dispose() : undefined), [own]);
+  useEffect(() => {
+    if (!own) return;
+    // Mounted again after its cleanup ran (StrictMode's rehearsal, a Fast Refresh): start a fresh one.
+    if (own.disposed) {
+      setOwn(createLiveAnnouncer(pace.current));
+      return;
+    }
+    return () => own.dispose();
+  }, [own]);
   return (
     <AnnouncerContext.Provider value={active}>
       {children}

@@ -1,6 +1,18 @@
 import type { KeyboardEvent } from "react";
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "textarea:not([disabled])",
+  "select:not([disabled])",
+  "summary",
+  "iframe",
+  "audio[controls]",
+  "video[controls]",
+  '[contenteditable]:not([contenteditable="false"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
 
 /** What Tab can reach inside `container`, in order: enabled, in the tab order and drawn. */
 export function tabbable(container: HTMLElement): HTMLElement[] {
