@@ -2,7 +2,7 @@ import type { SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtures";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
-import { searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
+import { ADMIN_SEARCHED_SESSIONS, searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
 import { searchDatabase } from "./test-support";
 import { recordingScopeSql } from "@/lib/recordings/access";
 
@@ -98,6 +98,40 @@ describe("authorized source retrieval", () => {
     for (const q of ["%", "_", "' OR 1=1 --"]) {
       expect((await searchPlatform(s.db, s.actor, { q, scope: "all" })).people).toEqual([]);
     }
+  });
+
+  it("reads an admin's newest sessions only, through the segment index, unless they name a cohort", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const recording = s.database.prepare("INSERT INTO recording(id,programId,title,processingStatus,recordedAt) VALUES (?,'cohort-b',?,'complete',?)");
+    const segment = s.database.prepare("INSERT INTO transcript_segment(id,recordingId,startTime,endTime,text) VALUES (?,?,?,?,?)");
+    // The oldest session of many, its one mention of "Harambee" far down a long transcript.
+    recording.run("oldest", "Oldest session", 1);
+    for (let i = 0; i < 300; i++) segment.run(`oldest-${i}`, "oldest", i, i + 1, i === 299 ? "Harambee retrospective" : "Filler words");
+    for (let i = 0; i < ADMIN_SEARCHED_SESSIONS; i++) recording.run(`newer-${i}`, `Session ${i}`, 1_000 + i);
+
+    expect((await searchPlatform(s.db, s.actor, { q: "Harambee", scope: "sessionMoments" })).sessionMoments).toEqual([]);
+    const transcript = s.queries.findLast(q => q.sql.includes("CROSS JOIN transcript_segment"))!;
+    expect(transcript.sql).toContain(`LIMIT ${ADMIN_SEARCHED_SESSIONS}`);
+    const plan = s.database.prepare("EXPLAIN QUERY PLAN " + transcript.sql).all(...transcript.values as SQLInputValue[]).map(r => r.detail).join("\n");
+    expect(plan).toContain("SEARCH s USING INDEX transcript_segment_recording_time_idx (recordingId=?");
+    expect(plan).not.toMatch(/SCAN s\b|SCAN transcript_segment\b/);
+
+    // Naming the cohort searches all of its sessions, by the cohort index.
+    const named = await searchPlatform(s.db, s.actor, { q: "Harambee", scope: "sessionMoments", programId: "cohort-b" });
+    expect(named.sessionMoments.map(m => [m.recordingId, m.startSeconds])).toEqual([["oldest", 299]]);
+    const narrowed = s.queries.findLast(q => q.sql.includes("CROSS JOIN transcript_segment"))!;
+    expect(narrowed.sql).not.toContain("LIMIT 60");
+    const narrowedPlan = s.database.prepare("EXPLAIN QUERY PLAN " + narrowed.sql).all(...narrowed.values as SQLInputValue[]).map(r => r.detail).join("\n");
+    expect(narrowedPlan).toContain("SEARCH r USING INDEX recording_program_idx (programId=?)");
+  });
+
+  it("says who sees a hidden session: admins and the cohort's hosts", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.database.exec("UPDATE recording SET hiddenAt = 1 WHERE id = 'recording-a'");
+    const moments = (await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "sessionMoments" })).sessionMoments;
+    expect(moments.map(m => [m.recordingId, m.visibility.label])).toEqual([
+      ["recording-a", "Only admins and the cohort's hosts"], ["recording-b", "Only you and your cohort"], ["recording-null", "Only admins"],
+    ]);
   });
 
   it("finds late matches in a long session and caps results after matching", async () => {

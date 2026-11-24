@@ -13,7 +13,14 @@ export const SEARCH_RESULT_LIMIT = 10;
 
 export class SearchScopeError extends Error {}
 
+/**
+ * An admin's search without a cohort reads only the newest sessions of every cohort, as Tembo does
+ * (TEMBO_CONFIG.recordings): never every transcript. Naming a cohort searches all of its sessions.
+ */
+export const ADMIN_SEARCHED_SESSIONS = 60;
+
 const COHORT_ONLY = { kind: "COHORT", label: "Only you and your cohort" } as const;
+const HOSTS_ONLY = { kind: "PRIVATE", label: "Only admins and the cohort's hosts" } as const;
 const ADMINS_ONLY = { kind: "PRIVATE", label: "Only admins" } as const;
 
 
@@ -102,27 +109,30 @@ export async function searchPlatform(
 /**
  * Transcript moments in the recordings the access policy admits, complete ones only, optionally in
  * one cohort. Driven from those recordings, never by scanning the global segment table in random
- * CUID order. No transcriptText prefilter: that denormalized column may be absent/stale while
- * segments are valid.
+ * CUID order: an admin, whom the policy admits to every recording, reads the newest
+ * ADMIN_SEARCHED_SESSIONS unless they name a cohort. No transcriptText prefilter: that denormalized
+ * column may be absent/stale while segments are valid.
  */
 async function searchSessionMoments(
   d1: D1Database, userId: string, caps: PlatformCapabilities, term: string, programId: string | undefined,
 ): Promise<SearchResults["sessionMoments"]> {
   const cohort = programId ? ` AND r.programId = ?3` : "";
+  const newest = caps.isAdmin && !programId
+    ? ` ORDER BY coalesce(r.recordedAt,r.createdAt) DESC,r.id LIMIT ${ADMIN_SEARCHED_SESSIONS}` : "";
   const { results: rows } = await d1.prepare(`WITH authorized_recordings AS MATERIALIZED (
-    SELECT id,programId,title,accessScope FROM recording r
-    WHERE ${recordingScopeSql(caps, userId, "r")} AND ${transcriptReadySql("r")}${cohort}
-  ) SELECT r.id AS recordingId,r.programId,r.accessScope,substr(r.title,1,500) AS title,s.startTime,
+    SELECT id,programId,title,accessScope,hiddenAt FROM recording r
+    WHERE ${recordingScopeSql(caps, userId, "r")} AND ${transcriptReadySql("r")}${cohort}${newest}
+  ) SELECT r.id AS recordingId,r.programId,r.accessScope,r.hiddenAt,substr(r.title,1,500) AS title,s.startTime,
       substr(s.text,max(1,instr(lower(s.text),lower(?1))-100),500) AS quote
     FROM authorized_recordings r CROSS JOIN transcript_segment s
     WHERE s.recordingId=r.id AND s.startTime>=0 AND instr(lower(s.text),lower(?2))>0
     ORDER BY r.id,s.startTime,s.id LIMIT ${SEARCH_RESULT_LIMIT}`)
     .bind(term, term, ...programId ? [programId] : [])
-    .all<{ recordingId: string; programId: string | null; accessScope: string; title: string; startTime: number; quote: string }>();
+    .all<{ recordingId: string; programId: string | null; accessScope: string; hiddenAt: number | null; title: string; startTime: number; quote: string }>();
   return rows.map(row => ({ recordingId: row.recordingId, programId: row.programId,
     title: row.title, startSeconds: row.startTime, quote: row.quote,
     href: `/dashboard/sessions/${encodeURIComponent(row.recordingId)}?t=${Math.floor(row.startTime)}`,
-    visibility: row.accessScope === "COHORT" ? COHORT_ONLY : ADMINS_ONLY }));
+    visibility: row.accessScope !== "COHORT" ? ADMINS_ONLY : row.hiddenAt === null ? COHORT_ONLY : HOSTS_ONLY }));
 }
 
 async function searchCapabilities(db:schema.Database,userId:string,query:SearchQuery,messages:boolean) {

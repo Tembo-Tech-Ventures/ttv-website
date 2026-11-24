@@ -35,6 +35,8 @@ Capabilities are loaded only for scopes that need cohort or channel access. Sess
 follow the recording access policy (`src/lib/recordings/access.ts`, `recordingScopeSql`):
 approved/audit/completed members and assigned instructors/TAs/mentors find their own cohorts'
 recordings; admins find every cohort's and those with no cohort, and may narrow to any cohort.
+Without a cohort, an admin's search reads only the newest `ADMIN_SEARCHED_SESSIONS` (60) sessions,
+as Tembo does, never every transcript; naming a cohort searches all of its sessions.
 No global mentor or institution override is used. Demo identities are additionally limited to
 demo public profiles and their canonical demo cohort. Revocation is effective on the next request.
 
