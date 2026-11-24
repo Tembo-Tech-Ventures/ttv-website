@@ -1,12 +1,14 @@
 import { CALL_LIMIT_MINUTES, SESSION_BOOK_AHEAD_DAYS, SESSION_SERIES_MAX_WEEKS } from "@/lib/meetings/rules";
-import { nairobiMoment, SESSION_LENGTHS, sessionDate, weeklyDates } from "@/lib/meetings/session-times";
+import { cleanTitle, nairobiMoment, SESSION_LENGTHS, sessionDate, weeklyDates } from "@/lib/meetings/session-times";
 
 /**
  * The schedule and edit forms' fields, read and checked on the server (they post without
  * JavaScript). A weekly series is previewed before it is scheduled: the page lists every date, ticked,
  * and a date unticked is skipped. The preview is tied to the fields it was made from (`previewKey`),
- * so a series whose first date, time, length or weeks changed after the preview is shown again rather
- * than scheduled with dates nobody saw. scheduleSessions and changeSession check everything again.
+ * so a series whose cohort, first date, time, length or weeks changed after the preview is shown again
+ * rather than scheduled with dates nobody saw. Only "Schedule" schedules: "Preview dates" shows the
+ * date, or the dates, and writes nothing. The form carries its own `token`, made when it was first
+ * shown, so sending it twice schedules once. scheduleSessions and changeSession check everything again.
  */
 
 export const REPEATS = ["once", "weekly"] as const;
@@ -31,6 +33,8 @@ export interface ScheduleValues extends SessionFields {
   /** The dates ticked in the preview. */
   dates: string[];
   previewKey: string;
+  /** The form's id (scheduleSessions' token): made when the form is first shown, kept through its previews. */
+  token: string;
 }
 
 export type FieldErrors<K extends string> = Partial<Record<K, string>>;
@@ -54,17 +58,22 @@ const text = (form: FormData, name: string) => {
 };
 
 /** The fields as the form showed them, for a blank form. */
-export function blankSchedule(cohort: string): ScheduleValues {
-  return { cohort, title: "", date: "", time: "", length: String(DEFAULT_LENGTH), repeat: "once", weeks: String(DEFAULT_WEEKS), dates: [], previewKey: "" };
+export function blankSchedule(cohort: string, token: string): ScheduleValues {
+  return {
+    cohort, title: "", date: "", time: "", length: String(DEFAULT_LENGTH), repeat: "once", weeks: String(DEFAULT_WEEKS), dates: [], previewKey: "", token,
+  };
 }
 
 /** What a preview was made from; a series is scheduled only from a preview of these same fields. */
-export function previewKeyOf(values: Pick<ScheduleValues, "date" | "time" | "length" | "weeks">): string {
-  return [values.date, values.time, values.length, values.weeks].join("|");
+export function previewKeyOf(values: Pick<ScheduleValues, "cohort" | "date" | "time" | "length" | "weeks">): string {
+  return [values.cohort, values.date, values.time, values.length, values.weeks].join("|");
 }
 
-/** The title, first date, time and length: shared by the schedule and edit forms. */
-export function checkSessionFields(values: SessionFields, now: number): { errors: FieldErrors<keyof SessionFields>; startAt: number | null; minutes: number } {
+/**
+ * The title, first date, time and length: shared by the schedule and edit forms. `keep` is a date's
+ * current start: an edit that keeps it may leave a start that has passed.
+ */
+export function checkSessionFields(values: SessionFields, now: number, keep?: number): { errors: FieldErrors<keyof SessionFields>; startAt: number | null; minutes: number } {
   const errors: FieldErrors<keyof SessionFields> = {};
   if (!values.title) errors.title = "Enter a title, like “Testing payment callbacks”.";
   else if (values.title.length > 120) errors.title = "Keep the title to 120 characters or fewer.";
@@ -77,7 +86,7 @@ export function checkSessionFields(values: SessionFields, now: number): { errors
   else if (nairobiMoment("2026-01-01", values.time) === null) errors.time = "Enter a start time in Nairobi time, like 18:00.";
   if (!errors.date && !errors.time) {
     startAt = nairobiMoment(values.date, values.time);
-    if (startAt === null || startAt <= now) errors.date = "Choose a date and time that haven't passed yet.";
+    if (startAt === null || (startAt <= now && startAt !== keep)) errors.date = "Choose a date and time that haven't passed yet.";
     else if (startAt > now + SESSION_BOOK_AHEAD_DAYS * DAY_MS) errors.date = "Sessions can be booked up to a year ahead.";
   }
   return { errors, startAt: Object.keys(errors).length === 0 ? startAt : null, minutes };
@@ -90,10 +99,10 @@ export function checkSessionFields(values: SessionFields, now: number): { errors
 export function readSchedule(form: FormData, now: number): ScheduleReading {
   const repeat = REPEATS.find((value) => value === text(form, "repeat")) ?? "once";
   const values: ScheduleValues = {
-    cohort: text(form, "cohort"), title: text(form, "title"), date: text(form, "date"), time: text(form, "time"),
+    cohort: text(form, "cohort"), title: cleanTitle(text(form, "title")), date: text(form, "date"), time: text(form, "time"),
     length: text(form, "length"), repeat, weeks: text(form, "weeks") || String(DEFAULT_WEEKS),
     dates: form.getAll("dates").filter((value): value is string => typeof value === "string"),
-    previewKey: text(form, "previewKey"),
+    previewKey: text(form, "previewKey"), token: text(form, "token"),
   };
   const checked = checkSessionFields(values, now);
   const errors: FieldErrors<ScheduleField> = { ...checked.errors };
@@ -106,7 +115,11 @@ export function readSchedule(form: FormData, now: number): ScheduleReading {
   }
   if (Object.keys(errors).length > 0 || checked.startAt === null) return { kind: "invalid", values, errors };
 
-  if (!weekly) return { kind: "ready", values, startTimes: [checked.startAt], minutes: checked.minutes, skipped: [] };
+  const scheduling = text(form, "intent") === "schedule";
+  if (!weekly) {
+    if (scheduling) return { kind: "ready", values, startTimes: [checked.startAt], minutes: checked.minutes, skipped: [] };
+    return { kind: "preview", values, dates: [{ date: values.date, label: sessionDate(values.date, now), ticked: true }] };
+  }
 
   const series = weeklyDates(values.date, weeks);
   const last = nairobiMoment(series.at(-1) as string, values.time);
@@ -117,7 +130,7 @@ export function readSchedule(form: FormData, now: number): ScheduleReading {
   const fresh = values.previewKey !== key;
   const ticked = new Set(fresh ? series : values.dates);
   const dates = series.map((date) => ({ date, label: sessionDate(date, now), ticked: ticked.has(date) }));
-  if (fresh || text(form, "intent") !== "schedule") {
+  if (fresh || !scheduling) {
     return { kind: "preview", values: { ...values, previewKey: key, dates: series.filter((date) => ticked.has(date)) }, dates };
   }
   const chosen = series.filter((date) => ticked.has(date));
@@ -129,10 +142,10 @@ export function readSchedule(form: FormData, now: number): ScheduleReading {
 }
 
 /** Reads the edit form: one date's title, date, time and length. */
-export function readSessionEdit(form: FormData, now: number):
+export function readSessionEdit(form: FormData, now: number, keep?: number):
   | { kind: "invalid"; values: SessionFields; errors: FieldErrors<keyof SessionFields> }
   | { kind: "ready"; values: SessionFields; startAt: number; minutes: number } {
-  const values: SessionFields = { title: text(form, "title"), date: text(form, "date"), time: text(form, "time"), length: text(form, "length") };
-  const { errors, startAt, minutes } = checkSessionFields(values, now);
+  const values: SessionFields = { title: cleanTitle(text(form, "title")), date: text(form, "date"), time: text(form, "time"), length: text(form, "length") };
+  const { errors, startAt, minutes } = checkSessionFields(values, now, keep);
   return startAt === null ? { kind: "invalid", values, errors } : { kind: "ready", values, startAt, minutes };
 }

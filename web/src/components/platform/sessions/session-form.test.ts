@@ -16,6 +16,13 @@ describe("the schedule form", () => {
     expect(reading).toMatchObject({ kind: "ready", startTimes: [nairobiMoment("2026-11-26", "18:00")], minutes: 45, skipped: [] });
   });
 
+  it("only shows the one date on Preview dates, and puts the title on one line", () => {
+    const reading = readSchedule(form({ ...SERIES, title: "Ledgers\n and  more", repeat: "once", intent: "preview" }), NOW);
+    expect(reading).toMatchObject({ kind: "preview", dates: [{ date: "2026-11-26", ticked: true }], values: { title: "Ledgers and more" } });
+    // No intent at all is never a schedule either.
+    expect(readSchedule(form({ ...SERIES, repeat: "once" }), NOW).kind).toBe("preview");
+  });
+
   it("shows a weekly series first, every date ticked, even when Schedule was pressed", () => {
     const reading = readSchedule(form({ ...SERIES, intent: "schedule" }), NOW);
     expect(reading.kind).toBe("preview");

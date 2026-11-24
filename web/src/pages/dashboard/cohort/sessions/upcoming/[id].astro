@@ -25,11 +25,12 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { ChannelError } from "@/lib/channels/errors";
 import * as schema from "@/lib/db/schema";
 import { CALL_LIMIT_MINUTES } from "@/lib/meetings/rules";
+import { noteChecks } from "@/lib/meetings/note-checks";
 import { cancelSession, changeSession, readSession, type HostedSession, type SessionCaller } from "@/lib/meetings/sessions";
 import { lengthLabel, nairobiFields, SESSION_LENGTHS, sessionDay, sessionHours } from "@/lib/meetings/session-times";
 import { redirectWithFlash } from "@/lib/platform/server/flash";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
-import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
+import { CONDUCT_PATH, sessionDatePath } from "@/lib/platform/server/space-routes";
 
 const { method } = Astro.request;
 const { id } = Astro.params;
@@ -72,13 +73,16 @@ const done = (title: string, note: string | null) => redirectWithFlash(Astro, se
 
 if (method === "POST") {
   const form = await Astro.request.formData();
+  // The session as the page just read it for this host, so the action doesn't read it again.
+  const write = { db: env.DB, now, afterNote: noteChecks(env, Astro.locals.cfContext, sessionDatePath(session.id)) };
+  const known = { known: session };
   const intent = form.get("intent");
   try {
     if (intent === "cancel") {
-      const result = await cancelSession({ db: env.DB, now }, caller, session.id);
+      const result = await cancelSession(write, caller, session.id, known);
       return done(`Cancelled “${session.title}”`, result.note);
     }
-    const reading = readSessionEdit(form, now);
+    const reading = readSessionEdit(form, now, session.scheduledStartAt);
     values = reading.values;
     if (reading.kind === "invalid") {
       errors = reading.errors;
@@ -88,9 +92,9 @@ if (method === "POST") {
     } else if (reading.values.title === session.title && reading.startAt === session.scheduledStartAt && reading.minutes === session.bookedMinutes) {
       unchanged = true;
     } else if (intent === "save") {
-      const result = await changeSession({ db: env.DB, now }, caller, session.id, {
+      const result = await changeSession(write, caller, session.id, {
         title: reading.values.title, startAt: reading.startAt, bookedMinutes: reading.minutes,
-      });
+      }, known);
       return done(result.moved ? `Moved “${result.session.title}”` : `Saved “${result.session.title}”`, result.note);
     } else if (intent === "review") {
       pending = { startAt: reading.startAt, minutes: reading.minutes };

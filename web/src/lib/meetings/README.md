@@ -32,11 +32,17 @@ see) the session, whatever the reason.
   same first date, time, length and weeks (`previewKey`), and only its own dates.
 - **Separate dates.** A weekly series is one `meeting` per date sharing a `seriesId`; moving or
   cancelling one never changes the others. Always recorded (`ALWAYS`), with the call's limit.
+- **Once per form.** The form carries its own token, made when it is first shown: the series id and
+  the base of each date's id. The dates are written in one statement that writes none of them if any
+  exists, so a form sent twice schedules once, and its note (nonce `session-scheduled-<token>`) posts
+  once. Only "Schedule" schedules; "Preview dates" writes nothing.
 - **One line in the channel.** Scheduling, moving and cancelling each post one line in the session's
-  channel through the channel-message path every post takes (screening, the code of conduct, the rate
-  limits), by the host who acted, since there is no system author: "Scheduled 5 sessions: …" never a
-  card per date (the card is P9). A refused note leaves the sessions as they are, and the host is told
-  to tell the cohort.
+  channel, by the host who acted, since there is no system author: "Scheduled 5 sessions: …" never a
+  card per date (the card is P9). It goes through `postMessage` (the detectors, the code of conduct,
+  the rate limits), then gets what a post through the channel API gets after the response
+  (`note-checks.ts`): Clef's check, and the admins' queue notice when it was flagged or hidden. A note
+  mentions nobody. Titles are put on one line. A refused note leaves the sessions as they are, and the
+  host is told to tell the cohort.
 - **Times.** Entered in Nairobi time; stored as the moment. Pages write Nairobi time with "EAT", and
   the browser adds the reader's own time where it differs (`local-time.ts`). No time zone is stored.
 - **The calendar file** (`ics.ts`, RFC 5545): UTC times, so no VTIMEZONE; the call's id as its UID

@@ -67,7 +67,15 @@ beforeAll(async () => {
 
 type PageName = keyof typeof PAGES;
 /** One request through the middleware and the page: a GET, or a same-origin form POST. */
-async function visit(page: PageName | "calendar", path: string, userId: string, form?: Record<string, string | string[]>, params: Record<string, string> = {}) {
+/** Work the pages leave for after the response (the note's checks), run before the database closes. */
+const deferred: Promise<unknown>[] = [];
+afterEach(async () => { await Promise.allSettled(deferred.splice(0)); });
+
+/** `origin`: the post's Origin header, ours unless a test sends another or none (`null`). */
+async function visit(
+  page: PageName | "calendar", path: string, userId: string, form?: Record<string, string | string[]>, params: Record<string, string> = {},
+  { origin = ORIGIN }: { origin?: string | null } = {},
+) {
   const url = new URL(path, ORIGIN);
   const user = { id: userId, name: "Synthetic", email: `${userId}@example.test`, image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
   mocks.getSession.mockResolvedValue({ user, session: { id: `${userId}-session`, userId, userAgent: "Mozilla/5.0" } });
@@ -75,9 +83,11 @@ async function visit(page: PageName | "calendar", path: string, userId: string, 
     if (!form) return new Request(url);
     const body = new URLSearchParams();
     for (const [name, value] of Object.entries(form)) for (const one of [value].flat()) body.append(name, one);
-    return new Request(url, { method: "POST", body, headers: { Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" } });
+    const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded" });
+    if (origin) headers.set("Origin", origin);
+    return new Request(url, { method: "POST", body, headers });
   };
-  const locals = {} as App.Locals;
+  const locals = { cfContext: { waitUntil: (task: Promise<unknown>) => deferred.push(task) } } as unknown as App.Locals;
   const context = {
     url, request: request(), locals, params,
     cookies: { get: () => undefined, set: () => {} },
@@ -110,12 +120,18 @@ const firstThursday = (() => {
 const SERIES = { cohort: "cohort-a", title: "Testing payment callbacks", date: firstThursday, time: "18:00", length: "45", repeat: "weekly", weeks: "6" };
 const SCHEDULE = "/dashboard/cohort/sessions/schedule";
 
+/** The token the form carries: drawn by the page on GET, kept through its previews. */
+const tokenOf = (page: ReturnType<typeof main>) => page.querySelector("input[name=token]")?.getAttribute("value") ?? "";
+
 async function scheduleSix(skip = 3) {
-  const preview = main((await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, intent: "schedule" })).body);
+  const token = tokenOf(main((await visit("schedule", SCHEDULE, PEOPLE.faith)).body));
+  const preview = main((await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, token, intent: "schedule" })).body);
+  expect(tokenOf(preview)).toBe(token);
   const boxes = [...preview.querySelectorAll("input[name=dates]")];
   const previewKey = preview.querySelector("input[name=previewKey]")?.getAttribute("value") ?? "";
   const ticked = boxes.filter((_, index) => index !== skip).map((box) => box.getAttribute("value") as string);
-  return { boxes, result: await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, intent: "schedule", previewKey, dates: ticked }) };
+  const final = { ...SERIES, token, intent: "schedule", previewKey, dates: ticked };
+  return { boxes, final, result: await visit("schedule", SCHEDULE, PEOPLE.faith, final) };
 }
 
 describe("scheduling a cohort session without JavaScript", () => {
@@ -139,6 +155,51 @@ describe("scheduling a cohort session without JavaScript", () => {
     expect(new Set(rows.map(({ seriesId }) => seriesId)).size).toBe(1);
     expect(notes()).toHaveLength(1);
     expect(notes()[0].body).toMatch(/^Scheduled 5 sessions: “Testing payment callbacks”, Thursdays at 18:00 EAT/);
+  });
+
+  it("schedules a form sent twice once: the same five dates and one note", async () => {
+    seeded();
+    const { final } = await scheduleSix();
+    const again = await visit("schedule", SCHEDULE, PEOPLE.faith, final);
+    expect(again.status).toBe(303);
+    expect(meetings()).toHaveLength(5);
+    expect(notes()).toHaveLength(1);
+  });
+
+  it("shows one date on Preview dates and schedules nothing until Schedule", async () => {
+    seeded();
+    const once = { ...SERIES, repeat: "once" };
+    const preview = await visit("schedule", SCHEDULE, PEOPLE.faith, { ...once, intent: "preview" });
+    expect(preview.status).toBe(200);
+    expect(main(preview.body).textContent).toContain("Nothing is scheduled until you press Schedule.");
+    expect(meetings()).toEqual([]);
+    expect(notes()).toEqual([]);
+    const token = tokenOf(main(preview.body));
+    expect((await visit("schedule", SCHEDULE, PEOPLE.faith, { ...once, token, intent: "schedule" })).status).toBe(303);
+    expect(meetings()).toHaveLength(1);
+  });
+
+  it("puts a title with line breaks on one line, in the session and its note", async () => {
+    seeded();
+    const token = tokenOf(main((await visit("schedule", SCHEDULE, PEOPLE.faith)).body));
+    await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, repeat: "once", title: "Ledgers\r\nand reconciliation", token, intent: "schedule" });
+    expect(meetings()[0].title).toBe("Ledgers and reconciliation");
+    expect(notes()[0].body).not.toMatch(/[\r\n]/);
+  });
+
+  it("refuses a post from another site, or with no Origin, with the same 404", async () => {
+    seeded();
+    await scheduleSix();
+    const target = meetings()[0];
+    const path = `/dashboard/cohort/sessions/upcoming/${target.id}`;
+    const change = { title: "Moved", date: firstThursday, time: "17:00", length: "60" };
+    for (const origin of ["https://evil.example", null]) {
+      expect((await visit("schedule", SCHEDULE, PEOPLE.faith, { ...SERIES, repeat: "once", token: "abcdefghijklmnopqrstuvwx", intent: "schedule" }, {}, { origin })).status).toBe(404);
+      expect((await visit("date", path, PEOPLE.faith, { ...change, intent: "save" }, { id: target.id }, { origin })).status).toBe(404);
+      expect((await visit("date", path, PEOPLE.faith, { intent: "cancel" }, { id: target.id }, { origin })).status).toBe(404);
+    }
+    expect(meetings()).toHaveLength(5);
+    expect(meetings().every(({ state, title }) => state === "SCHEDULED" && title === "Testing payment callbacks")).toBe(true);
   });
 
   it("shows the errors on the form, and schedules nothing", async () => {

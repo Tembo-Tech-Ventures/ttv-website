@@ -99,8 +99,9 @@ export function sessionDate(date: string, now: number): string {
   return ms === null ? date : sessionDay(ms, now);
 }
 
-/** A day and month, in Nairobi time: "27 Nov". */
-export const shortDate = (ms: number) => dayMonth.format(ms);
+const dayMonthYear = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: SESSION_TIME_ZONE });
+/** A day and month, in Nairobi time: "27 Nov", with the year when it is not this year's: "7 Jan 2027". */
+export const shortDate = (ms: number, now: number) => (yearOf.format(ms) === yearOf.format(now) ? dayMonth : dayMonthYear).format(ms);
 /** The parts of a session's date block: { day: "27", weekday: "Thu", month: "Nov" }. */
 export const dateBlock = (ms: number) => ({ day: dayNumber.format(ms), weekday: weekdayShort.format(ms), month: monthShort.format(ms) });
 /** A Nairobi clock time: "18:00". */
@@ -117,4 +118,9 @@ export function lengthLabel(minutes: number): string {
   const rest = minutes % 60;
   const parts = [hours > 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : "", rest > 0 ? `${rest} minutes` : ""];
   return parts.filter(Boolean).join(" ");
+}
+
+/** A title on one line: control characters and runs of white space become one space (a session's note is one line). */
+export function cleanTitle(title: string): string {
+  return title.replace(/[\u0000-\u001F\u007F\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
 }

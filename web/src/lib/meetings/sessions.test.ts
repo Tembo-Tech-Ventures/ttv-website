@@ -1,3 +1,4 @@
+import { createId } from "@paralleldrive/cuid2";
 import { describe, expect, it } from "vitest";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { MINUTE_MS } from "./clock";
@@ -25,11 +26,11 @@ const rows = (s: MeetingFixture) => s.database.prepare(`SELECT id, title, series
 const notes = (s: MeetingFixture) => s.database.prepare(`SELECT m.body, m.authorId, c.slug FROM channel_message m JOIN channel c ON c.id = m.channelId
     ORDER BY m.createdAt, m.seq`).all() as { body: string; authorId: string; slug: string }[];
 
-async function sixThursdaysSkippingOne(s: MeetingFixture) {
+async function sixThursdaysSkippingOne(s: MeetingFixture, token = createId(), userId: string = PEOPLE.faith) {
   const skipped = THURSDAYS[3];
   const chosen = THURSDAYS.filter((date) => date !== skipped);
-  return scheduleSessions(ctx(s), await caller(s, PEOPLE.faith), {
-    programId: "cohort-a", title: "Testing payment callbacks", startTimes: chosen.map((date) => at(date)), bookedMinutes: 45, skipped: [skipped],
+  return scheduleSessions(ctx(s), await caller(s, userId), {
+    programId: "cohort-a", token, title: "Testing payment callbacks", startTimes: chosen.map((date) => at(date)), bookedMinutes: 45, skipped: [skipped],
   });
 }
 
@@ -54,10 +55,36 @@ describe("scheduling cohort sessions", () => {
     }]);
   });
 
+  it("schedules once for a form sent twice: the same dates and one note, and a stranger's token is the same 404", async () => {
+    const s = meetingDatabase();
+    const token = createId();
+    const first = await sixThursdaysSkippingOne(s, token);
+    const again = await sixThursdaysSkippingOne(s, token);
+    expect(again.meetingIds).toEqual(first.meetingIds);
+    expect(again.note).toBe("posted");
+    expect(rows(s)).toHaveLength(5);
+    expect(rows(s).every(({ seriesId }) => seriesId === token)).toBe(true);
+    expect(notes(s)).toHaveLength(1);
+    // Another host sending the same token writes nothing and learns nothing.
+    await expect(sixThursdaysSkippingOne(s, token, PEOPLE.amina)).rejects.toMatchObject({ status: 404 });
+    expect(rows(s)).toHaveLength(5);
+    // A token that isn't a form's own is refused before anything is read.
+    await expect(sixThursdaysSkippingOne(s, "../not-a-token")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("puts a title on one line", async () => {
+    const s = meetingDatabase();
+    await scheduleSessions(ctx(s), await caller(s, PEOPLE.faith), {
+      programId: "cohort-a", token: createId(), title: "Ledgers\nand\u2028 reconciliation\t", startTimes: [at("2026-11-27")], bookedMinutes: 60,
+    });
+    expect(rows(s)[0].title).toBe("Ledgers and reconciliation");
+    expect(notes(s)[0].body).not.toMatch(/[\n\u2028]/);
+  });
+
   it("schedules one date with no series, and says so in one line", async () => {
     const s = meetingDatabase();
     await scheduleSessions(ctx(s), await caller(s, PEOPLE.amina), {
-      programId: "cohort-a", title: "Office hours", startTimes: [at("2026-11-27", "10:30")], bookedMinutes: 90,
+      programId: "cohort-a", token: createId(), title: "Office hours", startTimes: [at("2026-11-27", "10:30")], bookedMinutes: 90,
     });
     expect(rows(s)).toMatchObject([{ seriesId: null, bookedMinutes: 90, createdBy: PEOPLE.amina }]);
     expect(notes(s)[0].body).toBe("Scheduled a session: “Office hours”, Fri 27 Nov at 10:30 EAT, 1 hour 30 minutes. "
@@ -66,7 +93,7 @@ describe("scheduling cohort sessions", () => {
 
   it("refuses everyone but the cohort's instructors, TAs and admins with the same 404, and writes nothing", async () => {
     const s = meetingDatabase();
-    const input = { programId: "cohort-a", title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60 };
+    const input = { programId: "cohort-a", token: createId(), title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60 };
     // A member of another cohort, a mentor not invited to the cohort, the cohort's own members (a
     // current one and an alumna), its invited mentor, and an institution.
     for (const userId of [PEOPLE.kevin, PEOPLE.david, PEOPLE.otieno, PEOPLE.achieng, PEOPLE.joseph, PEOPLE.amani]) {
@@ -95,7 +122,7 @@ describe("scheduling cohort sessions", () => {
   it("checks every date and length on the server, whatever the form sent", async () => {
     const s = meetingDatabase();
     const faith = await caller(s, PEOPLE.faith);
-    const base = { programId: "cohort-a", title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60 };
+    const base = { programId: "cohort-a", token: createId(), title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60 };
     const refused = async (input: Partial<typeof base>, message: RegExp) =>
       expect(scheduleSessions(ctx(s), faith, { ...base, ...input })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(message) });
     await refused({ startTimes: [T0 - MINUTE_MS] }, /hasn't passed/);
@@ -113,7 +140,7 @@ describe("scheduling cohort sessions", () => {
   it("asks a host who hasn't agreed to the code of conduct to agree first", async () => {
     const s = meetingDatabase({ assignments: [{ programId: "cohort-a", name: "INSTRUCTOR" }], conduct: false });
     await expect(scheduleSessions(ctx(s), await caller(s, PEOPLE.wanjiku), {
-      programId: "cohort-a", title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60,
+      programId: "cohort-a", token: createId(), title: "Session", startTimes: [at("2026-11-26")], bookedMinutes: 60,
     })).rejects.toMatchObject({ status: 403, code: "conduct_required" });
     expect(rows(s)).toEqual([]);
   });
@@ -176,6 +203,33 @@ describe("one date of a series", () => {
     // A cancelled date can't be moved back.
     await expect(changeSession(ctx(s), faith, target.id as string, { title: "Back", startAt: at("2026-12-11"), bookedMinutes: 45 }))
       .rejects.toMatchObject({ status: 409 });
+  });
+
+  it("renames a date whose time has passed but that never opened, without moving it", async () => {
+    const s = meetingDatabase();
+    const late = s.meeting({ title: "Old title" });
+    const start = s.row(late).scheduledStartAt as number;
+    s.advance(30);
+    const faith = await caller(s, PEOPLE.faith);
+    const result = await changeSession(ctx(s), faith, late, { title: "New title", startAt: start, bookedMinutes: 60 });
+    expect(result).toMatchObject({ moved: false, session: { title: "New title" } });
+    // Moving it still needs a time to come.
+    await expect(changeSession(ctx(s), faith, late, { title: "New title", startAt: start + MINUTE_MS, bookedMinutes: 60 })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("moves updatedAt on by at least a second with each change, so the calendar's SEQUENCE rises", async () => {
+    const s = meetingDatabase();
+    await sixThursdaysSkippingOne(s);
+    const target = rows(s)[0].id as string;
+    const faith = await caller(s, PEOPLE.faith);
+    const updated = () => s.row(target).updatedAt as number;
+    const created = updated();
+    await changeSession(ctx(s), faith, target, { title: "One", startAt: at("2026-11-26"), bookedMinutes: 45 });
+    const once = updated();
+    await changeSession(ctx(s), faith, target, { title: "Two", startAt: at("2026-11-26"), bookedMinutes: 45 });
+    const twice = updated();
+    await cancelSession(ctx(s), faith, target);
+    expect([once - created, twice - once, updated() - twice].every((step) => step >= 1000)).toBe(true);
   });
 
   it("can't change or cancel a session once it is live", async () => {
