@@ -76,8 +76,9 @@ export const WARNING_GRACE_SECONDS = 2;
 
 /**
  * Which warnings are spent when the countdown starts or its end moves, `seconds`
- * from the end. One already said stays said. One the end has moved back before
- * is armed again, to be said when it comes round. One passed by more than the
+ * from the end. One already said stays said, unless the end has moved back
+ * before it by more than the grace: then it is armed again, to be said when it
+ * comes round. One passed by more than the
  * grace is spent without a word: it is no longer news. One passed by less (a
  * correction from the server that steps over it) stays armed, so the next look
  * says it.
@@ -85,7 +86,9 @@ export const WARNING_GRACE_SECONDS = 2;
 export function armWarnings(seconds: number, warnings: readonly CountdownWarning[], spent: ReadonlySet<number>): Set<number> {
   const next = new Set(spent);
   for (const warning of warnings) {
-    if (seconds > warning.at) next.delete(warning.at);
+    // Back above a warning by more than the grace: the end really moved later, so it is news again.
+    // Within the grace it is jitter from a correction, and a warning said stays said.
+    if (seconds > warning.at + WARNING_GRACE_SECONDS) next.delete(warning.at);
     else if (seconds <= warning.at - WARNING_GRACE_SECONDS) next.add(warning.at);
   }
   return next;

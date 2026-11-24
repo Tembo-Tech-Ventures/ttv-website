@@ -130,7 +130,7 @@ export default function Countdown({
       const used = spent.current!;
       const { say, spend } = dueWarning(left, due, used);
       for (const at of spend) used.add(at);
-      if (say) speaker?.say(warningMessage(say.at, what), { priority: say.priority, key: `countdown:${end}:${say.at}` });
+      if (say) speaker?.say(warningMessage(say.at, what), { priority: say.priority, key: `countdown:${say.at}` });
       if (left <= 0) {
         if (!ended) latest.current.onEnd?.();
         ended = true;

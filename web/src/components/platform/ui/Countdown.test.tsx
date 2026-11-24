@@ -81,6 +81,10 @@ describe("when it looks again", () => {
     expect([...armWarnings(299, CALL_WARNINGS, new Set([900, 300]))].toSorted((a, b) => a - b)).toEqual([300, 900]);
     // The end moved later: what it moved back before is armed again.
     expect([...armWarnings(10 * 60, CALL_WARNINGS, new Set([900, 300]))]).toEqual([900]);
+    // Back above it by no more than the grace is jitter: said stays said.
+    expect([...armWarnings(300.4, CALL_WARNINGS, new Set([900, 300]))].toSorted((a, b) => a - b)).toEqual([300, 900]);
+    expect([...armWarnings(302, CALL_WARNINGS, new Set([900, 300]))].toSorted((a, b) => a - b)).toEqual([300, 900]);
+    expect([...armWarnings(302.1, CALL_WARNINGS, new Set([900, 300]))]).toEqual([900]);
   });
 
   it("says only the latest of several warnings crossed while asleep, and spends them all", () => {
@@ -222,6 +226,18 @@ describe("Countdown", () => {
     await advance(50_000);
     await mount(<Countdown endsAt={Date.now() + 9_000} warnings="call" />);
     expect(heard.slice(1)).toEqual(["assertive: The call ends in 1 minute.", "assertive: The call ends in 10 seconds."]);
+  });
+
+  it("does not say a warning again when a correction puts the end back above it by less than 2 seconds", async () => {
+    await mount(<Countdown endsAt={START + 5 * MINUTE + 1_000} warnings="call" />);
+    await advance(1_100);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
+    // Just said at 5:00; the server's correction says 300.4 s are left after all.
+    await mount(<Countdown endsAt={Date.now() + 300_400} warnings="call" />);
+    await advance(10_000);
+    await mount(<Countdown endsAt={Date.now() + 301_900} warnings="call" />);
+    await advance(30_000);
+    expect(heard).toEqual(["polite: The call ends in 5 minutes."]);
   });
 
   it("says a warning again when the end is put back past it", async () => {

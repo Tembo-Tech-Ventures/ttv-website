@@ -392,7 +392,8 @@ ending, this only shows it and warns.
   warnings are said through the nearest `LiveAnnouncer`, each once. One more
   than 2 seconds past when it mounts is never said; when the end moves (the
   server corrects it), a warning stepped over by less than that is still said,
-  one already said is not said again, and one the end moved back before is
+  one already said is not said again (even if a correction puts it back up to
+  2 seconds ahead), and one the end moved back before by more than that is
   armed again. A tab that slept through several says only the most urgent.
 - Secondary ink, then `warning-ink` from 5 minutes and `danger-ink` in the
   last minute, with the timer icon turning to a warning sign: the words always
