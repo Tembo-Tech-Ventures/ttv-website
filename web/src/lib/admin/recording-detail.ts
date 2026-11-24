@@ -75,14 +75,17 @@ export const NEW_UPLOAD = { recordedAt: null, programId: null, accessScope: "ADM
 /**
  * The row to write for valid details. A date the admin left as it was keeps the
  * moment it was recorded (an import knows the time, the field only the day).
- * Choosing another cohort, or none, moves a cohort's or an admins-only recording's
- * audience with it, as the admin asked; the database no longer does this itself
- * (migration 0043), and a conversation's or the community's recording keeps its own.
+ * Choosing a cohort for a recording that had none makes it that cohort's, as the
+ * admin asked; a cohort's recording moves with its cohort, or becomes admins only
+ * with none. The database no longer widens anything itself (migration 0043). A
+ * recording kept admins only within a cohort stays so, and a conversation's or the
+ * community's recording keeps its own scope.
  */
 export function detailsUpdate(values: DetailsValues, current: { recordedAt: Date | null; programId: string | null; accessScope: string }) {
   const unchanged = values.recordedAt === recordedAtField(current.recordedAt);
   const programId = values.programId || null;
-  const moved = programId !== current.programId && (current.accessScope === "COHORT" || current.accessScope === "ADMIN_ONLY");
+  const moved = programId !== current.programId
+    && (current.accessScope === "COHORT" || (current.accessScope === "ADMIN_ONLY" && current.programId === null));
   return {
     title: values.title,
     description: values.description || null,

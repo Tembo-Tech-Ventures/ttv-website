@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a3b2cfa6-9f90-4c75-930f-8f95dbf906bb",
+  "id": "29d71696-5ea7-483b-9831-325dfeff039f",
   "prevId": "0895f63f-2cd9-44cd-b188-c3c0d12b0b2a",
   "tables": {
     "access_request": {
@@ -2329,7 +2329,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -3962,16 +3962,7 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {
-        "meeting_minutes_check": {
-          "name": "meeting_minutes_check",
-          "value": "\"meeting\".\"bookedMinutes\" >= 1 AND \"meeting\".\"limitMinutes\" >= \"meeting\".\"bookedMinutes\""
-        },
-        "meeting_time_check": {
-          "name": "meeting_time_check",
-          "value": "\"meeting\".\"scheduledStartAt\" >= 0 AND \"meeting\".\"createdAt\" >= 0 AND \"meeting\".\"updatedAt\" >= \"meeting\".\"createdAt\" AND coalesce(\"meeting\".\"openedAt\", 0) >= 0 AND coalesce(\"meeting\".\"hardEndAt\", \"meeting\".\"openedAt\", 0) >= coalesce(\"meeting\".\"openedAt\", 0) AND coalesce(\"meeting\".\"endedAt\", 0) >= 0"
-        }
-      }
+      "checkConstraints": {}
     },
     "meeting_consent": {
       "name": "meeting_consent",
@@ -4462,7 +4453,7 @@
       "checkConstraints": {
         "meeting_usage_month_month_check": {
           "name": "meeting_usage_month_month_check",
-          "value": "\"meeting_usage_month\".\"month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'"
+          "value": "\"meeting_usage_month\".\"month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND substr(\"meeting_usage_month\".\"month\", 6, 2) BETWEEN '01' AND '12'"
         },
         "meeting_usage_month_seconds_check": {
           "name": "meeting_usage_month_seconds_check",

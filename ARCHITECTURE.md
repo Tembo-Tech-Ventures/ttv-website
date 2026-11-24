@@ -235,7 +235,7 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `member_intent`, `member_onboarding`, `access_request` (flag `onboarding`; see `web/src/lib/onboarding/README.md`) — how a person said they'll take part (routing and copy only, never authority), their onboarding stage, and requests for mentor or institution access that an admin decides
 
 **In-app calls** (flags `meetings`, `meeting_checkins`, `meeting_events`, all OFF; migration 0043; see `web/src/lib/meetings/README.md`). The foundation only: nothing reads or writes these yet
-- `meeting` — one call on one date in one channel: purpose, schedule, booked and limit minutes, recording policy, state, its end and why, a check-in's work and revision, its card. Cited with ON DELETE CASCADE by `communityConfirmation.meetingId`, so its values are triggers, never table checks
+- `meeting` — one call on one date in one channel: purpose, schedule, booked and limit minutes, recording policy, state, its end and why, a check-in's work and revision, its card. Cited by recordings, confirmations (`communityConfirmation.meetingId`, NO ACTION) and seats, so its rules are triggers, never table checks
 - `meeting_seat`, `meeting_consent`, `meeting_recording`, `call_proposal`, `meeting_usage_month` — places in a live call (deleted when it ends), each person's answer to recording, a recording on its way in, a suggested call (one open per conversation), and the monthly spending count. The limits (90 minutes, 30 for a check-in, 15 people with one place for a host, $10 alert, $25 stop) are constants in `web/src/lib/meetings/rules.ts`
 
 **Staging agent logins** (see `web/src/lib/sam-login/README.md`)

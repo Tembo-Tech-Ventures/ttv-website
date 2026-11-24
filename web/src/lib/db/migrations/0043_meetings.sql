@@ -64,9 +64,7 @@ CREATE TABLE IF NOT EXISTS `meeting` (
 	FOREIGN KEY (`channelId`) REFERENCES `channel`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`journeyId`) REFERENCES `communityJourney`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`messageId`) REFERENCES `channel_message`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`createdBy`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null,
-	CONSTRAINT "meeting_minutes_check" CHECK("meeting"."bookedMinutes" >= 1 AND "meeting"."limitMinutes" >= "meeting"."bookedMinutes"),
-	CONSTRAINT "meeting_time_check" CHECK("meeting"."scheduledStartAt" >= 0 AND "meeting"."createdAt" >= 0 AND "meeting"."updatedAt" >= "meeting"."createdAt" AND coalesce("meeting"."openedAt", 0) >= 0 AND coalesce("meeting"."hardEndAt", "meeting"."openedAt", 0) >= coalesce("meeting"."openedAt", 0) AND coalesce("meeting"."endedAt", 0) >= 0)
+	FOREIGN KEY (`createdBy`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `meeting_channel_idx` ON `meeting` (`channelId`,`scheduledStartAt`);--> statement-breakpoint
@@ -145,12 +143,12 @@ CREATE TABLE IF NOT EXISTS `meeting_usage_month` (
 	`participantSeconds` integer DEFAULT 0 NOT NULL,
 	`alertedAt` integer,
 	`updatedAt` integer DEFAULT (unixepoch() * 1000) NOT NULL,
-	CONSTRAINT "meeting_usage_month_month_check" CHECK("meeting_usage_month"."month" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+	CONSTRAINT "meeting_usage_month_month_check" CHECK("meeting_usage_month"."month" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND substr("meeting_usage_month"."month", 6, 2) BETWEEN '01' AND '12'),
 	CONSTRAINT "meeting_usage_month_seconds_check" CHECK("meeting_usage_month"."recordingSecondsReserved" >= 0 AND "meeting_usage_month"."recordingSecondsUsed" >= 0 AND "meeting_usage_month"."participantSeconds" >= 0),
 	CONSTRAINT "meeting_usage_month_time_check" CHECK("meeting_usage_month"."updatedAt" >= 0 AND coalesce("meeting_usage_month"."alertedAt", 0) >= 0)
 );
 --> statement-breakpoint
-ALTER TABLE `communityConfirmation` ADD `meetingId` text REFERENCES meeting(id) ON DELETE cascade;--> statement-breakpoint
+ALTER TABLE `communityConfirmation` ADD `meetingId` text REFERENCES meeting(id);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `communityConfirmation_meetingId_idx` ON `communityConfirmation` (`meetingId`) WHERE "communityConfirmation"."meetingId" IS NOT NULL;--> statement-breakpoint
 ALTER TABLE `recording` ADD `meetingId` text REFERENCES meeting(id) ON DELETE set null;--> statement-breakpoint
 ALTER TABLE `recording` ADD `channelId` text REFERENCES channel(id) ON DELETE set null;--> statement-breakpoint
@@ -178,8 +176,8 @@ WHEN NEW.programId IS NULL AND NEW.accessScope = 'COHORT' BEGIN
  UPDATE `recording` SET accessScope = 'ADMIN_ONLY' WHERE id = NEW.id;
 END;
 --> statement-breakpoint
--- `meeting` is cited by other tables (a confirmation with ON DELETE CASCADE), so it must never be
--- rebuilt either: its allowed values and shape are triggers a later migration can replace, not table
+-- `meeting` is cited by other tables (recordings, confirmations, seats), so it must never be rebuilt
+-- either: its allowed values and shape are triggers a later migration can replace, and it has no table
 -- checks. The lists are lib/meetings/rules.ts's.
 CREATE TRIGGER IF NOT EXISTS meeting_values_insert BEFORE INSERT ON `meeting`
 WHEN NEW.purpose NOT IN ('SESSION', 'CHECKIN', 'CALL', 'EVENT')
@@ -198,21 +196,30 @@ WHEN NEW.purpose NOT IN ('SESSION', 'CHECKIN', 'CALL', 'EVENT')
 END;
 --> statement-breakpoint
 -- A title of 1 to 120 characters; a check-in names a revision of its work; a live call has opened;
--- an ended call has an end and a reason, and nothing else has either.
+-- an ended call has an end and a reason, and nothing else has either; at least one booked
+-- minute and no more than the limit; times never negative, the hard end and the end not before it opened.
 CREATE TRIGGER IF NOT EXISTS meeting_shape_insert BEFORE INSERT ON `meeting`
 WHEN length(trim(NEW.title)) = 0 OR length(NEW.title) > 120
   OR (NEW.purpose = 'CHECKIN' AND NEW.journeyVersion IS NULL) OR NEW.journeyVersion < 1
   OR (NEW.state = 'LIVE' AND NEW.openedAt IS NULL)
-  OR (NEW.state = 'ENDED') <> (NEW.endedAt IS NOT NULL) OR (NEW.state = 'ENDED') <> (NEW.endReason IS NOT NULL) BEGIN
- SELECT RAISE(ABORT, 'meeting: a 1 to 120 character title, a check-in''s revision, and an end only when ended');
+  OR (NEW.state = 'ENDED') <> (NEW.endedAt IS NOT NULL) OR (NEW.state = 'ENDED') <> (NEW.endReason IS NOT NULL)
+  OR NEW.bookedMinutes < 1 OR NEW.limitMinutes < NEW.bookedMinutes
+  OR NEW.scheduledStartAt < 0 OR NEW.createdAt < 0 OR NEW.updatedAt < NEW.createdAt OR NEW.openedAt < 0
+  OR NEW.hardEndAt < coalesce(NEW.openedAt, 0) OR (NEW.hardEndAt IS NOT NULL AND NEW.openedAt IS NULL)
+  OR NEW.endedAt < coalesce(NEW.openedAt, 0) BEGIN
+ SELECT RAISE(ABORT, 'meeting: a 1 to 120 character title, a check-in''s revision, an end only when ended, minutes within the limit and times in order');
 END;
 --> statement-breakpoint
-CREATE TRIGGER IF NOT EXISTS meeting_shape_update BEFORE UPDATE OF title, purpose, journeyVersion, state, openedAt, endedAt, endReason ON `meeting`
+CREATE TRIGGER IF NOT EXISTS meeting_shape_update BEFORE UPDATE ON `meeting`
 WHEN length(trim(NEW.title)) = 0 OR length(NEW.title) > 120
   OR (NEW.purpose = 'CHECKIN' AND NEW.journeyVersion IS NULL) OR NEW.journeyVersion < 1
   OR (NEW.state = 'LIVE' AND NEW.openedAt IS NULL)
-  OR (NEW.state = 'ENDED') <> (NEW.endedAt IS NOT NULL) OR (NEW.state = 'ENDED') <> (NEW.endReason IS NOT NULL) BEGIN
- SELECT RAISE(ABORT, 'meeting: a 1 to 120 character title, a check-in''s revision, and an end only when ended');
+  OR (NEW.state = 'ENDED') <> (NEW.endedAt IS NOT NULL) OR (NEW.state = 'ENDED') <> (NEW.endReason IS NOT NULL)
+  OR NEW.bookedMinutes < 1 OR NEW.limitMinutes < NEW.bookedMinutes
+  OR NEW.scheduledStartAt < 0 OR NEW.createdAt < 0 OR NEW.updatedAt < NEW.createdAt OR NEW.openedAt < 0
+  OR NEW.hardEndAt < coalesce(NEW.openedAt, 0) OR (NEW.hardEndAt IS NOT NULL AND NEW.openedAt IS NULL)
+  OR NEW.endedAt < coalesce(NEW.openedAt, 0) BEGIN
+ SELECT RAISE(ABORT, 'meeting: a 1 to 120 character title, a check-in''s revision, an end only when ended, minutes within the limit and times in order');
 END;
 --> statement-breakpoint
 -- The three flags, OFF everywhere until staff and then the owner turn them on. meetings needs

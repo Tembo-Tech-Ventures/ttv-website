@@ -182,9 +182,9 @@ describe("the call tables", () => {
     expect(() => database.exec("UPDATE meeting SET purpose = 'session' WHERE id = 'purpose-0'")).toThrow(values);
   });
 
-  it("holds a call's shape: its title, a check-in's revision, and an end only when ended", () => {
+  it("holds a call's shape: its title, a check-in's revision, an end only when ended, its minutes and its times", () => {
     const database = migrated();
-    const shape = "meeting: a 1 to 120 character title, a check-in's revision, and an end only when ended";
+    const shape = "meeting: a 1 to 120 character title, a check-in's revision, an end only when ended, minutes within the limit and times in order";
     expect(() => insertMeeting(database, { title: "  " })).toThrow(shape);
     expect(() => insertMeeting(database, { title: "x".repeat(121) })).toThrow(shape);
     expect(() => insertMeeting(database, { purpose: "CHECKIN" })).toThrow(shape);
@@ -192,16 +192,26 @@ describe("the call tables", () => {
     expect(() => insertMeeting(database, { state: "LIVE" })).toThrow(shape);
     expect(() => insertMeeting(database, { state: "ENDED", openedAt: 1, endedAt: 2 })).toThrow(shape);
     expect(() => insertMeeting(database, { endedAt: 2 })).toThrow(shape);
-    expect(() => insertMeeting(database, { bookedMinutes: 60, limitMinutes: 30 })).toThrow(/CHECK constraint failed: meeting_minutes_check/);
+    expect(() => insertMeeting(database, { bookedMinutes: 0 })).toThrow(shape);
+    expect(() => insertMeeting(database, { bookedMinutes: 60, limitMinutes: 30 })).toThrow(shape);
+    expect(() => insertMeeting(database, { scheduledStartAt: -1 })).toThrow(shape);
+    expect(() => insertMeeting(database, { createdAt: 10, updatedAt: 5 })).toThrow(shape);
+    expect(() => insertMeeting(database, { state: "LIVE", openedAt: 100, hardEndAt: 50 })).toThrow(shape);
+    expect(() => insertMeeting(database, { hardEndAt: 50 })).toThrow(shape);
+    expect(() => insertMeeting(database, { state: "ENDED", openedAt: 100, endedAt: 50, endReason: "LIMIT" })).toThrow(shape);
+    // A table check would make drizzle-kit rebuild a cited table to change it: there are none.
+    expect((database.prepare("SELECT sql FROM sqlite_master WHERE name = 'meeting'").get() as { sql: string }).sql).not.toMatch(/CHECK/i);
     insertMeeting(database, { title: "x".repeat(120) });
     expect(() => database.exec("UPDATE meeting SET state = 'ENDED', endedAt = 5 WHERE id = 'call'")).toThrow(shape);
     expect(() => database.exec("UPDATE meeting SET title = '' WHERE id = 'call'")).toThrow(shape);
+    expect(() => database.exec("UPDATE meeting SET limitMinutes = 30 WHERE id = 'call'")).toThrow(shape);
+    expect(() => database.exec("UPDATE meeting SET updatedAt = 0 WHERE id = 'call'")).toThrow(shape);
     database.exec("UPDATE meeting SET state = 'LIVE', openedAt = 10, hardEndAt = 5410 WHERE id = 'call'");
     database.exec("UPDATE meeting SET state = 'ENDED', endedAt = 5410, endReason = 'LIMIT' WHERE id = 'call'");
     expect(database.prepare("SELECT state, endReason FROM meeting").get()).toEqual({ state: "ENDED", endReason: "LIMIT" });
   });
 
-  it("deletes a call's seats, consent, recording-in-progress and the confirmations citing it with the call, and keeps its recording", () => {
+  it("takes a call's seats, consent and recording-in-progress with it, keeps its recording, and never deletes a confirmation citing it", () => {
     const database = migrated();
     insertMeeting(database);
     database.exec(`INSERT INTO meeting_seat(meetingId,userId,role,lastSeenAt) VALUES ('call','wanjiku','MEMBER',1),('call','otieno','HOST',1);
@@ -209,8 +219,14 @@ describe("the call tables", () => {
       INSERT INTO recording(id,programId,title,accessScope,scopeChosen,meetingId,channelId) VALUES ('recorded','cohort-a','Week 5','COHORT',1,'call',NULL);
       INSERT INTO meeting_recording(id,meetingId,recordingId,reservedSeconds) VALUES ('taking','call','recorded',5400);
       UPDATE communityConfirmation SET meetingId = 'call' WHERE id = 'confirmed';`);
+    // A confirmation cites the call: deleting it fails loudly rather than taking the confirmation.
+    expect(() => database.exec("DELETE FROM meeting WHERE id = 'call'")).toThrow(/FOREIGN KEY constraint failed/);
+    expect(count(database, "meeting")).toBe(1);
+    expect(count(database, "communityConfirmation")).toBe(1);
+    // Removing the confirmation first (as deleting the check-in's recording will, in P12) lets the call go.
+    database.exec("DELETE FROM communityConfirmation WHERE meetingId = 'call'");
     database.exec("DELETE FROM meeting WHERE id = 'call'");
-    for (const table of ["meeting_seat", "meeting_consent", "meeting_recording", "communityConfirmation"]) expect(count(database, table)).toBe(0);
+    for (const table of ["meeting_seat", "meeting_consent", "meeting_recording"]) expect(count(database, table)).toBe(0);
     expect(database.prepare("SELECT id, meetingId, accessScope FROM recording WHERE id = 'recorded'").get())
       .toEqual({ id: "recorded", meetingId: null, accessScope: "COHORT" });
     expect(count(database, "communityJourney")).toBe(1);
@@ -225,6 +241,14 @@ describe("the call tables", () => {
     expect(count(database, "meeting")).toBe(0);
     expect(database.prepare("SELECT meetingId, channelId, accessScope FROM recording WHERE id = 'private'").get())
       .toEqual({ meetingId: null, channelId: null, accessScope: "DIRECT" });
+  });
+
+  it("refuses to delete a channel or a cohort whose call a confirmation cites", () => {
+    const database = migrated();
+    insertMeeting(database);
+    database.exec("UPDATE communityConfirmation SET meetingId = 'call' WHERE id = 'confirmed'");
+    expect(() => database.exec(`DELETE FROM channel WHERE id = '${COHORT_CHANNEL(database)}'`)).toThrow(/FOREIGN KEY constraint failed/);
+    expect(count(database, "communityConfirmation")).toBe(1);
   });
 
   it("keeps one seat and one consent per person, one recording per call, and one open suggestion per conversation", () => {
@@ -253,6 +277,10 @@ describe("the call tables", () => {
     database.exec("INSERT INTO meeting_usage_month(month,recordingSecondsReserved) VALUES ('2026-11',5400)");
     expect(() => database.exec("INSERT INTO meeting_usage_month(month) VALUES ('2026-11')")).toThrow(/UNIQUE/);
     expect(() => database.exec("INSERT INTO meeting_usage_month(month) VALUES ('Nov 2026')")).toThrow(/CHECK/);
+    for (const month of ["2026-00", "2026-13", "2026-19"]) {
+      expect(() => database.exec(`INSERT INTO meeting_usage_month(month) VALUES ('${month}')`)).toThrow(/CHECK/);
+    }
+    database.exec("INSERT INTO meeting_usage_month(month) VALUES ('2026-12'), ('2027-01')");
     expect(() => database.exec("UPDATE meeting_usage_month SET recordingSecondsUsed = -1")).toThrow(/CHECK/);
   });
 });

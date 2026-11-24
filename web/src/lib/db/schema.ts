@@ -1305,10 +1305,12 @@ export const communityConfirmation = sqliteTable("communityConfirmation", {
   journeyVersion: integer("journeyVersion").notNull(),
   mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
   /**
-   * The check-in this confirmation cites (migration 0043): a citation, never a grant. The confirmation
-   * goes with the call, as it goes with the call's recording (ARCHITECTURE section 7).
+   * The check-in this confirmation cites (migration 0043): a citation, never a grant. NO ACTION on
+   * purpose: deleting a cited call (or the channel or cohort it is in) fails rather than silently
+   * taking confirmations with it. Deleting the check-in's recording removes the confirmation
+   * explicitly, in the same batch (ARCHITECTURE section 7, slice P12).
    */
-  meetingId: text("meetingId").references((): AnySQLiteColumn => meeting.id, { onDelete: "cascade" }),
+  meetingId: text("meetingId").references((): AnySQLiteColumn => meeting.id),
   ...timestamps,
 }, (table) => [
   index("communityConfirmation_journeyId_idx").on(table.journeyId),
@@ -1879,9 +1881,9 @@ const inList = (column: AnySQLiteColumn, values: readonly string[]) =>
 
 /**
  * One call on one date. Each date of a series is its own meeting, and an ended one never reopens.
- * Other tables cite it, a confirmation with ON DELETE CASCADE, so it must never be rebuilt: its
- * allowed values, its title and a check-in's revision are held by 0043's triggers, which a later
- * migration can replace, rather than by table checks, which drizzle-kit changes by rebuilding.
+ * Other tables cite it (recordings, confirmations, seats), so it must never be rebuilt: its allowed
+ * values, title, minutes, times, a check-in's revision and its end are held by 0043's triggers, which
+ * a later migration can replace, and no table checks, which drizzle-kit changes by rebuilding.
  * hardEndAt is set when the room opens (a check-in's when both people are in), and the clock ends
  * the call there. journeyId and journeyVersion are the work a check-in is about; messageId is the
  * call's card in its channel; providerMeetingId stays empty until the room first opens, since the
@@ -1920,8 +1922,6 @@ export const meeting = sqliteTable("meeting", {
   index("meeting_messageId_idx").on(table.messageId).where(sql`${table.messageId} IS NOT NULL`),
   index("meeting_createdBy_idx").on(table.createdBy).where(sql`${table.createdBy} IS NOT NULL`),
   uniqueIndex("meeting_providerMeetingId_idx").on(table.providerMeetingId).where(sql`${table.providerMeetingId} IS NOT NULL`),
-  check("meeting_minutes_check", sql`${table.bookedMinutes} >= 1 AND ${table.limitMinutes} >= ${table.bookedMinutes}`),
-  check("meeting_time_check", sql`${table.scheduledStartAt} >= 0 AND ${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.openedAt}, 0) >= 0 AND coalesce(${table.hardEndAt}, ${table.openedAt}, 0) >= coalesce(${table.openedAt}, 0) AND coalesce(${table.endedAt}, 0) >= 0`),
 ]);
 
 /**
@@ -2053,7 +2053,7 @@ export const meetingUsageMonth = sqliteTable("meeting_usage_month", {
   alertedAt: integer("alertedAt"),
   updatedAt: epochMs("updatedAt"),
 }, (table) => [
-  check("meeting_usage_month_month_check", sql`${table.month} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'`),
+  check("meeting_usage_month_month_check", sql`${table.month} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND substr(${table.month}, 6, 2) BETWEEN '01' AND '12'`),
   check("meeting_usage_month_seconds_check", sql`${table.recordingSecondsReserved} >= 0 AND ${table.recordingSecondsUsed} >= 0 AND ${table.participantSeconds} >= 0`),
   check("meeting_usage_month_time_check", sql`${table.updatedAt} >= 0 AND coalesce(${table.alertedAt}, 0) >= 0`),
 ]);

@@ -42,14 +42,16 @@ channel, a direct conversation or a community channel), whose readers are its au
 | `call_proposal` | A suggested call in a direct conversation: up to three times, a check-in's work and revision, "ask to record", state. One OPEN per conversation |
 | `meeting_usage_month` | TTV's own count of what calls cost, one row per UTC month, and when its alert went out |
 | `recording.meetingId`, `recording.channelId` | The call a recording came from; a DIRECT or COMMUNITY recording's channel |
-| `communityConfirmation.meetingId` | The check-in a confirmation cites: a citation, never a grant. Deleting the call deletes the confirmation |
+| `communityConfirmation.meetingId` | The check-in a confirmation cites: a citation, never a grant. NO ACTION: deleting a cited call, or the channel or cohort it is in, fails. Deleting the check-in's recording (a soft delete) removes the confirmation explicitly, in the same batch (slice P12) |
 
 **Never rebuild a referenced table.** `recording`, `communityJourney`, `communityConfirmation` and
 `studentProfile` are referenced with foreign keys on, and a rebuild's `DROP TABLE` fires their
-cascades. `meeting` is now one of them too (a confirmation cites it with ON DELETE CASCADE), so its
-allowed values, its title rule, a check-in's revision and "an end only when ended" are triggers
-(`meeting_values_*`, `meeting_shape_*`) that a later migration can replace, not table checks, which
-drizzle-kit would change by rebuilding. The other new tables are cited by nothing, so they use checks.
+cascades. `meeting` is now one of them too (recordings, confirmations and seats cite it), so it has no
+table checks at all: its allowed values, title, a check-in's revision, "an end only when ended", its
+minutes and its times are triggers (`meeting_values_*`, `meeting_shape_*`) that a later migration can
+replace, where a changed table check would make drizzle-kit rebuild it. The other new tables are cited
+by nothing, so they use checks. Nothing cites a call with a cascade that could delete people's work:
+a confirmation's `meetingId` is NO ACTION, a recording's is SET NULL.
 
 ## Recording scopes fail closed
 
@@ -64,7 +66,13 @@ so an insert that meant "admins only" could not be told from one that named no s
   and after a rollback;
 - only narrows on a cohort change: a COHORT recording moved out of every cohort is admins only
   (`recording_cohort_scope_leave`). Moving an admins-only recording into a cohort keeps it admins
-  only; the admin recording page moves its audience itself, as the admin asked (`detailsUpdate`).
+  only; the admin recording page gives a recording with no cohort the cohort the admin chooses
+  (`detailsUpdate`), and never widens one kept admins only within a cohort.
+
+**Known gap, accepted (it fails closed):** while 0043 is applied but the old Worker still serves
+(the deploy window, or after a rollback), an admin who gives a no-cohort recording a cohort on the
+old Worker's recording page leaves it admins only, because that page relied on 0042's widening
+trigger. Its cohort can't see it until an admin saves it again on the current Worker.
 
 ## Flags
 
