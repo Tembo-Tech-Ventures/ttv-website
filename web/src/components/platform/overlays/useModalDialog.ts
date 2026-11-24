@@ -1,12 +1,5 @@
 import { useCallback, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function tabbable(dialog: HTMLElement): HTMLElement[] {
-  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-    (element) => element.tabIndex >= 0 && element.getClientRects().length > 0,
-  );
-}
+import { cycleTab } from "@/components/platform/ui/focus";
 
 /**
  * A modal `<dialog>` for a shell overlay: the page behind goes inert, Tab and
@@ -45,18 +38,7 @@ export function useModalDialog(onClosed?: () => void) {
       if (event.target === event.currentTarget) event.currentTarget.close();
     },
     onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-      if (event.key !== "Tab") return;
-      const items = tabbable(event.currentTarget);
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      cycleTab(event, event.currentTarget);
     },
   };
 

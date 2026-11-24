@@ -297,6 +297,111 @@ helpers are `confirmHref(url, action)`, `confirmingAction(url, offered)` and
 buttons sit under the warning, not on its tint: a hovered danger button there
 falls below 4.5:1 on four of the six sheets.
 
+### Dialog `#dialog`
+
+A question that has to be answered before anything else, asked without
+leaving the page: for a React island that must keep its place, such as a
+live call, where a page load would drop what is happening ("End for
+everyone?", "Stop recording?"). Anywhere else, `ConfirmStep` asks the same
+question without script and keeps its address.
+
+| Prop | Use |
+|---|---|
+| `id` | required; names the title (`<id>-title`) and the words (`<id>-description`), and is what `dialogOpener(id)` opens |
+| `title` | the question, naming the thing; an h2 |
+| children | what happens, and whether it can be undone; read with the title |
+| `actions` | the action asked about, a `danger` or `primary` `Button` (on a static page in its own `<form method="post">`; from `.astro`, `<Fragment slot="actions">`) |
+| `cancelLabel` | the way out, which the dialog draws itself, first; "Cancel" by default |
+| `open`, `onClose` | in an island, always: whether it is open, and the call when it closes by itself (Escape, the way out, the backdrop), never when `open` closed it |
+| `initialFocus`, `returnFocus` | where focus starts (the first control by default) and where it goes back to (the control that opened it by default) |
+
+- A native `<dialog>` opened as a modal: the page behind is inert and dimmed
+  (`backdrop:bg-ground/60`), the box is the surrounding sheet's tone (the
+  community sheet's outside one) with `shadow-overlay`, and it never scrolls sideways at 320px.
+- In an island: focus moves to the first control, which is the way out when
+  there is nothing to fill in, so Enter never does the irreversible thing by
+  accident; Tab and Shift Tab stay inside (`cycleTab` in `focus.ts`, shared
+  with the overlays' `useModalDialog`); Escape closes it unless a part inside,
+  such as an open `Menu`, took the key first, or it ends an input method's
+  composition; focus goes back to the opener, or to `returnFocus` when the
+  opener is gone (a menu item), even if the dialog is taken away while open.
+  A close event that arrives after it was opened again is ignored, and
+  StrictMode's rehearsal unmount moves no focus.
+- On a static page: `<Button {...dialogOpener(id)}>` is the browser's own
+  invoker command (`commandfor`, `command="show-modal"`), and the way out is a
+  `method="dialog"` form, so it opens, closes on Escape and returns focus with
+  no script. Browsers without invoker commands (before 2025) can't open it,
+  which is why `ConfirmStep` stays the default.
+- Inside a `LiveAnnouncer` it carries the live regions while open through `open`, because a
+  modal makes the page's own regions inert: a warning said behind it is still
+  heard, and nothing said before it opened is said again.
+- The way out and the action are kit buttons, so each is 44px on a touch screen.
+
+### LiveAnnouncer `#live-announcer`
+
+What a screen reader is told when something changes without a page load. One
+per island, near its top, so its regions are in the page before anything is
+said into them; it draws nothing visible.
+
+| Part | Use |
+|---|---|
+| `LiveAnnouncer` | the polite region (an `output`) and the assertive one (`role="alert"`), and the announcer for everything inside. `voice` to share one made with `createLiveAnnouncer`, `options` for its pace, `name` for tests |
+| `useAnnouncer()` | the nearest announcer, or null outside one |
+| `say(message, { priority, key })` | says it once; `polite` by default, `assertive` only for what can't wait |
+| `gather(key, item, { sentence, priority, id })` | collects a burst of the same event and says one sentence for all of it; `id` tells apart two people with the same name |
+| `groupSentence(names, verb)` | "Kevin Omondi joined", "Kevin Omondi and Faith Njeri joined", "Kevin Omondi and 2 others joined" |
+
+- The same words are said at most once in 5 seconds (`dedupeMs`), messages
+  are at least a second apart (`throttleMs`), and assertive ones go ahead of
+  polite ones still waiting. A burst waits 2 seconds (`gatherMs`) from its
+  first item, and the same item twice counts once.
+- Safe under StrictMode: remounted after its cleanup, it starts a fresh
+  announcer. The assertive region is a plain `role="alert"`, so it is not
+  announced twice.
+- It has no clock of its own: it speaks only when asked, so nothing is said
+  every second unless a caller asks every second. Don't.
+- Each message is a fresh node keyed by its id, so a new message is always
+  read and an old one never again. It is built on the platform's
+  `createAnnouncer` (`lib/platform/client/announcer.ts`), which the attention
+  and search overlays use too.
+- Say what changed, in the voice's words: "Recording started", "You were muted
+  by a host", "Connection lost". Never what the page showed on arrival.
+
+### Countdown `#countdown`
+
+When something ends for everyone and how long is left: "Ends at 19:02 · 12
+min left". From the end time the server gave (`endsAt`); the server does the
+ending, this only shows it and warns.
+
+| Prop | Use |
+|---|---|
+| `endsAt` | the end, as epoch milliseconds or a `Date` |
+| `warnings` | `"call"` (`CALL_WARNINGS`: 15 and 5 minutes politely, 1 minute and 10 seconds at once), `"check-in"` (`CHECK_IN_WARNINGS`: 10 and 5, then the same) or a list of `{ at, priority }` in seconds; none by default |
+| `subject` | what ends, as the warnings say it: "The session ends in 5 minutes." Default "The call" |
+| `showEndTime`, `timeZone` | "Ends at" first (default), in Africa/Nairobi time by default |
+| `onEnd` | called once when the time is up |
+| `now` | the clock, for tests and server-corrected time |
+| `renderedAt` | when the server drew the page; without it the time left is drawn only once the browser's clock runs, so hydration never keeps a stale state |
+
+- Tabular numerals. Whole minutes, rounded up, while more than one is left,
+  so it changes once a minute and agrees with the warnings ("2 min left" at
+  61 seconds, never "14 min left" just after "ends in 15 minutes"), and the end
+  time is rounded up to the minute to match; then "0:42 left",
+  each second, or in steps of ten seconds under reduced motion.
+- Its time is a `timer`, which screen readers don't read as it changes. The
+  warnings are said through the nearest `LiveAnnouncer`, each once. One more
+  than 2 seconds past when it mounts is never said; when the end moves (the
+  server corrects it), a warning stepped over by less than that is still said,
+  one already said is not said again (even if a correction puts it back up to
+  2 seconds ahead), and one the end moved back before by more than that is
+  armed again. A tab that slept through several says only the most urgent.
+- Secondary ink, then `warning-ink` from 5 minutes and `danger-ink` in the
+  last minute, with the timer icon turning to a warning sign: the words always
+  say how long, so colour is never the only signal. The ink changes as a cut
+  under reduced motion.
+- The limits it serves: a call ends at 90 minutes, its first warning at 75; a
+  check-in ends at 30.
+
 ### SecretValue `#secret-value`
 
 A secret shown once, in the response to the form that made it (no-store,
