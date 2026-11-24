@@ -1,0 +1,26 @@
+---
+/**
+ * When a session runs, in Nairobi time ("Thu 27 Nov, 18:00–18:45 EAT"), with the reader's own time
+ * added after it by the browser where it differs (local-time.ts).
+ */
+import { sessionDay, sessionHours } from "@/lib/meetings/session-times";
+
+interface Props {
+  startAt: number;
+  minutes: number;
+  now: number;
+  /** Leave the day out where the row already shows it. */
+  withDay?: boolean;
+}
+
+const { startAt, minutes, now, withDay = true } = Astro.props;
+---
+
+<time datetime={new Date(startAt).toISOString()} data-local-time data-minutes={minutes}
+  >{withDay ? `${sessionDay(startAt, now)}, ` : ""}{sessionHours(startAt, minutes)}<span data-local-time-out></span></time
+>
+
+<script>
+  import { showLocalTimes } from "./local-time";
+  showLocalTimes();
+</script>

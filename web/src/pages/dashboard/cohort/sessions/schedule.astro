@@ -1,0 +1,232 @@
+---
+/**
+ * Cohort → Sessions → Schedule a session (in-app calls P8, src/lib/meetings/README.md). A plain form
+ * that posts here and works without JavaScript: a title, the date, a start in Nairobi time, a length
+ * up to the call limit, and just once or every week for some weeks. A weekly series is previewed
+ * first: every date is listed, ticked, and a date unticked is skipped. Only "Schedule" schedules;
+ * "Preview dates" writes nothing. Scheduling writes one `meeting` per date and posts one line in the
+ * cohort's channel, then goes back to Sessions. The form's own token makes sending it twice schedule once.
+ *
+ * Only a cohort's hosts (its instructors and TAs, admins) reach it, and only while `meetings` is on for
+ * them: anything else, a cohort they don't host included, is the same 404.
+ */
+import { createId } from "@paralleldrive/cuid2";
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import {
+  BackLink, Button, Card, ChoiceGroup, DescriptionItem, DescriptionList, Notice, PageHeader, SelectField, TextField,
+} from "@/components/platform/ui";
+import { blankSchedule, MIN_SERIES_WEEKS, readSchedule, type FieldErrors, type PreviewDate, type ScheduleField, type ScheduleValues } from "@/components/platform/sessions/session-form";
+import { sessionPageResponse } from "@/components/platform/sessions/page-responses";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { ChannelError } from "@/lib/channels/errors";
+import * as schema from "@/lib/db/schema";
+import { CALL_LIMIT_MINUTES, MAX_PEOPLE_PER_CALL, SEATS_KEPT_FOR_HOST, SESSION_SERIES_MAX_WEEKS } from "@/lib/meetings/rules";
+import { noteChecks } from "@/lib/meetings/note-checks";
+import { hostableCohorts, SCHEDULE_TOKEN, scheduleSessions } from "@/lib/meetings/sessions";
+import { lengthLabel, nairobiMoment, SESSION_LENGTHS, sessionDay, sessionHours, weekdayOf } from "@/lib/meetings/session-times";
+import { redirectWithFlash } from "@/lib/platform/server/flash";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { CONDUCT_PATH, SESSION_SCHEDULE_PATH } from "@/lib/platform/server/space-routes";
+
+const { method } = Astro.request;
+const db = drizzle(env.DB, { schema });
+const now = Date.now();
+// The cohorts this person hosts are read beside the space context, once it says `meetings` is on.
+const resolved = await resolveSpacePageWith(Astro.locals, "sessions", async (me) =>
+  me.flags.meetings ? hostableCohorts(env.DB, await requestCapabilities(db, Astro.locals)) : null);
+if (!resolved || !resolved[1] || resolved[1].length === 0) return sessionPageResponse(404);
+const [context, cohorts] = resolved;
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return sessionPageResponse(405);
+if (method === "POST" && !hasMatchingRequestOrigin(Astro.request)) return sessionPageResponse(404);
+const hosted = (programId: string) => cohorts.some((cohort) => cohort.programId === programId);
+
+const asked = Astro.url.searchParams.get("cohort");
+if (asked !== null && !hosted(asked)) return sessionPageResponse(404);
+let values: ScheduleValues = blankSchedule(asked ?? (cohorts.length === 1 ? cohorts[0].programId : ""), createId());
+let errors: FieldErrors<ScheduleField> = {};
+let preview: PreviewDate[] | null = null;
+let failure: { message: string; conduct: boolean } | null = null;
+
+if (method === "POST") {
+  const reading = readSchedule(await Astro.request.formData(), now);
+  if (reading.values.cohort && !hosted(reading.values.cohort)) return sessionPageResponse(404);
+  // A form without its own token (never one this page drew) is shown again with a new one, never scheduled.
+  const tokened = SCHEDULE_TOKEN.test(reading.values.token);
+  values = tokened ? reading.values : { ...reading.values, token: createId() };
+  if (reading.kind === "invalid") {
+    errors = reading.errors;
+    Astro.response.status = 400;
+  } else if (reading.kind === "preview") {
+    preview = reading.dates;
+  } else if (!tokened) {
+    failure = { message: "This form had expired, so nothing was scheduled. Check it and press Schedule again.", conduct: false };
+    Astro.response.status = 400;
+  } else {
+    const capabilities = await requestCapabilities(db, Astro.locals);
+    try {
+      const { meetingIds, cohort, note } = await scheduleSessions(
+        { db: env.DB, now, afterNote: noteChecks(env, Astro.locals.cfContext, SESSION_SCHEDULE_PATH) },
+        { userId: context.me.user.id, capabilities, meetings: context.me.flags.meetings },
+        { programId: values.cohort, token: values.token, title: values.title, startTimes: reading.startTimes, bookedMinutes: reading.minutes, skipped: reading.skipped },
+        { cohorts },
+      );
+      const count = meetingIds.length;
+      return redirectWithFlash(Astro, SPACE_PAGE_PATHS.sessions, {
+        tone: note === "posted" ? "success" : "warning",
+        title: count === 1 ? "Session scheduled" : `${count} sessions scheduled`,
+        message: note === "posted"
+          ? `#${cohort.channel.slug} has a note saying so.`
+          : `The note to #${cohort.channel.slug} didn't post. Tell the cohort there.`,
+      });
+    } catch (error) {
+      if (!(error instanceof ChannelError)) throw error;
+      if (error.status === 404) return sessionPageResponse(404);
+      failure = { message: error.message, conduct: error.code === "conduct_required" };
+      Astro.response.status = error.status;
+    }
+  }
+}
+
+const cohort = cohorts.find(({ programId }) => programId === values.cohort) ?? null;
+const cohortName = cohort?.name ?? "The cohort";
+const channel = cohort ? `#${cohort.channel.slug}` : "the cohort's channel";
+const weekday = values.date && !errors.date ? weekdayOf(values.date) : "";
+const weeklyLabel = weekday && values.time && !errors.time ? `Every ${weekday} at ${values.time}` : "Every week, on the same day and time";
+const hasErrors = Object.keys(errors).length > 0 || failure !== null;
+const tickedCount = preview?.filter(({ ticked }) => ticked).length ?? 0;
+const onceAt = preview && values.repeat === "once" ? nairobiMoment(values.date, values.time) : null;
+const minutes = Number(values.length);
+const hostPlace = SEATS_KEPT_FOR_HOST === 1 ? "one place" : `${SEATS_KEPT_FOR_HOST} places`;
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title="Schedule a session" titlePrefix={hasErrors ? "Error: " : ""}>
+  <div class="flex max-w-3xl flex-col gap-6">
+    <BackLink href={SPACE_PAGE_PATHS.sessions}>Sessions</BackLink>
+    <PageHeader title="Schedule a session">
+      {cohort ? `${cohortName} joins from TTV. The recording is filed in Sessions on its own.` : "Your cohort joins from TTV. The recording is filed in Sessions on its own."}
+    </PageHeader>
+
+    {failure ? (
+      <Notice tone="danger" title="We couldn't schedule it" focusOnLoad>
+        {failure.message}{" "}
+        {failure.conduct ? <a class="underline underline-offset-4" href={CONDUCT_PATH}>Read how we talk to each other</a> : "Check the form and try again."}
+      </Notice>
+    ) : Object.keys(errors).length > 0 ? (
+      <Notice tone="danger" title="Check the form" focusOnLoad>
+        {Object.keys(errors).length === 1 ? "One answer needs a change." : `${Object.keys(errors).length} answers need a change.`} Each says what to do next to it.
+      </Notice>
+    ) : onceAt !== null ? (
+      <Notice tone="info" title="Check the date" focusOnLoad>
+        {`${sessionDay(onceAt, now)}, ${sessionHours(onceAt, minutes)}. Nothing is scheduled until you press Schedule.`}
+      </Notice>
+    ) : preview ? (
+      <Notice tone="info" title="Check the dates" focusOnLoad>
+        Untick any date you want to skip, then schedule. Each date is separate, so you can move or cancel one later on its own.
+      </Notice>
+    ) : null}
+
+    <Card>
+      <form method="post" class="flex flex-col gap-6" novalidate data-schedule-form>
+        <input type="hidden" name="token" value={values.token} />
+        {cohorts.length > 1 ? (
+          <SelectField
+            label="Cohort"
+            name="cohort"
+            placeholder="Choose a cohort"
+            options={cohorts.map(({ programId, name }) => ({ value: programId, label: name }))}
+            defaultValue={values.cohort}
+            error={errors.cohort}
+            required
+          />
+        ) : (
+          <input type="hidden" name="cohort" value={values.cohort} />
+        )}
+        <TextField
+          label="Title"
+          name="title"
+          hint={`Shown in Sessions, in the note to ${channel} and in people's calendars.`}
+          defaultValue={values.title}
+          error={errors.title}
+          maxLength={120}
+          required
+        />
+        <div class="grid gap-4 sm:grid-cols-3">
+          <TextField label="Date" name="date" type="date" defaultValue={values.date} error={errors.date} hint="The first date, for a weekly series." required />
+          <TextField label="Starts" name="time" type="time" defaultValue={values.time} error={errors.time} hint="Nairobi time (EAT)." required />
+          <SelectField
+            label="Length"
+            name="length"
+            options={SESSION_LENGTHS.map((minutes) => ({ value: String(minutes), label: lengthLabel(minutes) }))}
+            defaultValue={values.length}
+            error={errors.length}
+            hint={`Every session ends at ${CALL_LIMIT_MINUTES} minutes.`}
+          />
+        </div>
+        <p class="m-0 text-sm text-ink-muted">
+          Enter the time in Nairobi time (EAT). Everyone sees it in Nairobi time, and in their own time where it differs.
+        </p>
+
+        <ChoiceGroup
+          label="Repeat"
+          name="repeat"
+          options={[
+            { value: "once", label: "Just once" },
+            { value: "weekly", label: weeklyLabel, hint: "Each date is separate: you can skip one now, and move or cancel one later." },
+          ]}
+          defaultValue={values.repeat}
+          error={errors.repeat}
+        />
+        <TextField
+          label="For how many weeks"
+          name="weeks"
+          type="number"
+          inputMode="numeric"
+          min={MIN_SERIES_WEEKS}
+          max={SESSION_SERIES_MAX_WEEKS}
+          defaultValue={values.weeks}
+          error={errors.weeks}
+          hint={`Only for every week: ${MIN_SERIES_WEEKS} to ${SESSION_SERIES_MAX_WEEKS} weeks. You see every date before anything is scheduled.`}
+          className="max-w-48"
+        />
+
+        {preview && values.repeat === "weekly" ? (
+          <>
+            <input type="hidden" name="previewKey" value={values.previewKey} />
+            <ChoiceGroup
+              label="Dates"
+              name="dates"
+              type="checkbox"
+              hint={`${preview.length} weeks, ${tickedCount} ticked. Untick a date to skip it.`}
+              options={preview.map(({ date, label }) => ({ value: date, label: `${label}, ${values.time} EAT` }))}
+              defaultValue={preview.filter(({ ticked }) => ticked).map(({ date }) => date)}
+              error={errors.dates}
+            />
+          </>
+        ) : null}
+
+        <Notice tone="info" title="Cohort sessions are always recorded">
+          From the start of the call to the end, with no pause. People see this before they join and while it runs. The
+          recording goes to {cohortName}'s Sessions with a transcript, and Tembo can answer questions about it.
+        </Notice>
+
+        <DescriptionList>
+          <DescriptionItem term="Who can join">{cohortName}: members, alumni, instructors, TAs and invited mentors</DescriptionItem>
+          <DescriptionItem term="Hosts">The cohort's instructors and TAs, and admins</DescriptionItem>
+          <DescriptionItem term="Size">Up to {MAX_PEOPLE_PER_CALL} people, with {hostPlace} kept for a host</DescriptionItem>
+          <DescriptionItem term="Length">Up to {CALL_LIMIT_MINUTES} minutes. Every session ends at {CALL_LIMIT_MINUTES} minutes</DescriptionItem>
+          <DescriptionItem term="Reminders">No emails. People can add each date to their own calendar from Sessions</DescriptionItem>
+        </DescriptionList>
+
+        <div class="flex flex-wrap gap-2">
+          <Button type="submit" name="intent" value="schedule">{preview && values.repeat === "weekly" ? "Schedule ticked dates" : "Schedule"}</Button>
+          <Button type="submit" name="intent" value="preview" variant="quiet">{preview && values.repeat === "weekly" ? "Update dates" : "Preview dates"}</Button>
+        </div>
+      </form>
+    </Card>
+  </div>
+</SpacePage>

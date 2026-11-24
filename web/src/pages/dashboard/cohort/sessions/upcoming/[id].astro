@@ -1,0 +1,203 @@
+---
+/**
+ * Cohort → Sessions → one date (in-app calls P8, src/lib/meetings/README.md): its hosts move it,
+ * rename it or change its length, or cancel it (`?confirm=cancel`). Both ask first, on the page
+ * itself, so they work without JavaScript: a change is shown as a question with what will happen
+ * before it is saved, and cancelling is a ConfirmStep. Only this date changes: every other date of
+ * its series stays as it is. A moved or cancelled date is told to the channel in one line.
+ *
+ * Only the session's hosts (the cohort's instructors and TAs, admins) reach it, while `meetings` is on
+ * for them; anything else is the same 404.
+ */
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import {
+  BackLink, Button, ButtonLink, Card, ConfirmStep, confirmingAction, confirmHref, Notice, PageHeader, SelectField, TextField,
+  withoutConfirm,
+} from "@/components/platform/ui";
+import SessionTime from "@/components/platform/sessions/SessionTime.astro";
+import { readSessionEdit, type FieldErrors, type SessionFields } from "@/components/platform/sessions/session-form";
+import { sessionPageResponse } from "@/components/platform/sessions/page-responses";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { ChannelError } from "@/lib/channels/errors";
+import * as schema from "@/lib/db/schema";
+import { CALL_LIMIT_MINUTES } from "@/lib/meetings/rules";
+import { noteChecks } from "@/lib/meetings/note-checks";
+import { cancelSession, changeSession, readSession, type HostedSession, type SessionCaller } from "@/lib/meetings/sessions";
+import { lengthLabel, nairobiFields, SESSION_LENGTHS, sessionDay, sessionHours } from "@/lib/meetings/session-times";
+import { redirectWithFlash } from "@/lib/platform/server/flash";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { CONDUCT_PATH, sessionDatePath } from "@/lib/platform/server/space-routes";
+
+const { method } = Astro.request;
+const { id } = Astro.params;
+if (!id) return sessionPageResponse(404);
+const db = drizzle(env.DB, { schema });
+const now = Date.now();
+
+// The session, with the caller's right to host it, read beside the space context once `meetings` is on.
+const resolved = await resolveSpacePageWith(Astro.locals, "sessions", async (me) => {
+  if (!me.flags.meetings) return null;
+  const caller: SessionCaller = { userId: me.user.id, capabilities: await requestCapabilities(db, Astro.locals), meetings: true };
+  try {
+    return { caller, session: await readSession(env.DB, caller, id) };
+  } catch (error) {
+    if (error instanceof ChannelError && error.status === 404) return null;
+    throw error;
+  }
+});
+if (!resolved || !resolved[1]) return sessionPageResponse(404);
+const [context, { caller }] = resolved;
+let session: HostedSession = resolved[1].session;
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return sessionPageResponse(405);
+if (method === "POST" && !hasMatchingRequestOrigin(Astro.request)) return sessionPageResponse(404);
+
+const fieldsOf = (row: HostedSession): SessionFields => ({ title: row.title, ...nairobiFields(row.scheduledStartAt), length: String(row.bookedMinutes) });
+let values = fieldsOf(session);
+let errors: FieldErrors<keyof SessionFields> = {};
+/** A change waiting to be confirmed. */
+let pending: { startAt: number; minutes: number } | null = null;
+let failure: { message: string; conduct: boolean } | null = null;
+let unchanged = false;
+const channel = `#${session.channel.slug}`;
+const sessionsPath = SPACE_PAGE_PATHS.sessions;
+
+const done = (title: string, note: string | null) => redirectWithFlash(Astro, sessionsPath, {
+  tone: note === "not_posted" ? "warning" : "success",
+  title,
+  message: note === "posted" ? `${channel} has a note saying so.` : note === "not_posted" ? `The note to ${channel} didn't post. Tell the cohort there.` : undefined,
+});
+
+if (method === "POST") {
+  const form = await Astro.request.formData();
+  // The session as the page just read it for this host, so the action doesn't read it again.
+  const write = { db: env.DB, now, afterNote: noteChecks(env, Astro.locals.cfContext, sessionDatePath(session.id)) };
+  const known = { known: session };
+  const intent = form.get("intent");
+  try {
+    if (intent === "cancel") {
+      const result = await cancelSession(write, caller, session.id, known);
+      return done(`Cancelled “${session.title}”`, result.note);
+    }
+    const reading = readSessionEdit(form, now, session.scheduledStartAt);
+    values = reading.values;
+    if (reading.kind === "invalid") {
+      errors = reading.errors;
+      Astro.response.status = 400;
+    } else if (intent === "edit") {
+      // "Change it again": the form, with the change still in it.
+    } else if (reading.values.title === session.title && reading.startAt === session.scheduledStartAt && reading.minutes === session.bookedMinutes) {
+      unchanged = true;
+    } else if (intent === "save") {
+      const result = await changeSession(write, caller, session.id, {
+        title: reading.values.title, startAt: reading.startAt, bookedMinutes: reading.minutes,
+      }, known);
+      return done(result.moved ? `Moved “${result.session.title}”` : `Saved “${result.session.title}”`, result.note);
+    } else if (intent === "review") {
+      pending = { startAt: reading.startAt, minutes: reading.minutes };
+    }
+  } catch (error) {
+    if (!(error instanceof ChannelError)) throw error;
+    if (error.status === 404) return sessionPageResponse(404);
+    failure = { message: error.message, conduct: error.code === "conduct_required" };
+    Astro.response.status = error.status;
+    session = await readSession(env.DB, caller, session.id).catch(() => session);
+  }
+}
+
+const editable = session.state === "SCHEDULED";
+const confirming = editable && method !== "POST" ? confirmingAction(Astro.url, ["cancel"] as const) : null;
+const moving = pending !== null && pending.startAt !== session.scheduledStartAt;
+const hasErrors = Object.keys(errors).length > 0 || failure !== null;
+const pendingDay = pending ? `${sessionDay(pending.startAt, now)}, ${sessionHours(pending.startAt, pending.minutes)}` : "";
+const stateNote = session.state === "LIVE"
+  ? "This session has started, so it can't be changed. End it from the call instead."
+  : session.state === "CANCELLED" ? "This session was cancelled." : "This session has ended.";
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title={`Edit ${session.title}`} titlePrefix={hasErrors ? "Error: " : ""}>
+  <div class="flex max-w-3xl flex-col gap-6">
+    <BackLink href={sessionsPath}>Sessions</BackLink>
+    <PageHeader title="Edit a session">
+      {session.cohortName}: <SessionTime startAt={session.scheduledStartAt} minutes={session.bookedMinutes} now={now} />. Changing this
+      date leaves the others in its series as they are.
+    </PageHeader>
+
+    {failure ? (
+      <Notice tone="danger" title="We couldn't save that" focusOnLoad>
+        {failure.message}{" "}
+        {failure.conduct ? <a class="underline underline-offset-4" href={CONDUCT_PATH}>Read how we talk to each other</a> : null}
+      </Notice>
+    ) : Object.keys(errors).length > 0 ? (
+      <Notice tone="danger" title="Check the form" focusOnLoad>
+        {Object.keys(errors).length === 1 ? "One answer needs a change." : `${Object.keys(errors).length} answers need a change.`} Each says what to do next to it.
+      </Notice>
+    ) : unchanged ? (
+      <Notice tone="info" title="Nothing changed" focusOnLoad>The session is as it was. Change a field, or go back to Sessions.</Notice>
+    ) : null}
+
+    {!editable ? (
+      <Notice tone="info" title={stateNote} focusOnLoad>
+        <ButtonLink variant="quiet" size="sm" href={sessionsPath}>Back to Sessions</ButtonLink>
+      </Notice>
+    ) : confirming === "cancel" ? (
+      <ConfirmStep
+        title={`Cancel “${session.title}” on ${sessionDay(session.scheduledStartAt, now)}?`}
+        confirmLabel="Cancel session"
+        cancelHref={withoutConfirm(Astro.url)}
+        fields={{ intent: "cancel" }}
+      >
+        {channel} is told. People who added it to a calendar need to remove it there. The other dates in its series stay as
+        they are.
+      </ConfirmStep>
+    ) : pending ? (
+      <div class="flex flex-col gap-3" data-confirm-change>
+        <Notice
+          tone="warning"
+          title={moving ? `Move “${values.title}” to ${pendingDay}?` : `Save the changes to “${values.title}”?`}
+          focusOnLoad
+        >
+          {moving
+            ? `${channel} is told. People who added it to a calendar can add it again from Sessions to update it.`
+            : `It stays at ${pendingDay}, ${lengthLabel(pending.minutes)}. Nobody is told.`}{" "}
+          The other dates in its series stay as they are.
+        </Notice>
+        <form method="post" class="flex flex-wrap gap-2">
+          <input type="hidden" name="title" value={values.title} />
+          <input type="hidden" name="date" value={values.date} />
+          <input type="hidden" name="time" value={values.time} />
+          <input type="hidden" name="length" value={values.length} />
+          <Button type="submit" name="intent" value="save">{moving ? "Move session" : "Save changes"}</Button>
+          <Button type="submit" name="intent" value="edit" variant="ghost">Change it again</Button>
+        </form>
+      </div>
+    ) : (
+      <Card>
+        <form method="post" class="flex flex-col gap-6" novalidate>
+          <TextField label="Title" name="title" defaultValue={values.title} error={errors.title} maxLength={120} required
+            hint={`Shown in Sessions, in ${channel} and in people's calendars.`} />
+          <div class="grid gap-4 sm:grid-cols-3">
+            <TextField label="Date" name="date" type="date" defaultValue={values.date} error={errors.date} required />
+            <TextField label="Starts" name="time" type="time" defaultValue={values.time} error={errors.time} hint="Nairobi time (EAT)." required />
+            <SelectField
+              label="Length"
+              name="length"
+              options={SESSION_LENGTHS.map((minutes) => ({ value: String(minutes), label: lengthLabel(minutes) }))}
+              defaultValue={values.length}
+              error={errors.length}
+              hint={`Every session ends at ${CALL_LIMIT_MINUTES} minutes.`}
+            />
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button type="submit" name="intent" value="review">Review changes</Button>
+            <ButtonLink variant="ghost" href={confirmHref(Astro.url, "cancel")}>Cancel this session</ButtonLink>
+          </div>
+        </form>
+      </Card>
+    )}
+  </div>
+</SpacePage>

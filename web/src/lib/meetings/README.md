@@ -7,8 +7,47 @@ UX-REVIEW); it is built one slice at a time, every slice dark behind the flags b
 What exists so far is the foundation: the tables, the flags (OFF), the values in the contracts and
 the recording policy's channel rule (slice P3a, migration 0043); and who may join, the provider
 interface with a fake, the seats, the state machine and the API routes (slice P3b). Nothing a person
-sees has changed: no page uses the routes yet (the room is slice P5), and every route is 404 while
-`meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice P4.
+sees has changed outside the scheduling pages below: no page uses the routes yet (the room is slice
+P5), and every route is 404 while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice P4.
+
+## Scheduling cohort sessions (slice P8)
+
+Cohort sessions are scheduled from the cohort's Sessions page, by that cohort's instructors and TAs
+or an admin (`meetingAccessFor`'s `canHost` on the cohort's main channel). Scheduling only writes
+`meeting` rows: nothing is made at the provider until a host opens the room (P5, P6). While
+`meetings` is off for the caller, the Sessions page is exactly what it was and every page and action
+below is the same 404; so is everything for a person who doesn't host (or, for the calendar file,
+see) the session, whatever the reason.
+
+| Page | Who | What |
+|---|---|---|
+| `/dashboard/cohort/sessions` | the cohort's readers | "Coming up" above the recordings: each date still to come (and a live one), soonest first, with "Add to calendar"; hosts also get Edit and Cancel, and "Schedule a session" |
+| `/dashboard/cohort/sessions/schedule` (`?cohort=`) | its hosts | the form: title, date, start in Nairobi time, length up to `CALL_LIMIT_MINUTES` in `SESSION_LENGTH_STEP_MINUTES` steps, just once or every week for 2 to `SESSION_SERIES_MAX_WEEKS` weeks. A series is previewed first, every date ticked; an unticked date is skipped. An admin chooses the cohort |
+| `/dashboard/cohort/sessions/upcoming/:id` | its hosts | one date: change its title, time or length behind a confirm step, or cancel it (`?confirm=cancel`, a `ConfirmStep`). Only a date that hasn't opened changes |
+| `/dashboard/cohort/sessions/upcoming/:id/calendar.ics` | its readers | the date's calendar file |
+
+- **Plain forms.** Every page posts to itself and works without JavaScript (`session-form.ts` reads
+  the fields; `sessions.ts` checks everything again: the host, every date still to come and within
+  `SESSION_BOOK_AHEAD_DAYS`, the title, the length). A series is scheduled only from a preview of the
+  same first date, time, length and weeks (`previewKey`), and only its own dates.
+- **Separate dates.** A weekly series is one `meeting` per date sharing a `seriesId`; moving or
+  cancelling one never changes the others. Always recorded (`ALWAYS`), with the call's limit.
+- **Once per form.** The form carries its own token, made when it is first shown: the series id and
+  the base of each date's id. The dates are written in one statement that writes none of them if any
+  exists, so a form sent twice schedules once, and its note (nonce `session-scheduled-<token>`) posts
+  once. Only "Schedule" schedules; "Preview dates" writes nothing.
+- **One line in the channel.** Scheduling, moving and cancelling each post one line in the session's
+  channel, by the host who acted, since there is no system author: "Scheduled 5 sessions: …" never a
+  card per date (the card is P9). It goes through `postMessage` (the detectors, the code of conduct,
+  the rate limits), then gets what a post through the channel API gets after the response
+  (`note-checks.ts`): Clef's check, and the admins' queue notice when it was flagged or hidden. A note
+  mentions nobody. Titles are put on one line. A refused note leaves the sessions as they are, and the
+  host is told to tell the cohort.
+- **Times.** Entered in Nairobi time; stored as the moment. Pages write Nairobi time with "EAT", and
+  the browser adds the reader's own time where it differs (`local-time.ts`). No time zone is stored.
+- **The calendar file** (`ics.ts`, RFC 5545): UTC times, so no VTIMEZONE; the call's id as its UID
+  and a SEQUENCE that rises with each change, so adding a moved date again replaces the old entry.
+  There are no email reminders.
 
 ## The rules (`rules.ts`)
 

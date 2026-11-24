@@ -1,0 +1,75 @@
+---
+/**
+ * "Coming up" on the cohort's Sessions page (in-app calls P8), above the recordings, while `meetings`
+ * is on for the reader: the sessions still to come in their cohorts, soonest first, each date its own.
+ * Everyone who can see a session can add it to their calendar (there are no email reminders); its
+ * hosts (the cohort's instructors and TAs, admins) can also edit or cancel it, each behind a confirm step.
+ */
+import { ButtonLink, Card, Chip, CONFIRM_PARAM, DataList, DataListItem, EmptyState } from "@/components/platform/ui";
+import type { UpcomingSession } from "@/lib/meetings/sessions";
+import { lengthLabel } from "@/lib/meetings/session-times";
+import { MAX_PEOPLE_PER_CALL, SEATS_KEPT_FOR_HOST } from "@/lib/meetings/rules";
+import { sessionCalendarPath, sessionDatePath } from "@/lib/platform/server/space-routes";
+import SessionTime from "./SessionTime.astro";
+
+interface Props {
+  sessions: readonly UpcomingSession[];
+  now: number;
+  /** Whether the reader hosts any cohort, so an empty list still says what scheduling does. */
+  hosts: boolean;
+}
+
+const { sessions, now, hosts } = Astro.props;
+// Name each session's cohort only where the list holds more than one.
+const severalCohorts = new Set(sessions.map(({ programId }) => programId)).size > 1;
+const hostsAny = hosts || sessions.some(({ access }) => access.canHost);
+const places = `Up to ${MAX_PEOPLE_PER_CALL} people can join a session, with ${SEATS_KEPT_FOR_HOST === 1 ? "one place" : `${SEATS_KEPT_FOR_HOST} places`} kept for a host.`;
+const channels = [...new Set(sessions.filter(({ access }) => access.canHost).map(({ channel }) => `#${channel.slug}`))];
+---
+
+<section aria-labelledby="coming-up-title" class="flex flex-col gap-4" data-coming-up>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 id="coming-up-title" class="m-0 text-xl text-ink-primary">Coming up</h2>
+    <p class="m-0 text-sm text-ink-muted">Times in Nairobi time (EAT)</p>
+  </div>
+  {sessions.length === 0 ? (
+    <EmptyState title="Nothing scheduled yet" headingLevel={3}>
+      When you schedule a session, it shows here and the cohort's channel gets a note.
+    </EmptyState>
+  ) : (
+    <Card>
+      <DataList label="Sessions coming up">
+        {sessions.map((session) => (
+          <DataListItem title={session.title}>
+            <Fragment slot="status">
+              {session.state === "LIVE" ? <Chip tone="peach">Live now</Chip> : null}
+            </Fragment>
+            <Fragment slot="meta">
+              <SessionTime startAt={session.scheduledStartAt} minutes={session.bookedMinutes} now={now} />
+              {` · ${lengthLabel(session.bookedMinutes)} · Recorded`}
+              {severalCohorts ? ` · ${session.cohortName}` : ""}
+            </Fragment>
+            <Fragment slot="actions">
+              <ButtonLink variant="quiet" size="sm" href={sessionCalendarPath(session.id)} download data-add-to-calendar>
+                Add to calendar
+              </ButtonLink>
+              {session.access.canHost && session.state === "SCHEDULED" ? (
+                <>
+                  <ButtonLink variant="quiet" size="sm" href={sessionDatePath(session.id)} aria-label={`Edit ${session.title}`}>Edit</ButtonLink>
+                  <ButtonLink variant="ghost" size="sm" href={`${sessionDatePath(session.id)}?${CONFIRM_PARAM}=cancel`} aria-label={`Cancel ${session.title}`}>
+                    Cancel
+                  </ButtonLink>
+                </>
+              ) : null}
+            </Fragment>
+          </DataListItem>
+        ))}
+      </DataList>
+    </Card>
+  )}
+  <p class="m-0 max-w-prose text-sm text-ink-muted">
+    {hostsAny
+      ? `Each date is separate: moving or cancelling one never changes the others${channels.length === 1 ? `, and ${channels[0]} gets a note when you do` : ", and the cohort's channel gets a note when you do"}. ${places}`
+      : "Add a session to your calendar to get a reminder from it. TTV doesn't send emails about sessions."}
+  </p>
+</section>
