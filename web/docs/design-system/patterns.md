@@ -206,7 +206,8 @@ A task that matters gets its own page. Modals use
 `components/platform/overlays/useModalDialog`: focus moves in on open, stays
 inside, Escape closes, focus returns to the trigger, and the page behind is
 inert and dimmed. Drawers slide from their own edge and are still under
-reduced motion.
+reduced motion. A question asked inside an island that can't reload (a live
+call) is the kit's `Dialog`; everywhere else it is a `ConfirmStep`.
 
 ## Without JavaScript
 

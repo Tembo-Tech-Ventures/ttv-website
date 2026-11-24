@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { PiBellSimple, PiPaperPlaneTilt, PiPushPin } from "react-icons/pi";
-import { Button, IconButton, Pill, REACTIONS, TextReaction } from "@/components/platform/ui";
+import {
+  Button,
+  Countdown,
+  Dialog,
+  IconButton,
+  LiveAnnouncer,
+  Pill,
+  REACTIONS,
+  TextReaction,
+  groupSentence,
+  useAnnouncer,
+  type CountdownWarning,
+} from "@/components/platform/ui";
 import type { ReactionKind } from "@/lib/platform/contracts";
+import { GUIDE_PEOPLE } from "./people";
 
 /*
  * The parts of the guide you can press. Each demo renders on the server in its
@@ -9,7 +22,7 @@ import type { ReactionKind } from "@/lib/platform/contracts";
  * state to itself: nothing is sent anywhere.
  */
 
-export type LiveDemo = "button" | "icon-button" | "pill" | "reaction";
+export type LiveDemo = "button" | "icon-button" | "pill" | "reaction" | "dialog" | "announcer" | "countdown";
 
 function SendDemo() {
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
@@ -115,11 +128,141 @@ function ReactionDemo() {
   );
 }
 
+function DialogDemo() {
+  const [open, setOpen] = useState(false);
+  const [outcome, setOutcome] = useState("");
+  const { david } = GUIDE_PEOPLE;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button variant="danger" onClick={() => setOpen(true)}>
+        Withdraw request
+      </Button>
+      <Dialog
+        id="guide-dialog-withdraw"
+        title={`Withdraw your request to ${david.name}?`}
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setOutcome("Kept. Nothing changed.");
+        }}
+        actions={
+          <Button
+            variant="danger"
+            onClick={() => {
+              setOpen(false);
+              setOutcome("Withdrawn. This is a demonstration, so nothing left the page.");
+            }}
+          >
+            Withdraw request
+          </Button>
+        }
+      >
+        {david.name.split(" ")[0]} won&apos;t see it any more. You can ask again later.
+      </Dialog>
+      <output className="text-sm text-ink-secondary">{outcome}</output>
+    </div>
+  );
+}
+
+/** What the demonstration's announcer said, shown, so a sighted reader sees what a screen reader hears. */
+function Heard() {
+  const voice = useAnnouncer();
+  const [heard, setHeard] = useState<readonly { id: number; line: string }[]>([]);
+  useEffect(
+    () =>
+      voice?.store.subscribe(() => {
+        const said = voice.store.getState();
+        if (said) setHeard((now) => [...now.slice(-3), { id: said.id, line: `${said.priority === "assertive" ? "At once" : "Politely"}: ${said.message}` }]);
+      }),
+    [voice],
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <p className="m-0 text-xs font-semibold text-ink-secondary">What a screen reader hears</p>
+      {heard.length === 0 ? (
+        <p className="m-0 text-sm text-ink-secondary">Nothing yet.</p>
+      ) : (
+        <ol className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-ink-primary">
+          {heard.map(({ id, line }) => (
+            <li key={id}>{line}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function AnnouncerControls() {
+  const voice = useAnnouncer();
+  const { kevin, faith, brian } = GUIDE_PEOPLE;
+  const joined = (names: readonly string[]) => groupSentence(names, "joined");
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          onClick={() => {
+            for (const person of [kevin, faith, brian]) voice?.gather("joined", person.name, { sentence: joined });
+          }}
+        >
+          Three people join
+        </Button>
+        <Button onClick={() => voice?.say("Recording started", { priority: "assertive" })}>Start recording</Button>
+      </div>
+      <Heard />
+    </div>
+  );
+}
+
+function AnnouncerDemo() {
+  return (
+    <LiveAnnouncer name="guide-announcer">
+      <AnnouncerControls />
+    </LiveAnnouncer>
+  );
+}
+
+/** The last minute of a call, so the demonstration's two warnings come within a minute and ten seconds. */
+const DEMO_WARNINGS: readonly CountdownWarning[] = [
+  { at: 60, priority: "assertive" },
+  { at: 10, priority: "assertive" },
+];
+
+function CountdownDemo() {
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [ended, setEnded] = useState(false);
+
+  return (
+    <LiveAnnouncer name="guide-countdown">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={() => {
+              setEnded(false);
+              setEndsAt(Date.now() + 70_000);
+            }}
+          >
+            {endsAt === null ? "Start a 70-second countdown" : "Start again"}
+          </Button>
+          {endsAt !== null && <Countdown key={endsAt} endsAt={endsAt} warnings={DEMO_WARNINGS} subject="The demonstration" onEnd={() => setEnded(true)} />}
+        </div>
+        {ended && <p className="m-0 text-sm text-ink-secondary">Ended. In a call, the server ends it for everyone at this point.</p>}
+        <Heard />
+      </div>
+    </LiveAnnouncer>
+  );
+}
+
 const DEMOS: Record<LiveDemo, () => JSX.Element> = {
   button: SendDemo,
   "icon-button": ToggleDemo,
   pill: FilterDemo,
   reaction: ReactionDemo,
+  dialog: DialogDemo,
+  announcer: AnnouncerDemo,
+  countdown: CountdownDemo,
 };
 
 export default function LiveSpecimen({ demo }: { demo: LiveDemo }) {

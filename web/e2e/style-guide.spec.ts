@@ -217,3 +217,135 @@ test("makes the link that names a row a 44px target on a touch screen, without m
   else expect(measured.link).toBe(measured.text);
   expect(measured.row).toBe(measured.bareRow);
 });
+
+test.describe("the call room's parts", () => {
+  async function hydrated(page: Page, demo: string) {
+    const live = page.locator(`[data-live="${demo}"]`);
+    await live.scrollIntoViewIfNeeded();
+    await expect(live.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
+    return live;
+  }
+
+  test("a dialog in an island keeps focus inside, closes on Escape and gives focus back", async ({ page }, testInfo) => {
+    await open(page, "/style-guide/components");
+    const demo = await hydrated(page, "dialog");
+    const trigger = demo.getByRole("button", { name: "Withdraw request" });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog", { name: "Withdraw your request to David Kamau?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleDescription("David won't see it any more. You can ask again later.");
+    const cancel = dialog.getByRole("button", { name: "Cancel" });
+    const confirm = dialog.getByRole("button", { name: "Withdraw request" });
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(confirm).toBeFocused();
+    await runAxe(page, testInfo, "style-guide-dialog-open", { include: ["main"] });
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(demo.getByRole("status")).toHaveText("Kept. Nothing changed.");
+  });
+
+  test("a dialog on a static page opens, closes on Escape and gives focus back with no script at all", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto("/style-guide/components#dialog");
+    const trigger = page.locator("#dialog").getByRole("button", { name: "Delete draft" });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Delete the draft “Chama ledger”?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    // The way out is a method="dialog" form, which the browser closes on its own.
+    await trigger.click();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await context.close();
+  });
+
+  test("an announcer says a burst of arrivals once, as one sentence", async ({ page }) => {
+    await open(page, "/style-guide/components");
+    const demo = await hydrated(page, "announcer");
+    const join = demo.getByRole("button", { name: "Three people join" });
+    await join.click();
+    await expect(demo.locator('[data-live-announcer="guide-announcer"] output')).toHaveText("Kevin Omondi and 2 others joined", { timeout: 5_000 });
+    // The same burst again straight away is the same news: it is not said twice.
+    await join.click();
+    await page.waitForTimeout(2_500);
+    await expect(demo.getByRole("listitem")).toHaveText(["Politely: Kevin Omondi and 2 others joined"]);
+
+    await demo.getByRole("button", { name: "Start recording" }).click();
+    await expect(demo.locator('[data-live-announcer="guide-announcer"] [role="alert"]')).toHaveText("Recording started");
+  });
+
+  test("a countdown changes once a minute, then says the last minute and the last ten seconds once each", async ({ page }) => {
+    await page.clock.install();
+    await open(page, "/style-guide/components");
+    const demo = await hydrated(page, "countdown");
+    // From here the page's time moves only when the test says.
+    await page.clock.pauseAt(Date.now() + 1_000);
+    await demo.getByRole("button", { name: "Start a 70-second countdown" }).click();
+    const timer = demo.getByRole("timer");
+    await expect(timer).toHaveText(/2 min left/);
+    await expect(demo.locator("[data-countdown]")).toHaveCSS("font-variant-numeric", "tabular-nums");
+
+    await page.clock.runFor(11_500);
+    await expect(timer).toHaveText(/0:59 left/);
+    const alert = demo.locator('[data-live-announcer="guide-countdown"] [role="alert"]');
+    await expect(alert).toHaveText("The demonstration ends in 1 minute.");
+
+    await page.clock.runFor(50_000);
+    await expect(alert).toHaveText("The demonstration ends in 10 seconds.");
+    await page.clock.runFor(11_000);
+    await expect(timer).toHaveText(/Ending now/);
+    await expect(demo.getByRole("listitem")).toHaveText(["At once: The demonstration ends in 1 minute.", "At once: The demonstration ends in 10 seconds."]);
+  });
+
+  test("a countdown moves through its last minute in steps of ten seconds under reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.install();
+    await open(page, "/style-guide/components");
+    const demo = await hydrated(page, "countdown");
+    await page.clock.pauseAt(Date.now() + 1_000);
+    await demo.getByRole("button", { name: "Start a 70-second countdown" }).click();
+    const timer = demo.getByRole("timer");
+    await page.clock.runFor(11_000);
+    await expect(timer).toHaveText(/1:00 left/);
+    await page.clock.runFor(5_000);
+    await expect(timer).toHaveText(/1:00 left/);
+    await page.clock.runFor(5_000);
+    await expect(timer).toHaveText(/0:50 left/);
+    await expect(demo.locator("[data-countdown]")).toHaveCSS("transition-property", "none");
+  });
+
+  test("gives every control in them a 44px target on a touch screen", async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.name.includes("mobile"), "Targets grow on a coarse pointer.");
+    await open(page, "/style-guide/components");
+    const sizes = async (selector: string) =>
+      page.locator(selector).evaluateAll((buttons) =>
+        buttons.filter((button) => button.getClientRects().length > 0).map((button) => {
+          const box = button.getBoundingClientRect();
+          return Math.round(Math.min(box.width, box.height));
+        }),
+      );
+    for (const id of ["dialog", "live-announcer", "countdown"]) {
+      const measured = await sizes(`#${id} button`);
+      expect(measured.length, id).toBeGreaterThan(0);
+      for (const size of measured) expect(size, id).toBeGreaterThanOrEqual(44);
+    }
+    await page.locator("#dialog").getByRole("button", { name: "Delete draft" }).click();
+    const inside = await sizes("dialog[open] button");
+    expect(inside).toHaveLength(2);
+    for (const size of inside) expect(size).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  });
+});

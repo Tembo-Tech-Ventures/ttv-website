@@ -11,6 +11,7 @@ import {
   ChoiceGroup,
   ConfirmStep,
   CountBadge,
+  Countdown,
   DataCell,
   DataList,
   DataListItem,
@@ -19,6 +20,7 @@ import {
   DataTable,
   DescriptionItem,
   DescriptionList,
+  Dialog,
   Disclosure,
   EmptyState,
   FileField,
@@ -45,6 +47,8 @@ import {
   TextAreaField,
   TextField,
   TextReaction,
+  dialogOpener,
+  groupSentence,
   linkClass,
 } from "@/components/platform/ui";
 import type { LiveDemo } from "./LiveSpecimen";
@@ -71,7 +75,11 @@ export type CatalogueEntry = {
   code: string;
 };
 
-const { wanjiku, david, joseph, lucy } = GUIDE_PEOPLE;
+const { wanjiku, david, joseph, lucy, kevin, faith, brian } = GUIDE_PEOPLE;
+
+/** A fixed moment for the countdowns, so the server draws the same page every time: 18:47 in Nairobi. */
+const COUNTDOWN_NOW = Date.UTC(2026, 10, 26, 15, 47);
+const countdownClock = () => COUNTDOWN_NOW;
 
 function Row({ children, label }: { children: ReactNode; label?: string }) {
   return (
@@ -721,6 +729,140 @@ const asking = confirmingAction(Astro.url, ["remove-mentor"]);
 ) : (
   <ButtonLink variant="danger" href={confirmHref(Astro.url, "remove-mentor")}>Remove from cohort</ButtonLink>
 )}`,
+  },
+  {
+    id: "dialog",
+    name: "Dialog",
+    exports: ["Dialog", "dialogOpener"],
+    live: "dialog",
+    summary: "A question that has to be answered before anything else, asked without leaving the page: for an island that can't reload, such as a live call.",
+    specimen: () => (
+      <Row>
+        <Button variant="danger" {...dialogOpener("guide-dialog-delete")}>
+          Delete draft
+        </Button>
+        <Dialog
+          id="guide-dialog-delete"
+          title="Delete the draft “Chama ledger”?"
+          actions={
+            <form method="post" action="#dialog">
+              <Button variant="danger" type="submit">
+                Delete draft
+              </Button>
+            </form>
+          }
+        >
+          Only you could see it. Deleting it can&apos;t be undone.
+        </Dialog>
+      </Row>
+    ),
+    use: [
+      "A confirm step inside a React island that must keep its place, where a page load would lose what is happening: “End for everyone?” in a call.",
+      "The title asks the question and names the thing; the words under it say what happens; the action says it again on its button.",
+      "In an island, open it with open and close it in onClose. On a static page, open it with a dialogOpener button, and put the action in its own form.",
+    ],
+    avoid: [
+      "A confirm on an ordinary page: ConfirmStep works in every browser without script, and keeps its address.",
+      "A form or a task that matters on its own. Give it a page.",
+      "A dialog that opens another dialog.",
+    ],
+    access: [
+      "A native modal dialog: the page behind is inert, Tab and Shift Tab stay inside, and Escape closes it.",
+      "It is named by its title and described by its words, and focus starts on the way out, so Enter never does the irreversible thing by accident.",
+      "Focus goes back to the control that opened it, or to returnFocus when that control is gone.",
+      "Inside a LiveAnnouncer it carries the live regions while open, so a warning said behind it is still heard.",
+    ],
+    code: `// In a React island
+const [asking, setAsking] = useState(false);
+<Button variant="danger" onClick={() => setAsking(true)}>End for everyone</Button>
+<Dialog id="end-session" title="End for everyone?" open={asking} onClose={() => setAsking(false)}
+  actions={<Button variant="danger" onClick={() => { setAsking(false); end(); }}>End session</Button>}>
+  Everyone leaves at once, and the recording stops.
+</Dialog>
+
+<!-- On a static page: the browser opens it, no script -->
+<Button variant="danger" {...dialogOpener("delete-draft")}>Delete draft</Button>
+<Dialog id="delete-draft" title="Delete the draft “Chama ledger”?">
+  Only you could see it. Deleting it can't be undone.
+  <Fragment slot="actions">
+    <form method="post"><Button variant="danger" type="submit" name="intent" value="delete">Delete draft</Button></form>
+  </Fragment>
+</Dialog>`,
+  },
+  {
+    id: "live-announcer",
+    name: "LiveAnnouncer",
+    exports: ["LiveAnnouncer", "useAnnouncer", "createLiveAnnouncer", "groupSentence"],
+    live: "announcer",
+    summary: "What a screen reader is told when something changes without a page load: once, in as few words as it takes, politely unless it can't wait.",
+    specimen: () => (
+      <Row label="What it says, for three people arriving at once">
+        <p className="m-0 text-sm text-ink-primary">“{groupSentence([kevin.name, faith.name, brian.name], "joined")}”</p>
+      </Row>
+    ),
+    use: [
+      "Once per island, near its top: the regions must be in the page before anything is said into them. Parts inside take it with useAnnouncer().",
+      "say for one event: polite by default, assertive only for what can't wait (recording started, connection lost, a host muted you).",
+      "gather for bursts of the same event, said once as one sentence: “Kevin Omondi and 2 others joined”.",
+    ],
+    avoid: [
+      "A clock or anything else said on a schedule. Say what changed, when it changed.",
+      "Repeating what the page already shows when it loads: a live region is for change.",
+      "A second announcer in the same island, which would talk over the first.",
+    ],
+    access: [
+      "A polite region (an output) and an assertive one (an alert), both empty until something is said.",
+      "The same words are said once in 5 seconds, messages are spaced a second apart, and urgent ones go first.",
+      "A burst of arrivals waits 2 seconds and is said as one sentence, with the first name in full.",
+    ],
+    code: `<LiveAnnouncer name="call">
+  <CallRoom />
+</LiveAnnouncer>
+
+// Inside, in any part of the island
+const voice = useAnnouncer();
+voice?.say("Recording started", { priority: "assertive" });
+voice?.gather("joined", person.name, { sentence: (names) => groupSentence(names, "joined") });`,
+  },
+  {
+    id: "countdown",
+    name: "Countdown",
+    exports: ["Countdown", "CALL_WARNINGS", "CHECK_IN_WARNINGS"],
+    live: "countdown",
+    summary: "When something ends and how long is left, in figures that hold still: whole minutes until the last one, and a few warnings said out loud.",
+    specimen: () => (
+      <Specimens>
+        <Row label="More than 5 minutes left">
+          <Countdown endsAt={COUNTDOWN_NOW + 15 * 60_000} now={countdownClock} />
+        </Row>
+        <Row label="5 minutes or less">
+          <Countdown endsAt={COUNTDOWN_NOW + 4 * 60_000} now={countdownClock} />
+        </Row>
+        <Row label="The last minute">
+          <Countdown endsAt={COUNTDOWN_NOW + 42_000} now={countdownClock} />
+        </Row>
+      </Specimens>
+    ),
+    use: [
+      "A limit that ends something for everyone at once, such as a call's 90 minutes or a check-in's 30, from the end time the server gave.",
+      "warnings=\"call\" says 15 and 5 minutes politely, and 1 minute and 10 seconds at once; \"check-in\" says 10 and 5 minutes, then the same.",
+      "subject names what ends, in the words the page uses: “The session”, “The call”, “The check-in”.",
+    ],
+    avoid: [
+      "A deadline days away: write the date.",
+      "Counting time since something started. Say when it started.",
+      "Warnings without a LiveAnnouncer around it: they would have nowhere to be said.",
+    ],
+    access: [
+      "A timer, which screen readers don't read as it changes. Only its warnings are said, each once, and none already past when it starts.",
+      "Tabular numerals, so the figures don't jump; minutes change once a minute, and the last minute moves in steps of ten seconds under reduced motion.",
+      "From 5 minutes the ink turns to warning and the icon to a warning sign; the words always say how long, so colour is never the only signal.",
+    ],
+    code: `<LiveAnnouncer name="call">
+  <Countdown endsAt={session.endsAt} warnings="call" subject="The session" onEnd={showEnded} />
+</LiveAnnouncer>
+
+<Countdown endsAt={checkIn.endsAt} warnings="check-in" subject="The check-in" />`,
   },
   {
     id: "secret-value",
