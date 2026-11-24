@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
+import { createSqliteD1, featureFlagSeeds, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 
 const mocks = vi.hoisted(() => ({
   env: {} as Record<string, unknown>,
@@ -39,6 +39,7 @@ beforeEach(() => {
   setup.database.exec(MINIMAL_AUTH_SCHEMA);
   setup.database.exec(readMigration("0021_feature_flags.sql"));
   setup.database.exec(readMigration("0025_onboarding.sql"));
+  setup.database.exec(featureFlagSeeds());
   // The program tables capabilitiesFor reads; the admin guard of a GET shares that read (PERF-2).
   setup.database.exec(`CREATE TABLE programApplication (id text PRIMARY KEY, userId text, programId text, status text);
     CREATE TABLE programRole (id text PRIMARY KEY, userId text, programId text, name text);`);
@@ -143,7 +144,9 @@ describe("platform flags admin API through real middleware guards", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const data = FlagsAdmin.parse(await response.json());
-    expect(data.flags.map(flag => flag.key)).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
+    expect(data.flags.map(flag => flag.key)).toEqual([
+      "spaces", "channels", "tembo_channels", "mentor_requests", "onboarding", "meetings", "meeting_checkins", "meeting_events",
+    ]);
     expect(data.flags.every(flag => flag.audience === "OFF" && flag.updatedBy === null)).toBe(true);
     expect(data.flags.every(flag => flag.updatedAt > 1_700_000_000_000)).toBe(true);
     expect(queries.mock.calls.filter(([sql]) => sql.startsWith("SELECT key"))).toHaveLength(1);

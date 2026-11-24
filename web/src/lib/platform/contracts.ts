@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { inSpaceOrder, SPACE_ORDER } from "./space-order";
+import {
+  CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS, MEETING_PURPOSES,
+  MEETING_RECORDING_POLICIES, MEETING_RECORDING_STATES, MEETING_SEAT_ROLES, MEETING_SEAT_STATES, MEETING_STATES,
+} from "@/lib/meetings/rules";
 
 /** Wire contracts only. No handlers, database dependencies, or access decisions. */
 export interface RouteDef<P = unknown, Q = unknown, B = unknown, R = unknown> {
@@ -53,8 +57,10 @@ export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>;
 export { SPACE_ORDER } from "./space-order";
 export const SpaceId = z.enum(SPACE_ORDER);
 export type SpaceId = z.infer<typeof SpaceId>;
-/** onboarding is effective only while spaces is (onboarding SPEC §6). */
-export const FlagKey = z.enum(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
+/** Which flags each builds on is REQUIRES in lib/platform/server/flags.ts. */
+export const FlagKey = z.enum([
+  "spaces", "channels", "tembo_channels", "mentor_requests", "onboarding", "meetings", "meeting_checkins", "meeting_events",
+]);
 export type FlagKey = z.infer<typeof FlagKey>;
 export const FlagAudience = z.enum(["OFF", "STAFF", "ALL"]);
 export type FlagAudience = z.infer<typeof FlagAudience>;
@@ -116,16 +122,22 @@ export const Me = z.object({
   .refine((m) => !m.mentoring || m.spaces.includes("mentoring"), "Mentoring summary needs the Mentoring space");
 export type Me = z.infer<typeof Me>;
 
+/**
+ * In-app calls add four, which nothing produces yet (lib/meetings/README.md): a call starting soon and
+ * a call now live, to the people who can read its channel; the other person, when one of the two
+ * deletes their check-in's recording; and admins, when the month's recording spending reaches its alert.
+ */
 export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
   "mentor_declined", "mentor_withdrawn", "recording_ready", "application_status",
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
   "access_request", "access_decided", "moderation_decided", "mentor_checked",
+  "meeting_soon", "meeting_live", "recording_deleted", "recording_spend_alert",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
   "message", "channel", "recording", "journey", "mentorRequest", "application", "visitorMessage", "opportunity",
-  "accessRequest",
+  "accessRequest", "meeting",
 ]);
 export type SubjectKind = z.infer<typeof SubjectKind>;
 export const SubjectRef = z.object({ kind: SubjectKind, id: Id, href: InternalPath, label: NonEmptyText });
@@ -236,6 +248,41 @@ export const SessionClipEmbed = z.object({
   startSeconds: z.number().nonnegative(), durationSeconds: z.number().positive(), quote: NonEmptyText,
 });
 export type SessionClipEmbed = z.infer<typeof SessionClipEmbed>;
+// In-app calls (lib/meetings/README.md): the values a call, its seats, consent, recording and a
+// suggested call take, from lib/meetings/rules.ts, for the routes and cards later slices add.
+export const MeetingPurpose = z.enum(MEETING_PURPOSES);
+export type MeetingPurpose = z.infer<typeof MeetingPurpose>;
+export const MeetingState = z.enum(MEETING_STATES);
+export type MeetingState = z.infer<typeof MeetingState>;
+export const MeetingRecordingPolicy = z.enum(MEETING_RECORDING_POLICIES);
+export type MeetingRecordingPolicy = z.infer<typeof MeetingRecordingPolicy>;
+export const MeetingEndReason = z.enum(MEETING_END_REASONS);
+export type MeetingEndReason = z.infer<typeof MeetingEndReason>;
+export const MeetingSeatRole = z.enum(MEETING_SEAT_ROLES);
+export type MeetingSeatRole = z.infer<typeof MeetingSeatRole>;
+export const MeetingSeatState = z.enum(MEETING_SEAT_STATES);
+export type MeetingSeatState = z.infer<typeof MeetingSeatState>;
+export const MeetingConsentAnswer = z.enum(MEETING_CONSENT_ANSWERS);
+export type MeetingConsentAnswer = z.infer<typeof MeetingConsentAnswer>;
+export const MeetingRecordingState = z.enum(MEETING_RECORDING_STATES);
+export type MeetingRecordingState = z.infer<typeof MeetingRecordingState>;
+export const CallProposalPurpose = z.enum(CALL_PROPOSAL_PURPOSES);
+export type CallProposalPurpose = z.infer<typeof CallProposalPurpose>;
+export const CallProposalState = z.enum(CALL_PROPOSAL_STATES);
+export type CallProposalState = z.infer<typeof CallProposalState>;
+/**
+ * A call's card (in-app calls): the message names the call, and its state (scheduled, live, ended,
+ * recording ready) is worked out from the call each time the message is read, never stored. Nothing
+ * posts one yet, and it is not a MessageEmbed until a slice renders it.
+ */
+export const MeetingEmbed = z.object({ type: z.literal("meeting"), meetingId: Id });
+export type MeetingEmbed = z.infer<typeof MeetingEmbed>;
+/** A suggested call's card in a direct conversation, read the same way as a call's. Nothing posts one yet. */
+export const CallProposalEmbed = z.object({ type: z.literal("callProposal"), proposalId: Id });
+export type CallProposalEmbed = z.infer<typeof CallProposalEmbed>;
+/** The two kinds of card a call posts, which only the server writes: never something a person shares. */
+export const CallEmbed = z.discriminatedUnion("type", [MeetingEmbed, CallProposalEmbed]);
+export type CallEmbed = z.infer<typeof CallEmbed>;
 /** The kinds of work a message can share. */
 export const MessageEmbed = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed]);
 export type MessageEmbed = z.infer<typeof MessageEmbed>;

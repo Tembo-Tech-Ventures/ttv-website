@@ -13,6 +13,10 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { drizzle } from "drizzle-orm/d1";
+import {
+  CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS, MEETING_PURPOSES,
+  MEETING_RECORDING_POLICIES, MEETING_RECORDING_STATES, MEETING_SEAT_ROLES, MEETING_SEAT_STATES, MEETING_STATES,
+} from "../meetings/rules";
 
 export type Database = ReturnType<
   typeof drizzle<typeof import("@/lib/db/schema")>
@@ -500,8 +504,22 @@ export const recording = sqliteTable("recording", {
   deletedAt: integer("deletedAt", { mode: "timestamp" }),
   /** Hidden: only admins and the cohort's instructors and TAs may watch it or read it. */
   hiddenAt: integer("hiddenAt", { mode: "timestamp" }),
+  /** The call it was recorded in (migration 0043). */
+  meetingId: text("meetingId").references((): AnySQLiteColumn => meeting.id, { onDelete: "set null" }),
+  /** A DIRECT recording's conversation, or a COMMUNITY recording's channel: who may watch it (lib/recordings/access.ts). */
+  channelId: text("channelId").references((): AnySQLiteColumn => channel.id, { onDelete: "set null" }),
+  /**
+   * Set on every insert by this Worker, which always names the scope: only a row a Worker from
+   * before migration 0043 inserted has none, and the database then puts it in its cohort (0043's
+   * trigger). Without it an explicit ADMIN_ONLY with a cohort could not be told from an omitted scope.
+   */
+  scopeChosen: integer("scopeChosen", { mode: "boolean" }).$defaultFn(() => true),
   ...timestamps,
-}, (table) => [index("recording_program_idx").on(table.programId)]);
+}, (table) => [
+  index("recording_program_idx").on(table.programId),
+  index("recording_meetingId_idx").on(table.meetingId).where(sql`${table.meetingId} IS NOT NULL`),
+  index("recording_channelId_idx").on(table.channelId).where(sql`${table.channelId} IS NOT NULL`),
+]);
 
 export const recordingRelations = relations(recording, ({ one, many }) => ({
   program: one(program, {
@@ -1286,8 +1304,18 @@ export const communityConfirmation = sqliteTable("communityConfirmation", {
   method: text("method").notNull(),
   journeyVersion: integer("journeyVersion").notNull(),
   mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
+  /**
+   * The check-in this confirmation cites (migration 0043): a citation, never a grant. NO ACTION on
+   * purpose: deleting a cited call (or the channel or cohort it is in) fails rather than silently
+   * taking confirmations with it. Deleting the check-in's recording removes the confirmation
+   * explicitly, in the same batch (ARCHITECTURE section 7, slice P12).
+   */
+  meetingId: text("meetingId").references((): AnySQLiteColumn => meeting.id),
   ...timestamps,
-}, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);
+}, (table) => [
+  index("communityConfirmation_journeyId_idx").on(table.journeyId),
+  index("communityConfirmation_meetingId_idx").on(table.meetingId).where(sql`${table.meetingId} IS NOT NULL`),
+]);
 
 export const communityConfirmationRelations = relations(
   communityConfirmation,
@@ -1840,4 +1868,192 @@ export const mentorRequestReport = sqliteTable("mentor_request_report", {
 }, (table) => [
   index("mentor_request_report_reporterId_idx").on(table.reporterId),
   check("mentor_request_report_reason_check", sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`),
+]);
+
+// ─── In-app calls (migration 0043; src/lib/meetings/README.md) ───────────────
+// Epoch milliseconds, like channels. Every call belongs to one channel, whose readers are its
+// audience (channelAccessFor); who may join, host or watch is decided in src/lib/meetings and
+// lib/recordings/access.ts, never here. The limits are constants in lib/meetings/rules.ts and the
+// booked and limit minutes of each call; these checks hold only what can never change.
+
+const inList = (column: AnySQLiteColumn, values: readonly string[]) =>
+  sql`${column} IN (${sql.raw(values.map((value) => `'${value}'`).join(","))})`;
+
+/**
+ * One call on one date. Each date of a series is its own meeting, and an ended one never reopens.
+ * Other tables cite it (recordings, confirmations, seats), so it must never be rebuilt: its allowed
+ * values, title, minutes, times, a check-in's revision and its end are held by 0043's triggers, which
+ * a later migration can replace, and no table checks, which drizzle-kit changes by rebuilding.
+ * hardEndAt is set when the room opens (a check-in's when both people are in), and the clock ends
+ * the call there. journeyId and journeyVersion are the work a check-in is about; messageId is the
+ * call's card in its channel; providerMeetingId stays empty until the room first opens, since the
+ * provider's meetings can never be deleted.
+ */
+export const meeting = sqliteTable("meeting", {
+  id: cuid("id"),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  purpose: text("purpose", { enum: MEETING_PURPOSES }).notNull(),
+  title: text("title").notNull(),
+  /** The dates scheduled together share one; a date is moved or cancelled alone. */
+  seriesId: text("seriesId"),
+  scheduledStartAt: integer("scheduledStartAt").notNull(),
+  bookedMinutes: integer("bookedMinutes").notNull(),
+  limitMinutes: integer("limitMinutes").notNull(),
+  recordingPolicy: text("recordingPolicy", { enum: MEETING_RECORDING_POLICIES }).notNull(),
+  state: text("state", { enum: MEETING_STATES }).notNull().default("SCHEDULED"),
+  openedAt: integer("openedAt"),
+  hardEndAt: integer("hardEndAt"),
+  endedAt: integer("endedAt"),
+  endReason: text("endReason", { enum: MEETING_END_REASONS }),
+  journeyId: text("journeyId").references(() => communityJourney.id, { onDelete: "set null" }),
+  journeyVersion: integer("journeyVersion"),
+  messageId: text("messageId").references(() => channelMessage.id, { onDelete: "set null" }),
+  providerMeetingId: text("providerMeetingId"),
+  createdBy: text("createdBy").references(() => user.id, { onDelete: "set null" }),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  // A channel's calls in time order: its upcoming sessions, and the card's lookups.
+  index("meeting_channel_idx").on(table.channelId, table.scheduledStartAt),
+  // The clock's work: calls to open reminders for, and live calls to end.
+  index("meeting_state_idx").on(table.state, table.scheduledStartAt),
+  index("meeting_seriesId_idx").on(table.seriesId).where(sql`${table.seriesId} IS NOT NULL`),
+  index("meeting_journeyId_idx").on(table.journeyId).where(sql`${table.journeyId} IS NOT NULL`),
+  index("meeting_messageId_idx").on(table.messageId).where(sql`${table.messageId} IS NOT NULL`),
+  index("meeting_createdBy_idx").on(table.createdBy).where(sql`${table.createdBy} IS NOT NULL`),
+  uniqueIndex("meeting_providerMeetingId_idx").on(table.providerMeetingId).where(sql`${table.providerMeetingId} IS NOT NULL`),
+]);
+
+/**
+ * One place in a live call, one per person: the only thing a join token is minted for. HELD while
+ * they are in; RELEASED when they leave or have been gone too long; REMOVED by a host, which keeps
+ * them out. Every seat is deleted when the call ends, so no record of who attended survives.
+ */
+export const meetingSeat = sqliteTable("meeting_seat", {
+  meetingId: text("meetingId").notNull().references(() => meeting.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  role: text("role", { enum: MEETING_SEAT_ROLES }).notNull(),
+  state: text("state", { enum: MEETING_SEAT_STATES }).notNull().default("HELD"),
+  /** The provider's participant, deleted with the seat to revoke its token; empty until the provider adds them. */
+  providerParticipantId: text("providerParticipantId"),
+  lastSeenAt: integer("lastSeenAt").notNull(),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  primaryKey({ columns: [table.meetingId, table.userId] }),
+  // The seat claim counts a call's held seats by role.
+  index("meeting_seat_state_idx").on(table.meetingId, table.state, table.role),
+  index("meeting_seat_userId_idx").on(table.userId),
+  uniqueIndex("meeting_seat_participant_idx").on(table.providerParticipantId).where(sql`${table.providerParticipantId} IS NOT NULL`),
+  check("meeting_seat_role_check", inList(table.role, MEETING_SEAT_ROLES)),
+  check("meeting_seat_state_check", inList(table.state, MEETING_SEAT_STATES)),
+  check("meeting_seat_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.lastSeenAt} >= 0`),
+]);
+
+/**
+ * Each person's answer to recording a call between two people, given before joining, with the
+ * version of the words they agreed to. Deleted with the recording, or when the call ends unrecorded.
+ */
+export const meetingConsent = sqliteTable("meeting_consent", {
+  meetingId: text("meetingId").notNull().references(() => meeting.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  answer: text("answer", { enum: MEETING_CONSENT_ANSWERS }).notNull(),
+  wordingVersion: integer("wordingVersion").notNull(),
+  answeredAt: integer("answeredAt").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.meetingId, table.userId] }),
+  index("meeting_consent_userId_idx").on(table.userId),
+  check("meeting_consent_answer_check", inList(table.answer, MEETING_CONSENT_ANSWERS)),
+  check("meeting_consent_wording_check", sql`${table.wordingVersion} >= 1`),
+  check("meeting_consent_time_check", sql`${table.answeredAt} >= 0`),
+]);
+
+/**
+ * A call's recording on its way in, at most one per call: the provider's recording, the spending
+ * reserved for it and what it really used, the file in the ingest bucket, and the `recording` it
+ * became. attempts and lastError are the clock's retries.
+ */
+export const meetingRecording = sqliteTable("meeting_recording", {
+  id: cuid("id"),
+  meetingId: text("meetingId").notNull().references(() => meeting.id, { onDelete: "cascade" }),
+  state: text("state", { enum: MEETING_RECORDING_STATES }).notNull().default("STARTING"),
+  providerRecordingId: text("providerRecordingId"),
+  reservedSeconds: integer("reservedSeconds").notNull().default(0),
+  usedSeconds: integer("usedSeconds"),
+  ingestKey: text("ingestKey"),
+  recordingId: text("recordingId").references(() => recording.id, { onDelete: "set null" }),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("lastError"),
+  startedAt: integer("startedAt"),
+  stoppedAt: integer("stoppedAt"),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  uniqueIndex("meeting_recording_meetingId_idx").on(table.meetingId),
+  // The clock's work: recordings still on their way in.
+  index("meeting_recording_state_idx").on(table.state, table.updatedAt),
+  uniqueIndex("meeting_recording_provider_idx").on(table.providerRecordingId).where(sql`${table.providerRecordingId} IS NOT NULL`),
+  uniqueIndex("meeting_recording_recordingId_idx").on(table.recordingId).where(sql`${table.recordingId} IS NOT NULL`),
+  check("meeting_recording_state_check", inList(table.state, MEETING_RECORDING_STATES)),
+  check("meeting_recording_seconds_check", sql`${table.reservedSeconds} >= 0 AND coalesce(${table.usedSeconds}, 0) >= 0 AND ${table.attempts} >= 0`),
+  check("meeting_recording_error_check", sql`${table.lastError} IS NULL OR length(${table.lastError}) <= 2000`),
+  check("meeting_recording_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.startedAt}, 0) >= 0 AND coalesce(${table.stoppedAt}, ${table.startedAt}, 0) >= coalesce(${table.startedAt}, 0)`),
+]);
+
+/**
+ * A suggested call in a direct conversation: who suggested it, a check-in on one revision of one
+ * piece of work or a plain call, up to three times (epoch milliseconds, as a JSON array), whether
+ * they asked to record, and its state. One OPEN suggestion per conversation. meetingId is the call
+ * it booked, or the booked call a new round of times would move; messageId is its card.
+ */
+export const callProposal = sqliteTable("call_proposal", {
+  id: cuid("id"),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  proposedBy: text("proposedBy").notNull().references(() => user.id, { onDelete: "cascade" }),
+  purpose: text("purpose", { enum: CALL_PROPOSAL_PURPOSES }).notNull(),
+  journeyId: text("journeyId").references(() => communityJourney.id, { onDelete: "set null" }),
+  journeyVersion: integer("journeyVersion"),
+  times: text("times").notNull(),
+  bookedMinutes: integer("bookedMinutes").notNull(),
+  askToRecord: integer("askToRecord", { mode: "boolean" }).notNull().default(false),
+  state: text("state", { enum: CALL_PROPOSAL_STATES }).notNull().default("OPEN"),
+  meetingId: text("meetingId").references(() => meeting.id, { onDelete: "set null" }),
+  messageId: text("messageId").references(() => channelMessage.id, { onDelete: "set null" }),
+  decidedAt: integer("decidedAt"),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  uniqueIndex("call_proposal_open_idx").on(table.channelId).where(sql`${table.state} = 'OPEN'`),
+  index("call_proposal_channel_idx").on(table.channelId, table.createdAt),
+  index("call_proposal_proposedBy_idx").on(table.proposedBy),
+  index("call_proposal_journeyId_idx").on(table.journeyId).where(sql`${table.journeyId} IS NOT NULL`),
+  index("call_proposal_meetingId_idx").on(table.meetingId).where(sql`${table.meetingId} IS NOT NULL`),
+  index("call_proposal_messageId_idx").on(table.messageId).where(sql`${table.messageId} IS NOT NULL`),
+  check("call_proposal_purpose_check", inList(table.purpose, CALL_PROPOSAL_PURPOSES)),
+  check("call_proposal_state_check", inList(table.state, CALL_PROPOSAL_STATES)),
+  // A check-in is always about one revision of one piece of work.
+  check("call_proposal_journey_check", sql`(${table.purpose} <> 'CHECKIN' OR ${table.journeyVersion} IS NOT NULL) AND coalesce(${table.journeyVersion}, 1) >= 1`),
+  check("call_proposal_times_check", sql`${isJsonArray(table.times)} AND json_array_length(${table.times}) BETWEEN 1 AND 3`),
+  check("call_proposal_minutes_check", sql`${table.bookedMinutes} >= 1`),
+  check("call_proposal_askToRecord_check", sql`${table.askToRecord} IN (0, 1)`),
+  check("call_proposal_decided_check", sql`(${table.state} = 'OPEN') = (${table.decidedAt} IS NULL)`),
+  check("call_proposal_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.decidedAt}, ${table.createdAt}) >= ${table.createdAt}`),
+]);
+
+/**
+ * TTV's own count of what calls cost, one row per UTC month (`YYYY-MM`): recording seconds
+ * reserved by recordings not yet finished, recording seconds used, and participant seconds.
+ * alertedAt is when the month's spending first crossed the alert, so the alert is written once.
+ */
+export const meetingUsageMonth = sqliteTable("meeting_usage_month", {
+  month: text("month").primaryKey(),
+  recordingSecondsReserved: integer("recordingSecondsReserved").notNull().default(0),
+  recordingSecondsUsed: integer("recordingSecondsUsed").notNull().default(0),
+  participantSeconds: integer("participantSeconds").notNull().default(0),
+  alertedAt: integer("alertedAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  check("meeting_usage_month_month_check", sql`${table.month} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND substr(${table.month}, 6, 2) BETWEEN '01' AND '12'`),
+  check("meeting_usage_month_seconds_check", sql`${table.recordingSecondsReserved} >= 0 AND ${table.recordingSecondsUsed} >= 0 AND ${table.participantSeconds} >= 0`),
+  check("meeting_usage_month_time_check", sql`${table.updatedAt} >= 0 AND coalesce(${table.alertedAt}, 0) >= 0`),
 ]);

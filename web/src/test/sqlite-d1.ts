@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
 /**
@@ -97,6 +97,15 @@ export function readMigration(name: string): string {
     new URL(`../lib/db/migrations/${name}`, import.meta.url),
     "utf8"
   ).replaceAll("--> statement-breakpoint", "");
+}
+
+/**
+ * Every migration's seed of the feature_flag table, in order, for a test that builds the table alone
+ * (0021) rather than every migration: it seeds exactly the flags the migrations do.
+ */
+export function featureFlagSeeds(): string {
+  const migrations = readdirSync(new URL("../lib/db/migrations/", import.meta.url)).filter((name) => name.endsWith(".sql")).toSorted();
+  return migrations.flatMap((name) => readMigration(name).match(/INSERT OR IGNORE INTO `feature_flag`[^;]*;/g) ?? []).join("\n");
 }
 
 /** The slice of the auth schema that feature tables reference. */

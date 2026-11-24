@@ -38,6 +38,13 @@ change takes effect on the next request.
 | `channels` | Channel and conversation pages, the code of conduct, the channel and message APIs, moderation (`/admin/moderation`, `/api/moderation/*`, the MCP moderation tools) and channel messages in search | The APIs need only `channels`. The pages are spaces pages, so they also need `spaces` |
 | `tembo_channels` | Tembo in channels: `@tembo` mentions, "Ask Tembo here", `/api/channels/:id/tembo`, `/api/messages/:id/tembo-feedback` and the daily allowance in `/me` | `channels`. Every Tembo route checks both flags, and `/me` reports `tembo_channels` off while `channels` is off |
 | `mentor_requests` | The mentor directory, asking for time, the Mentoring space's Requests and Availability pages, "Worth another look", request-note checks and the "Request notes" tab | `channels` (enforced in `flags.ts`), because accepting a request opens a direct conversation |
+| `meetings` | In-app calls: the call room, cohort sessions and the admin calls page. Nothing yet: later slices build them (`src/lib/meetings/README.md`) | `channels` and `spaces` (enforced in `flags.ts`), because a call's card and chat live in a channel |
+| `meeting_checkins` | Suggesting calls in a conversation, check-ins and the Calls page. Nothing yet | `meetings` and `mentor_requests` (enforced) |
+| `meeting_events` | Community events. Nothing yet | `meetings` (enforced) |
+
+`REQUIRES` in `flags.ts` lists each flag's parents, and a flag is effective only while it and
+every flag it builds on, however deep, is on for that person. The admin page warns about each
+parent set narrower than the flag.
 
 Not flag-gated on purpose: `/admin/access-requests` and `/api/admin/access-requests`,
 so pending access requests are never stranded when `onboarding` is off.

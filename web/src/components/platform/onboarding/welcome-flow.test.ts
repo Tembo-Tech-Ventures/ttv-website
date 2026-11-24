@@ -74,7 +74,10 @@ const requestFields = (draft: RequestDraft): [string, string][] => [
 
 describe("onboardingOpen", () => {
   const flags = (extra: Partial<EffectiveFlags>): EffectiveFlags =>
-    ({ spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: false, ...extra });
+    ({
+      spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: false,
+      meetings: false, meeting_checkins: false, meeting_events: false, ...extra,
+    });
 
   it("stays closed while the onboarding flag is off", () => {
     expect(onboardingOpen(flags({}))).toBe(false);

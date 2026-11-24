@@ -8,6 +8,7 @@ import {
   TITLE_MAX,
   detailsFromForm,
   detailsUpdate,
+  NEW_UPLOAD,
   readRecordingDetail,
   recordedAtField,
   transcribeAgain,
@@ -80,9 +81,30 @@ describe("the details form", () => {
     expect(recordedAtField(moment)).toBe("2026-11-03");
     expect(recordedAtField(null)).toBe("");
     const values = { title: "Week 4", programId: "", recordedAt: "2026-11-03", description: "" };
-    expect(detailsUpdate(values, { recordedAt: moment })).toEqual({ title: "Week 4", description: null, programId: null, recordedAt: moment });
-    expect(detailsUpdate({ ...values, recordedAt: "2026-11-04" }, { recordedAt: moment }).recordedAt).toEqual(new Date(Date.UTC(2026, 10, 4)));
-    expect(detailsUpdate({ ...values, recordedAt: "" }, { recordedAt: moment }).recordedAt).toBeNull();
+    const current = { recordedAt: moment, programId: null, accessScope: "ADMIN_ONLY" };
+    expect(detailsUpdate(values, current)).toEqual({ title: "Week 4", description: null, programId: null, recordedAt: moment });
+    expect(detailsUpdate({ ...values, recordedAt: "2026-11-04" }, current).recordedAt).toEqual(new Date(Date.UTC(2026, 10, 4)));
+    expect(detailsUpdate({ ...values, recordedAt: "" }, current).recordedAt).toBeNull();
+  });
+
+  it("gives a recording with no cohort the cohort the admin chooses, moves a cohort's with it, and never widens otherwise", () => {
+    const values = { title: "Week 4", programId: "cohort-b", recordedAt: "", description: "" };
+    const at = (programId: string | null, accessScope: string) => detailsUpdate(values, { recordedAt: null, programId, accessScope });
+    // Into a cohort, or to another one: that cohort's.
+    expect(at(null, "ADMIN_ONLY")).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
+    expect(at("cohort-a", "COHORT")).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
+    // Out of every cohort: admins only.
+    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "COHORT" }))
+      .toMatchObject({ programId: null, accessScope: "ADMIN_ONLY" });
+    // The cohort as it was, admins only within a cohort, or a conversation's or the community's recording: the scope isn't written.
+    expect(at("cohort-b", "ADMIN_ONLY")).not.toHaveProperty("accessScope");
+    expect(at("cohort-a", "ADMIN_ONLY")).not.toHaveProperty("accessScope");
+    expect(detailsUpdate({ ...values, programId: "" }, { recordedAt: null, programId: "cohort-a", accessScope: "ADMIN_ONLY" })).not.toHaveProperty("accessScope");
+    expect(at(null, "DIRECT")).not.toHaveProperty("accessScope");
+    expect(at(null, "COMMUNITY")).not.toHaveProperty("accessScope");
+    // A new upload starts with no cohort and admins only.
+    expect(detailsUpdate(values, NEW_UPLOAD)).toMatchObject({ programId: "cohort-b", accessScope: "COHORT" });
+    expect(detailsUpdate({ ...values, programId: "" }, NEW_UPLOAD)).not.toHaveProperty("accessScope");
   });
 });
 

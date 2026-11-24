@@ -183,7 +183,9 @@ describe("wire invariants", () => {
 
   it("fixes the space, flag and reaction vocabulary", () => {
     expect(C.SpaceId.options).toEqual(["cohort", "community", "mentoring", "discover", "admin", "profile"]);
-    expect(C.FlagKey.options).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
+    expect(C.FlagKey.options).toEqual([
+      "spaces", "channels", "tembo_channels", "mentor_requests", "onboarding", "meetings", "meeting_checkins", "meeting_events",
+    ]);
     expect(C.FlagAudience.options).toEqual(["OFF", "STAFF", "ALL"]);
     expect(C.ReactionKind.options).toEqual(["useful", "learned", "thanks", "agree", "congrats"]);
   });

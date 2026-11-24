@@ -13,6 +13,7 @@ import {
   type GoogleDriveVideoFile,
 } from "@/lib/recordings/google-drive";
 import type { RecordingQueueMessage } from "@/lib/recordings/pipeline";
+import { cohortScope } from "@/lib/recordings/access";
 
 type RecordingStatus =
   typeof schema.recording.$inferSelect.processingStatus;
@@ -342,6 +343,8 @@ function createDrizzleImportStore(db: Database): RecordingImportStore {
         .insert(schema.recording)
         .values({
           ...input,
+          // An import is its source's cohort's (migration 0043 keeps the scope an insert names).
+          accessScope: cohortScope(input.programId),
           processingStatus: "pending",
         })
         .onConflictDoNothing({ target: schema.recording.driveFileId })

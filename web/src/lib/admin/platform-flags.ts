@@ -1,4 +1,5 @@
 import { FlagAudience, FlagKey, type Flag } from "@/lib/platform/contracts";
+import { REQUIRES } from "@/lib/platform/server/flags";
 
 /**
  * The admin side of the platform feature flags: the page at /admin/platform-flags. Reading and
@@ -37,10 +38,24 @@ export const FLAG_DETAILS: Record<FlagKey, FlagDetails> = {
     description:
       "Asks new accounts how they will take part, and lets people request mentor or organisation access for you to decide in Access requests.",
   },
+  meetings: {
+    name: "Calls",
+    description: "Video calls inside TTV, starting with the cohort sessions instructors and TAs schedule. Still in development.",
+  },
+  meeting_checkins: {
+    name: "Calls between two people",
+    description: "Lets the two people in a conversation suggest a call, including a check-in on a piece of work. Still in development.",
+  },
+  meeting_events: {
+    name: "Community events",
+    description: "Calls in a community channel that anyone who reads it can join. Still in development.",
+  },
 };
 
-/** The order the page lists them: what is live first, and each flag after the one it builds on. */
-export const FLAG_ORDER: readonly FlagKey[] = ["spaces", "onboarding", "channels", "tembo_channels", "mentor_requests"];
+/** The order the page lists them: what is live first, and each flag after the ones it builds on. */
+export const FLAG_ORDER: readonly FlagKey[] = [
+  "spaces", "onboarding", "channels", "tembo_channels", "mentor_requests", "meetings", "meeting_checkins", "meeting_events",
+];
 
 export const AUDIENCE_LABELS: Record<FlagAudience, string> = { OFF: "Off", STAFF: "Staff", ALL: "Everyone" };
 
@@ -51,12 +66,11 @@ export const AUDIENCE_MEANINGS: Record<FlagAudience, string> = {
   ALL: "Every signed-in user",
 };
 
-/** The flag each of these builds on. Onboarding's and mentor requests' are enforced by the server; the page warns about all three. */
-export const FLAG_DEPENDENCIES: Partial<Record<FlagKey, FlagKey>> = {
-  onboarding: "spaces",
-  tembo_channels: "channels",
-  mentor_requests: "channels",
-};
+/**
+ * The flags each of these builds on: the server's REQUIRES, which it enforces, and Tembo in channels
+ * on channels, which its routes check themselves. The page warns about every one.
+ */
+export const FLAG_DEPENDENCIES: Readonly<Partial<Record<FlagKey, readonly FlagKey[]>>> = { ...REQUIRES, tembo_channels: ["channels"] };
 
 const AUDIENCE_RANK: Record<FlagAudience, number> = { OFF: 0, STAFF: 1, ALL: 2 };
 
@@ -72,11 +86,10 @@ export interface FlagWarning {
  */
 export function dependencyWarnings(flags: readonly Pick<Flag, "key" | "audience">[]): FlagWarning[] {
   const audiences = new Map(flags.map((flag) => [flag.key, flag.audience]));
-  return FlagKey.options.flatMap((key) => {
-    const requires = FLAG_DEPENDENCIES[key];
+  return FlagKey.options.flatMap((key) => (FLAG_DEPENDENCIES[key] ?? []).flatMap((requires): FlagWarning[] => {
     const audience = audiences.get(key);
-    const required = requires ? audiences.get(requires) : undefined;
-    if (!requires || !audience || !required || AUDIENCE_RANK[audience] <= AUDIENCE_RANK[required]) return [];
+    const required = audiences.get(requires);
+    if (!audience || !required || AUDIENCE_RANK[audience] <= AUDIENCE_RANK[required]) return [];
     const { name } = FLAG_DETAILS[key];
     const base = FLAG_DETAILS[requires].name;
     return [{
@@ -84,7 +97,7 @@ export function dependencyWarnings(flags: readonly Pick<Flag, "key" | "audience"
       requires,
       message: `${name} needs ${base}, which is ${AUDIENCE_LABELS[required]}. Set ${base} to ${AUDIENCE_LABELS[audience]} too, or ${name} won't work for everyone it is set for.`,
     }];
-  });
+  }));
 }
 
 /** The value of the confirm field that makes a choice of ALL take effect. */

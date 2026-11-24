@@ -16,8 +16,11 @@ import type { EmbedRef } from "@/lib/platform/contracts";
  * every migration. The expectations are written out by hand from the scope table (lib/recordings/
  * access.ts), not computed by the policy, so the test checks the policy as well as each path's use of it.
  *
- * Recordings: cohort A's, complete and still transcribing; cohort B's; one with no cohort; and cohort
- * A's hidden and deleted ones. Every one has a stored video and a transcript line matching "Webhook".
+ * Recordings: cohort A's, complete and still transcribing; cohort B's; one with no cohort; cohort
+ * A's hidden and deleted ones; and a direct conversation's (Wanjiku's and Juma's) and a community
+ * channel's, which every path here refuses to everyone, their own members and admins included: these
+ * are session paths, and only a path that asks for everything (none yet) reads a channel's recording.
+ * Every one has a stored video and a transcript line matching "Webhook".
  */
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
@@ -40,9 +43,9 @@ const { recordingReadyAttention } = await import("@/lib/attention/producers");
 const { listAttention } = await import("@/lib/attention/service");
 const { capabilitiesFor, channelAccessFor } = await import("@/lib/platform/server/capabilities");
 
-const RECORDINGS = ["a-ready", "a-working", "b-ready", "loose", "a-hidden", "a-deleted"] as const;
+const RECORDINGS = ["a-ready", "a-working", "b-ready", "loose", "a-hidden", "a-deleted", "direct", "community"] as const;
 type RecordingId = (typeof RECORDINGS)[number];
-const COMPLETE: ReadonlySet<RecordingId> = new Set(["a-ready", "b-ready", "loose", "a-hidden", "a-deleted"]);
+const COMPLETE: ReadonlySet<RecordingId> = new Set(["a-ready", "b-ready", "loose", "a-hidden", "a-deleted", "direct", "community"]);
 
 const A_MEMBER: RecordingId[] = ["a-ready", "a-working"];
 const A_HOST: RecordingId[] = ["a-ready", "a-working", "a-hidden"];
@@ -79,6 +82,7 @@ const readsTranscripts = (person: Person) => person.watches.filter((id) => COMPL
 const TITLES: Record<RecordingId, string> = {
   "a-ready": "Cohort A week 3", "a-working": "Cohort A week 4", "b-ready": "Cohort B week 3",
   loose: "Unsorted upload", "a-hidden": "Cohort A hidden", "a-deleted": "Cohort A deleted",
+  direct: "Wanjiku and Juma's check-in", community: "Open hours",
 };
 const idOfTitle = (title: string) => RECORDINGS.find((id) => TITLES[id] === title);
 const sorted = (ids: readonly (string | undefined)[]) => [...ids].toSorted();
@@ -104,9 +108,13 @@ beforeAll(async () => {
     sqlite.prepare("INSERT INTO user(id,name,email) VALUES (?,?,?)").run(person.id, person.name, `${person.id}@example.test`);
     sqlite.exec(person.setup);
   }
+  sqlite.exec(`INSERT INTO channel(id,kind,slug,name) VALUES ('conversation','DIRECT','dm','Wanjiku and Juma');
+    INSERT INTO channel_member(channelId,userId) VALUES ('conversation','synthetic-approved'),('conversation','synthetic-no-cohort');`);
   const recordings: [RecordingId, string | null, string, string][] = [
     ["a-ready", "cohort-a", "complete", ""], ["a-working", "cohort-a", "transcribing", ""], ["b-ready", "cohort-b", "complete", ""],
     ["loose", null, "complete", ""], ["a-hidden", "cohort-a", "complete", "hiddenAt=1"], ["a-deleted", "cohort-a", "complete", "deletedAt=1"],
+    ["direct", null, "complete", "accessScope='DIRECT', channelId='conversation'"],
+    ["community", null, "complete", "accessScope='COMMUNITY', channelId=(SELECT id FROM channel WHERE seedKey='community:help')"],
   ];
   for (const [i, [id, programId, status, change]] of recordings.entries()) {
     sqlite.prepare(`INSERT INTO recording(id,programId,title,processingStatus,r2VideoKey,durationSeconds,recordedAt,transcriptText)
@@ -250,6 +258,22 @@ describe.each(PEOPLE)("recording access for $id", (person) => {
     const { items } = await listAttention(db, person.id, {}, await capabilitiesFor(db, { id: person.id }));
     const shown = items.filter((item) => item.subject.kind === "recording").map((item) => item.subject.id);
     expect(sorted(shown)).toEqual(sorted(person.watches));
+  });
+});
+
+describe("a conversation's and the community's recordings", () => {
+  it("are ones the policy would let their channel's readers watch, which no path here asks for", async () => {
+    const { recordingAccessFor } = await import("./access");
+    const row = (id: RecordingId) => sqlite.prepare("SELECT programId, accessScope, channelId, deletedAt, hiddenAt FROM recording WHERE id = ?").get(id) as never;
+    const community = (sqlite.prepare("SELECT id FROM channel WHERE seedKey='community:help'").get() as { id: string }).id;
+    for (const person of PEOPLE) {
+      const capabilities = await capabilitiesFor(db, { id: person.id });
+      const member = ["synthetic-approved", "synthetic-no-cohort"].includes(person.id);
+      const everything = { userId: person.id, reach: "everything" as const };
+      expect(recordingAccessFor(capabilities, row("direct"), { ...everything, channel: { id: "conversation", kind: "DIRECT", isMember: member } })).toBe(member);
+      expect(recordingAccessFor(capabilities, row("community"), { ...everything, channel: { id: community, kind: "COMMUNITY", isMember: false } })).toBe(true);
+      expect(recordingAccessFor(capabilities, row("direct"), { userId: person.id, channel: { id: "conversation", kind: "DIRECT", isMember: member } })).toBe(false);
+    }
   });
 });
 

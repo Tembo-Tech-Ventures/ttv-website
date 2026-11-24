@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
-import { getFlags, isFlagEnabled, requireFlag, type FlagContext } from "./flags";
+import { createSqliteD1, featureFlagSeeds, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
+import { effective, getFlags, isFlagEnabled, REQUIRES, requireFlag, type FlagContext } from "./flags";
 import { FlagAudience, FlagKey } from "@/lib/platform/contracts";
 
 let setup: ReturnType<typeof createSqliteD1>;
@@ -9,6 +9,7 @@ beforeEach(() => {
   setup.database.exec(MINIMAL_AUTH_SCHEMA);
   setup.database.exec(readMigration("0021_feature_flags.sql"));
   setup.database.exec(readMigration("0025_onboarding.sql"));
+  setup.database.exec(featureFlagSeeds());
   setup.database.exec("INSERT INTO user(id,name,email) VALUES ('amina','Amina Hassan','amina@example.test')");
 });
 afterEach(() => { setup.database.close(); vi.restoreAllMocks(); });
@@ -103,8 +104,90 @@ describe("flag audiences", () => {
     setup.database.exec("INSERT INTO feature_flag(key,audience) VALUES ('future','ALL')");
     expect(await getFlags(context())).toEqual(uniform(false));
     setup.database.exec("UPDATE feature_flag SET audience='ALL'");
-    // onboarding builds on spaces, so a missing spaces row keeps it off too.
-    expect(await getFlags(context())).toEqual({ ...uniform(true), spaces: false, onboarding: false });
+    // onboarding and calls build on spaces, and check-ins and events on calls, so a missing spaces row keeps them off too.
+    expect(await getFlags(context())).toEqual({
+      ...uniform(true), spaces: false, onboarding: false, meetings: false, meeting_checkins: false, meeting_events: false,
+    });
+  });
+});
+
+describe("flags that build on others", () => {
+  const set = (audiences: Partial<Record<FlagKey, FlagAudience>>) => {
+    setup.database.exec("UPDATE feature_flag SET audience='OFF'");
+    for (const [key, audience] of Object.entries(audiences)) {
+      setup.database.prepare("UPDATE feature_flag SET audience=? WHERE key=?").run(audience, key);
+    }
+  };
+  const on = (flags: Record<FlagKey, boolean>) => FlagKey.options.filter((key) => flags[key]);
+
+  it("lists each flag's parents, none of them itself or unknown, with no cycle", () => {
+    expect(REQUIRES).toEqual({
+      onboarding: ["spaces"],
+      mentor_requests: ["channels"],
+      meetings: ["channels", "spaces"],
+      meeting_checkins: ["meetings", "mentor_requests"],
+      meeting_events: ["meetings"],
+    });
+    const ancestors = (key: FlagKey, seen: FlagKey[] = []): FlagKey[] => {
+      expect(seen).not.toContain(key);
+      return (REQUIRES[key] ?? []).flatMap((parent) => [parent, ...ancestors(parent, [...seen, key])]);
+    };
+    for (const key of FlagKey.options) {
+      expect(FlagKey.options).toEqual(expect.arrayContaining([...ancestors(key)]));
+      expect(ancestors(key)).not.toContain(key);
+    }
+  });
+
+  it("seeds the three call flags OFF, so nobody has them", async () => {
+    expect(setup.database.prepare("SELECT key, audience FROM feature_flag WHERE key LIKE 'meeting%' ORDER BY key").all())
+      .toEqual([{ key: "meeting_checkins", audience: "OFF" }, { key: "meeting_events", audience: "OFF" }, { key: "meetings", audience: "OFF" }]);
+    setup.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key NOT LIKE 'meeting%'");
+    expect(on(await getFlags(context({ isAdmin: true })))).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
+  });
+
+  it.each([
+    // Calls need both channels and spaces.
+    { audiences: { meetings: "ALL", channels: "ALL" }, isAdmin: true, expected: ["channels"] },
+    { audiences: { meetings: "ALL", spaces: "ALL" }, isAdmin: true, expected: ["spaces"] },
+    { audiences: { meetings: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: false, expected: ["spaces", "channels", "meetings"] },
+    { audiences: { meetings: "STAFF", spaces: "ALL", channels: "ALL" }, isAdmin: false, expected: ["spaces", "channels"] },
+    { audiences: { meetings: "STAFF", spaces: "ALL", channels: "ALL" }, isAdmin: true, expected: ["spaces", "channels", "meetings"] },
+    { audiences: { meetings: "ALL", spaces: "ALL", channels: "STAFF" }, isAdmin: false, expected: ["spaces"] },
+    // Check-ins need calls and mentor requests, and through them channels and spaces.
+    { audiences: { meeting_checkins: "ALL", meetings: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: true,
+      expected: ["spaces", "channels", "meetings"] },
+    { audiences: { meeting_checkins: "ALL", mentor_requests: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: true,
+      expected: ["spaces", "channels", "mentor_requests"] },
+    { audiences: { meeting_checkins: "ALL", mentor_requests: "ALL", meetings: "ALL", channels: "ALL" }, isAdmin: true,
+      expected: ["channels", "mentor_requests"] },
+    { audiences: { meeting_checkins: "ALL", mentor_requests: "ALL", meetings: "ALL", spaces: "ALL" }, isAdmin: true,
+      expected: ["spaces"] },
+    { audiences: { meeting_checkins: "ALL", mentor_requests: "ALL", meetings: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: false,
+      expected: ["spaces", "channels", "mentor_requests", "meetings", "meeting_checkins"] },
+    { audiences: { meeting_checkins: "ALL", mentor_requests: "ALL", meetings: "STAFF", spaces: "ALL", channels: "ALL" }, isAdmin: false,
+      expected: ["spaces", "channels", "mentor_requests"] },
+    { audiences: { meeting_checkins: "STAFF", mentor_requests: "ALL", meetings: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: true,
+      expected: ["spaces", "channels", "mentor_requests", "meetings", "meeting_checkins"] },
+    // Events need calls, and through them channels and spaces, but not mentor requests.
+    { audiences: { meeting_events: "ALL", meetings: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: false,
+      expected: ["spaces", "channels", "meetings", "meeting_events"] },
+    { audiences: { meeting_events: "ALL", spaces: "ALL", channels: "ALL" }, isAdmin: true, expected: ["spaces", "channels"] },
+    { audiences: { meeting_events: "ALL", meetings: "ALL", channels: "ALL" }, isAdmin: true, expected: ["channels"] },
+  ] as { audiences: Partial<Record<FlagKey, FlagAudience>>; isAdmin: boolean; expected: FlagKey[] }[])(
+    "$audiences, admin $isAdmin: $expected", async ({ audiences, isAdmin, expected }) => {
+      set(audiences);
+      expect(on(await getFlags(context({ isAdmin })))).toEqual(expected);
+      for (const key of ["meetings", "meeting_checkins", "meeting_events"] as const) {
+        expect(await requireFlag(context({ isAdmin }), key)).toEqual(expected.includes(key) ? null : expect.any(Response));
+      }
+    });
+
+  it("makes every flag effective exactly when it and all its ancestors are on, for every combination", () => {
+    for (let mask = 0; mask < 1 << FlagKey.options.length; mask++) {
+      const own = Object.fromEntries(FlagKey.options.map((key, bit) => [key, Boolean(mask & (1 << bit))])) as Record<FlagKey, boolean>;
+      const allOn = (key: FlagKey): boolean => own[key] && (REQUIRES[key] ?? []).every(allOn);
+      expect(effective(own)).toEqual(Object.fromEntries(FlagKey.options.map((key) => [key, allOn(key)])));
+    }
   });
 });
 
