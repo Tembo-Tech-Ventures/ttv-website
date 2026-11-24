@@ -113,7 +113,24 @@ describe("the session viewer", () => {
     expect(page.querySelector("video")!.getAttribute("src")).toBe("/api/recordings/ready/video#t=75.5");
   });
 
-  it("says a recording is still being processed, with its StatusChip and no player", async () => {
+  it("plays a stored video while its transcript is still being made, saying so", async () => {
+    seeded();
+    databases.at(-1)!.exec("UPDATE recording SET r2VideoKey = 'recordings/working.mp4' WHERE id = 'working'");
+    const page = main((await visit("working")).body);
+    expect(page.querySelector("[data-chip] [data-status]")?.textContent).toBe("Transcribing");
+    expect(page.querySelector("video")?.getAttribute("src")).toBe("/api/recordings/working/video");
+    expect(page.querySelector("[data-transcript-panel] [data-empty-state] h2")?.textContent).toBe("No transcript yet");
+  });
+
+  it("plays a stored video whose transcript failed", async () => {
+    seeded();
+    databases.at(-1)!.exec("UPDATE recording SET r2VideoKey = 'recordings/broken.mp4' WHERE id = 'broken'");
+    const page = main((await visit("broken")).body);
+    expect(page.querySelector("[data-chip]")?.getAttribute("data-chip")).toBe("danger");
+    expect(page.querySelector("video")).not.toBeNull();
+  });
+
+  it("says a recording is still being processed, with its StatusChip and no player, until its video is stored", async () => {
     seeded();
     const page = main((await visit("working")).body);
     expect(page.querySelector("h1")?.textContent).toBe("Week 4: Deploying");
@@ -129,10 +146,11 @@ describe("the session viewer", () => {
     expect(page.querySelector("[data-empty-state] h2")?.textContent).toBe("This recording couldn't be processed");
   });
 
-  it("sends a recording outside the person's cohorts, or none, back to Sessions", async () => {
+  it("answers a recording outside the person's cohorts, one with no cohort, and none at all with the same 404", async () => {
     seeded();
-    for (const id of ["elsewhere", "missing"]) {
-      expect(await visit(id)).toMatchObject({ status: 302, location: "/dashboard/cohort/sessions" });
+    databases.at(-1)!.exec("INSERT INTO recording (id, programId, title, processingStatus) VALUES ('loose', NULL, 'Unsorted', 'complete')");
+    for (const id of ["elsewhere", "loose", "missing"]) {
+      expect(await visit(id)).toMatchObject({ status: 404, location: null, body: "Not found." });
     }
   });
 

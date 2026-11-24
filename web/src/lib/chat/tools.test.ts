@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import type { Database } from "@/lib/db/schema";
+import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "./tools";
 
 const dialect = new SQLiteSyncDialect();
@@ -24,18 +25,27 @@ function createSelectDatabase(rows: unknown[] = []) {
   return { db, captured };
 }
 
+function caps(overrides: Partial<PlatformCapabilities> = {}): PlatformCapabilities {
+  return { spaces: ["community", "profile"], cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false, ...overrides };
+}
+
 function createContext(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     env: {} as Env,
     db: createSelectDatabase().db,
     userId: "user-1",
     userName: "Amina",
-    programIds: [],
-    isAdmin: false,
+    capabilities: caps(),
     sources: [],
     ...overrides,
   };
 }
+
+/** A recording row as Drizzle reads it: a cohort's, visible, its transcript complete. */
+const cohortRecording = (overrides: Record<string, unknown> = {}) => ({
+  id: "rec-1", programId: "program-a", accessScope: "COHORT", deletedAt: null, hiddenAt: null,
+  processingStatus: "complete", title: "Week one", transcriptText: "hello", ...overrides,
+});
 
 describe("chat tool access boundaries", () => {
   describe("list_recordings", () => {
@@ -43,7 +53,7 @@ describe("chat tool access boundaries", () => {
       const { db, captured } = createSelectDatabase([
         { id: "rec-other-program", title: "Some other cohort", durationSeconds: 60, recordedAt: null, programId: "program-b" },
       ]);
-      const ctx = createContext({ db, programIds: [], isAdmin: false });
+      const ctx = createContext({ db });
 
       const result = JSON.parse(await executeTool("list_recordings", {}, ctx));
 
@@ -52,24 +62,27 @@ describe("chat tool access boundaries", () => {
       expect(captured).toEqual([]);
     });
 
-    it("constrains the query to the user's programs", async () => {
+    it("constrains the query to the user's cohorts' recordings, complete ones only", async () => {
       const { db, captured } = createSelectDatabase([]);
-      const ctx = createContext({ db, programIds: ["program-a"], isAdmin: false });
+      const ctx = createContext({ db, capabilities: caps({ cohortIds: ["program-a"] }) });
 
       await executeTool("list_recordings", {}, ctx);
 
       expect(captured).toHaveLength(1);
-      expect(captured[0]).toContain('"programId"');
+      expect(captured[0]).toContain("recording.accessScope = 'COHORT' AND recording.programId IN ('program-a')");
+      expect(captured[0]).toContain("recording.processingStatus = 'complete'");
     });
 
-    it("does not constrain by program for an admin", async () => {
+    it("gives an admin every cohort's recordings and those with no cohort, never a deleted one", async () => {
       const { db, captured } = createSelectDatabase([]);
-      const ctx = createContext({ db, programIds: [], isAdmin: true });
+      const ctx = createContext({ db, capabilities: caps({ isAdmin: true }) });
 
       await executeTool("list_recordings", {}, ctx);
 
       expect(captured).toHaveLength(1);
-      expect(captured[0]).not.toContain('"programId"');
+      expect(captured[0]).toContain("recording.accessScope IN ('COHORT', 'ADMIN_ONLY')");
+      expect(captured[0]).toContain("recording.deletedAt IS NULL");
+      expect(captured[0]).not.toContain("programId IN");
     });
   });
 
@@ -80,27 +93,28 @@ describe("chat tool access boundaries", () => {
       } as unknown as Database;
     }
 
-    it("refuses a recording belonging to a program the user cannot access", async () => {
-      const ctx = createContext({
-        db: createRecordingDatabase({ id: "rec-1", programId: "program-b", transcriptText: "secret" }),
-        programIds: ["program-a"],
-      });
+    const details = async (recording: unknown, capabilities = caps({ cohortIds: ["program-a"] })) =>
+      JSON.parse(await executeTool("get_recording_details", { recording_id: "rec-1" },
+        createContext({ db: createRecordingDatabase(recording), capabilities })));
 
-      const result = JSON.parse(await executeTool("get_recording_details", { recording_id: "rec-1" }, ctx));
+    it("refuses a recording belonging to a program the user cannot access, as if it were missing", async () => {
+      const result = await details(cohortRecording({ programId: "program-b", transcriptText: "secret" }));
 
-      expect(result.error).toMatch(/do not have access/i);
-      expect(result.transcript).toBeUndefined();
+      expect(result).toEqual({ error: "Recording not found" });
+      expect(await details(undefined)).toEqual(result);
     });
 
-    it("returns the transcript for a recording in the user's program", async () => {
-      const ctx = createContext({
-        db: createRecordingDatabase({ id: "rec-1", programId: "program-a", title: "Week one", transcriptText: "hello" }),
-        programIds: ["program-a"],
-      });
+    it("refuses a recording with no cohort to everyone but admins", async () => {
+      const noCohort = cohortRecording({ programId: null, accessScope: "ADMIN_ONLY", transcriptText: "secret" });
 
-      const result = JSON.parse(await executeTool("get_recording_details", { recording_id: "rec-1" }, ctx));
+      expect(await details(noCohort)).toEqual({ error: "Recording not found" });
+      expect(await details(noCohort, caps({ cohortIds: ["program-a"], teachingCohortIds: ["program-a"] }))).toEqual({ error: "Recording not found" });
+      expect((await details(noCohort, caps({ isAdmin: true }))).transcript).toBe("secret");
+    });
 
-      expect(result.transcript).toBe("hello");
+    it("returns the transcript for a recording in the user's program, once it is complete", async () => {
+      expect((await details(cohortRecording())).transcript).toBe("hello");
+      expect(await details(cohortRecording({ processingStatus: "transcribing" }))).toMatchObject({ id: "rec-1", transcript: null });
     });
   });
 
@@ -122,13 +136,13 @@ describe("chat tool access boundaries", () => {
         .programs[0].staff.map((member: { role: string }) => member.role);
 
     it("never names a cohort's invited mentors to someone outside that cohort", async () => {
-      expect(await staffFor({ programIds: [] })).toEqual(["TA", "INSTRUCTOR"]);
-      expect(await staffFor({ programIds: ["cohort-b"] })).toEqual(["TA", "INSTRUCTOR"]);
+      expect(await staffFor({ capabilities: caps() })).toEqual(["TA", "INSTRUCTOR"]);
+      expect(await staffFor({ capabilities: caps({ cohortIds: ["cohort-b"] }) })).toEqual(["TA", "INSTRUCTOR"]);
     });
 
     it("names them to the cohort's own members and to admins", async () => {
-      expect(await staffFor({ programIds: ["cohort-a"] })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
-      expect(await staffFor({ isAdmin: true })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
+      expect(await staffFor({ capabilities: caps({ cohortIds: ["cohort-a"] }) })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
+      expect(await staffFor({ capabilities: caps({ isAdmin: true }) })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
     });
   });
 
@@ -137,7 +151,7 @@ describe("chat tool access boundaries", () => {
       const { db, captured } = createSelectDatabase([{ id: "rec-1", title: "Leaked", durationSeconds: 1, recordedAt: null, programId: "program-b" }]);
       const ctx = createContext({
         db,
-        programIds: ["program-a"],
+        capabilities: caps({ cohortIds: ["program-a"] }),
         allowedTools: new Set(["get_user_context", "get_program_info"]),
       });
 
@@ -151,7 +165,7 @@ describe("chat tool access boundaries", () => {
       const { db } = createSelectDatabase([]);
       const ctx = createContext({
         db,
-        programIds: ["program-a"],
+        capabilities: caps({ cohortIds: ["program-a"] }),
         allowedTools: new Set(TOOL_DEFINITIONS.map((t) => t.function.name)),
       });
 
@@ -176,7 +190,7 @@ describe("search_transcripts across one answer (QA3-08)", () => {
       AI: { run: vi.fn().mockResolvedValue({ data: [[0.1, 0.2]] }) },
       VECTORIZE: { query: vi.fn().mockResolvedValue({ matches: rows.map((row) => ({ metadata: { segment_id: row.id, recording_id: row.recordingId, start_time: row.startTime, end_time: row.endTime } })) }) },
     } as unknown as Env;
-    return createContext({ env, db: { select: () => chain } as unknown as Database, programIds: ["program-a"] });
+    return createContext({ env, db: { select: () => chain } as unknown as Database, capabilities: caps({ cohortIds: ["program-a"] }) });
   }
 
   it("lists a passage once however often Tembo searches, giving it back under its first number", async () => {

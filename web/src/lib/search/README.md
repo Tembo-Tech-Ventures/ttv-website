@@ -31,11 +31,14 @@ people/projects. Incompatible or inaccessible
 cohort scopes return the same 403 without revealing whether a cohort exists.
 All four groups are always present.
 
-Capabilities are loaded only for scopes that need cohort or channel access. No implicit administrator, global
-mentor or institution recording override is used. Approved/audit/completed
-members and assigned instructors/TAs/mentors receive only their explicit
-cohorts. Demo identities are additionally limited to demo public profiles and
-their canonical demo cohort. Revocation is effective on the next request.
+Capabilities are loaded only for scopes that need cohort or channel access. Session moments
+follow the recording access policy (`src/lib/recordings/access.ts`, `recordingScopeSql`):
+approved/audit/completed members and assigned instructors/TAs/mentors find their own cohorts'
+recordings; admins find every cohort's and those with no cohort, and may narrow to any cohort.
+Without a cohort, an admin's search reads only the newest `ADMIN_SEARCHED_SESSIONS` (60) sessions,
+as Tembo does, never every transcript; naming a cohort searches all of its sessions.
+No global mentor or institution override is used. Demo identities are additionally limited to
+demo public profiles and their canonical demo cohort. Revocation is effective on the next request.
 
 People and projects use the shared member predicates linked above. Names fall back to account names only on signed-in surfaces; email and moderation details are never search results. The visibility kind is `COMMUNITY`, labelled for signed-in members. Private drafts never appear, including for their owner.
 
@@ -43,8 +46,8 @@ Links use existing supported destinations: member profiles, an owner's
 community workspace, the institutional profile view, and recording timestamps.
 Project links open the containing profile/workspace; no unsupported revision or
 project anchor is invented. Session quotes come from `transcript_segment` joined
-to complete recordings in the authorized cohort, labeled “Only you and your
-cohort”. Neither Vectorize metadata nor any model output supplies a citation.
+to the complete recordings the policy admits, labeled “Only you and your
+cohort” (a recording with no cohort, which only admins find: `PRIVATE`, “Only admins”). Neither Vectorize metadata nor any model output supplies a citation.
 
 The wire contract has no paging fields. V1 therefore returns at most 10 matches
 per group in deterministic order, with at most 500 characters in each excerpt.

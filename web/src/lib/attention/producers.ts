@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { FlagContext } from "@/lib/platform/server/flags";
+import { cohortAudienceSql, transcriptReadySql } from "@/lib/recordings/access";
 import type { ProgramApplicationStatus } from "@/lib/admin/program-application";
 import type { AccessRole, AttentionFilter, AttentionKind, FlagAudience, FlagKey, SpaceId, SubjectRef } from "@/lib/platform/contracts";
 
@@ -118,11 +119,14 @@ export function recordingReadyAttention(context: AttentionProducerContext, recor
   return bestEffort(async () => {
     const audience = await audienceFor(context);
     if (audience === "OFF") return;
+    // The cohort's people, only while the whole cohort may watch it (the recording access policy's
+    // cohort audience) and its transcript is ready.
+    const ready = `r.id=? AND ${transcriptReadySql("r")} AND ${cohortAudienceSql("r", "r.programId")}`;
     const rows = await context.db.prepare(`SELECT a.userId FROM recording r
       JOIN programApplication a ON a.programId=r.programId
-      WHERE r.id=? AND r.processingStatus='complete' AND a.status IN ('APPROVED','AUDIT','COMPLETED')
+      WHERE ${ready} AND a.status IN ('APPROVED','AUDIT','COMPLETED')
       UNION SELECT pr.userId FROM recording r JOIN programRole pr ON pr.programId=r.programId
-      WHERE r.id=? AND r.processingStatus='complete' AND pr.name IN ('INSTRUCTOR','TA','MENTOR')`)
+      WHERE ${ready} AND pr.name IN ('INSTRUCTOR','TA','MENTOR')`)
       .bind(recordingId, recordingId).all<{ userId: string }>();
     await persist(context, audience, rows.results.map(row => ({
       userId: row.userId, actorId: null, kind: "recording_ready", space: "cohort",

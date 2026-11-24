@@ -1,8 +1,10 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import type { ToolDefinition } from "@/lib/ai/gateway";
 import { formatTimestamp, formatDuration } from "@/lib/recordings/time-utils";
+import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
+import { mayReadRecordings, recordingAccessFor, recordingScopeSql, transcriptReady, transcriptReadySql } from "@/lib/recordings/access";
 
 export interface TranscriptSource {
   sourceNumber: number;
@@ -18,8 +20,8 @@ export interface ToolContext {
   db: Database;
   userId: string;
   userName: string;
-  programIds: string[];
-  isAdmin: boolean;
+  /** The caller's capabilities: every recording read goes through the recording access policy with them. */
+  capabilities: PlatformCapabilities;
   /** Tool names the caller offered the model. Omit to allow every tool. */
   allowedTools?: ReadonlySet<string>;
   /** Accumulates sources across tool calls for citation building. */
@@ -146,18 +148,20 @@ interface SegmentRow {
   recordingProgramId: string | null;
 }
 
-function buildAccessFilter(
-  isAdmin: boolean,
-  recordingIds: string[],
-  segmentIds: string[],
-  programIds: string[]
-) {
+/** Recordings the caller may read whose transcript is complete: the condition every recording read here shares. */
+const readableTranscripts = (ctx: ToolContext) =>
+  sql.raw(`${recordingScopeSql(ctx.capabilities, ctx.userId)} AND ${transcriptReadySql()}`);
+
+/**
+ * Vectorize ranks every cohort's segments together, so each match is checked again here, in D1,
+ * through the recording access policy: a match the caller may not read is dropped.
+ */
+function buildAccessFilter(ctx: ToolContext, recordingIds: string[], segmentIds: string[]) {
   const idFilter =
     recordingIds.length > 0
       ? inArray(schema.recording.id, recordingIds)
       : inArray(schema.transcriptSegment.id, segmentIds);
-  if (isAdmin) return idFilter;
-  return and(idFilter, inArray(schema.recording.programId, programIds));
+  return and(idFilter, readableTranscripts(ctx));
 }
 
 const rangeKey = (recordingId: string, startTime: number, endTime: number) =>
@@ -225,7 +229,7 @@ function deduplicateMatches(
 async function searchTranscripts(query: string, scopeRecordingId: string | null, ctx: ToolContext): Promise<string> {
   if (!query.trim()) return JSON.stringify({ results: [], note: "Empty query" });
 
-  if (ctx.programIds.length === 0 && !ctx.isAdmin) {
+  if (!mayReadRecordings(ctx.capabilities)) {
     return JSON.stringify({ results: [], note: "No recordings available for this user" });
   }
 
@@ -270,7 +274,7 @@ async function searchTranscripts(query: string, scopeRecordingId: string | null,
     })
     .from(schema.transcriptSegment)
     .innerJoin(schema.recording, eq(schema.transcriptSegment.recordingId, schema.recording.id))
-    .where(buildAccessFilter(ctx.isAdmin, recordingIds, segmentIds, ctx.programIds))
+    .where(buildAccessFilter(ctx, recordingIds, segmentIds))
     .orderBy(asc(schema.transcriptSegment.startTime))) as SegmentRow[];
 
   const { results: found, added } = deduplicateMatches(matches, segmentRows, ctx.sources);
@@ -300,7 +304,7 @@ async function getUserContext(ctx: ToolContext): Promise<string> {
 
   return JSON.stringify({
     name: ctx.userName,
-    isAdmin: ctx.isAdmin,
+    isAdmin: ctx.capabilities.isAdmin,
     applications: applications.map((a) => ({
       status: a.status,
       programName: a.program?.name ?? null,
@@ -320,18 +324,7 @@ async function getUserContext(ctx: ToolContext): Promise<string> {
 async function listRecordings(limit: number, ctx: ToolContext): Promise<string> {
   const cap = Math.min(Math.max(limit, 1), 25);
 
-  // A non-admin with no accessible programs can see nothing. Falling through to
-  // an unconstrained query here would list every recording in the deployment.
-  if (!ctx.isAdmin && ctx.programIds.length === 0) {
-    return JSON.stringify({ recordings: [] });
-  }
-
-  const where = ctx.isAdmin
-    ? eq(schema.recording.processingStatus, "complete")
-    : and(
-        eq(schema.recording.processingStatus, "complete"),
-        inArray(schema.recording.programId, ctx.programIds)
-      );
+  if (!mayReadRecordings(ctx.capabilities)) return JSON.stringify({ recordings: [] });
 
   const recordings = await ctx.db
     .select({
@@ -342,7 +335,7 @@ async function listRecordings(limit: number, ctx: ToolContext): Promise<string> 
       programId: schema.recording.programId,
     })
     .from(schema.recording)
-    .where(where)
+    .where(readableTranscripts(ctx))
     .orderBy(desc(schema.recording.recordedAt))
     .limit(cap);
 
@@ -362,13 +355,12 @@ async function getRecordingDetails(recordingId: string, ctx: ToolContext): Promi
   const rec = await ctx.db.query.recording.findFirst({
     where: eq(schema.recording.id, recordingId),
   });
-  if (!rec) return JSON.stringify({ error: "Recording not found" });
-
-  if (!ctx.isAdmin && rec.programId && !ctx.programIds.includes(rec.programId)) {
-    return JSON.stringify({ error: "You do not have access to this recording" });
+  // A missing recording and one the policy refuses (one with no cohort, for everyone but admins) answer alike.
+  if (!rec || !recordingAccessFor(ctx.capabilities, rec, { userId: ctx.userId })) {
+    return JSON.stringify({ error: "Recording not found" });
   }
 
-  const transcript = rec.transcriptText
+  const transcript = transcriptReady(rec) && rec.transcriptText
     ? rec.transcriptText.length > 12_000
       ? `${rec.transcriptText.slice(0, 12_000)}… [truncated]`
       : rec.transcriptText
@@ -389,14 +381,14 @@ async function getRecordingDetails(recordingId: string, ctx: ToolContext): Promi
  * that cohort's own members and to admins: any signed-in person can ask about any program.
  */
 function isListedStaff(role: string, programId: string, ctx: ToolContext): boolean {
-  return role !== "MENTOR" || ctx.isAdmin || ctx.programIds.includes(programId);
+  return role !== "MENTOR" || ctx.capabilities.isAdmin || ctx.capabilities.cohortIds.includes(programId);
 }
 
 async function getProgramInfo(
   programId: string | null,
   ctx: ToolContext
 ): Promise<string> {
-  const targetIds = programId ? [programId] : ctx.programIds;
+  const targetIds = programId ? [programId] : ctx.capabilities.cohortIds;
 
   if (targetIds.length === 0) {
     const allPrograms = await ctx.db.query.program.findMany({

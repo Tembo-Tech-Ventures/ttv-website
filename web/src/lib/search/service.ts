@@ -2,15 +2,26 @@ import { memberProfileHref, memberWorkHref } from "@/lib/members/links";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { SearchQuery, SearchResults, WebLink, type PersonSummary } from "@/lib/platform/contracts";
-import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { capabilitiesFor, type PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import { DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { memberEligibility, publicProfileEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
+import { mayReadRecordings, recordingScopeSql, transcriptReadySql } from "@/lib/recordings/access";
 import { searchMessages } from "./messages";
 
 export const SEARCH_RESULT_LIMIT = 10;
 
 export class SearchScopeError extends Error {}
+
+/**
+ * An admin's search without a cohort reads only the newest sessions of every cohort, as Tembo does
+ * (TEMBO_CONFIG.recordings): never every transcript. Naming a cohort searches all of its sessions.
+ */
+export const ADMIN_SEARCHED_SESSIONS = 60;
+
+const COHORT_ONLY = { kind: "COHORT", label: "Only you and your cohort" } as const;
+const HOSTS_ONLY = { kind: "PRIVATE", label: "Only admins and the cohort's hosts" } as const;
+const ADMINS_ONLY = { kind: "PRIVATE", label: "Only admins" } as const;
 
 
 interface PublicPersonRow {
@@ -45,7 +56,7 @@ export async function searchPlatform(
   if (query.programId && !["all", "cohort", "sessionMoments"].includes(query.scope)) {
     throw new SearchScopeError("This scope does not accept a cohort.");
   }
-  if (query.programId && !caps.cohortIds.includes(query.programId)) {
+  if (query.programId && !caps.isAdmin && !caps.cohortIds.includes(query.programId)) {
     throw new SearchScopeError("Cohort is not available.");
   }
   const results: SearchResults = { query, messages: [], people: [], projects: [], sessionMoments: [] };
@@ -86,30 +97,42 @@ export async function searchPlatform(
       visibility: { kind: "COMMUNITY", label: "Signed-in members" } }));
   }
 
-  if (["all", "cohort", "sessionMoments"].includes(query.scope) && caps.cohortIds.length > 0) {
-    const programIds = query.programId ? [query.programId] : caps.cohortIds;
-    // Drive the segment index from authorized recordings, never scan the
-    // global segment table in random CUID order. No transcriptText prefilter:
-    // that denormalized column may be absent/stale while segments are valid.
-    const { results: rows } = await d1.prepare(`WITH authorized_recordings AS MATERIALIZED (
-      SELECT id,programId,title FROM recording
-      WHERE programId IN (SELECT value FROM json_each(?)) AND processingStatus='complete'
-    ) SELECT r.id AS recordingId,r.programId,substr(r.title,1,500) AS title,s.startTime,
-        substr(s.text,max(1,instr(lower(s.text),lower(?))-100),500) AS quote
-      FROM authorized_recordings r CROSS JOIN transcript_segment s
-      WHERE s.recordingId=r.id AND s.startTime>=0 AND instr(lower(s.text),lower(?))>0
-      ORDER BY r.id,s.startTime,s.id LIMIT ${SEARCH_RESULT_LIMIT}`)
-      .bind(JSON.stringify(programIds), term, term)
-      .all<{ recordingId: string; programId: string; title: string; startTime: number; quote: string }>();
-    results.sessionMoments = rows.map(row => ({ recordingId: row.recordingId, programId: row.programId,
-      title: row.title, startSeconds: row.startTime, quote: row.quote,
-      href: `/dashboard/sessions/${encodeURIComponent(row.recordingId)}?t=${Math.floor(row.startTime)}`,
-      visibility: { kind: "COHORT", label: "Only you and your cohort" } }));
+  if (["all", "cohort", "sessionMoments"].includes(query.scope) && mayReadRecordings(caps)) {
+    results.sessionMoments = await searchSessionMoments(d1, userId, caps, term, query.programId);
   }
   if (messages) {
     results.messages = await searchMessages(d1, db, { userId, capabilities: caps, query, limit: SEARCH_RESULT_LIMIT });
   }
   return SearchResults.parse(results);
+}
+
+/**
+ * Transcript moments in the recordings the access policy admits, complete ones only, optionally in
+ * one cohort. Driven from those recordings, never by scanning the global segment table in random
+ * CUID order: an admin, whom the policy admits to every recording, reads the newest
+ * ADMIN_SEARCHED_SESSIONS unless they name a cohort. No transcriptText prefilter: that denormalized
+ * column may be absent/stale while segments are valid.
+ */
+async function searchSessionMoments(
+  d1: D1Database, userId: string, caps: PlatformCapabilities, term: string, programId: string | undefined,
+): Promise<SearchResults["sessionMoments"]> {
+  const cohort = programId ? ` AND r.programId = ?3` : "";
+  const newest = caps.isAdmin && !programId
+    ? ` ORDER BY coalesce(r.recordedAt,r.createdAt) DESC,r.id LIMIT ${ADMIN_SEARCHED_SESSIONS}` : "";
+  const { results: rows } = await d1.prepare(`WITH authorized_recordings AS MATERIALIZED (
+    SELECT id,programId,title,accessScope,hiddenAt FROM recording r
+    WHERE ${recordingScopeSql(caps, userId, "r")} AND ${transcriptReadySql("r")}${cohort}${newest}
+  ) SELECT r.id AS recordingId,r.programId,r.accessScope,r.hiddenAt,substr(r.title,1,500) AS title,s.startTime,
+      substr(s.text,max(1,instr(lower(s.text),lower(?1))-100),500) AS quote
+    FROM authorized_recordings r CROSS JOIN transcript_segment s
+    WHERE s.recordingId=r.id AND s.startTime>=0 AND instr(lower(s.text),lower(?2))>0
+    ORDER BY r.id,s.startTime,s.id LIMIT ${SEARCH_RESULT_LIMIT}`)
+    .bind(term, term, ...programId ? [programId] : [])
+    .all<{ recordingId: string; programId: string | null; accessScope: string; hiddenAt: number | null; title: string; startTime: number; quote: string }>();
+  return rows.map(row => ({ recordingId: row.recordingId, programId: row.programId,
+    title: row.title, startSeconds: row.startTime, quote: row.quote,
+    href: `/dashboard/sessions/${encodeURIComponent(row.recordingId)}?t=${Math.floor(row.startTime)}`,
+    visibility: row.accessScope !== "COHORT" ? ADMINS_ONLY : row.hiddenAt === null ? COHORT_ONLY : HOSTS_ONLY }));
 }
 
 async function searchCapabilities(db:schema.Database,userId:string,query:SearchQuery,messages:boolean) {

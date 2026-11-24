@@ -184,7 +184,8 @@ export const SearchProject = z.object({
 });
 export type SearchProject = z.infer<typeof SearchProject>;
 export const SearchSessionMoment = z.object({
-  recordingId: Id, programId: Id, title: NonEmptyText, startSeconds: z.number().nonnegative(),
+  /** Null for a recording with no cohort, which only admins find. */
+  recordingId: Id, programId: Id.nullable(), title: NonEmptyText, startSeconds: z.number().nonnegative(),
   quote: NonEmptyText, href: InternalPath, visibility: Visibility,
 });
 export type SearchSessionMoment = z.infer<typeof SearchSessionMoment>;

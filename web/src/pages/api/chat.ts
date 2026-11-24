@@ -76,8 +76,8 @@ const handleChat: APIRoute = async ({ request, locals }) => {
   );
 
   // One scope for every read Tembo makes here, the one channels and recordings share (B-3.2).
-  const { cohortIds: programIds, isAdmin } = await capabilitiesFor(db, { id: user.id });
-  const scope = privateAskScope({ cohortIds: programIds, isAdmin });
+  const capabilities = await capabilitiesFor(db, { id: user.id });
+  const scope = privateAskScope(capabilities);
   const hasRecordings = readsRecordings(scope);
   const systemPrompt = privateAskPrompt(user.name, scope);
 
@@ -86,8 +86,7 @@ const handleChat: APIRoute = async ({ request, locals }) => {
     db,
     userId: user.id,
     userName: user.name,
-    programIds,
-    isAdmin,
+    capabilities,
     sources: [],
   };
 

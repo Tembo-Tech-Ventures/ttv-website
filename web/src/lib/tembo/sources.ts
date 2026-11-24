@@ -6,6 +6,7 @@ import { NonEmptyText, type ChannelKind, type Citation, type TemboScope } from "
 import { channelPagePath } from "@/lib/platform/server/space-routes";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
+import { cohortAudienceSql, transcriptReadySql } from "@/lib/recordings/access";
 import { TEMBO_CONFIG } from "./config";
 import { mentionsTembo } from "./mention";
 
@@ -216,11 +217,14 @@ const searchChannel: Search = async ({ db, book, channel, questionId }, terms) =
 
 interface SegmentRow { recordingId: string; title: string; startTime: number; text: string }
 
-/** The program's newest complete sessions, segments ranked by how many terms they contain, with the two after each. */
+/**
+ * The program's newest complete sessions every reader of the channel may see (the recording access
+ * policy's cohort audience), segments ranked by how many terms they contain, with the two after each.
+ */
 const searchSessions: Search = async ({ db, book, channel }, terms) => {
   if (channel.kind !== "COHORT" || channel.programId === null) return [];
   const { results } = await db.prepare(`WITH recent AS MATERIALIZED (
-      SELECT id, title FROM recording WHERE programId = ?1 AND processingStatus = 'complete'
+      SELECT id, title FROM recording r WHERE ${cohortAudienceSql("r", "?1")} AND ${transcriptReadySql("r")}
       ORDER BY coalesce(recordedAt, createdAt) DESC, id LIMIT ?2),
     hits AS (SELECT s.recordingId, r.title, s.startTime, ${score("s.text", "?3")} AS score
       FROM recent r CROSS JOIN transcript_segment s WHERE s.recordingId = r.id AND s.startTime >= 0)

@@ -2,8 +2,9 @@ import type { SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtures";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
-import { searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
+import { ADMIN_SEARCHED_SESSIONS, searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
 import { searchDatabase } from "./test-support";
+import { recordingScopeSql } from "@/lib/recordings/access";
 
 const databases: ReturnType<typeof searchDatabase>[] = [];
 function setup(...args: Parameters<typeof searchDatabase>) { const s = searchDatabase(...args); databases.push(s); return s; }
@@ -21,15 +22,20 @@ describe("authorized source retrieval", () => {
     expect(result.messages).toEqual([]);
     expect(result.people.map(p => p.person.id)).toEqual(["synthetic-ineligible", "synthetic-otieno", "synthetic-private"]);
     expect(result.projects.map(p => p.journeyId)).toEqual(["project-synthetic-ineligible", "project-synthetic-otieno", "project-synthetic-private"]);
-    expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
-    expect(result.sessionMoments.every(m => m.visibility.kind === "COHORT" && m.visibility.label === "Only you and your cohort")).toBe(true);
+    // The recording access policy: the caller's cohorts; for admins every cohort's and those with no cohort.
+    const { isAdmin, cohortIds } = fixture.expected;
+    expect(result.sessionMoments.map(m => m.programId)).toEqual(isAdmin ? ["cohort-a", "cohort-b", null] : cohortIds);
+    expect(result.sessionMoments.map(m => m.visibility)).toEqual(result.sessionMoments.map(m => m.programId === null
+      ? { kind: "PRIVATE", label: "Only admins" } : { kind: "COHORT", label: "Only you and your cohort" }));
     const retrieved = JSON.stringify(s.retrieved);
-    expect(retrieved).not.toMatch(/secret project|secret staff|secret admissions|Private auth name|pending secret|unscoped secret/);
-    if (!fixture.expected.cohortIds.includes("cohort-b")) expect(retrieved).not.toContain("Webhook cohort B secret");
+    expect(retrieved).not.toMatch(/secret project|secret staff|secret admissions|Private auth name|pending secret/);
+    if (!isAdmin) expect(retrieved).not.toContain("unscoped secret");
+    if (!isAdmin && !cohortIds.includes("cohort-b")) expect(retrieved).not.toContain("Webhook cohort B secret");
     const transcript = s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"));
-    if (fixture.expected.cohortIds.length > 0) expect(transcript?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
+    const reads = isAdmin || cohortIds.length > 0;
+    if (reads) expect(transcript?.sql).toContain(recordingScopeSql(fixture.expected, s.actor, "r"));
     else expect(transcript).toBeUndefined();
-    expect(s.queries).toHaveLength(fixture.expected.cohortIds.length > 0 ? 6 : 5);
+    expect(s.queries).toHaveLength(reads ? 6 : 5);
   });
 
   it.each(["SUSPENDED"])("denies %s profiles and their projects even to an institution", async status => {
@@ -94,6 +100,40 @@ describe("authorized source retrieval", () => {
     }
   });
 
+  it("reads an admin's newest sessions only, through the segment index, unless they name a cohort", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const recording = s.database.prepare("INSERT INTO recording(id,programId,title,processingStatus,recordedAt) VALUES (?,'cohort-b',?,'complete',?)");
+    const segment = s.database.prepare("INSERT INTO transcript_segment(id,recordingId,startTime,endTime,text) VALUES (?,?,?,?,?)");
+    // The oldest session of many, its one mention of "Harambee" far down a long transcript.
+    recording.run("oldest", "Oldest session", 1);
+    for (let i = 0; i < 300; i++) segment.run(`oldest-${i}`, "oldest", i, i + 1, i === 299 ? "Harambee retrospective" : "Filler words");
+    for (let i = 0; i < ADMIN_SEARCHED_SESSIONS; i++) recording.run(`newer-${i}`, `Session ${i}`, 1_000 + i);
+
+    expect((await searchPlatform(s.db, s.actor, { q: "Harambee", scope: "sessionMoments" })).sessionMoments).toEqual([]);
+    const transcript = s.queries.findLast(q => q.sql.includes("CROSS JOIN transcript_segment"))!;
+    expect(transcript.sql).toContain(`LIMIT ${ADMIN_SEARCHED_SESSIONS}`);
+    const plan = s.database.prepare("EXPLAIN QUERY PLAN " + transcript.sql).all(...transcript.values as SQLInputValue[]).map(r => r.detail).join("\n");
+    expect(plan).toContain("SEARCH s USING INDEX transcript_segment_recording_time_idx (recordingId=?");
+    expect(plan).not.toMatch(/SCAN s\b|SCAN transcript_segment\b/);
+
+    // Naming the cohort searches all of its sessions, by the cohort index.
+    const named = await searchPlatform(s.db, s.actor, { q: "Harambee", scope: "sessionMoments", programId: "cohort-b" });
+    expect(named.sessionMoments.map(m => [m.recordingId, m.startSeconds])).toEqual([["oldest", 299]]);
+    const narrowed = s.queries.findLast(q => q.sql.includes("CROSS JOIN transcript_segment"))!;
+    expect(narrowed.sql).not.toContain("LIMIT 60");
+    const narrowedPlan = s.database.prepare("EXPLAIN QUERY PLAN " + narrowed.sql).all(...narrowed.values as SQLInputValue[]).map(r => r.detail).join("\n");
+    expect(narrowedPlan).toContain("SEARCH r USING INDEX recording_program_idx (programId=?)");
+  });
+
+  it("says who sees a hidden session: admins and the cohort's hosts", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.database.exec("UPDATE recording SET hiddenAt = 1 WHERE id = 'recording-a'");
+    const moments = (await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "sessionMoments" })).sessionMoments;
+    expect(moments.map(m => [m.recordingId, m.visibility.label])).toEqual([
+      ["recording-a", "Only admins and the cohort's hosts"], ["recording-b", "Only you and your cohort"], ["recording-null", "Only admins"],
+    ]);
+  });
+
   it("finds late matches in a long session and caps results after matching", async () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const insert = s.database.prepare("INSERT INTO transcript_segment(id,recordingId,startTime,endTime,text) VALUES (?,'recording-a',?,?,'Webhook synthetic bounded evidence')");
@@ -104,7 +144,7 @@ describe("authorized source retrieval", () => {
     expect(result.sessionMoments.every(m => m.quote.length <= 500)).toBe(true);
     const retrieval = s.queries[3]!;
     const plan = s.database.prepare("EXPLAIN QUERY PLAN " + retrieval.sql).all(...retrieval.values as SQLInputValue[]).map(r => r.detail).join("\n");
-    expect(plan).toContain("SEARCH recording USING INDEX recording_program_idx (programId=?)");
+    expect(plan).toContain("SEARCH r USING INDEX recording_program_idx (programId=?)");
     expect(plan).toContain("SEARCH s USING INDEX transcript_segment_recording_time_idx (recordingId=?");
     expect(plan).not.toMatch(/SCAN s\b|SCAN transcript_segment\b/);
     s.database.exec("UPDATE transcript_segment SET text='Unique late evidence' WHERE id='a-0700'");

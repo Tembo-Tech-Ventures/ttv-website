@@ -224,6 +224,11 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 **Files**
 - `file` — uploaded file metadata (name, type, size, path, ownerId)
 
+**Recordings**
+- `recording` — a session's video (R2), transcript and processing status; `accessScope` (COHORT, DIRECT, COMMUNITY, ADMIN_ONLY), `deletedAt`, `hiddenAt` (migration 0042). Triggers allow only those scopes and keep a cohort or admins-only recording's scope following its `programId`
+- `transcript_segment` — timed transcript lines, embedded in Vectorize for Ask Tembo
+- Access: one policy, `web/src/lib/recordings/access.ts`, for every path that reads a recording: `recordingAccessFor` for one recording and `recordingScopeSql` for lists and search, proven equal by a test. COHORT recordings are for that cohort's people and admins; ADMIN_ONLY (a recording with no cohort) for admins; DIRECT and COMMUNITY for nobody until a recording can belong to a conversation or channel; deleted for nobody; hidden only for admins and the cohort's instructors and TAs. A cohort channel (Tembo, clips) and the "ready to watch" notice read as the whole cohort (`cohortAudience`). Every refusal is the same 404. The video plays once stored; transcripts are read once processing is complete
+
 **Platform** (see `web/docs/platform-spaces-and-channels.md`)
 - `feature_flag` — one row per rollout flag (`spaces`, `onboarding`, `channels`, `tembo_channels`, `mentor_requests`), audience OFF/STAFF/ALL with who changed it; seeded OFF by migration
 - `attention_item` — one thing that needs one person: kind, space, category (mentions/requests/updates), subject link, optional actor, read time; `eventKey` unique per person so each event writes once. Kinds: `application_status`, `recording_ready`, `work_confirmed`, `visitor_message`, `mention`, `tembo_answer`, `message_hidden`, `moderation_pending`, `moderation_decided`, `mentor_request`, `mentor_withdrawn`, `mentor_accepted`, `mentor_redirected`, `mentor_declined`, `mentor_checked`, `access_request`, `access_decided` (`reply` and `opportunity_match` are in the contract with no producer yet). An item shows only while its subject still applies (see `web/src/lib/attention/README.md`)

@@ -54,10 +54,10 @@ beforeAll(async () => {
   container = await AstroContainer.create({ renderers: await loadRenderers([getContainerRenderer()]) });
 });
 
-async function visit() {
+async function visit(id = STUDENT) {
   const url = new URL("/dashboard/cohort/sessions", ORIGIN);
-  const user = { id: STUDENT, name: "Wanjiku Njeri", email: "wanjiku@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
-  mocks.getSession.mockResolvedValue({ user, session: { id: `${STUDENT}-session`, userId: STUDENT, userAgent: "Mozilla/5.0" } });
+  const user = { id, name: "Wanjiku Njeri", email: "wanjiku@example.test", image: null, emailVerified: true, createdAt: new Date(0), updatedAt: new Date(0) };
+  mocks.getSession.mockResolvedValue({ user, session: { id: `${id}-session`, userId: id, userAgent: "Mozilla/5.0" } });
   const locals = {} as App.Locals;
   const context = {
     url, request: new Request(url), locals, params: {},
@@ -108,6 +108,20 @@ describe("the Sessions page", () => {
     const page = main((await visit()).body);
     const chips = [...page.querySelectorAll("[data-session-card] [data-chip]")].map((chip) => [chip.getAttribute("data-chip"), chip.textContent]);
     expect(chips).toEqual([["danger", "Failed"], ["neutral", "Transcribing"], ["success", "Ready"]]);
+  });
+
+  it("lists every recording for an admin, saying when one has no cohort", async () => {
+    seeded(`${RECORDINGS}
+      INSERT INTO recording (id, programId, title, recordedAt, processingStatus) VALUES ('loose', NULL, 'Unsorted upload', 1795800000, 'complete');
+      INSERT INTO user(id,name,email) VALUES ('synthetic-amina','Amina Hassan','amina@example.test');
+      INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN');
+      INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin-role','synthetic-amina',id FROM Roles WHERE name='ADMIN';`);
+    const cards = [...main((await visit()).body).querySelectorAll("[data-session-card]")];
+    expect(cards.map((card) => card.querySelector("h2")?.textContent)).not.toContain("Unsorted upload");
+    const adminCards = [...main((await visit("synthetic-amina")).body).querySelectorAll("[data-session-card]")];
+    expect(adminCards.map((card) => [card.querySelector("h2")?.textContent, card.querySelector("p")?.textContent])).toEqual([
+      ["Unsorted upload", "No cohort"], ["Week 5: Observability", "Cohort 07"], ["Week 4: Deploying", "Cohort 07"], ["Week 3: Testing a service", "Cohort 07"],
+    ]);
   });
 
   it("uses no legacy card and no off-palette colour", async () => {
