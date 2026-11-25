@@ -207,16 +207,19 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   // space's flags waited for the ADMIN guard). Now flags and capabilities are one round trip and
   // everything the frame reads after them is the next.
   "frame only, community": { d1: 16, depth: 2 },
-  "frame only, cohort": { d1: 16, depth: 2 },
+  // One more since in-app calls P9: at the Overview's path, the frame starts its next session beside the rest.
+  "frame only, cohort": { d1: 17, depth: 2 },
   "frame only, mentoring": { d1: 13, depth: 2 },
   "frame only, profile": { d1: 16, depth: 2 },
   "frame only, admin": { d1: 13, depth: 2 },
-  "cohort overview": { d1: 16, depth: 2 },
+  // The next session (in-app calls P9, while `meetings` is on), started by the frame, shared with the page.
+  "cohort overview": { d1: 17, depth: 2 },
   // Its reads of its own are the recordings and, while `meetings` is on, the sessions coming up (one
   // more since in-app calls P8), together once the router has the space context.
-  "cohort sessions": { d1: 16, depth: 3 },
+  // One more since in-app calls P9: the sessions that ended without a recording, beside the sessions coming up.
+  "cohort sessions": { d1: 17, depth: 3 },
   // A host pays no more: whether they may schedule comes from the request's capabilities.
-  "cohort sessions, a host": { d1: 13, depth: 3 },
+  "cohort sessions, a host": { d1: 14, depth: 3 },
   // The cohorts the caller hosts, one read beside the recordings' place (in-app calls P8).
   "schedule a session": { d1: 12, depth: 3 },
   // The session with its channel and cohort, one read once the space context says `meetings` is on.

@@ -7,8 +7,10 @@ import {
 } from "@/lib/platform/server/capabilities";
 import { meetingAccessFor, type MeetingAccess } from "./access";
 import { LIMIT_MINUTES, notFound } from "./calls";
+import { attachCard, touchCard } from "./cards";
 import { MINUTE_MS } from "./clock";
-import { SESSION_BOOK_AHEAD_DAYS, SESSION_SERIES_MAX_WEEKS, type MeetingState } from "./rules";
+import { captureOutcome } from "./card-state";
+import { SESSION_BOOK_AHEAD_DAYS, SESSION_SERIES_MAX_WEEKS, type MeetingRecordingState, type MeetingState } from "./rules";
 import {
   cleanTitle, lengthLabel, nairobiFields, SESSION_LENGTHS, SESSION_ZONE_LABEL, sessionClock, sessionDate, sessionDay, shortDate, weekdayOf,
 } from "./session-times";
@@ -132,6 +134,47 @@ export async function upcomingSessions(db: D1Database, capabilities: PlatformCap
   });
 }
 
+/** A session that ended without a recording any reader could be shown: on its way, failed, or not recorded. */
+export interface UnrecordedSession {
+  id: string;
+  title: string;
+  /** When its room opened: where it sits among the recordings. */
+  openedAt: number;
+  bookedMinutes: number;
+  programId: string;
+  cohortName: string;
+  outcome: ReturnType<typeof captureOutcome>;
+}
+
+/** The most sessions without a recording listed at once. */
+export const UNRECORDED_LIMIT = 60;
+
+/**
+ * The sessions in every cohort the caller reads that ended with no recording at all, newest first:
+ * Sessions lists each as a row ("Not recorded", "Recording failed", or on its way) among the
+ * recordings (UX review §3, screen 03). A session a recording came from is never listed here, whoever
+ * may watch that recording: one hidden from the cohort is not "not recorded", it is simply not shown.
+ */
+export async function sessionsWithoutRecording(db: D1Database, capabilities: PlatformCapabilities): Promise<UnrecordedSession[]> {
+  if (!capabilities.isAdmin && capabilities.cohortIds.length === 0) return [];
+  const { results } = await db.prepare(`SELECT m.id, m.title, m.openedAt, m.bookedMinutes, c.programId, c.kind, c.postingPolicy, c.archivedAt,
+      p.name AS cohortName, (SELECT mr.state FROM meeting_recording mr WHERE mr.meetingId = m.id) AS capture
+    FROM meeting m JOIN channel c ON c.id = m.channelId JOIN program p ON p.id = c.programId
+    WHERE m.state = 'ENDED' AND m.purpose = 'SESSION' AND c.kind = 'COHORT' AND (?1 OR c.programId IN (SELECT value FROM json_each(?2)))
+      AND NOT EXISTS (SELECT 1 FROM recording r WHERE r.meetingId = m.id)
+    ORDER BY m.openedAt DESC, m.id LIMIT ?3`)
+    .bind(...cohortScope(capabilities, capabilities.cohortIds), UNRECORDED_LIMIT).all<Record<string, unknown>>();
+  return results.flatMap((row) => {
+    const channel = { kind: row.kind, programId: row.programId, postingPolicy: row.postingPolicy, archivedAt: row.archivedAt } as ChannelAccessTarget;
+    if (!meetingAccessFor(capabilities, channel, "SESSION").canSee) return [];
+    return [{
+      id: row.id as string, title: row.title as string, openedAt: row.openedAt as number, bookedMinutes: row.bookedMinutes as number,
+      programId: row.programId as string, cohortName: (row.cohortName as string).trim() || "Cohort",
+      outcome: captureOutcome(row.capture as MeetingRecordingState | null),
+    }];
+  });
+}
+
 /** A session the caller can see (`host: false`) or host, or the same 404 for anything else. */
 export async function readSession(db: D1Database, caller: SessionCaller, meetingId: string, { host = true } = {}): Promise<HostedSession> {
   if (!caller.meetings) throw notFound();
@@ -185,15 +228,19 @@ export type NoteOutcome = "posted" | "not_posted";
  * detectors, the code of conduct, the rate limits), then the checks after the response (`afterNote`:
  * Clef and the queue notice, as channels/http.ts gives a post). There is no system author, so the
  * host who acted posts it, as the mentor-request flow does. The nonce makes a repeated request post it once.
+ * `cardFor` is a single date's id: its note carries the session's card (cards.ts) and becomes its card.
  */
-async function postNote(ctx: SessionContext, caller: SessionCaller, channel: ChannelFacts, body: string, nonce: string): Promise<NoteOutcome> {
+async function postNote(
+  ctx: SessionContext, caller: SessionCaller, channel: ChannelFacts, body: string, nonce: string, cardFor?: string,
+): Promise<NoteOutcome> {
   const { canRead: _, ...capabilities } = channelAccessFor(caller.capabilities, channel);
   try {
     const { message, created } = await postMessage({
       db: ctx.db, viewerId: caller.userId, now: ctx.now, conductVersion: caller.conductVersion,
       channel: { id: channel.id, kind: channel.kind, programId: channel.programId, archivedAt: channel.archivedAt, capabilities },
-    }, { body, clientNonce: nonce, parentId: null, embeds: [] });
+    }, { body, clientNonce: nonce, parentId: null, embeds: [] }, cardFor === undefined ? {} : { card: { type: "meeting", meetingId: cardFor } });
     if (created) ctx.afterNote?.(message, channel);
+    if (cardFor !== undefined) await attachCard(ctx.db, cardFor, message.id);
     return "posted";
   } catch (error) {
     if (error instanceof ChannelError) return "not_posted";
@@ -282,7 +329,8 @@ export async function scheduleSessions(
     if (!same) throw new ChannelError("conflict", "This form was already sent. Open Schedule a session again.", 409);
   }
   const body = scheduledNote({ title, starts, minutes: input.bookedMinutes, skipped: input.skipped ?? [], now: ctx.now });
-  const note = await postNote(ctx, caller, cohort.channel, body, `session-scheduled-${input.token}`);
+  // A single date's note is its card; a series' dates get theirs when each room opens (UX review M6).
+  const note = await postNote(ctx, caller, cohort.channel, body, `session-scheduled-${input.token}`, ids.length === 1 ? ids[0] : undefined);
   return { meetingIds: ids, cohort, note };
 }
 
@@ -328,6 +376,8 @@ export async function changeSession(
     .bind(meetingId, title, change.startAt, change.bookedMinutes, ctx.now)
     .first<Pick<HostedSession, "title" | "scheduledStartAt" | "bookedMinutes" | "state" | "updatedAt">>();
   if (!updated) throw new ChannelError("conflict", NOT_SCHEDULED, 409);
+  // A single date's card shows its new time and title in every open page.
+  await touchCard(ctx.db, meetingId).run();
   const session: HostedSession = { ...before, ...updated };
   const note = moved
     ? await postNote(ctx, caller, before.channel, movedNote({ title, from: before.scheduledStartAt, to: change.startAt, now: ctx.now }),
@@ -358,6 +408,7 @@ export async function cancelSession(
     if (now.state === "CANCELLED") return { session: now, note: null };
     throw new ChannelError("conflict", STARTED, 409);
   }
+  await touchCard(ctx.db, meetingId).run();
   const session: HostedSession = { ...before, ...cancelled };
   const note = await postNote(ctx, caller, before.channel, cancelledNote({ title: before.title, at: before.scheduledStartAt, now: ctx.now }),
     `session-cancelled-${meetingId}`);

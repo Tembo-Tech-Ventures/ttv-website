@@ -9,9 +9,11 @@ const mocks = vi.hoisted(() => ({
   embedAndIndexRecording: vi.fn(),
   recordError: vi.fn().mockResolvedValue(null),
   recordingReadyAttention: vi.fn().mockResolvedValue(undefined),
+  touchRecordingCard: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/attention/producers", () => ({ recordingReadyAttention: mocks.recordingReadyAttention }));
+vi.mock("@/lib/meetings/card-state", () => ({ touchRecordingCard: mocks.touchRecordingCard }));
 
 vi.mock("drizzle-orm/d1", () => ({ drizzle: mocks.drizzle }));
 vi.mock("@/lib/recordings/google-drive", () => ({
@@ -214,6 +216,8 @@ describe("recording processing pipeline", () => {
       "complete",
     ]);
     expect(mocks.recordingReadyAttention).toHaveBeenCalledWith({ db: env.DB, env }, "recording1");
+    // A call's card offers the recording in every open page (in-app calls P9).
+    expect(mocks.touchRecordingCard).toHaveBeenCalledWith(env.DB, "recording1");
     expect(recording.processingStatus).toBe("complete");
     const containerRequest = containerFetch.mock.calls[0][1] as RequestInit;
     expect(env.FFMPEG_CONTAINER.getByName).toHaveBeenCalledWith("recording1");

@@ -15,6 +15,7 @@ import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
 import { recordError, redactErrorMessage } from "@/lib/observability/errors";
 import { recordingReadyAttention } from "@/lib/attention/producers";
+import { touchRecordingCard } from "@/lib/meetings/card-state";
 
 export interface RecordingQueueMessage {
   type: "process_recording";
@@ -557,6 +558,8 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
     await updateStatus(db, recording.id, "complete");
     await recordingReadyAttention({ db: env.DB, env }, recording.id);
+    // A call's card offers "Watch recording" and "Ask Tembo" in every open page (in-app calls P9).
+    await touchRecordingCard(env.DB, recording.id);
   } catch (error) {
     const failureMessage = redactErrorMessage(error);
     logRecordingPipelineEvent("recording_pipeline_failed", {
@@ -564,6 +567,7 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       error: failureMessage,
     });
     await updateStatus(db, recording.id, "failed", failureMessage);
+    await touchRecordingCard(env.DB, recording.id);
     await recordError(env.DB, {
       source: "pipeline",
       route: "/recordings/:id/pipeline",

@@ -4,14 +4,17 @@
  * newest first. Each card opens the session viewer at its space path. While `meetings` is on for the
  * person, "Coming up" lists the sessions still to come above them, and a cohort's hosts (its
  * instructors and TAs, admins) get "Schedule a session" (in-app calls P8, src/lib/meetings/README.md).
- * With the flag off the page is exactly as it was.
+ * Among the recordings, each session that ended with none is a row saying so ("Not recorded",
+ * "Recording failed"), and a recording hidden from the cohort says so to the hosts who still see it
+ * (P9). With the flag off the page is exactly as it was.
  */
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { ButtonLink, Card, EmptyState, FOCUS_RING, Notice, PageHeader, PageTitle, StatusChip, cx } from "@/components/platform/ui";
+import { ButtonLink, Card, Chip, EmptyState, FOCUS_RING, Notice, PageHeader, PageTitle, StatusChip, cx } from "@/components/platform/ui";
 import ComingUp from "@/components/platform/sessions/ComingUp.astro";
-import { upcomingSessions } from "@/lib/meetings/sessions";
+import { sessionsWithoutRecording, upcomingSessions, type UnrecordedSession } from "@/lib/meetings/sessions";
+import { lengthLabel } from "@/lib/meetings/session-times";
 import { takeFlash } from "@/lib/platform/server/flash";
 import { SESSION_SCHEDULE_PATH } from "@/lib/platform/server/space-routes";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
@@ -45,7 +48,8 @@ const loadUpcoming = async (meetings: boolean) => {
   const hosts = capabilities.isAdmin || capabilities.teachingCohortIds.length > 0;
   // One cohort taught: the form opens on it. Several (or an admin's every cohort): the form asks which.
   const only = !capabilities.isAdmin && capabilities.teachingCohortIds.length === 1 ? capabilities.teachingCohortIds[0] : null;
-  return { sessions: await upcomingSessions(env.DB, capabilities, now), hosts, scheduleHref: only ? `${SESSION_SCHEDULE_PATH}?cohort=${encodeURIComponent(only)}` : SESSION_SCHEDULE_PATH };
+  const [sessions, unrecorded] = await Promise.all([upcomingSessions(env.DB, capabilities, now), sessionsWithoutRecording(env.DB, capabilities)]);
+  return { sessions, unrecorded, hosts, scheduleHref: only ? `${SESSION_SCHEDULE_PATH}?cohort=${encodeURIComponent(only)}` : SESSION_SCHEDULE_PATH };
 };
 const resolved = await resolveSpacePageWith(Astro.locals, "sessions", (me) => Promise.all([recordingsRead, loadUpcoming(me.flags.meetings)]));
 const spaces = resolved?.[0] ?? null;
@@ -56,6 +60,22 @@ const flash = upcoming && Astro.request.method === "GET" ? takeFlash(Astro) : nu
 const sessionsHref = SPACE_PAGE_PATHS.sessions;
 // Under "Recordings" (with "Coming up" above it), each recording's title is a level down.
 const RecordingTitle = upcoming ? "h3" : "h2";
+// The recordings and the sessions that ended without one, newest first: a session sits where its room opened.
+type Row = { kind: "recording"; recording: (typeof recordings)[number]; at: number } | { kind: "unrecorded"; session: UnrecordedSession; at: number };
+const rows: Row[] = [
+  ...recordings.map((recording): Row => ({ kind: "recording", recording, at: recording.recordedAt?.getTime() ?? 0 })),
+  ...(upcoming?.unrecorded ?? []).map((session): Row => ({ kind: "unrecorded", session, at: session.openedAt })),
+].toSorted((a, b) => b.at - a.at);
+const UNRECORDED_CHIP = {
+  notRecorded: { label: "Not recorded", tone: "neutral" },
+  failed: { label: "Recording failed", tone: "danger" },
+  processing: { label: "Processing", tone: "neutral" },
+} as const;
+/** Why a session has no recording, in a sentence (voice.md). */
+const unrecordedLine = ({ outcome }: UnrecordedSession) => outcome.state === "failed" ? "The recording failed, so there's nothing to watch."
+  : outcome.state === "processing" ? "The recording will be here when it's ready."
+  : outcome.reason === "limit" ? "Not recorded: TTV had reached its recording limit for the month."
+  : outcome.reason === "short" ? "Not recorded: it was too short to keep." : "This session wasn't recorded.";
 ---
 
 <SpacePage context={spaces} title="Sessions">
@@ -86,28 +106,44 @@ const RecordingTitle = upcoming ? "h3" : "h2";
 
     {upcoming ? <h2 class="m-0 text-xl text-ink-primary">Recordings</h2> : null}
 
-    {recordings.length === 0 ? (
+    {rows.length === 0 ? (
       <EmptyState title="No recordings yet" headingLevel={upcoming ? 3 : 2}>
         Recordings of your cohort's sessions appear here after each session, once they're processed.
       </EmptyState>
     ) : (
       <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3" data-session-list>
-        {recordings.map((recording) => (
+        {rows.map((row) => row.kind === "unrecorded" ? (
+          <li class="flex">
+            <Card className="flex w-full flex-col gap-4" data-session-unrecorded={row.session.outcome.state}>
+              <div class="flex items-start justify-between gap-3">
+                <RecordingTitle class="m-0 text-base leading-snug text-ink-secondary">{row.session.title}</RecordingTitle>
+                <Chip tone={UNRECORDED_CHIP[row.session.outcome.state].tone}>{UNRECORDED_CHIP[row.session.outcome.state].label}</Chip>
+              </div>
+              <p class="m-0 text-sm text-ink-secondary">{unrecordedLine(row.session)}</p>
+              <div class="mt-auto flex items-center justify-between text-xs text-ink-muted">
+                <span>{formatMomentDate(new Date(row.session.openedAt))}</span>
+                <span>{row.session.cohortName}</span>
+              </div>
+            </Card>
+          </li>
+        ) : (
           <li class="flex">
             <a
-              href={`${sessionsHref}/${recording.id}`}
+              href={`${sessionsHref}/${row.recording.id}`}
               class={cx("group flex w-full rounded-[1.125rem]", FOCUS_RING)}
               data-session-card
             >
               <Card className="flex w-full flex-col gap-4 transition-colors duration-150 group-hover:border-ink-primary/30 motion-reduce:transition-none">
                 <div class="flex items-start justify-between gap-3">
-                  <RecordingTitle class="m-0 text-base leading-snug text-ink-primary">{recording.title}</RecordingTitle>
-                  <StatusChip domain="recording" status={recording.processingStatus} />
+                  <RecordingTitle class="m-0 text-base leading-snug text-ink-primary">{row.recording.title}</RecordingTitle>
+                  <StatusChip domain="recording" status={row.recording.processingStatus} />
                 </div>
-                <p class="m-0 text-sm text-ink-secondary">{recording.program?.name ?? "No cohort"}</p>
+                {/* Only its hosts and admins still see a hidden recording (the access policy): they're told it is hidden. */}
+                {row.recording.hiddenAt ? <Chip tone="warning" className="self-start">Hidden from the cohort</Chip> : null}
+                <p class="m-0 text-sm text-ink-secondary">{row.recording.program?.name ?? "No cohort"}</p>
                 <div class="mt-auto flex items-center justify-between text-xs text-ink-muted">
-                  <span>{recording.recordedAt ? formatMomentDate(recording.recordedAt) : "No date"}</span>
-                  <span>{formatDuration(recording.durationSeconds)}</span>
+                  <span>{row.recording.recordedAt ? formatMomentDate(row.recording.recordedAt) : "No date"}</span>
+                  <span>{formatDuration(row.recording.durationSeconds)}</span>
                 </div>
               </Card>
             </a>

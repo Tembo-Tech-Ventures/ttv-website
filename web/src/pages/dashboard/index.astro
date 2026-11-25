@@ -15,18 +15,36 @@ import { getStudentJourney } from "@/lib/student/journey";
 import { getDashboardGreetingName } from "@/lib/display-name";
 import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astro";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
+import NextSession from "@/components/platform/sessions/NextSession.astro";
+import { nextCohortSession } from "@/components/platform/sessions/next-session";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { getFlags } from "@/lib/platform/server/flags";
 
 const user = Astro.locals.user!;
+const now = Date.now();
+/** The live session, or else the next to come, in the reader's cohorts, while `meetings` is on for them (in-app calls P9). */
+// The frame starts this read beside the space context (startSpacePageFrame); the page shares it.
+const nextSession = async () => {
+  const [flags, capabilities] = await Promise.all([
+    getFlags({ db: env.DB, env, user, locals: Astro.locals }), requestCapabilities(drizzle(env.DB, { schema }), Astro.locals),
+  ]);
+  return nextCohortSession(env.DB, user.id, capabilities, flags.meetings, now);
+};
 // Independent reads, started together. The channel list for the "Channels" card (QA2-16), which the
 // sidebar reuses, starts beside onboarding (PERF-2).
-const [journey, access, landing] = await Promise.all([
+const [journey, access, landing, upcoming] = await Promise.all([
   getStudentJourney(drizzle(env.DB, { schema }), user.id),
   createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT, env.PLATFORM_FLAGS_OVERRIDE, env).access(),
   resolveSpacePageWith(Astro.locals, "cohort", (me) =>
     loadChannelShortcuts({ me, space: pickSpace(me, "cohort")!, page: "cohort" })),
+  nextSession(),
 ]);
 const spaces = landing?.[0] ?? null;
 const { channels, shortcuts } = landing?.[1] ?? { channels: undefined, shortcuts: null };
+// Only inside the spaces shell, where `meetings` can be on.
+const session = spaces ? upcoming : null;
+// While a session is live, joining it is the page's one peach action, and the next step steps back.
+const live = session?.state === "LIVE";
 const canDiscover = hasDiscoveryAccess(access);
 const proposedStep = dashboardNextStep(journey.nextStep, canDiscover);
 const qa = Astro.locals.stagingQa;
@@ -56,6 +74,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
     </header>
     {/* The status cards follow the title, so its h1 leads the page; the next step stays its one peach action. */}
     {spaces?.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
+    {session ? <NextSession session={session} now={now} /> : null}
 
     <Card as="section" aria-labelledby="next-step-title">
       <h2 id="next-step-title" data-testid="student-next-step" class="text-2xl text-ink-primary sm:text-3xl">
@@ -69,7 +88,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
           {nextStep.detail}
         </p>
       )}
-      <ButtonLink variant="primary" size="lg" href={nextStepHref} className="mt-6">
+      <ButtonLink variant={live ? "quiet" : "primary"} size="lg" href={nextStepHref} className="mt-6">
         {nextStep.action.label}
       </ButtonLink>
     </Card>

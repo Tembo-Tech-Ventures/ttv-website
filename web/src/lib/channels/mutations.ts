@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed, type MessageReactions,
-  type PostMessage, type ReactToMessage,
+  CallEmbed, MessageEmbed, type Channel, type EditMessage, type MeetingEmbed, type Message, type MessageEmbed as StoredEmbed,
+  type MessageReactions, type PostMessage, type ReactToMessage,
 } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
 import { refOf, resolveEmbeds, sameRefs, screeningText } from "./embeds";
@@ -102,13 +102,27 @@ interface NonceRow {
   id: string; channelId: string; parentId: string | null; body: string; embeds: string; editedAt: number | null; deletedAt: number | null;
 }
 
-/** The references a stored message's embeds were resolved from; null when they cannot be read back. */
-function storedRefs(text: string) {
+/** A stored message's embeds as JSON, or null when they cannot be read back. */
+function storedList(text: string): unknown[] | null {
   try {
-    const embeds = MessageEmbed.array().safeParse(JSON.parse(text));
-    return embeds.success ? embeds.data.map(refOf) : null;
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : null;
   } catch { return null; }
 }
+
+/**
+ * The references a stored message's embeds were resolved from; null when they cannot be read back.
+ * A call's card is the server's, never a reference the author sent, so it is not one of them.
+ */
+function storedRefs(text: string) {
+  const stored = storedList(text);
+  if (stored === null) return null;
+  const embeds = MessageEmbed.array().safeParse(stored.filter((value) => !CallEmbed.safeParse(value).success));
+  return embeds.success ? embeds.data.map(refOf) : null;
+}
+
+/** Whether a stored message carries a call's card (lib/meetings/cards.ts). */
+export const carriesCallCard = (text: string) => storedList(text)?.some((value) => CallEmbed.safeParse(value).success) ?? false;
 
 /**
  * The message this author already sent with this nonce, when the request repeats it: same channel,
@@ -172,8 +186,14 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
  * conduct_required); a rate limit (429 with retryAfterMs); a thread that is not an open root of
  * this channel the caller can see (404), or a deleted or hidden one (409); attached work that cannot
  * be shared here (resolveEmbeds: 400, or 409 for a stale project revision).
+ *
+ * `card` is a call's card, which only the server attaches (lib/meetings/cards.ts: a cohort session's
+ * note, or the card its room's opening posts), after the work the post shares. It is never something a
+ * person sends: PostMessage carries references to shared work only.
  */
-export async function postMessage(ctx: WriteContext, input: PostMessage): Promise<{ message: Message; created: boolean }> {
+export async function postMessage(
+  ctx: WriteContext, input: PostMessage, { card }: { card?: MeetingEmbed } = {},
+): Promise<{ message: Message; created: boolean }> {
   if (!ctx.channel.capabilities.canPost) {
     const previous = await previousPost(ctx, input);
     if (previous) return previous;
@@ -214,7 +234,8 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
     ON CONFLICT (authorId, clientNonce) DO NOTHING RETURNING id`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body, JSON.stringify(findings), textKey, now, id,
     conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
-    FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1, JSON.stringify(embeds),
+    FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1,
+    JSON.stringify(card ? [...embeds, card] : embeds),
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";
@@ -321,10 +342,15 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
 /**
  * DELETE /api/messages/:id: the author removes their message from a channel they can still read,
  * even one they can no longer post in. It keeps its place as an empty placeholder, so its replies
- * stay in their thread, and loses its reactions. Deleting again returns the same placeholder.
+ * stay in their thread, and loses its reactions. Deleting again returns the same placeholder. A
+ * message carrying a call's card is never deleted (409): its thread is the call's chat, and the card
+ * is how the channel finds the call and its recording (UX review, screen 04). Its words can be edited.
  */
 export async function deleteMessage(ctx: WriteContext, target: MessageTarget): Promise<Message> {
   requireAuthor(ctx, target, "delete");
+  if (target.deletedAt === null && carriesCallCard(target.embeds)) {
+    throw new ChannelError("conflict", "This message holds a session's card, so it can't be deleted. You can edit its words.", 409);
+  }
   if (target.deletedAt === null) {
     const now = ctx.now ?? Date.now();
     // ?1 channel, ?2 id, ?3 author, ?4 now. The later statements act only for this deletion.

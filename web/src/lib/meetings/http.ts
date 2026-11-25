@@ -15,6 +15,8 @@ import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import {
   createMeeting, endMeetingAsHost, getMeeting, joinMeeting, leaveMeeting, meetingPresence, removeFromMeeting, type Caller,
 } from "./calls";
+import { meetingLiveAttention } from "@/lib/attention/meeting-producers";
+import { ensureSessionCard } from "./cards";
 import { FAKE_PRESENCE_PATH } from "./fake-presence";
 import type { CallContext } from "./clock";
 import { callProviderFor, CallProviderError, type CallProvider } from "./provider";
@@ -111,6 +113,25 @@ async function handle(operation: MeetingOperation, { request, params }: Context,
   }
 }
 
+/**
+ * What follows a host joining a cohort session (slice P9): its card in the channel, when it has none
+ * yet, posted by that host, and when their join opened it, "live" in Attention for the rest of the
+ * cohort. Neither fails the join: a card that couldn't be posted (a rate limit) is tried again when a
+ * host next joins, and is logged.
+ */
+function hostJoined(context: Context, env: Env, caller: Caller, now: number): NonNullable<CallContext["afterHostJoin"]> {
+  return async (meetingId, hostId, opened) => {
+    try {
+      await ensureSessionCard({ db: env.DB, now }, caller, meetingId);
+    } catch (error) {
+      recordErrorInBackground(context.locals.cfContext, env.DB, {
+        source: "request", route: ROUTES.joinMeeting.path, error, version: env.DEPLOYMENT_VERSION, level: "warning",
+      });
+    }
+    if (opened) await meetingLiveAttention({ db: env.DB, env }, meetingId, hostId, now);
+  };
+}
+
 /** Every answer is no-store (platformJson), the join's token above all. */
 export async function meetingRequest(
   operation: MeetingOperation, context: Context, env: Env, options: MeetingRequestOptions = {},
@@ -120,8 +141,10 @@ export async function meetingRequest(
     if (!caller) return NOT_FOUND();
     const provider = options.provider === undefined ? callProviderFor(env) : options.provider;
     if (!provider) return platformError("server", "Calls aren't available here yet.", 503);
-    const ctx: CallContext = { db: env.DB, provider, now: options.now?.() ?? Date.now() };
-    return await handle(operation, context, ctx, { ...caller, conductVersion: options.conductVersion });
+    const now = options.now?.() ?? Date.now();
+    const asked: Caller = { ...caller, conductVersion: options.conductVersion };
+    const ctx: CallContext = { db: env.DB, provider, now, afterHostJoin: hostJoined(context, env, asked, now) };
+    return await handle(operation, context, ctx, asked);
   } catch (error) {
     if (error instanceof Refusal) return error.response;
     if (error instanceof ChannelError) return error.status === 404 ? NOT_FOUND() : platformError(error.code, error.message, error.status);

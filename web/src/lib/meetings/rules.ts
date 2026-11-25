@@ -32,6 +32,11 @@ export const SESSION_LENGTH_STEP_MINUTES = 15;
 export const SESSION_SERIES_MAX_WEEKS = 26;
 /** How far ahead a cohort session may be booked, in days. */
 export const SESSION_BOOK_AHEAD_DAYS = 366;
+/**
+ * "Starting soon" reaches a cohort session's people in Attention this many minutes before it starts
+ * (there are no email reminders), as its room can first be opened.
+ */
+export const STARTING_SOON_MINUTES = 10;
 
 /** What a call is for: a cohort session, a check-in on one piece of work, a call between two people, a community event. */
 export const MEETING_PURPOSES = ["SESSION", "CHECKIN", "CALL", "EVENT"] as const;

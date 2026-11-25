@@ -20,6 +20,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { startAdminNavCounts } from "@/components/admin/admin-nav-server";
 import { getFlags } from "@/lib/platform/server/flags";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { nextCohortSession } from "@/components/platform/sessions/next-session";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import { onboardingView, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { onboardingOpen } from "@/components/platform/onboarding/welcome-flow";
@@ -86,7 +87,7 @@ export async function resolveSpacePageWith<T>(
 /** What the frame's reads depend on: the parts of `Me` known once its flags and capabilities are read. */
 export interface SpaceFrameFacts {
   user: Pick<Me["user"], "id">;
-  flags: Pick<Me["flags"], "channels" | "mentor_requests">;
+  flags: Pick<Me["flags"], "channels" | "mentor_requests" | "meetings">;
   spaces: readonly SpaceId[];
   capabilities: Pick<Me["capabilities"], "cohortIds">;
 }
@@ -127,6 +128,11 @@ export function startSpacePageFrame(locals: App.Locals, path: string): void {
     if (!facts?.spaces.includes(space)) return;
     startSpaceFrame(facts, space);
     const page = PAGE_BY_PATH.get(path);
+    // The cohort Overview's next session (in-app calls P9), beside the rest of the frame.
+    if (page === "cohort" && facts.flags.meetings) {
+      const capabilities = await requestCapabilities(drizzle(env.DB, { schema }), locals);
+      nextCohortSession(env.DB, facts.user.id, capabilities, true, Date.now()).catch(() => {});
+    }
     if (onboardingFor(locals, facts) && (space === "community" || (page && ONBOARDING_PAGES.has(page)))) {
       onboardingState(facts.user.id).catch(() => {});
     }

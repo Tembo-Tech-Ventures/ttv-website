@@ -1,0 +1,52 @@
+---
+/**
+ * The cohort Overview's "Next session" card (in-app calls P9), while `meetings` is on for the reader:
+ * the live session, or else the next one to come, in their cohorts. While one is live, "Join session"
+ * is the page's one peach action (the Overview's next step steps back); otherwise the card offers
+ * "Add to calendar", and its hosts "Start session" from ROOM_OPENS_EARLY_MINUTES before it starts.
+ * Nothing scheduled, no card: the Overview stays as it was.
+ */
+import { ButtonLink, Card, Chip } from "@/components/platform/ui";
+import type { UpcomingSession } from "@/lib/meetings/sessions";
+import { lengthLabel } from "@/lib/meetings/session-times";
+import { ROOM_OPENS_EARLY_MINUTES } from "@/lib/meetings/room-model";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { callPath, sessionCalendarPath } from "@/lib/platform/server/space-routes";
+import SessionTime from "./SessionTime.astro";
+
+interface Props {
+  session: UpcomingSession;
+  now: number;
+}
+
+const { session, now } = Astro.props;
+const live = session.state === "LIVE";
+// A host may start it from ROOM_OPENS_EARLY_MINUTES before; everyone else joins once a host has.
+const startable = !live && session.access.canHost && now + ROOM_OPENS_EARLY_MINUTES * 60_000 >= session.scheduledStartAt;
+---
+
+<Card as="section" aria-labelledby="next-session-title" className="flex flex-col gap-3" data-next-session={live ? "live" : "scheduled"}>
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h2 id="next-session-title" class="m-0 text-xl text-ink-primary">{live ? "Live now" : "Next session"}</h2>
+    {live ? <Chip tone="peach">Live now</Chip> : null}
+  </div>
+  <p class="m-0 text-base font-semibold text-ink-primary">{session.title}</p>
+  <p class="m-0 text-sm text-ink-secondary">
+    <SessionTime startAt={session.scheduledStartAt} minutes={session.bookedMinutes} now={now} />
+    {` · ${lengthLabel(session.bookedMinutes)} · Recorded · ${session.cohortName}`}
+  </p>
+  <div class="flex flex-wrap items-center gap-2">
+    {live ? (
+      <ButtonLink variant="primary" href={callPath(session.id)} target="_blank" rel="noopener" data-call-link>
+        Join session<span class="sr-only">{`: ${session.title} (opens in a new tab)`}</span>
+      </ButtonLink>
+    ) : startable ? (
+      <ButtonLink variant="quiet" href={callPath(session.id)} target="_blank" rel="noopener" data-call-link>
+        Start session<span class="sr-only">{`: ${session.title} (opens in a new tab)`}</span>
+      </ButtonLink>
+    ) : (
+      <ButtonLink variant="quiet" href={sessionCalendarPath(session.id)} download data-add-to-calendar>Add to calendar</ButtonLink>
+    )}
+    <ButtonLink variant="ghost" href={SPACE_PAGE_PATHS.sessions}>All sessions</ButtonLink>
+  </div>
+</Card>

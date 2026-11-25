@@ -165,13 +165,15 @@ export async function joinMeeting(ctx: CallContext, caller: Caller, meetingId: s
   if (target.state === "ENDED" || target.state === "CANCELLED") throw conflict(ENDED);
   if (target.state === "SCHEDULED" && !access.canHost) throw conflict("This call hasn't started yet. It opens when a host joins.");
   await requireConduct(ctx, caller);
+  let opened = false;
   if (target.state === "SCHEDULED") {
-    await openMeeting(ctx, meetingId, target.title);
+    opened = await openMeeting(ctx, meetingId, target.title);
     ({ target, access } = await visible(ctx, caller, meetingId));
     if (target.state !== "LIVE") throw conflict(ENDED);
   }
   const providerMeetingId = target.providerMeetingId;
   if (!providerMeetingId) throw new Error("A live call has no provider meeting.");
+  if (access.canHost) await ctx.afterHostJoin?.(meetingId, caller.userId, opened);
 
   const claim = await claimSeat(ctx, meetingId, caller.userId, access.canHost ? "HOST" : "MEMBER");
   if (claim.outcome !== "held") {

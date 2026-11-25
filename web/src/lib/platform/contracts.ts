@@ -272,11 +272,31 @@ export const CallProposalState = z.enum(CALL_PROPOSAL_STATES);
 export type CallProposalState = z.infer<typeof CallProposalState>;
 /**
  * A call's card (in-app calls): the message names the call, and its state (scheduled, live, ended,
- * recording ready) is worked out from the call each time the message is read, never stored. Nothing
- * posts one yet, and it is not a MessageEmbed until a slice renders it.
+ * recording ready) is worked out from the call each time the message is read, never stored. Only the
+ * server posts one (a cohort session's, slice P9: lib/meetings/cards.ts); readers get MeetingCardView.
  */
 export const MeetingEmbed = z.object({ type: z.literal("meeting"), meetingId: Id });
 export type MeetingEmbed = z.infer<typeof MeetingEmbed>;
+/**
+ * Where a call's card stands for its channel's readers, worked out on every read: scheduled; live
+ * (Join, and the card's thread is the call's chat); over, with the recording on its way (processing),
+ * ready to watch, not recorded, or failed; over with its recording no longer shown to the channel
+ * (ended: hidden or removed); or cancelled before it opened.
+ */
+export const MeetingCardState = z.enum(["scheduled", "live", "processing", "ready", "notRecorded", "failed", "ended", "cancelled"]);
+export type MeetingCardState = z.infer<typeof MeetingCardState>;
+/** Why a call that ended wasn't recorded, where TTV knows: the month's recording limit, or too short to keep. */
+export const MeetingNotRecordedReason = z.enum(["limit", "short"]);
+export type MeetingNotRecordedReason = z.infer<typeof MeetingNotRecordedReason>;
+export const MeetingCardView = z.object({
+  type: z.literal("meeting"), meetingId: Id, title: NonEmptyText, state: MeetingCardState,
+  scheduledStartAt: Timestamp, bookedMinutes: z.int().positive(), openedAt: Timestamp.nullable(), endedAt: Timestamp.nullable(),
+  /** The recording to watch, only while `ready`; `transcriptReady` says whether Tembo can answer about it yet. */
+  recordingId: Id.nullable(), transcriptReady: z.boolean(),
+  notRecordedReason: MeetingNotRecordedReason.nullable(),
+}).refine((card) => (card.state === "ready") === (card.recordingId !== null), "Only a ready card names its recording")
+  .refine((card) => card.state === "notRecorded" || card.notRecordedReason === null, "Only a card not recorded says why");
+export type MeetingCardView = z.infer<typeof MeetingCardView>;
 /** A suggested call's card in a direct conversation, read the same way as a call's. Nothing posts one yet. */
 export const CallProposalEmbed = z.object({ type: z.literal("callProposal"), proposalId: Id });
 export type CallProposalEmbed = z.infer<typeof CallProposalEmbed>;
@@ -295,9 +315,10 @@ export type UnavailableEmbed = z.infer<typeof UnavailableEmbed>;
 /**
  * An embed as one reader sees it, checked again on every read of the message. A change to the work
  * alone does not move the message, so `since` polls do not carry it: an open page shows it when it
- * next reads the message (a fresh latest page, or any change to the message).
+ * next reads the message (a fresh latest page, or any change to the message). A call's card is the
+ * exception: every change of the call's state moves its message, so open pages see it at once.
  */
-export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed]);
+export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed, MeetingCardView]);
 export type MessageEmbedView = z.infer<typeof MessageEmbedView>;
 /** The longest session clip a message can share, in seconds. */
 export const MAX_CLIP_SECONDS = 600;
