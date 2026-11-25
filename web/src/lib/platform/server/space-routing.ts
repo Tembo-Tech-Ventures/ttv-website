@@ -14,7 +14,7 @@ import { getRouteChannel, startRouteChannel } from "./channel-context";
 import { getSpaceContext } from "./space-context";
 import { startSpacePageFrame } from "@/components/platform/spaces/space-page";
 import {
-  canonicalSpacePath, channelRoute, conversationRoute, isAvailableSpacePath, isChannelPagePath, isMentorPagePath, isNewSpacePath, isSessionPlanPath,
+  canonicalSpacePath, channelRoute, conversationRoute, isAvailableSpacePath, isCallsPagePath, isChannelPagePath, isMentorPagePath, isNewSpacePath, isSessionPlanPath,
   legacySpacePath, normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
 } from "./space-routes";
 
@@ -108,20 +108,25 @@ async function acknowledgeApproval({ locals }: APIContext, me: Me, space: SpaceI
  * A page that does not exist for this caller. Channel pages exist only with the flag on, and a channel
  * the caller cannot read is missing whatever the reason (no such slug or id, another space, another
  * cohort, someone else's conversation), so no slug or id confirms that a channel exists. Mentor
- * connection pages exist only with `mentor_requests` on, and session scheduling pages with `meetings`.
+ * connection pages exist only with `mentor_requests` on, session scheduling pages with `meetings`, and
+ * the Calls pages (calls between two people) with `meeting_checkins`.
  */
 async function pageMissing(context: APIContext, me: Me, target: string): Promise<boolean> {
   if (!isAvailableSpacePath(target)) return true;
   if (isMentorPagePath(target)) return !me.flags.mentor_requests;
   if (isSessionPlanPath(target)) return !me.flags.meetings;
+  if (isCallsPagePath(target)) return !me.flags.meeting_checkins;
   if (!isChannelPagePath(target)) return false;
   if (!me.flags.channels) return true;
   return (channelRoute(target) !== null || conversationRoute(target) !== null) && !await getRouteChannel(context);
 }
 
-/** A space page the caller's spaces don't include: 403, except a session scheduling page, which refuses everyone it isn't for with the same 404. */
+/**
+ * A space page the caller's spaces don't include: 403, except a session scheduling page and a Calls
+ * page, which refuse everyone they aren't for with the same 404.
+ */
 function outsideSpaceStatus(target: string): number {
-  return isSessionPlanPath(target) ? 404 : 403;
+  return isSessionPlanPath(target) || isCallsPagePath(target) ? 404 : 403;
 }
 
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {

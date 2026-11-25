@@ -2,8 +2,9 @@ import { memberEligibility, postedWorkEligibility } from "@/lib/community/eligib
 import { memberWorkHref } from "@/lib/members/links";
 import { cohortAudience, cohortAudienceSql, recordingAccessFor, transcriptReady, transcriptReadySql } from "@/lib/recordings/access";
 import { meetingCard } from "@/lib/meetings/card-state";
+import { proposalCard } from "@/lib/meetings/proposal-card";
 import {
-  ExternalLink, MeetingEmbed, MessageEmbed,
+  CallProposalEmbed, ExternalLink, MeetingEmbed, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
   type ProjectEmbedRef, type SessionClipEmbed, type ShareablesQuery,
 } from "@/lib/platform/contracts";
@@ -272,13 +273,30 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * second card a race posted shows nothing. `meeting` is the call's id and `program` the channel's
  * program, as SQL.
  */
-const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_object('title', mt.title, 'state', mt.state,
+const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_object('purpose', mt.purpose, 'title', mt.title, 'state', mt.state,
       'scheduledStartAt', mt.scheduledStartAt, 'bookedMinutes', mt.bookedMinutes, 'openedAt', mt.openedAt, 'endedAt', mt.endedAt,
       'capture', (SELECT mr.state FROM meeting_recording mr WHERE mr.meetingId = mt.id),
       'linked', EXISTS (SELECT 1 FROM recording lr WHERE lr.meetingId = mt.id),
       'recording', (SELECT json_array(r.id, r.r2VideoKey IS NOT NULL, ${transcriptReadySql("r")}, r.processingStatus = 'failed') FROM recording r
         WHERE r.meetingId = mt.id AND ${cohortAudienceSql("r", program)} ORDER BY coalesce(r.recordedAt, r.createdAt) DESC, r.id LIMIT 1))
     FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId AND mt.messageId = m.id)`;
+
+/**
+ * A suggested call's card as its conversation reads it (lib/meetings/proposals.ts, proposal-card.ts):
+ * the suggestion, in the message's own channel and only on its own card message, with the call it
+ * booked or would move. A check-in's work is named only while it is still posted. "countered" is a
+ * declined suggestion the other person answered with times of their own, in the same write: their
+ * suggestion was made at the very moment this one was declined (proposals.ts suggestCall).
+ * `proposal` is the suggestion's id as SQL.
+ */
+const proposalCardColumn = (proposal: string) => `(SELECT json_object('purpose', cp.purpose, 'state', cp.state,
+      'proposedBy', cp.proposedBy, 'times', json(cp.times), 'bookedMinutes', cp.bookedMinutes, 'askToRecord', cp.askToRecord,
+      'countered', cp.state = 'DECLINED' AND EXISTS (SELECT 1 FROM call_proposal n WHERE n.channelId = cp.channelId
+        AND n.createdAt = cp.decidedAt AND n.proposedBy <> cp.proposedBy),
+      'work', (SELECT json_array(j.title, cp.journeyVersion) FROM communityJourney j
+        WHERE j.id = cp.journeyId AND ${postedWorkEligibility("j", true)}),
+      'call', (SELECT json_array(mt.id, mt.state, mt.scheduledStartAt) FROM meeting mt WHERE mt.id = cp.meetingId AND mt.channelId = cp.channelId))
+    FROM call_proposal cp WHERE cp.id = ${proposal} AND cp.channelId = m.channelId AND cp.messageId = m.id)`;
 
 /**
  * Per stored embed, whether this reader may still see it, in one correlated column of the page's
@@ -296,6 +314,7 @@ export const embedAccessColumn = (program: string) => `(SELECT json_group_array(
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND ${cohortAudienceSql("r", program)} AND ${transcriptReadySql("r")})
     WHEN 'meeting' THEN ${meetingCardColumn("json_extract(e.value, '$.meetingId')", program)}
+    WHEN 'callProposal' THEN ${proposalCardColumn("json_extract(e.value, '$.proposalId')")}
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**
@@ -324,6 +343,11 @@ export function embedsForReader(stored: unknown[], access: string | null): Messa
     const card = MeetingEmbed.safeParse(value);
     if (card.success) {
       const view = meetingCard(card.data.meetingId, jsonValue(checks[i]));
+      return view ? [view] : [];
+    }
+    const proposal = CallProposalEmbed.safeParse(value);
+    if (proposal.success) {
+      const view = proposalCard(proposal.data.proposalId, jsonValue(checks[i]));
       return view ? [view] : [];
     }
     const embed = MessageEmbed.safeParse(value);

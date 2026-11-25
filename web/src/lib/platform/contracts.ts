@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { inSpaceOrder, SPACE_ORDER } from "./space-order";
 import {
-  CALL_LIMIT_MINUTES, CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, CALL_PROVIDER_KINDS, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS,
+  CALL_LIMIT_MINUTES, CALL_PROPOSAL_PURPOSES, CALL_PROPOSAL_STATES, CALL_PROVIDER_KINDS, MAX_PROPOSED_TIMES, MEETING_CONSENT_ANSWERS, MEETING_END_REASONS,
   MEETING_PURPOSES, MEETING_RECORDING_POLICIES, MEETING_RECORDING_STATES, MEETING_SEAT_ROLES, MEETING_SEAT_STATES, MEETING_STATES,
 } from "@/lib/meetings/rules";
 
@@ -123,9 +123,12 @@ export const Me = z.object({
 export type Me = z.infer<typeof Me>;
 
 /**
- * In-app calls add four, which nothing produces yet (lib/meetings/README.md): a call starting soon and
- * a call now live, to the people who can read its channel; the other person, when one of the two
- * deletes their check-in's recording; and admins, when the month's recording spending reaches its alert.
+ * In-app calls (lib/meetings/README.md): a cohort session starting soon and now live, to the people
+ * who can read its channel; the other person, when one of the two deletes their check-in's recording
+ * (nothing produces it yet); and admins, when the month's recording spending reaches its alert
+ * (nothing produces it yet). Calls between two people (slice P10): the other person, when one
+ * suggests a call or other times for one, and when a time is picked or a booked call is cancelled.
+ * Saying "Not now" tells nobody anything outside the conversation, so it has no kind.
  */
 export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
@@ -133,11 +136,12 @@ export const AttentionKind = z.enum([
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
   "access_request", "access_decided", "moderation_decided", "mentor_checked",
   "meeting_soon", "meeting_live", "recording_deleted", "recording_spend_alert",
+  "call_proposed", "call_countered", "call_booked", "call_cancelled",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
   "message", "channel", "recording", "journey", "mentorRequest", "application", "visitorMessage", "opportunity",
-  "accessRequest", "meeting",
+  "accessRequest", "meeting", "callProposal",
 ]);
 export type SubjectKind = z.infer<typeof SubjectKind>;
 export const SubjectRef = z.object({ kind: SubjectKind, id: Id, href: InternalPath, label: NonEmptyText });
@@ -289,7 +293,7 @@ export type MeetingCardState = z.infer<typeof MeetingCardState>;
 export const MeetingNotRecordedReason = z.enum(["limit", "short"]);
 export type MeetingNotRecordedReason = z.infer<typeof MeetingNotRecordedReason>;
 export const MeetingCardView = z.object({
-  type: z.literal("meeting"), meetingId: Id, title: NonEmptyText, state: MeetingCardState,
+  type: z.literal("meeting"), meetingId: Id, purpose: MeetingPurpose, title: NonEmptyText, state: MeetingCardState,
   scheduledStartAt: Timestamp, bookedMinutes: z.int().positive(), openedAt: Timestamp.nullable(), endedAt: Timestamp.nullable(),
   /** The recording to watch, only while `ready`; `transcriptReady` says whether Tembo can answer about it yet. */
   recordingId: Id.nullable(), transcriptReady: z.boolean(),
@@ -297,9 +301,40 @@ export const MeetingCardView = z.object({
 }).refine((card) => (card.state === "ready") === (card.recordingId !== null), "Only a ready card names its recording")
   .refine((card) => card.state === "notRecorded" || card.notRecordedReason === null, "Only a card not recorded says why");
 export type MeetingCardView = z.infer<typeof MeetingCardView>;
-/** A suggested call's card in a direct conversation, read the same way as a call's. Nothing posts one yet. */
+/**
+ * A suggested call's card in a direct conversation (slice P10, lib/meetings/proposals.ts), posted by
+ * the person who suggested it and read the same way as a call's: readers get CallProposalCardView.
+ */
 export const CallProposalEmbed = z.object({ type: z.literal("callProposal"), proposalId: Id });
 export type CallProposalEmbed = z.infer<typeof CallProposalEmbed>;
+/**
+ * Where a suggested call stands for its conversation, worked out on every read: waiting for an
+ * answer (open); a time picked (accepted); answered with other times, which a new card carries
+ * (countered); "Not now" (declined); taken back (withdrawn); or every time has passed (expired).
+ */
+export const CallProposalCardState = z.enum(["open", "accepted", "countered", "declined", "withdrawn", "expired"]);
+export type CallProposalCardState = z.infer<typeof CallProposalCardState>;
+export const CallProposalCardView = z.object({
+  type: z.literal("callProposal"), proposalId: Id, purpose: CallProposalPurpose, state: CallProposalCardState,
+  /** Who suggested it, the card message's author: the other person answers, and only they withdraw it. */
+  proposedBy: Id,
+  /** The times offered, soonest first, as moments: each reader sees them in their own time zone. */
+  times: z.array(Timestamp).min(1).max(MAX_PROPOSED_TIMES),
+  bookedMinutes: z.int().positive(),
+  /** Whether the suggester asked to record it. Recording is asked of both people on the day, and only both saying yes records it. */
+  askToRecord: z.boolean(),
+  /** A check-in's work at its revision, while it is still posted; null for a plain call, or work no longer posted. */
+  work: z.object({ title: NonEmptyText, version: z.int().positive() }).nullable(),
+  /**
+   * The booked call: the one this suggestion booked once a time was picked, or the one whose time it
+   * would change. `state` and `scheduledStartAt` are the call's as it stands now.
+   */
+  call: z.object({ meetingId: Id, state: MeetingState, scheduledStartAt: Timestamp }).nullable(),
+  /** True when the times would move an already booked call rather than book a new one. */
+  moves: z.boolean(),
+}).refine((card) => card.state !== "accepted" || card.call !== null, "An accepted suggestion names its call")
+  .refine((card) => !card.moves || card.call !== null, "A change names the call it moves");
+export type CallProposalCardView = z.infer<typeof CallProposalCardView>;
 /** The two kinds of card a call posts, which only the server writes: never something a person shares. */
 export const CallEmbed = z.discriminatedUnion("type", [MeetingEmbed, CallProposalEmbed]);
 export type CallEmbed = z.infer<typeof CallEmbed>;
@@ -318,7 +353,7 @@ export type UnavailableEmbed = z.infer<typeof UnavailableEmbed>;
  * next reads the message (a fresh latest page, or any change to the message). A call's card is the
  * exception: every change of the call's state moves its message, so open pages see it at once.
  */
-export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed, MeetingCardView]);
+export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed, MeetingCardView, CallProposalCardView]);
 export type MessageEmbedView = z.infer<typeof MessageEmbedView>;
 /** The longest session clip a message can share, in seconds. */
 export const MAX_CLIP_SECONDS = 600;

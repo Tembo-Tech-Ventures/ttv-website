@@ -355,7 +355,8 @@ const EXCERPT_LENGTH = 48;
 /** A message's opening words, plain: markdown marks dropped, cut at a word. Shared work stands in for no words. */
 export function excerpt(message: Pick<Message, "body" | "embeds">): string {
   const words = message.body.replace(/[*_~`>#[\]]/g, "").replace(/\s+/g, " ").trim();
-  const text = words || (message.embeds.find((embed) => embed.type !== "unavailable")?.title ?? "");
+  const titled = message.embeds.find((embed) => embed.type !== "unavailable" && embed.type !== "callProposal");
+  const text = words || (titled && "title" in titled ? titled.title : "");
   if (text.length <= EXCERPT_LENGTH) return text;
   const cut = text.slice(0, EXCERPT_LENGTH);
   const space = cut.lastIndexOf(" ");

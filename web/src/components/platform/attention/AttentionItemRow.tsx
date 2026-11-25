@@ -4,6 +4,10 @@ import {
   PiAt,
   PiBriefcase,
   PiBroadcast,
+  PiCalendarCheck,
+  PiCalendarDots,
+  PiCalendarPlus,
+  PiCalendarX,
   PiChatCircleText,
   PiClock,
   PiCurrencyDollar,
@@ -47,6 +51,10 @@ const KIND_ICON: Record<AttentionKind, IconType> = {
   meeting_live: PiBroadcast,
   recording_deleted: PiTrash,
   recording_spend_alert: PiCurrencyDollar,
+  call_proposed: PiCalendarPlus,
+  call_countered: PiCalendarDots,
+  call_booked: PiCalendarCheck,
+  call_cancelled: PiCalendarX,
 };
 
 type Viewer = { id: string; name: string; src?: string };

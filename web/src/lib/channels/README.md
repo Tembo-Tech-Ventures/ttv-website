@@ -571,10 +571,12 @@ the rest.
 
 ### Embeds (B-2.4)
 
-A call's card (in-app calls P9) is an embed too, but never one a person sends: the server attaches
-it (`postMessage`'s `card`), `embedAccessColumn` reads the call's state with it, and the message moves
-whenever that state changes, so polls carry it. See `src/lib/meetings/README.md`, "Cohort sessions,
-live and after". The session's card message can't be deleted or edited, and only it shows the card.
+A call's card (in-app calls P9), and a suggested call's in a direct conversation (P10), is an embed
+too, but never one a person sends: the server attaches it (`postMessage`'s `card`), `embedAccessColumn`
+reads the call's or the suggestion's state with it, and the message moves whenever that state changes,
+so polls carry it. See `src/lib/meetings/README.md`, "Cohort sessions, live and after" and "Calls
+between two people". A card's message (the one `meeting.messageId` or `call_proposal.messageId` names)
+can't be deleted or edited (`isCallCard`), and only it shows the card.
 
 `embeds.ts`. A post sends references (`EmbedRef`, at most five, each once);
 the server resolves them in one statement, stores what readers will see in

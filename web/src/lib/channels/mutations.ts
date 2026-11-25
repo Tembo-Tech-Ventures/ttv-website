@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  CallEmbed, MeetingEmbed, MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed,
+  CallEmbed, MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed,
   type MessageReactions, type PostMessage, type ReactToMessage,
 } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
@@ -121,18 +121,20 @@ function storedRefs(text: string) {
   return embeds.success ? embeds.data.map(refOf) : null;
 }
 
-/** Whether a stored message carries a meeting's card (lib/meetings/cards.ts). */
-const carriesMeetingCard = (text: string) => storedList(text)?.some((value) => MeetingEmbed.safeParse(value).success) ?? false;
+/** Whether a stored message carries a call's card (lib/meetings/cards.ts) or a suggested call's (lib/meetings/proposals.ts). */
+const carriesCallCard = (text: string) => storedList(text)?.some((value) => CallEmbed.safeParse(value).success) ?? false;
 
 /**
- * Whether this message is a session's card, the message `meeting.messageId` names: its thread is the
- * session's chat and the card is how the channel finds the session and its recording, so its author
- * can neither delete it nor change its words (UX review, screen 04). Read only for a message that
- * carries a meeting card at all.
+ * Whether this message is a call's card, the message `meeting.messageId` names, or a suggested call's,
+ * the message `call_proposal.messageId` names. A session's card thread is its chat and the card is how
+ * the channel finds the session and its recording; a suggestion's card is where it is answered. So the
+ * author can neither delete one nor change its words (UX review, screen 04). Read only for a message
+ * that carries a call's card at all.
  */
-async function isSessionCard(ctx: ReadContext, target: MessageTarget): Promise<boolean> {
-  if (!carriesMeetingCard(target.embeds)) return false;
-  return await ctx.db.prepare("SELECT 1 FROM meeting WHERE messageId = ?1").bind(target.id).first() !== null;
+async function isCallCard(ctx: ReadContext, target: MessageTarget): Promise<boolean> {
+  if (!carriesCallCard(target.embeds)) return false;
+  return await ctx.db.prepare(`SELECT 1 FROM meeting WHERE messageId = ?1 UNION ALL SELECT 1 FROM call_proposal WHERE messageId = ?1 LIMIT 1`)
+    .bind(target.id).first() !== null;
 }
 
 /**
@@ -199,11 +201,12 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
  * be shared here (resolveEmbeds: 400, or 409 for a stale project revision).
  *
  * `card` is a call's card, which only the server attaches (lib/meetings/cards.ts: a cohort session's
- * note, or the card its room's opening posts), after the work the post shares. It is never something a
+ * note, or the card its room's opening posts; lib/meetings/proposals.ts: a suggested call, or the call
+ * a picked time booked), after the work the post shares. It is never something a
  * person sends: PostMessage carries references to shared work only.
  */
 export async function postMessage(
-  ctx: WriteContext, input: PostMessage, { card }: { card?: MeetingEmbed } = {},
+  ctx: WriteContext, input: PostMessage, { card }: { card?: CallEmbed } = {},
 ): Promise<{ message: Message; created: boolean }> {
   if (!ctx.channel.capabilities.canPost) {
     const previous = await previousPost(ctx, input);
@@ -322,8 +325,8 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
   }
   if (!ctx.channel.capabilities.canPost) throw cannotPost();
   if (input.body === target.body) return loaded(ctx, target.id);
-  if (await isSessionCard(ctx, target)) {
-    throw new ChannelError("conflict", "This message holds a session's card, so its words stay as they are.", 409);
+  if (await isCallCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a call's card, so its words stay as they are.", 409);
   }
 
   const now = ctx.now ?? Date.now();
@@ -357,12 +360,12 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
  * DELETE /api/messages/:id: the author removes their message from a channel they can still read,
  * even one they can no longer post in. It keeps its place as an empty placeholder, so its replies
  * stay in their thread, and loses its reactions. Deleting again returns the same placeholder. A
- * session's card is never deleted (409, isSessionCard).
+ * call's card is never deleted (409, isCallCard).
  */
 export async function deleteMessage(ctx: WriteContext, target: MessageTarget): Promise<Message> {
   requireAuthor(ctx, target, "delete");
-  if (target.deletedAt === null && await isSessionCard(ctx, target)) {
-    throw new ChannelError("conflict", "This message holds a session's card, so it can't be deleted.", 409);
+  if (target.deletedAt === null && await isCallCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a call's card, so it can't be deleted.", 409);
   }
   if (target.deletedAt === null) {
     const now = ctx.now ?? Date.now();

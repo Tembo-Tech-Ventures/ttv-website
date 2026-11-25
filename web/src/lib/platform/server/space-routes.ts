@@ -126,6 +126,57 @@ export function isSessionPlanPath(pathname: string): boolean {
   return normalizeSpacePath(pathname) === SESSION_SCHEDULE_PATH || sessionDateRoute(pathname) !== null;
 }
 
+/**
+ * Calls between two people (in-app calls P10): the Calls page, under Profile for everyone and under
+ * Mentoring for mentors, the form that suggests times in a direct conversation, one suggestion (where
+ * it is answered without JavaScript), and one booked call with its calendar file. Canonical pages of
+ * their own, never rewritten to a legacy path, that exist only while `meeting_checkins` is on for the
+ * caller (space-routing.ts). Each page also checks that the caller is one of the conversation's two
+ * members, and answers the same 404 otherwise.
+ */
+export const CALLS_PAGE_PATH = `${SPACE_PATHS.profile}/calls`;
+export const MENTORING_CALLS_PATH = `${SPACE_PATHS.mentoring}/calls`;
+export const SUGGEST_CALL_PATH = `${CALLS_PAGE_PATH}/suggest`;
+const CALL_ID = /^[A-Za-z0-9_-]{1,255}$/;
+
+/** What a path under the Calls page names: the form, one suggestion, or one booked call (and its calendar file). */
+export type CallsRoute =
+  | { page: "list" }
+  | { page: "suggest" }
+  | { page: "proposal"; id: string }
+  | { page: "call"; id: string; calendar: boolean };
+
+/** The Calls page a canonical path names, under Profile or Mentoring. Ids are never decoded. */
+export function callsRoute(pathname: string): CallsRoute | null {
+  const path = normalizeSpacePath(pathname);
+  if (path === CALLS_PAGE_PATH || path === MENTORING_CALLS_PATH) return { page: "list" };
+  if (path === SUGGEST_CALL_PATH) return { page: "suggest" };
+  const proposal = /^\/dashboard\/me\/calls\/suggested\/([^/]+)$/.exec(path);
+  if (proposal) return CALL_ID.test(proposal[1]) ? { page: "proposal", id: proposal[1] } : null;
+  const call = /^\/dashboard\/me\/calls\/([^/]+)(\/calendar\.ics)?$/.exec(path);
+  if (call && call[1] !== "suggest" && call[1] !== "suggested" && CALL_ID.test(call[1])) {
+    return { page: "call", id: call[1], calendar: call[2] !== undefined };
+  }
+  return null;
+}
+
+export function isCallsPagePath(pathname: string): boolean {
+  return callsRoute(pathname) !== null;
+}
+
+/** Suggest a call in a conversation; `instead` answers the other person's suggestion with other times, `change` moves a booked call. */
+export function suggestCallPath(conversationId: string, { instead, change }: { instead?: string; change?: string } = {}): string {
+  const query = new URLSearchParams({ conversation: conversationId });
+  if (instead) query.set("instead", instead);
+  if (change) query.set("change", change);
+  return `${SUGGEST_CALL_PATH}?${query}`;
+}
+/** One suggested call: its times and its answers, as on its card. */
+export const proposalPath = (id: string) => `${CALLS_PAGE_PATH}/suggested/${encodeURIComponent(id)}`;
+/** One booked call between two people: change its time or cancel it (`?confirm=cancel`). */
+export const bookedCallPath = (id: string) => `${CALLS_PAGE_PATH}/${encodeURIComponent(id)}`;
+export const bookedCallCalendarPath = (id: string) => `${bookedCallPath(id)}/calendar.ics`;
+
 export const SPACE_REDIRECTS = [
   ["/dashboard/apply", "/dashboard/cohort/apply"],
   ["/dashboard/application/:id", "/dashboard/cohort/application/:id"],
@@ -167,7 +218,7 @@ export function canonicalSpacePath(pathname: string): string | null {
 /** Temporary render targets until U-1.2 migrates the pages; also bounds allowlist aliases. */
 export function legacySpacePath(pathname: string): string {
   const path = normalizeSpacePath(pathname);
-  if (isSessionPlanPath(path)) return path;
+  if (isSessionPlanPath(path) || isCallsPagePath(path)) return path;
   if (path === SPACE_PATHS.cohort) return "/dashboard";
   if (path === SPACE_PATHS.mentoring) return "/dashboard/mentorship";
   for (const [legacy, canonical] of SPACE_REDIRECTS) {
@@ -200,5 +251,6 @@ export function isAvailableSpacePath(pathname: string): boolean {
     || isChannelPagePath(path)
     || isMentorPagePath(path)
     || isMemberPagePath(path)
-    || isSessionPlanPath(path);
+    || isSessionPlanPath(path)
+    || isCallsPagePath(path);
 }

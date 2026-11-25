@@ -24,6 +24,7 @@ export const ATTENTION_FILTERS: readonly { filter: AttentionFilter; label: strin
 function requestsEmpty(viewer: AttentionViewer): string {
   const holds = ["answers to requests you send to mentors"];
   if (viewer.mentor) holds.push("requests sent to you as a mentor");
+  if (viewer.calls) holds.push("calls suggested to you");
   if (viewer.admin && viewer.onboarding) holds.push("requests for access");
   const list = holds.length === 1 ? holds[0]! : `${holds.slice(0, -1).join(", ")} and ${holds.at(-1)!}`;
   const line = `${list.charAt(0).toUpperCase()}${list.slice(1)} show here.`;
@@ -36,6 +37,8 @@ export interface AttentionViewer {
   onboarding: boolean;
   /** Holds the MENTOR role, so requests for their time arrive here too. */
   mentor: boolean;
+  /** Calls between two people are on (flag meeting_checkins), so a suggested call arrives here too. */
+  calls: boolean;
 }
 
 /**
@@ -56,7 +59,7 @@ export function attentionEmptyDetail(filter: AttentionFilter, awaiting: number |
 
 /** The viewer from Me: an administrator has the Admin space. */
 export function attentionViewer(me: Pick<Me, "spaces" | "flags" | "capabilities">): AttentionViewer {
-  return { admin: me.spaces.includes("admin"), onboarding: me.flags.onboarding, mentor: me.capabilities.isMentor };
+  return { admin: me.spaces.includes("admin"), onboarding: me.flags.onboarding, mentor: me.capabilities.isMentor, calls: me.flags.meeting_checkins };
 }
 
 /** The attention page's summary line, which says "all caught up" only when nothing is known to wait. */

@@ -9,7 +9,9 @@ the recording policy's channel rule (slice P3a, migration 0043); who may join, t
 with a fake, the seats, the state machine and the API routes (slice P3b); scheduling cohort sessions
 (slice P8); the call room on the fake provider (slice P5, below); and cohort sessions live and after:
 the session card, "Starting soon" and "Live" in Attention, the Overview card, "Not recorded" rows and
-hiding a recording (slice P9, below). Every page and route is 404 while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice
+hiding a recording (slice P9, below); and calls between two people: suggesting times in a direct
+conversation, answering, changing and cancelling, and the Calls page (slice P10, below). Every page and
+route is 404 while `meetings` is off, and the calls between two people while `meeting_checkins` is. The real provider, RealtimeKit, and the every-minute clock arrive in slice
 P4; its browser client in P6.
 
 ## Scheduling cohort sessions (slice P8)
@@ -113,6 +115,71 @@ shows as a recording; a session whose recording is hidden isn't listed as anythi
 **Not built:** the live banner under the tabs (left for later, as the plan allows: the shell has no
 banner slot, and a frame read would raise every page's query budget); a follow-on session.
 
+## Calls between two people (slice P10)
+
+Mentor scheduling is option A (the owner's decision): in a direct conversation, **either** person
+suggests up to `MAX_PROPOSED_TIMES` times, and the other picks one, suggests other times, or says "Not
+now". A suggestion is a `call_proposal` row and its card in the conversation (`proposals.ts`); picking a
+time books the `meeting` and posts its card. Only the conversation's two members, never an admin outside
+it (`meetingAccessFor`), and only while `meeting_checkins` is on for the caller: every refusal is the same
+404. All plain forms, so it works without JavaScript; each write checks the Origin.
+
+| Page | What |
+|---|---|
+| `/dashboard/me/calls` (Profile › Calls), `/dashboard/mentoring/calls` (Mentoring › Calls) | the same list: booked calls coming up (Join once the room can open, Add to calendar, Change or cancel), suggestions waiting for an answer (the reader's own and the other person's, with Answer and Suggest other times), and past calls, each saying plainly whether it was recorded. "Only you and the other person can see these." A suggestion answered or withdrawn, a cancelled call, and a booked time that passed without the room opening are not listed |
+| `/dashboard/me/calls/suggest?conversation=` (`&instead=`, `&change=`) | the form: a call (`CALL_LENGTHS`, up to `CALL_LIMIT_MINUTES`) or a project check-in on one revision of either member's posted work (always `CHECKIN_LIMIT_MINUTES`), up to three times, "Ask to record". `instead` answers the other person's suggestion with other times; `change` is a new round of times for a booked call, checked before it is sent |
+| `/dashboard/me/calls/suggested/:id` | one suggestion, as on its card: where the card's forms post, and where its Attention item opens |
+| `/dashboard/me/calls/:id` (`?confirm=cancel`) and `…/calendar.ics` | one booked call: Join, Add to calendar, Change time, and Cancel call behind a `ConfirmStep` |
+
+The conversation's header offers "Suggest a call" while the flag is on.
+
+**States.** `OPEN` until it is answered: `ACCEPTED` (a time picked: the call is booked, its id the
+suggestion's own, in the same batch), `DECLINED` ("Not now"), `WITHDRAWN` (its suggester took it back,
+or the booked call it would move was cancelled) or `EXPIRED` (every time has started; written when the
+conversation's next suggestion or an answer finds it, and shown as expired on every read before then).
+"Countered" is a declined suggestion the other person answered with times of their own: one batch declines
+it and makes theirs at the same moment (`n.createdAt = cp.decidedAt`), which is how its card says "other
+times were suggested" without a column of its own. An expired suggestion offers nothing to act on; its
+card offers new times.
+
+- **One open suggestion per conversation**, kept by the database (`call_proposal_open_idx`): two people
+  suggesting at once get one suggestion and one 409, whatever the pages show.
+- **Once per form.** The form's own token is the suggestion's id, so a form sent twice suggests once (and
+  posts its card once, nonce `call-proposal-<id>`); the same token with anything else is a 409. Answers
+  are conditional writes: the same answer again changes nothing, another is a 409.
+- **Times** are entered in the suggester's own zone (Nairobi's unless the browser offers its own,
+  `zonedMoment`), stored as moments, and shown in Nairobi time with "EAT" and each reader's own time
+  beside it. Each must still be to come and within `CALL_BOOK_AHEAD_DAYS`. Picking needs a time still to
+  come. There are no email reminders; "Add to calendar" is an .ics file whose SEQUENCE rises with each move.
+- **A per-person limit**: `CALL_PROPOSALS_PER_DAY` suggestions in a rolling day, new times included
+  (429 `rate_limited`), beside the channel's own post limits on the cards.
+- **Changing a booked call** is a new round of times with `meetingId` set: the booked time stands until
+  one is picked, which moves the call (raising `updatedAt` by at least a second) and both cards; "Not now"
+  or withdrawing leaves it as it is. **Cancelling** asks first, then marks the call `CANCELLED`, closes
+  any round of new times, and posts one line by the person who cancelled ("Cancelled our call on …"). A
+  call that has started can be neither: it is ended from the call.
+- **"Ask to record" only asks** (`recordingPolicy` `BOTH_AGREE`, else `NONE`): both people are asked on
+  the day, and only both saying yes records it (slice P11). No call between two people is recorded yet,
+  so a past one says "Not recorded".
+- **"Not now" leaves no trace outside the conversation**, as a mentor's set-aside: it is written on the
+  suggestion alone, produces no Attention item, and the suggester learns it from the card. The
+  suggestion's own notice leaves the other person's bell. `not-now.test.ts` reads the profile, Discover,
+  search and the assessment before and after.
+
+**Cards** (`proposal-card.ts`, `channels/embeds.ts` `proposalCardColumn`). A suggestion's card is posted
+by its suggester and read on every read of the message, never stored: the times, the work at its
+revision while it is still posted, "Ask to record", the booked call, and the state. Every change moves
+the message's `changeSeq` (`touchProposalCard`), so open pages redraw it. The booked call's own card is a
+`MeetingEmbed` posted by the person who picked the time; `MeetingCardView.purpose` lets it say "Call" or
+"Project check-in", link to its own page and calendar file, and offer "Join call" while it is open.
+Neither card's message can be deleted or edited (409, `isCallCard`).
+
+**Attention** (`lib/attention/call-producers.ts`, in Profile, beside the Calls page): `call_proposed`
+(Requests) to the other person while the suggestion is open with a time to come; `call_countered`
+(Updates) the same for other times; `call_booked` (Updates) to the suggester while the call waits at the
+time it announced; `call_cancelled` (Updates) to the other person. The pages send them after the
+response (`call-events.ts`).
+
 ## The room (slice P5)
 
 `/dashboard/calls/:id` (`callPath`) is one call: the page before joining, the call, and the pages
@@ -189,6 +256,7 @@ is enforced:
 | A session or event with no host in it for 5 minutes ends | `NO_HOST_END_MINUTES` |
 | A call between two people the second never joins ends 15 minutes after it opened | `NOBODY_CAME_END_MINUTES` |
 | An empty room ends 2 minutes after the last person left | `EMPTY_ROOM_END_MINUTES` |
+| A suggestion offers up to 3 times, up to 90 days ahead; a person suggests up to 10 a day | `MAX_PROPOSED_TIMES`, `CALL_BOOK_AHEAD_DAYS`, `CALL_PROPOSALS_PER_DAY` |
 | Recording spend alerts admins at $10 a month, and stops new recordings above $25 | `RECORDING_ALERT_USD`, `RECORDING_LIMIT_USD` |
 
 No check-in recording is shared in the first release.
@@ -260,12 +328,14 @@ while it and every ancestor is. All three are seeded OFF. Only the owner moves o
 
 ## Contracts
 
-`lib/platform/contracts.ts` already has everything later slices add to, so they need not change it:
-the attention kinds `meeting_soon`, `meeting_live` (produced since P9, for cohort sessions),
-`recording_deleted` and `recording_spend_alert` (category updates); the subject `meeting`, which
-`attentionAccess` shows for cohort sessions; and the card embeds `MeetingEmbed` and
-`CallProposalEmbed` (`CallEmbed`), which are not `MessageEmbed`s: people never share them. P9 added
-`MeetingCardView`, what a reader gets for a stored `MeetingEmbed` (a `MessageEmbedView`).
+`lib/platform/contracts.ts` holds the attention kinds `meeting_soon`, `meeting_live` (produced since P9,
+for cohort sessions), `recording_deleted` and `recording_spend_alert` (category updates); the subject
+`meeting`, which `attentionAccess` shows for cohort sessions and calls between two people; and the card
+embeds `MeetingEmbed` and `CallProposalEmbed` (`CallEmbed`), which are not `MessageEmbed`s: people never
+share them. P9 added `MeetingCardView`, what a reader gets for a stored `MeetingEmbed` (a
+`MessageEmbedView`). P10 added `CallProposalCardView` (what a reader gets for a stored
+`CallProposalEmbed`), `MeetingCardView.purpose`, the subject `callProposal`, and the kinds
+`call_proposed`, `call_countered`, `call_booked` and `call_cancelled`.
 
 ## Who may join (`access.ts`)
 
@@ -344,7 +414,7 @@ one.
 
 | Route | Who | What |
 |---|---|---|
-| `POST /api/meetings` | a host of the channel | schedule a `SESSION` (cohort channel), a `CALL` (conversation; flag `meeting_checkins`) or an `EVENT` (community channel; flag `meeting_events`, with `record`); 201. Check-ins come from a suggested call (slice P10) |
+| `POST /api/meetings` | a host of the channel | schedule a `SESSION` (cohort channel), a `CALL` (conversation; flag `meeting_checkins`) or an `EVENT` (community channel; flag `meeting_events`, with `record`); 201. Check-ins, and the calls the Calls pages book, come from a suggested call (slice P10, `proposals.ts`) |
 | `GET /api/meetings/:id` | its channel's readers | the call, the server's `now` for the countdown, and the caller's `you`: `canJoin`, `canHost`, their seat and role |
 | `POST /api/meetings/:id/join` | its channel's readers | a host opens a scheduled call; anyone takes a seat; returns the call, `provider` and this tab's `token`. 409 when it hasn't opened, has ended, or is full |
 | `POST /api/meetings/:id/leave` | anyone with a seat | releases it; idempotent |

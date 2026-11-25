@@ -37,9 +37,9 @@ describe("attentionActor", () => {
 });
 
 describe("attentionEmpty", () => {
-  const member = { admin: false, onboarding: true, mentor: false };
-  const admin = { admin: true, onboarding: true, mentor: false };
-  const before = { admin: false, onboarding: false, mentor: false };
+  const member = { admin: false, onboarding: true, mentor: false, calls: false };
+  const admin = { admin: true, onboarding: true, mentor: false, calls: false };
+  const before = { admin: false, onboarding: false, mentor: false, calls: false };
 
   it("says nothing needs you only when no confirmation is known to be waiting", () => {
     expect(attentionEmpty("all", 0, member)).toBe("You're all caught up.");
@@ -70,6 +70,15 @@ describe("attentionEmpty", () => {
     );
   });
 
+  it("says suggested calls arrive here too while calls between two people are on", () => {
+    expect(attentionEmpty("requests", 0, { ...before, calls: true })).toBe(
+      "Answers to requests you send to mentors and calls suggested to you show here.",
+    );
+    expect(attentionEmpty("requests", 0, { ...member, mentor: true, calls: true })).toBe(
+      "Answers to requests you send to mentors, requests sent to you as a mentor and calls suggested to you show here. Your own requests for mentor or organisation access are in Account.",
+    );
+  });
+
   it("tells an administrator the tab also holds access requests, which they decide", () => {
     expect(attentionEmpty("requests", 0, admin)).toBe("Answers to requests you send to mentors and requests for access show here.");
     expect(attentionEmpty("requests", 0, { ...admin, mentor: true })).toBe(
@@ -90,9 +99,10 @@ describe("attentionViewer", () => {
       meetings: false, meeting_checkins: false, meeting_events: false,
     };
     const capabilities = { cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: false, isAdmin: true };
-    expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags, capabilities })).toEqual({ admin: true, onboarding: true, mentor: false });
+    expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags, capabilities })).toEqual({ admin: true, onboarding: true, mentor: false, calls: false });
     expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, onboarding: false }, capabilities: { ...capabilities, isMentor: true } }))
-      .toEqual({ admin: false, onboarding: false, mentor: true });
+      .toEqual({ admin: false, onboarding: false, mentor: true, calls: false });
+    expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, meeting_checkins: true }, capabilities }).calls).toBe(true);
   });
 });
 

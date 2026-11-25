@@ -22,15 +22,35 @@ export const SESSION_LENGTHS: readonly number[] = Array.from(
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME = /^(\d{2}):(\d{2})$/;
 
-const wallParts = new Intl.DateTimeFormat("en-GB", {
-  timeZone: SESSION_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-});
+const wallFormats = new Map<string, Intl.DateTimeFormat>();
+/** The wall-clock parts of one time zone, made once per zone. */
+function wallParts(timeZone: string): Intl.DateTimeFormat {
+  let format = wallFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-GB", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    });
+    wallFormats.set(timeZone, format);
+  }
+  return format;
+}
 
-/** The Nairobi wall clock at `ms`, written as if it were UTC. */
-function wallClock(ms: number): number {
-  const parts = Object.fromEntries(wallParts.formatToParts(new Date(ms)).map(({ type, value }) => [type, Number(value)]));
+/** The wall clock in `timeZone` (Nairobi's by default) at `ms`, written as if it were UTC. */
+function wallClock(ms: number, timeZone = SESSION_TIME_ZONE): number {
+  const parts = Object.fromEntries(wallParts(timeZone).formatToParts(new Date(ms)).map(({ type, value }) => [type, Number(value)]));
   return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+}
+
+/** Whether `zone` is a time zone this runtime knows ("Africa/Nairobi", "Europe/Paris"), so times can be entered in it. */
+export function isTimeZone(zone: string): boolean {
+  if (zone.length === 0 || zone.length > 64) return false;
+  try {
+    wallParts(zone);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A calendar date ("2026-11-27") as midnight UTC, or null when it is not a real date. */
@@ -48,20 +68,34 @@ function calendarDay(date: string): number | null {
  * Kenya keeps one offset all year, but the zone database decides, so a change there is followed.
  */
 export function nairobiMoment(date: string, time: string): number | null {
+  return zonedMoment(date, time, SESSION_TIME_ZONE);
+}
+
+/**
+ * The moment a date and time on the wall clocks of `timeZone` name, or null when either is not real
+ * there (a time a daylight-saving change skips included). A call between two people is entered in
+ * the suggester's own zone, Nairobi's by default.
+ */
+export function zonedMoment(date: string, time: string, timeZone: string): number | null {
   const day = calendarDay(date);
   const clock = TIME.exec(time);
-  if (day === null || !clock) return null;
+  if (day === null || !clock || !isTimeZone(timeZone)) return null;
   const [hour, minute] = clock.slice(1).map(Number);
   if (hour > 23 || minute > 59) return null;
   const wall = day + (hour * 60 + minute) * MINUTE_MS;
-  let guess = wall - (wallClock(wall) - wall);
-  guess = wall - (wallClock(guess) - guess);
-  return wallClock(guess) === wall ? guess : null;
+  let guess = wall - (wallClock(wall, timeZone) - wall);
+  guess = wall - (wallClock(guess, timeZone) - guess);
+  return wallClock(guess, timeZone) === wall ? guess : null;
 }
 
 /** A moment's Nairobi date and time, as the form's fields take them: { date: "2026-11-27", time: "18:00" }. */
 export function nairobiFields(ms: number): { date: string; time: string } {
-  const iso = new Date(wallClock(ms)).toISOString();
+  return zonedFields(ms, SESSION_TIME_ZONE);
+}
+
+/** A moment's date and time on the wall clocks of `timeZone`, as the form's fields take them. */
+export function zonedFields(ms: number, timeZone: string): { date: string; time: string } {
+  const iso = new Date(wallClock(ms, timeZone)).toISOString();
   return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
 

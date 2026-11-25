@@ -1,0 +1,143 @@
+---
+/**
+ * The Calls page's body (in-app calls P10), the same in Profile and in Mentoring: calls between two
+ * people the reader is in, and nobody else's. "Coming up" (with Join once the call can open, Add to
+ * calendar, and Change or cancel), "Waiting for an answer" (the reader's own suggestions and the other
+ * person's), and "Past calls", each of which says plainly whether it was recorded: none is yet, since
+ * recording calls between two people comes with check-ins (slice P11). A suggestion answered "Not now"
+ * or withdrawn, a cancelled call, and a booked time that passed without the call opening are not listed.
+ */
+import { ButtonLink, Card, Chip, DataList, DataListItem, EmptyState } from "@/components/platform/ui";
+import SessionTime from "@/components/platform/sessions/SessionTime.astro";
+import { captureOutcome } from "@/lib/meetings/card-state";
+import type { CallsList } from "@/lib/meetings/proposals";
+import { ROOM_OPENS_EARLY_MINUTES } from "@/lib/meetings/room-model";
+import { lengthLabel, sessionDay } from "@/lib/meetings/session-times";
+import { bookedCallCalendarPath, bookedCallPath, callPath, proposalPath, suggestCallPath } from "@/lib/platform/server/space-routes";
+import { conversationHref } from "./call-page";
+
+interface Props {
+  list: CallsList;
+  now: number;
+}
+
+const { list, now } = Astro.props;
+const opensBy = now + ROOM_OPENS_EARLY_MINUTES * 60_000;
+const KIND = { CALL: "Call", CHECKIN: "Project check-in" } as const;
+const PAST: Record<ReturnType<typeof captureOutcome>["state"], string> = {
+  notRecorded: "Not recorded",
+  processing: "Recording on its way",
+  failed: "Recording failed",
+};
+const empty = list.comingUp.length === 0 && list.waiting.length === 0 && list.past.length === 0;
+---
+
+{empty ? (
+  <EmptyState title="No calls yet" headingLevel={2}>
+    When you and someone you have a conversation with agree a time, the call shows here. Suggest a call from the conversation.
+  </EmptyState>
+) : (
+  <div class="flex flex-col gap-8">
+    <section aria-labelledby="calls-coming-up" class="flex flex-col gap-3" data-calls-coming-up>
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="calls-coming-up" class="m-0 text-xl text-ink-primary">Coming up</h2>
+        <p class="m-0 text-sm text-ink-muted">Times in Nairobi time (EAT), and in yours where it differs</p>
+      </div>
+      {list.comingUp.length === 0 ? (
+        <p class="m-0 text-ink-secondary">Nothing booked. When a time is picked, the call shows here.</p>
+      ) : (
+        <Card>
+          <DataList label="Calls coming up">
+            {list.comingUp.map((call) => (
+              <DataListItem title={call.title}>
+                <Fragment slot="status">{call.state === "LIVE" ? <Chip tone="peach">Open now</Chip> : null}</Fragment>
+                <Fragment slot="meta">
+                  <SessionTime startAt={call.scheduledStartAt} minutes={call.bookedMinutes} now={now} />
+                  {` · ${lengthLabel(call.bookedMinutes)} · With ${call.counterpart.name}`}
+                </Fragment>
+                <Fragment slot="actions">
+                  {call.state === "LIVE" || opensBy >= call.scheduledStartAt ? (
+                    <ButtonLink variant="quiet" size="sm" href={callPath(call.id)} target="_blank" rel="noopener" data-call-link>
+                      Join call<span class="sr-only">{`: ${call.title} with ${call.counterpart.name} (opens in a new tab)`}</span>
+                    </ButtonLink>
+                  ) : null}
+                  <ButtonLink variant="quiet" size="sm" href={bookedCallCalendarPath(call.id)} download data-add-to-calendar>
+                    Add to calendar
+                  </ButtonLink>
+                  {call.state === "SCHEDULED" ? (
+                    <ButtonLink variant="ghost" size="sm" href={bookedCallPath(call.id)} aria-label={`Change or cancel ${call.title} with ${call.counterpart.name}`}>
+                      Change or cancel
+                    </ButtonLink>
+                  ) : null}
+                </Fragment>
+              </DataListItem>
+            ))}
+          </DataList>
+        </Card>
+      )}
+    </section>
+
+    <section aria-labelledby="calls-waiting" class="flex flex-col gap-3" data-calls-waiting>
+      <h2 id="calls-waiting" class="m-0 text-xl text-ink-primary">Waiting for an answer</h2>
+      {list.waiting.length === 0 ? (
+        <p class="m-0 text-ink-secondary">No suggested times are waiting.</p>
+      ) : (
+        <Card>
+          <DataList label="Suggested times waiting for an answer">
+            {list.waiting.map((waiting) => (
+              <DataListItem title={`${waiting.moves ? "New times for your call" : KIND[waiting.purpose]} with ${waiting.counterpart.name}`}>
+                <Fragment slot="status">
+                  <Chip tone={waiting.mine ? "neutral" : "ring"}>{waiting.mine ? `Waiting for ${waiting.counterpart.name}` : "Waiting for you"}</Chip>
+                </Fragment>
+                <Fragment slot="meta">
+                  {waiting.workTitle ? `${waiting.workTitle} · ` : ""}
+                  {waiting.times.map((at, index) => (
+                    <>{index > 0 ? " · " : ""}<SessionTime startAt={at} minutes={waiting.bookedMinutes} now={now} /></>
+                  ))}
+                </Fragment>
+                <Fragment slot="actions">
+                  <ButtonLink variant="quiet" size="sm" href={proposalPath(waiting.id)} data-proposal-link>
+                    {waiting.mine ? "See it" : "Answer"}<span class="sr-only">{` the suggestion with ${waiting.counterpart.name}`}</span>
+                  </ButtonLink>
+                  {waiting.mine ? null : (
+                    <ButtonLink variant="ghost" size="sm" href={suggestCallPath(waiting.channelId, { instead: waiting.id })} data-suggest-other>
+                      Suggest other times<span class="sr-only">{` to ${waiting.counterpart.name}`}</span>
+                    </ButtonLink>
+                  )}
+                  <ButtonLink variant="ghost" size="sm" href={conversationHref(waiting.channelId)}>
+                    Conversation<span class="sr-only">{` with ${waiting.counterpart.name}`}</span>
+                  </ButtonLink>
+                </Fragment>
+              </DataListItem>
+            ))}
+          </DataList>
+        </Card>
+      )}
+    </section>
+
+    <section aria-labelledby="calls-past" class="flex flex-col gap-3" data-calls-past>
+      <h2 id="calls-past" class="m-0 text-xl text-ink-primary">Past calls</h2>
+      {list.past.length === 0 ? (
+        <p class="m-0 text-ink-secondary">No calls have taken place yet.</p>
+      ) : (
+        <Card>
+          <DataList label="Past calls">
+            {list.past.map((call) => (
+              <DataListItem title={call.title}>
+                <Fragment slot="status"><Chip tone="neutral">{PAST[captureOutcome(call.capture).state]}</Chip></Fragment>
+                <Fragment slot="meta">
+                  {`${sessionDay(call.openedAt ?? call.scheduledStartAt, now)} · With ${call.counterpart.name}`}
+                </Fragment>
+                <Fragment slot="actions">
+                  <ButtonLink variant="ghost" size="sm" href={conversationHref(call.channelId)}>
+                    Conversation<span class="sr-only">{` with ${call.counterpart.name}`}</span>
+                  </ButtonLink>
+                </Fragment>
+              </DataListItem>
+            ))}
+          </DataList>
+        </Card>
+      )}
+    </section>
+  </div>
+)}
