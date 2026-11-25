@@ -195,6 +195,8 @@ export async function joinMeeting(ctx: CallContext, caller: Caller, meetingId: s
   }
   // The participant an earlier tab held: its token stops working.
   await revokeParticipants(ctx, meetingId, providerMeetingId, [attached.replaced]);
+  // A host is in: the session's card and "live" follow (never for a join that was refused).
+  if (access.canHost) await ctx.afterHostJoin?.(meetingId, caller.userId);
   return { meeting: view(await visible(ctx, caller, meetingId), ctx.now), provider: provider.kind, token: participant.token };
 }
 

@@ -5,7 +5,7 @@
  * they are composed here from the fixtures.
  */
 import { people, projects, sessionClip } from "@/lib/platform/fixtures";
-import type { MessageEmbedView } from "@/lib/platform/contracts";
+import type { MeetingCardView, MessageEmbedView } from "@/lib/platform/contracts";
 import EmbedCard from "../EmbedCard";
 import { served } from "./fixture-pages";
 import "../channels.css";
@@ -13,6 +13,13 @@ import "../channels.css";
 const ledger = served(projects.chamaLedger);
 const fare = served(projects.fareSplitter);
 
+
+/** A fictional cohort session's card (in-app calls P9): Thursday 26 November 2026, 18:00 EAT, 45 minutes. */
+const session: MeetingCardView = {
+  type: "meeting", meetingId: "fixture-session", title: "Testing payment callbacks", state: "scheduled",
+  scheduledStartAt: Date.parse("2026-11-26T15:00:00Z"), bookedMinutes: 45, openedAt: null, endedAt: null,
+  recordingId: null, transcriptReady: false, notRecordedReason: null,
+};
 
 export const EMBED_SCENES: readonly { key: string; title: string; embed: MessageEmbedView; compact?: boolean }[] = [
   { key: "earlier-revision", title: "A confirmation that covers an earlier revision", embed: ledger },
@@ -34,6 +41,11 @@ export const EMBED_SCENES: readonly { key: string; title: string; embed: Message
   { key: "clip", title: "A session clip at its moment", embed: sessionClip },
   { key: "gone-project", title: "A project the reader can no longer open", embed: { type: "unavailable", was: "project" } },
   { key: "gone-clip", title: "A session clip the reader can no longer open", embed: { type: "unavailable", was: "sessionClip" } },
+  { key: "session-scheduled", title: "A cohort session's card, before it starts", embed: session },
+  { key: "session-live", title: "The same card while the session is live", embed: { ...session, state: "live", openedAt: session.scheduledStartAt - 120_000 } },
+  { key: "session-processing", title: "Once it ends, with the recording on its way", embed: { ...session, state: "processing", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000 } },
+  { key: "session-ready", title: "With its recording ready to watch", embed: { ...session, state: "ready", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000, recordingId: "fixture-recording", transcriptReady: true } },
+  { key: "session-not-recorded", title: "A session that wasn't recorded, and why", embed: { ...session, state: "notRecorded", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000, notRecordedReason: "limit" } },
 ];
 
 export default function EmbedGallery() {

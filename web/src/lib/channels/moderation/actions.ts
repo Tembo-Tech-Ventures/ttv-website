@@ -385,9 +385,14 @@ async function allowlisting(ctx: WriteContext, target: MessageTarget, params: un
     ON CONFLICT (key) DO NOTHING`).bind(...params, JSON.stringify([...keys]), target.body)];
 }
 
+/** The shared work a stored message carries (a call's card is the server's words, not the author's). */
 function storedEmbeds(text: string): MessageEmbed[] {
   try {
-    return MessageEmbed.array().catch([]).parse(JSON.parse(text));
+    const stored: unknown = JSON.parse(text);
+    return Array.isArray(stored) ? stored.flatMap((value) => {
+      const embed = MessageEmbed.safeParse(value);
+      return embed.success ? [embed.data] : [];
+    }) : [];
   } catch { return []; }
 }
 

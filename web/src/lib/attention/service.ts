@@ -24,21 +24,24 @@ function decodeCursor(value: string): PageCursor {
 }
 
 /** Fixed snapshot + (createdAt,id) keyset. IDs break ties; they are not clocks. */
-export async function listAttention(db: Database, userId: string, query: AttentionQuery, capabilities: PlatformCapabilities): Promise<AttentionList> {
+/** `now` is the request's clock (a test's); now by default. */
+export async function listAttention(
+  db: Database, userId: string, query: AttentionQuery, capabilities: PlatformCapabilities, now = Date.now(),
+): Promise<AttentionList> {
   const filter = query.filter ?? "all";
   const cursor = query.cursor ? decodeCursor(query.cursor) : null;
   // Fixed-size owner binding keeps cursors below the wire limit even for legal
   // 255-character Unicode IDs. This is not an authorization credential.
   const owner = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(userId))),
     byte => byte.toString(16).padStart(2, "0")).join("");
-  const boundary = Date.now() - 1;
+  const boundary = now - 1;
   if (cursor && (cursor.owner !== owner || cursor.filter !== filter || cursor.snapshotAt > boundary || cursor.beforeAt > cursor.snapshotAt)) {
     throw new AttentionCursorError("Invalid attention cursor.");
   }
   const snapshotAt = cursor?.snapshotAt ?? boundary;
   const rows = await db.select({ item: attentionItem, actor: { id: user.id, name: user.name, image: user.image } })
     .from(attentionItem).leftJoin(user, eq(attentionItem.actorId, user.id))
-    .where(and(eq(attentionItem.userId, userId), attentionAccess(db, userId, capabilities), lte(attentionItem.createdAt, snapshotAt),
+    .where(and(eq(attentionItem.userId, userId), attentionAccess(db, userId, capabilities, now), lte(attentionItem.createdAt, snapshotAt),
       filter === "all" ? undefined : eq(attentionItem.category, filter),
       cursor ? or(lt(attentionItem.createdAt, cursor.beforeAt),
         and(eq(attentionItem.createdAt, cursor.beforeAt), lt(attentionItem.id, cursor.beforeId))) : undefined))

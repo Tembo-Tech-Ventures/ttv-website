@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   env: { DB: {} },
+  capabilities: { cohortIds: ["cohort-1"], teachingCohortIds: [], isAdmin: false },
   getChatMessages: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
+vi.mock("@/lib/platform/server/request-capabilities", () => ({ requestCapabilities: vi.fn().mockResolvedValue(mocks.capabilities) }));
 vi.mock("@/lib/chat/sessions", () => ({
   getChatMessages: mocks.getChatMessages,
 }));
@@ -56,7 +58,8 @@ describe("GET /api/chat/sessions/:id", () => {
     expect(mocks.getChatMessages).toHaveBeenCalledWith(
       mocks.env.DB,
       "user-1",
-      "session-1"
+      "session-1",
+      mocks.capabilities
     );
     expect(body.messages).toHaveLength(1);
   });

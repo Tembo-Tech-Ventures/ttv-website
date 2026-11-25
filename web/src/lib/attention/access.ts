@@ -1,7 +1,7 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
 import {
-  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, mentorRequestCase, mentorRequestReport, moderationCase, profileContact,
-  programApplication, recording, studentProfile, type Database,
+  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, meeting, mentorRequest, mentorRequestCase, mentorRequestReport,
+  moderationCase, profileContact, programApplication, recording, studentProfile, type Database,
 } from "@/lib/db/schema";
 import { HELD, MENTOR_SEES } from "@/lib/mentoring/visibility";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
@@ -20,8 +20,11 @@ import { recordingScopeSql } from "@/lib/recordings/access";
  * mentor's only while they may see the request (a check can hold it back), a new request's only while
  * it waits for their answer, the asker's notice that a check is open only while it is, and an open
  * check's notice for admins while it stays open on a request still waiting or reported.
+ * Cohort sessions (in-app calls P9): to a reader of the session's cohort, "live" while it is live, and
+ * "starting soon" while it still waits for a host at the time the item announced and its booked time
+ * hasn't passed (`now`), so both leave the bell once it opens, ends, moves or is cancelled.
  */
-export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
+export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities, now = Date.now()) {
   return and(
     inArray(attentionItem.space, capabilities.spaces),
     or(
@@ -75,6 +78,16 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
             .from(mentorRequestReport).where(eq(mentorRequestReport.requestId, mentorRequest.id)))), exists(db.select({ id: mentorRequestCase.requestId })
             .from(mentorRequestCase).where(and(eq(mentorRequestCase.requestId, mentorRequest.id), eq(mentorRequestCase.state, "OPEN"))))) : sql`0`,
         ))))),
+      and(eq(attentionItem.subjectKind, "meeting"), exists(db.select({ id: meeting.id }).from(meeting)
+        .innerJoin(channel, eq(channel.id, meeting.channelId))
+        .where(and(eq(meeting.id, attentionItem.subjectId), eq(meeting.purpose, "SESSION"), eq(channel.kind, "COHORT"),
+          capabilities.isAdmin ? sql`1` : sql`${channel.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`,
+          or(
+            and(eq(attentionItem.kind, "meeting_live"), eq(meeting.state, "LIVE")),
+            and(eq(attentionItem.kind, "meeting_soon"), eq(meeting.state, "SCHEDULED"),
+              sql`json_extract(${attentionItem.eventKey}, '$[2]') = ${meeting.scheduledStartAt}`,
+              sql`${meeting.scheduledStartAt} + ${meeting.bookedMinutes} * 60000 > ${now}`),
+          ))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)
         .where(and(eq(accessRequest.id, attentionItem.subjectId), or(
           and(eq(attentionItem.kind, "access_decided"), eq(accessRequest.userId, userId)),

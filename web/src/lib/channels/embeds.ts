@@ -1,8 +1,9 @@
 import { memberEligibility, postedWorkEligibility } from "@/lib/community/eligibility";
 import { memberWorkHref } from "@/lib/members/links";
 import { cohortAudience, cohortAudienceSql, recordingAccessFor, transcriptReady, transcriptReadySql } from "@/lib/recordings/access";
+import { meetingCard } from "@/lib/meetings/card-state";
 import {
-  ExternalLink, MessageEmbed,
+  ExternalLink, MeetingEmbed, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
   type ProjectEmbedRef, type SessionClipEmbed, type ShareablesQuery,
 } from "@/lib/platform/contracts";
@@ -263,6 +264,23 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
 }
 
 /**
+ * A call's card as its channel reads it (lib/meetings/cards.ts), for embedAccessColumn: the call, in the
+ * message's own channel, with how its recording stands. The recording is read as the channel's whole
+ * audience (cohortAudienceSql: the cohort's own, neither deleted nor hidden), as clips are, so a hidden
+ * recording leaves every reader's card at once; `linked` says one exists at all, so a hidden one is
+ * never called "not recorded". Only the call's own card message (`meeting.messageId`) shows it, so a
+ * second card a race posted shows nothing. `meeting` is the call's id and `program` the channel's
+ * program, as SQL.
+ */
+const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_object('title', mt.title, 'state', mt.state,
+      'scheduledStartAt', mt.scheduledStartAt, 'bookedMinutes', mt.bookedMinutes, 'openedAt', mt.openedAt, 'endedAt', mt.endedAt,
+      'capture', (SELECT mr.state FROM meeting_recording mr WHERE mr.meetingId = mt.id),
+      'linked', EXISTS (SELECT 1 FROM recording lr WHERE lr.meetingId = mt.id),
+      'recording', (SELECT json_array(r.id, r.r2VideoKey IS NOT NULL, ${transcriptReadySql("r")}, r.processingStatus = 'failed') FROM recording r
+        WHERE r.meetingId = mt.id AND ${cohortAudienceSql("r", program)} ORDER BY coalesce(r.recordedAt, r.createdAt) DESC, r.id LIMIT 1))
+    FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId AND mt.messageId = m.id)`;
+
+/**
  * Per stored embed, whether this reader may still see it, in one correlated column of the page's
  * own statement: a JSON array with null where the work is gone, and otherwise, for a project, its
  * confirmations at or before the shared revision. ?3 is the channel's program. A project must still
@@ -277,6 +295,7 @@ export const embedAccessColumn = (program: string) => `(SELECT json_group_array(
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j", true)})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND ${cohortAudienceSql("r", program)} AND ${transcriptReadySql("r")})
+    WHEN 'meeting' THEN ${meetingCardColumn("json_extract(e.value, '$.meetingId')", program)}
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**
@@ -295,12 +314,18 @@ function projectAccess(stored: unknown): { rows: unknown; handle: string | null 
 
 /**
  * The embeds as this reader sees them: stored work they may still see (a project with its current
- * confirmations, and the way to it on its owner's member page), and a neutral "unavailable" card in
- * place of anything they no longer may. Malformed stored entries are dropped.
+ * confirmations, and the way to it on its owner's member page), a call's card as the call stands now,
+ * and a neutral "unavailable" card in place of anything they no longer may. Malformed stored entries,
+ * and a card whose call is gone or in another channel, are dropped.
  */
 export function embedsForReader(stored: unknown[], access: string | null): MessageEmbedView[] {
   const checks = jsonList(access);
   return stored.flatMap((value, i): MessageEmbedView[] => {
+    const card = MeetingEmbed.safeParse(value);
+    if (card.success) {
+      const view = meetingCard(card.data.meetingId, jsonValue(checks[i]));
+      return view ? [view] : [];
+    }
     const embed = MessageEmbed.safeParse(value);
     if (!embed.success) return [];
     const check = checks[i];

@@ -7,8 +7,9 @@ UX-REVIEW); it is built one slice at a time, every slice dark behind the flags b
 What exists so far is the foundation: the tables, the flags (OFF), the values in the contracts and
 the recording policy's channel rule (slice P3a, migration 0043); who may join, the provider interface
 with a fake, the seats, the state machine and the API routes (slice P3b); scheduling cohort sessions
-(slice P8); and the call room on the fake provider (slice P5, below). Every page and route is 404
-while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice
+(slice P8); the call room on the fake provider (slice P5, below); and cohort sessions live and after:
+the session card, "Starting soon" and "Live" in Attention, the Overview card, "Not recorded" rows and
+hiding a recording (slice P9, below). Every page and route is 404 while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice
 P4; its browser client in P6.
 
 ## Scheduling cohort sessions (slice P8)
@@ -49,6 +50,68 @@ see) the session, whatever the reason.
 - **The calendar file** (`ics.ts`, RFC 5545): UTC times, so no VTIMEZONE; the call's id as its UID
   and a SEQUENCE that rises with each change, so adding a moved date again replaces the old entry.
   There are no email reminders.
+
+## Cohort sessions, live and after (slice P9)
+
+**The session card.** Each session has one card in its cohort's channel, `meeting.messageId`: the
+message's stored embed names the call (`MeetingEmbed`), and readers get a `MeetingCardView` worked out
+on every read from the call and its recording (`embedAccessColumn` in `channels/embeds.ts`,
+`card-state.ts`), never stored:
+
+| State | The card offers |
+|---|---|
+| `scheduled` | its time (Nairobi time, and the reader's own), "Add to calendar" |
+| `live` | "Join session" (the room, in its own tab); the message's thread is the session's chat |
+| `processing` | it ended, and the recording will be on the card when it's ready |
+| `ready` | "Watch recording", and "Ask Tembo" once the transcript is ready |
+| `notRecorded`, `failed` | that it wasn't recorded (with why, where TTV knows: the month's limit, too short), or that recording failed |
+| `ended` | its recording exists but the channel may no longer watch it (hidden or removed): never "not recorded" |
+| `cancelled` | that it was cancelled |
+
+- **Where it comes from** (`cards.ts`). There is no system author, so a card is posted by the host who
+  acted. A single date's scheduling note carries its card. A weekly series' note does not (five cards
+  at once, UX review M6): each date gets its card when a host first joins its room, posted by that
+  host ("Started “…”. Chat in this thread…"), as `postMessage` posts anything (the code of conduct, the
+  rate limits). A refused card is tried again when a host next joins. Two hosts joining at once may
+  both post: the first attached is the card, only it shows the card (`mt.messageId = m.id`), and the
+  other request deletes its duplicate, as its author would.
+- **Open pages follow it.** Every change of what a card says moves its message's `changeSeq`
+  (`touchMeetingCard`): opening, ending and cancelling (`clock.ts`), moving or renaming a date
+  (`sessions.ts`), the recording finishing or failing (`recordings/pipeline.ts`; slice P7 calls
+  `touchRecordingCard` when it promotes one), and hiding or showing it. So an open channel's `since`
+  poll redraws the card, with no reload (`cards.test.ts` walks scheduled, live, ended and "Watch
+  recording" through the messages API).
+- **Read as the channel.** The recording on a card is read as the whole channel's audience
+  (`cohortAudienceSql`), as clips are: hosts see the same card as members.
+- **Kept.** A session's card message (the one `meeting.messageId` names) can't be deleted or edited
+  (409): its thread is the chat, and the card is how the channel finds the recording.
+
+**Attention** (`lib/attention/meeting-producers.ts`; there are no email reminders). "Starting soon"
+(`meeting_soon`) reaches the cohort's people (members and alumni, its instructors, TAs and invited
+mentors) from `STARTING_SOON_MINUTES` before a session starts; "Live" (`meeting_live`) once a host is in,
+naming that host, to everyone else. Each shows only while it is true (`attentionAccess`):
+"soon" while the session still waits for a host at the very time it announced and its booked time
+hasn't passed, "live" while it is live, so both leave the bell when it opens, ends, moves or is
+cancelled; a moved date is announced again at its new time. Neither copies the title. Nothing in this
+slice runs on a clock: `remindSessionsStartingSoon(context, now)` is the hook slice P4's every-minute
+clock calls. "Live" is written after each host's join has its seat (`afterHostJoin` in `http.ts`,
+after the response through `waitUntil`), best effort and once per person, while the session is live.
+
+**The cohort Overview** (`NextSession.astro`) shows the live session, or else the next one, with
+"Join session" (the page's one peach action while it is live), or "Add to calendar", or for a host
+"Start session" from `ROOM_OPENS_EARLY_MINUTES` before. The frame starts its read beside the space
+context (`next-session.ts`, shared for the request).
+
+**Sessions after a session.** Among the recordings, newest first, each session that ended with no
+recording at all is a row: "Not recorded" (with why), "Recording failed", or "Processing" while one is
+on its way (`sessionsWithoutRecording`). A recording that came from a session (`recording.meetingId`)
+shows as a recording; a session whose recording is hidden isn't listed as anything.
+
+**Hiding a recording** is on the session viewer page, for the cohort's hosts and admins:
+`src/lib/recordings/README.md`, "Hiding a recording".
+
+**Not built:** the live banner under the tabs (left for later, as the plan allows: the shell has no
+banner slot, and a frame read would raise every page's query budget); a follow-on session.
 
 ## The room (slice P5)
 
@@ -107,9 +170,9 @@ the call's own 15-minute and 1-minute warnings (`Countdown`); and each page afte
 why and where the recording will be; removed; full, with Try again; left; joined elsewhere), whose h1
 takes focus.
 
-**Not here yet:** recording consent and Stop recording for calls between two people (P11); the
-session card, "live" in Attention and a follow-on session (P9); a knock to let late joiners in, which
-UX-REVIEW §3 dropped (everyone who can reach the room may join).
+**Not here yet:** recording consent and Stop recording for calls between two people (P11); a
+follow-on session; a knock to let late joiners in, which UX-REVIEW §3 dropped (everyone who can
+reach the room may join).
 
 ## The rules (`rules.ts`)
 
@@ -198,11 +261,11 @@ while it and every ancestor is. All three are seeded OFF. Only the owner moves o
 ## Contracts
 
 `lib/platform/contracts.ts` already has everything later slices add to, so they need not change it:
-the attention kinds `meeting_soon`, `meeting_live`, `recording_deleted` and `recording_spend_alert`
-(category updates; nothing produces them, and `attentionAccess` shows none until a slice adds the
-`meeting` subject's branch); the subject `meeting`; and the card embeds `MeetingEmbed` and
-`CallProposalEmbed` (`CallEmbed`), which are not `MessageEmbed`s: people never share them, and
-nothing posts or renders them yet.
+the attention kinds `meeting_soon`, `meeting_live` (produced since P9, for cohort sessions),
+`recording_deleted` and `recording_spend_alert` (category updates); the subject `meeting`, which
+`attentionAccess` shows for cohort sessions; and the card embeds `MeetingEmbed` and
+`CallProposalEmbed` (`CallEmbed`), which are not `MessageEmbed`s: people never share them. P9 added
+`MeetingCardView`, what a reader gets for a stored `MeetingEmbed` (a `MessageEmbedView`).
 
 ## Who may join (`access.ts`)
 

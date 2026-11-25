@@ -1,3 +1,4 @@
+import { touchMeetingCard } from "./card-state";
 import type { CallProvider } from "./provider";
 import {
   EMPTY_ROOM_END_MINUTES, NO_HOST_END_MINUTES, NOBODY_CAME_END_MINUTES,
@@ -19,6 +20,12 @@ export interface CallContext {
   db: D1Database;
   provider: CallProvider | null;
   now: number;
+  /**
+   * What follows a host taking their seat in a live call (http.ts: the session's card, and "live" in
+   * Attention, slice P9), after the response where the request can wait for it. Best effort: it never
+   * fails the join.
+   */
+  afterHostJoin?: (meetingId: string, hostId: string) => Promise<void>;
 }
 
 /** Purposes with hosts distinct from members: they end when no host has been in for a while. */
@@ -96,6 +103,8 @@ export async function openMeeting(ctx: CallContext, meetingId: string, title: st
   const opened = await ctx.db.prepare(`UPDATE meeting SET state = 'LIVE', openedAt = ?2, providerMeetingId = ?3, updatedAt = ?2,
       hardEndAt = CASE WHEN purpose = 'CHECKIN' THEN NULL ELSE ?2 + limitMinutes * ?4 END
     WHERE id = ?1 AND state = 'SCHEDULED' RETURNING id`).bind(meetingId, ctx.now, providerMeetingId, MINUTE_MS).first();
+  // Its card, where it has one already (a single date's note), turns live in every open page.
+  if (opened !== null) await ctx.db.prepare(touchMeetingCard("?1")).bind(meetingId).run();
   return opened !== null;
 }
 
@@ -127,6 +136,8 @@ export async function endMeeting(ctx: CallContext, meetingId: string, reason: Me
     db.prepare(`DELETE FROM meeting_seat WHERE meetingId = ?1 AND ${ended}`).bind(meetingId),
     db.prepare(`DELETE FROM meeting_consent WHERE meetingId = ?1 AND ${ended}
       AND NOT EXISTS (SELECT 1 FROM meeting_recording WHERE meetingId = ?1 AND state IN ${RECORDED})`).bind(meetingId),
+    // Its card says it ended, in every open page.
+    db.prepare(touchMeetingCard("?1", `${ended} AND (SELECT endedAt FROM meeting WHERE id = ?1) = ?2`)).bind(meetingId, now),
   ]);
   return "ENDED";
 }
@@ -135,5 +146,6 @@ export async function endMeeting(ctx: CallContext, meetingId: string, reason: Me
 export async function cancelMeeting(ctx: CallContext, meetingId: string): Promise<boolean> {
   const cancelled = await ctx.db.prepare(`UPDATE meeting SET state = 'CANCELLED', updatedAt = ?2
     WHERE id = ?1 AND state = 'SCHEDULED' RETURNING id`).bind(meetingId, ctx.now).first();
+  if (cancelled !== null) await ctx.db.prepare(touchMeetingCard("?1")).bind(meetingId).run();
   return cancelled !== null;
 }

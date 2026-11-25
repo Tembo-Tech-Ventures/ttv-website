@@ -1,5 +1,12 @@
+import { useEffect, useState } from "react";
 import { PiArrowRight, PiFolderSimple, PiPlayFill, PiVideoCamera } from "react-icons/pi";
-import type { MessageEmbedView, ProjectConfirmation, ProjectEmbed, SessionClipEmbed, UnavailableEmbed } from "@/lib/platform/contracts";
+import type {
+  MeetingCardState, MeetingCardView, MessageEmbedView, ProjectConfirmation, ProjectEmbed, SessionClipEmbed, UnavailableEmbed,
+} from "@/lib/platform/contracts";
+import { localTimeText } from "@/components/platform/sessions/local-time";
+import { sessionDay, sessionHours } from "@/lib/meetings/session-times";
+import { callPath, sessionCalendarPath } from "@/lib/platform/server/space-routes";
+import type { ChipTone } from "@/components/platform/ui/tones";
 import Chip from "@/components/platform/ui/Chip";
 import { cx } from "@/components/platform/ui/cx";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
@@ -152,15 +159,103 @@ function UnavailableCard({ embed }: { embed: UnavailableEmbed }) {
   );
 }
 
+/** Where a session's recording plays, and where Tembo answers about the cohort's sessions. */
+export const sessionHref = (recordingId: string) => `/dashboard/cohort/sessions/${encodeURIComponent(recordingId)}`;
+export const ASK_TEMBO_HREF = "/dashboard/cohort/ask";
+
+/** The chip each state of a session's card wears: words, never colour alone. */
+const SESSION_CHIP: Record<MeetingCardState, { label: string; tone: ChipTone }> = {
+  scheduled: { label: "Scheduled", tone: "neutral" },
+  live: { label: "Live now", tone: "peach" },
+  processing: { label: "Ended", tone: "neutral" },
+  ready: { label: "Recording ready", tone: "success" },
+  notRecorded: { label: "Not recorded", tone: "neutral" },
+  failed: { label: "Recording failed", tone: "danger" },
+  ended: { label: "Ended", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+/** What the card says under the time, for each state (voice.md: plain, and what to do next). */
+export function sessionCardLine(card: MeetingCardView): string {
+  switch (card.state) {
+    case "scheduled": return "Add it to your calendar to get a reminder from it. Join opens here when a host starts it.";
+    case "live": return "Recording from start to end. The chat is this message's thread.";
+    case "processing": return "The recording will be on this card when it's ready.";
+    case "ready": return card.transcriptReady ? "Watch it with its transcript, or ask Tembo about it." : "Watch it now. Its transcript is still being made.";
+    case "notRecorded": return card.notRecordedReason === "limit" ? "This session wasn't recorded: TTV had reached its recording limit for the month."
+      : card.notRecordedReason === "short" ? "This session wasn't recorded: it was too short to keep." : "This session wasn't recorded.";
+    case "failed": return "The recording failed, so there's nothing to watch. Ask your instructor if you need this session.";
+    case "ended": return "This session has ended. Its recording isn't available to the cohort.";
+    case "cancelled": return "This session was cancelled.";
+  }
+}
+
+/**
+ * A cohort session's card (in-app calls P9): its time in Nairobi time, with the reader's own where it
+ * differs, then what each state offers: "Add to calendar" before it starts, "Join session" while it is
+ * live (in its own tab, so the call outlives the channel), and "Watch recording" and "Ask Tembo" once
+ * the recording is ready. The server works the state out on every read and moves the message when it
+ * changes, so an open page's poll redraws it without a reload.
+ */
+function SessionCard({ card, compact }: { card: MeetingCardView; compact: boolean }) {
+  // The reader's own time is written once mounted, so the server's HTML and the first render agree.
+  const [local, setLocal] = useState<string | null>(null);
+  useEffect(() => setLocal(localTimeText(card.scheduledStartAt, card.bookedMinutes)), [card.scheduledStartAt, card.bookedMinutes]);
+  const chip = SESSION_CHIP[card.state];
+  const named = <span className="sr-only">: {card.title}</span>;
+  return (
+    <div className={cx(CARD, RAISED)} data-embed="meeting" data-card-state={card.state}>
+      <p className="channel-embed__kind">
+        <PiVideoCamera aria-hidden="true" className="size-4 shrink-0" />
+        Cohort session
+        <Chip tone={chip.tone}>{chip.label}</Chip>
+      </p>
+      <p className="channel-embed__title">{card.title}</p>
+      <p className="channel-embed__summary">
+        <time dateTime={new Date(card.scheduledStartAt).toISOString()}>
+          {`${sessionDay(card.scheduledStartAt, Date.now())}, ${sessionHours(card.scheduledStartAt, card.bookedMinutes)}`}
+        </time>
+        {local ? ` · ${local}` : ""}
+      </p>
+      {!compact && <p className="channel-embed__summary">{sessionCardLine(card)}</p>}
+      {(card.state === "scheduled" || card.state === "live" || card.state === "ready") && (
+        <div className="channel-embed__foot">
+          {card.state === "scheduled" && (
+            <a href={sessionCalendarPath(card.meetingId)} download className={GO} data-add-to-calendar>
+              Add to calendar{named}
+            </a>
+          )}
+          {card.state === "live" && (
+            <a href={callPath(card.meetingId)} target="_blank" rel="noopener" className={GO} data-call-link>
+              Join session<span className="sr-only">: {card.title} (opens in a new tab)</span>
+              <PiArrowRight aria-hidden="true" className="size-3.5" />
+            </a>
+          )}
+          {card.state === "ready" && card.recordingId !== null && (
+            <>
+              {card.transcriptReady && <a href={ASK_TEMBO_HREF} className={buttonClass({ variant: "ghost", size: "sm" })}>Ask Tembo</a>}
+              <a href={sessionHref(card.recordingId)} className={GO} data-watch-recording>
+                Watch recording{named}
+                <PiArrowRight aria-hidden="true" className="size-3.5" />
+              </a>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Work shared in a message: a project at the revision that was shared, with
  * the mentor confirmations it carries and which revision each covers; a
  * session clip at its moment, with what was said; or, when the reader can no
- * longer open it, a quiet card that says so. `compact` (a thread's first
+ * longer open it, a quiet card that says so; or a cohort session's card. `compact` (a thread's first
  * message) keeps the title, the confirmation and the way in, as on the phone
  * prototype (m4).
  */
 export default function EmbedCard({ embed, compact = false }: { embed: MessageEmbedView; compact?: boolean }) {
   if (embed.type === "unavailable") return <UnavailableCard embed={embed} />;
+  if (embed.type === "meeting") return <SessionCard card={embed} compact={compact} />;
   return embed.type === "project" ? <ProjectCard embed={embed} compact={compact} /> : <ClipCard embed={embed} compact={compact} />;
 }

@@ -35,12 +35,14 @@ const AUDIENCE_FLAGS = {
   channels: ["spaces", "channels"],
   // Mentor requests are effective only while channels is (lib/platform/server/flags.ts).
   mentor_requests: ["spaces", "channels", "mentor_requests"],
+  // Calls need channels and spaces too (flags.ts REQUIRES).
+  meetings: ["spaces", "channels", "meetings"],
 } as const satisfies Partial<Record<FlagKey, readonly FlagKey[]>>;
 
 /**
  * One audience read per event/bulk operation; OFF never reads the domain sources. Attention follows
- * `spaces`; items about channels also need `channels`, and items about mentor requests also need
- * `mentor_requests`, so they take the narrowest of those.
+ * `spaces`; items about channels also need `channels`, items about mentor requests also need
+ * `mentor_requests`, and items about calls `meetings`, so they take the narrowest of those.
  */
 export async function audienceFor(context: AttentionProducerContext, flag: keyof typeof AUDIENCE_FLAGS = "spaces"): Promise<FlagAudience> {
   // Keep the production aliases identical to the API flag resolver.
@@ -65,7 +67,8 @@ export async function audienceFor(context: AttentionProducerContext, flag: keyof
 const audienceAdmits = (recipient: string, audience: string) => `(${audience}='ALL' OR (${audience}='STAFF' AND EXISTS
   (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=${recipient} AND r.name='ADMIN')))`;
 
-export async function persist(context: AttentionProducerContext, audience: FlagAudience, items: EventItem[]) {
+/** `createdAt` is the producer's clock (a test's, or the meeting clock's); now by default. */
+export async function persist(context: AttentionProducerContext, audience: FlagAudience, items: EventItem[], createdAt = Date.now()) {
   if (items.length === 0) return;
   // JSON keeps both the bind count and the number of D1 round trips constant.
   await context.db.prepare(`INSERT INTO attention_item
@@ -77,7 +80,7 @@ export async function persist(context: AttentionProducerContext, audience: FlagA
       json_extract(e.value,'$.actorId'),json_extract(e.value,'$.summary'),?1
     FROM json_each(?2) e WHERE ${audienceAdmits("json_extract(e.value,'$.userId')", "?3")}
     ON CONFLICT(userId,eventKey) DO NOTHING`)
-    .bind(Date.now(), JSON.stringify(items.map(item => ({ ...item, id: createId(), category: ATTENTION_CATEGORY[item.kind] }))), audience)
+    .bind(createdAt, JSON.stringify(items.map(item => ({ ...item, id: createId(), category: ATTENTION_CATEGORY[item.kind] }))), audience)
     .run();
 }
 

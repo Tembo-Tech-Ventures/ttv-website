@@ -10,6 +10,11 @@ import {
 } from "./sessions";
 import { ASKER, createChatTestDb, OTHER_ASKER } from "@/test/chat-db";
 
+/** A reader with no recordings: nothing the tests here store names a recording. */
+const NO_RECORDINGS = { cohortIds: [], teachingCohortIds: [], isAdmin: false };
+/** A conversation's preview as listChatSessions' statement returns it: content, role, recordings gone. */
+const preview = (content: string, role = "assistant") => JSON.stringify([content, role, "[]"]);
+
 function d1Statement({
   first,
   all,
@@ -59,7 +64,7 @@ describe("chat sessions", () => {
             createdAt: 10,
             updatedAt: 20,
             messageCount: 2,
-            latestMessage: "Use interviews.",
+            latestMessage: preview("Use interviews."),
           },
         ],
       }),
@@ -67,12 +72,12 @@ describe("chat sessions", () => {
         first: {
           messageCount: 2,
           updatedAt: 9,
-          latestMessage: "Older answer",
+          latestMessage: preview("Older answer"),
         },
       }),
     ]);
 
-    await expect(listChatSessions(db, "user-1")).resolves.toEqual([
+    await expect(listChatSessions(db, "user-1", NO_RECORDINGS)).resolves.toEqual([
       {
         id: "session-1",
         title: "Mentor hours",
@@ -108,7 +113,7 @@ describe("chat sessions", () => {
       }),
     ]);
 
-    await expect(getChatMessages(ownedDb, "user-1", "session-1")).resolves.toEqual([
+    await expect(getChatMessages(ownedDb, "user-1", "session-1", NO_RECORDINGS)).resolves.toEqual([
       {
         id: "message-1",
         role: "assistant",
@@ -119,7 +124,7 @@ describe("chat sessions", () => {
     ]);
 
     const missingDb = d1Mock([d1Statement({ first: null })]);
-    await expect(getChatMessages(missingDb, "user-1", "missing")).resolves.toBeNull();
+    await expect(getChatMessages(missingDb, "user-1", "missing", NO_RECORDINGS)).resolves.toBeNull();
   });
 });
 
@@ -165,7 +170,7 @@ describe("chat session persistence", () => {
 
     expect(chat.messages("older")).toHaveLength(4);
     expect(chat.messages("newer")).toHaveLength(2);
-    expect((await listChatSessions(chat.db, ASKER.id)).map((session) => session.id)).toEqual(["older", "newer"]);
+    expect((await listChatSessions(chat.db, ASKER.id, NO_RECORDINGS)).map((session) => session.id)).toEqual(["older", "newer"]);
   });
 
   it("writes nothing when any statement in the exchange fails", async () => {
@@ -214,7 +219,7 @@ describe("chat session persistence", () => {
     chat.seedSession("recent-empty", ASKER.id, { ageSeconds: 60 });
     chat.seedSession("answered", ASKER.id, { ageSeconds: 120, messageCount: 2 });
 
-    expect(await listChatSessions(chat.db, ASKER.id)).toEqual([
+    expect(await listChatSessions(chat.db, ASKER.id, NO_RECORDINGS)).toEqual([
       expect.objectContaining({ id: "answered", messageCount: 2, latestMessage: expect.any(String) }),
     ]);
   });

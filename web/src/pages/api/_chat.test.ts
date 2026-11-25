@@ -31,6 +31,7 @@ vi.mock("@/lib/chat/sessions", () => ({
   saveChatExchange: mocks.saveChatExchange,
 }));
 
+import type { ToolContext } from "@/lib/chat/tools";
 import { POST } from "./chat";
 
 interface ChatResponse {
@@ -292,6 +293,33 @@ describe("POST /api/chat", () => {
       expect.objectContaining({ userId: "user-1" })
     );
     expect(body.answer).toBe("Based on the transcripts, here is what happened.");
+  });
+
+  it("saves a trace of every recording the tools read with the answer, and never returns it", async () => {
+    mocks.generateToolCompletion
+      .mockResolvedValueOnce({
+        content: null,
+        toolCalls: [
+          { id: "call-1", type: "function", function: { name: "search_transcripts", arguments: "{}" } },
+          { id: "call-2", type: "function", function: { name: "get_recording_details", arguments: "{}" } },
+        ],
+        finishReason: "tool_calls",
+      })
+      .mockResolvedValueOnce({ content: "Retries need keys.", toolCalls: [], finishReason: "stop" });
+    // What the real tools do to the context: a cited source, and a whole transcript read without citing it.
+    mocks.executeTool.mockImplementation(async (name: string, _args: unknown, ctx: ToolContext) => {
+      if (name === "search_transcripts") ctx.sources.push({ sourceNumber: 1, recordingId: "rec-cited", title: "Week 1", startTime: 0, endTime: 30, text: "Retries" });
+      else ctx.read?.add("rec-read");
+      return "{}";
+    });
+
+    const body = await json(await POST(context()));
+
+    const cited = { sourceNumber: 1, recordingId: "rec-cited", title: "Week 1", startTime: 0, endTime: 30, url: "/dashboard/sessions/rec-cited?t=0", text: "Retries" };
+    expect(body.citations).toEqual([cited]);
+    expect(mocks.saveChatExchange.mock.calls[0]?.[3]?.citations).toEqual([
+      cited, { type: "read", recordingId: "rec-cited" }, { type: "read", recordingId: "rec-read" },
+    ]);
   });
 
   it("caps tool rounds at MAX_TOOL_ROUNDS and drops tools on the final call", async () => {

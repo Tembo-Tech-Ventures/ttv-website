@@ -70,22 +70,56 @@ previews have applied it), so scopes fail closed:
 0043 also added `channelId` (a DIRECT or COMMUNITY recording's channel, `SET NULL` with it, which
 then admits nobody) and `meetingId` (the call it came from); see `src/lib/meetings/README.md`.
 
-## Known gap: stored copies of transcript text
+## Hiding a recording (in-app calls P9)
 
-The policy guards every read of `recording` and `transcript_segment`. Copies of transcript text
-stored elsewhere when they were read are not re-checked on read:
+Cohort sessions are recorded from start to end with no pause, and reach the cohort as soon as they
+are processed (UX review M9). So a cohort's hosts (its instructors and TAs) and admins can hide one
+of the cohort's recordings from the cohort, and show it again, on the session viewer page
+(`/dashboard/cohort/sessions/:id`): "Hide from the cohort" asks first (`?confirm=hide`, a
+`ConfirmStep` that names what changes), "Show to the cohort" puts it back. Plain forms, while
+`meetings` is on for the person; any other post (a member, another cohort's host, a mentor, another
+site, the flag off) is the same 404 and changes nothing (`hiding.ts`: `mayHideRecording`,
+`setRecordingHidden`).
 
-- Ask Tembo's conversation history: `chat_message.citations` (each source's title and up to 240
-  characters of transcript) and the answer text, returned by `lib/chat/sessions.ts`
-  (`getChatMessages`) to the conversation's owner;
-- Tembo's answers in channels: the answer body and its `session` citations (title and moment),
-  stored on the `channel_message` (`CITATIONS_GONE` in `lib/channels/messages.ts` re-checks only
-  `message` citations).
+Hidden sets `hiddenAt`, and the policy does the rest: on every path in the matrix
+(`access.matrix.render.test.ts`) only admins and the cohort's hosts still reach it. Its hosts see it
+in Sessions marked "Hidden from the cohort". The card of the session it came from says it isn't
+available, and Tembo's answers that cite it are withheld (below); both change in open pages at once
+(`touchRecordingCard`, `touchAnswersCiting`). Deleting is not built yet.
 
-Today this is harmless: each copy was readable by its reader when it was written, and nothing yet
-hides or deletes a recording. **Before any UI or API sets `hiddenAt` or `deletedAt`, these copies
-must be re-checked on read through the policy** (drop or blank a citation whose recording the
-reader may no longer see, as `embedAccessColumn` does for clips), with tests.
+## Stored copies of transcript text
 
-The admin recording pages (`/admin/recordings`) list every recording, deleted ones included; they
-need the same decision once deletion exists.
+The policy guards every read of `recording` and `transcript_segment`. Two places keep a copy of
+transcript words from when they were read, and each is checked again on every read, in the
+statement that reads it, so hiding, deleting or moving a recording takes its words out of them too:
+
+- **Ask Tembo's conversation history** (`lib/chat/stored-sources.ts`), for the conversation's owner
+  as they are now (`capabilitiesFor`): `chat_message.citations` holds the citations shown (each
+  source's title and up to 240 characters of transcript), then a trace entry
+  `{ type: "read", recordingId }` for every recording a tool returned anything of for that answer
+  (`search_transcripts`' sources, and what `list_recordings` and `get_recording_details` named,
+  cited or not). A follow-up in an existing conversation also carries a trace of every recording an
+  earlier answer there named, written in the same statement (`sessions.ts`), because Tembo had those
+  answers as history and may restate them without a tool. An answer that drew on a recording the
+  owner may no longer read, or whose transcript isn't complete, is replaced by one neutral line, and
+  that recording's citations are dropped; trace entries never leave the server. `getChatMessages`
+  checks each message and `listChatSessions` each preview, inside their own statements.
+- **Tembo's answers in channels** (`lib/channels/messages.ts`, `sessionsGoneSql`): Tembo read a
+  cohort's sessions as the whole cohort, and every reader of the channel sees its answer, so an
+  answer is checked as `cohortAudienceSql` for the channel's program, with a complete transcript,
+  as clips are. While any `sessionClip` citation fails, every reader (hosts and admins too) gets
+  `TEMBO_SESSION_GONE` instead of the body, and that citation is dropped. Message search
+  (`lib/search/messages.ts`) leaves such an answer out, so its words don't come back as an excerpt.
+  Whoever hides, restores or deletes a recording calls `touchMessagesShowing` (`lib/channels/
+  mutations.ts`) after the change, which moves those answers and every message sharing a clip of it,
+  so open channels pick the change up on their next poll.
+
+Known limits: an answer saved before the traces existed carries only its citations, so a transcript
+it read through `get_recording_details` without citing it can't be traced; and Ask Tembo's
+follow-up questions send the earlier conversation from the browser, so a tab left open since before
+a recording was hidden can still send that answer's words back as context.
+
+Attention items carry no transcript text (their summaries are fixed sentences), and their reads
+check the policy (`attentionAccess`). The admin recording pages (`/admin/recordings`) list every
+recording, deleted ones included; admins may watch hidden recordings, but they need a decision once
+deletion exists.

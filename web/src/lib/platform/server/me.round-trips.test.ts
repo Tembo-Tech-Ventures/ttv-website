@@ -15,7 +15,7 @@ afterEach(() => databases.splice(0).forEach((database) => database.close()));
 function setup(globalRoles: string[]) {
   const fixture = createCapabilityDatabase({ globalRoles, applications: [{ programId: "cohort-a", status: "APPROVED" }] });
   databases.push(fixture.database);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql", "0042_recording_access.sql"]) {
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql", "0036_mentor_requests.sql", "0037_mentor_request_checks.sql", "0042_recording_access.sql", "0043_meetings.sql"]) {
     fixture.database.exec(readMigration(migration));
   }
   addMemberSchema(fixture.database);

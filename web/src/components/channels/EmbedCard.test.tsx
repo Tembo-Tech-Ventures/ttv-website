@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ProjectEmbed } from "@/lib/platform/contracts";
+import type { MeetingCardView, ProjectEmbed } from "@/lib/platform/contracts";
 import { people, projects, sessionClip } from "@/lib/platform/fixtures";
-import EmbedCard, { clipHref, confirmationText, shownConfirmations } from "./EmbedCard";
+import EmbedCard, { ASK_TEMBO_HREF, clipHref, confirmationText, sessionCardLine, shownConfirmations } from "./EmbedCard";
 
 const ledger = projects.chamaLedger; // revision 3, confirmed by David on revision 2
 const html = (node: React.ReactElement) => renderToStaticMarkup(node).replaceAll("<!-- -->", "").replaceAll("&#x27;", "'");
@@ -98,5 +98,39 @@ describe("work that is no longer available", () => {
     const markup = html(<EmbedCard embed={{ type: "unavailable", was: "project" }} />);
     expect(markup).not.toContain("<a ");
     expect(markup).toContain('data-embed="unavailable"');
+  });
+});
+
+describe("a cohort session's card (in-app calls P9)", () => {
+  const session: MeetingCardView = {
+    type: "meeting", meetingId: "week-9", title: "Testing payment callbacks", state: "scheduled",
+    scheduledStartAt: Date.parse("2026-11-26T15:00:00Z"), bookedMinutes: 45, openedAt: null, endedAt: null,
+    recordingId: null, transcriptReady: false, notRecordedReason: null,
+  };
+  const links = (card: MeetingCardView) => [...html(<EmbedCard embed={card} />).matchAll(/<a [^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g)]
+    .map(([, href, label]) => [href, label!.replace(/<[^>]+>/g, "").trim()]);
+
+  it("offers each state's way in, and only that", () => {
+    expect(links(session)).toEqual([["/dashboard/cohort/sessions/upcoming/week-9/calendar.ics", "Add to calendar: Testing payment callbacks"]]);
+    expect(text(<EmbedCard embed={session} />)).toMatch(/Thu 26 Nov( 2026)?, 18:00–18:45 EAT/);
+    expect(links({ ...session, state: "live" })).toEqual([["/dashboard/calls/week-9", "Join session: Testing payment callbacks (opens in a new tab)"]]);
+    expect(text(<EmbedCard embed={{ ...session, state: "live" }} />)).toContain("The chat is this message's thread.");
+    expect(links({ ...session, state: "ready", recordingId: "video", transcriptReady: false })).toEqual([
+      ["/dashboard/cohort/sessions/video", "Watch recording: Testing payment callbacks"],
+    ]);
+    expect(links({ ...session, state: "ready", recordingId: "video", transcriptReady: true })).toEqual([
+      [ASK_TEMBO_HREF, "Ask Tembo"], ["/dashboard/cohort/sessions/video", "Watch recording: Testing payment callbacks"],
+    ]);
+    for (const state of ["processing", "notRecorded", "failed", "ended", "cancelled"] as const) expect(links({ ...session, state })).toEqual([]);
+  });
+
+  it("says in words where the session stands, never by colour alone", () => {
+    const said = (card: MeetingCardView) => text(<EmbedCard embed={card} />);
+    expect(said({ ...session, state: "live" })).toContain("Live now");
+    expect(said({ ...session, state: "notRecorded", notRecordedReason: "limit" })).toContain("TTV had reached its recording limit for the month");
+    expect(said({ ...session, state: "notRecorded", notRecordedReason: "short" })).toContain("it was too short to keep");
+    expect(said({ ...session, state: "failed" })).toContain("Recording failed");
+    expect(said({ ...session, state: "ended" })).toContain("Its recording isn't available to the cohort.");
+    expect(sessionCardLine({ ...session, state: "processing" })).toBe("The recording will be on this card when it's ready.");
   });
 });

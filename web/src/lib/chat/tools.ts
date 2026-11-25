@@ -26,6 +26,12 @@ export interface ToolContext {
   allowedTools?: ReadonlySet<string>;
   /** Accumulates sources across tool calls for citation building. */
   sources: TranscriptSource[];
+  /**
+   * Every recording a tool returned anything of (its title and description in list_recordings and
+   * get_recording_details, its transcript there), cited or not. Saved with the answer, so a later read
+   * can withhold it once the recording is gone (stored-sources.ts).
+   */
+  read?: Set<string>;
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -339,6 +345,7 @@ async function listRecordings(limit: number, ctx: ToolContext): Promise<string> 
     .orderBy(desc(schema.recording.recordedAt))
     .limit(cap);
 
+  for (const { id } of recordings) ctx.read?.add(id);
   return JSON.stringify({
     recordings: recordings.map((r) => ({
       id: r.id,
@@ -365,6 +372,9 @@ async function getRecordingDetails(recordingId: string, ctx: ToolContext): Promi
       ? `${rec.transcriptText.slice(0, 12_000)}… [truncated]`
       : rec.transcriptText
     : null;
+  // Its title and description name it even before its transcript is ready: traced either way. Until
+  // the transcript is complete, the stored check withholds the answer (stored-sources.ts).
+  ctx.read?.add(rec.id);
 
   return JSON.stringify({
     id: rec.id,

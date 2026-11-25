@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed, type MessageReactions,
-  type PostMessage, type ReactToMessage,
+  CallEmbed, MeetingEmbed, MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed,
+  type MessageReactions, type PostMessage, type ReactToMessage,
 } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
 import { refOf, resolveEmbeds, sameRefs, screeningText } from "./embeds";
@@ -102,12 +102,37 @@ interface NonceRow {
   id: string; channelId: string; parentId: string | null; body: string; embeds: string; editedAt: number | null; deletedAt: number | null;
 }
 
-/** The references a stored message's embeds were resolved from; null when they cannot be read back. */
-function storedRefs(text: string) {
+/** A stored message's embeds as JSON, or null when they cannot be read back. */
+function storedList(text: string): unknown[] | null {
   try {
-    const embeds = MessageEmbed.array().safeParse(JSON.parse(text));
-    return embeds.success ? embeds.data.map(refOf) : null;
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : null;
   } catch { return null; }
+}
+
+/**
+ * The references a stored message's embeds were resolved from; null when they cannot be read back.
+ * A call's card is the server's, never a reference the author sent, so it is not one of them.
+ */
+function storedRefs(text: string) {
+  const stored = storedList(text);
+  if (stored === null) return null;
+  const embeds = MessageEmbed.array().safeParse(stored.filter((value) => !CallEmbed.safeParse(value).success));
+  return embeds.success ? embeds.data.map(refOf) : null;
+}
+
+/** Whether a stored message carries a meeting's card (lib/meetings/cards.ts). */
+const carriesMeetingCard = (text: string) => storedList(text)?.some((value) => MeetingEmbed.safeParse(value).success) ?? false;
+
+/**
+ * Whether this message is a session's card, the message `meeting.messageId` names: its thread is the
+ * session's chat and the card is how the channel finds the session and its recording, so its author
+ * can neither delete it nor change its words (UX review, screen 04). Read only for a message that
+ * carries a meeting card at all.
+ */
+async function isSessionCard(ctx: ReadContext, target: MessageTarget): Promise<boolean> {
+  if (!carriesMeetingCard(target.embeds)) return false;
+  return await ctx.db.prepare("SELECT 1 FROM meeting WHERE messageId = ?1").bind(target.id).first() !== null;
 }
 
 /**
@@ -172,8 +197,14 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
  * conduct_required); a rate limit (429 with retryAfterMs); a thread that is not an open root of
  * this channel the caller can see (404), or a deleted or hidden one (409); attached work that cannot
  * be shared here (resolveEmbeds: 400, or 409 for a stale project revision).
+ *
+ * `card` is a call's card, which only the server attaches (lib/meetings/cards.ts: a cohort session's
+ * note, or the card its room's opening posts), after the work the post shares. It is never something a
+ * person sends: PostMessage carries references to shared work only.
  */
-export async function postMessage(ctx: WriteContext, input: PostMessage): Promise<{ message: Message; created: boolean }> {
+export async function postMessage(
+  ctx: WriteContext, input: PostMessage, { card }: { card?: MeetingEmbed } = {},
+): Promise<{ message: Message; created: boolean }> {
   if (!ctx.channel.capabilities.canPost) {
     const previous = await previousPost(ctx, input);
     if (previous) return previous;
@@ -214,7 +245,8 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
     ON CONFLICT (authorId, clientNonce) DO NOTHING RETURNING id`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body, JSON.stringify(findings), textKey, now, id,
     conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
-    FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1, JSON.stringify(embeds),
+    FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1,
+    JSON.stringify(card ? [...embeds, card] : embeds),
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";
@@ -290,6 +322,9 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
   }
   if (!ctx.channel.capabilities.canPost) throw cannotPost();
   if (input.body === target.body) return loaded(ctx, target.id);
+  if (await isSessionCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a session's card, so its words stay as they are.", 409);
+  }
 
   const now = ctx.now ?? Date.now();
   const { findings, textKey } = await screen(ctx, input.body, target.parentId, "edit");
@@ -321,10 +356,14 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
 /**
  * DELETE /api/messages/:id: the author removes their message from a channel they can still read,
  * even one they can no longer post in. It keeps its place as an empty placeholder, so its replies
- * stay in their thread, and loses its reactions. Deleting again returns the same placeholder.
+ * stay in their thread, and loses its reactions. Deleting again returns the same placeholder. A
+ * session's card is never deleted (409, isSessionCard).
  */
 export async function deleteMessage(ctx: WriteContext, target: MessageTarget): Promise<Message> {
   requireAuthor(ctx, target, "delete");
+  if (target.deletedAt === null && await isSessionCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a session's card, so it can't be deleted.", 409);
+  }
   if (target.deletedAt === null) {
     const now = ctx.now ?? Date.now();
     // ?1 channel, ?2 id, ?3 author, ?4 now. The later statements act only for this deletion.
@@ -400,6 +439,27 @@ export async function markChannelRead(ctx: ReadContext & { now?: number }, messa
 /** Whether a reader of the message's channel may see it: a hidden message is missing to anyone but its author and moderators. */
 export function visibleTo(target: MessageTarget, userId: string, channel: Pick<Channel, "capabilities">): boolean {
   return target.moderationState !== "HIDDEN" || target.authorId === userId || channel.capabilities.canModerate;
+}
+
+/**
+ * Moves every message that shows recording `recordingId` on for pollers: Tembo's answers that cite it
+ * (withheld while it is gone, messages.ts TEMBO_SESSION_GONE) and people's messages that share a clip
+ * of it (an "unavailable" card while it is gone, embeds.ts). So an open channel learns at once when
+ * the recording is hidden, restored or deleted. Whoever changes a recording's audience calls it after
+ * that change. One read, then one touch per message in one batch; returns how many it moved.
+ *
+ * The read scans every live message's citations and embeds with json_each (nothing indexes a JSON
+ * field): fine for an action as rare as hiding a recording, not for a hot path.
+ */
+export async function touchMessagesShowing(db: D1Database, recordingId: string): Promise<number> {
+  const { results } = await db.prepare(`SELECT DISTINCT m.id, m.channelId FROM channel_message m
+    CROSS JOIN json_each(CASE WHEN m.authorKind = 'TEMBO' AND json_valid(m.citations) THEN m.citations
+      WHEN m.authorKind = 'USER' AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) shown
+    WHERE m.deletedAt IS NULL
+      AND json_extract(shown.value, '$.type') = 'sessionClip' AND json_extract(shown.value, '$.recordingId') = ?1`)
+    .bind(recordingId).all<{ id: string; channelId: string }>();
+  if (results.length > 0) await db.batch(results.map(({ id, channelId }) => db.prepare(touch("?2")).bind(channelId, id)));
+  return results.length;
 }
 
 /** The message a /api/messages/:id route names, before any access decision. One primary-key read. */
