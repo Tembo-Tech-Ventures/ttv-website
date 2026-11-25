@@ -132,9 +132,13 @@ const RECORDING_FOR: Record<CreateMeeting["purpose"], (input: CreateMeeting) => 
 /**
  * A new scheduled call in a channel the caller hosts in. The purpose decides everything else: its
  * channel's kind (a session only in a cohort channel, which ties it to that cohort), its limit and
- * how it is recorded. Nothing is made at the provider until a host opens the room.
+ * how it is recorded. Nothing is made at the provider until a host opens the room. `limitMinutes`
+ * only shortens the limit, for a test call (test-calls.ts); no route passes it.
  */
-export async function createMeeting(ctx: CallContext, caller: Caller, input: CreateMeeting): Promise<Meeting> {
+export async function createMeeting(
+  ctx: CallContext, caller: Caller, input: CreateMeeting, { limitMinutes }: { limitMinutes?: number } = {},
+): Promise<Meeting> {
+  const limit = Math.min(limitMinutes ?? LIMIT_MINUTES[input.purpose], LIMIT_MINUTES[input.purpose]);
   if (!caller.flags[PURPOSE_FLAG[input.purpose]]) throw notFound();
   const channel = await ctx.db.prepare(`SELECT kind, programId, postingPolicy, archivedAt,
       EXISTS (SELECT 1 FROM channel_member WHERE channelId = channel.id AND userId = ?2) AS isMember
@@ -147,7 +151,7 @@ export async function createMeeting(ctx: CallContext, caller: Caller, input: Cre
   await ctx.db.prepare(`INSERT INTO meeting (id, channelId, purpose, title, scheduledStartAt, bookedMinutes, limitMinutes,
       recordingPolicy, state, createdBy, createdAt, updatedAt)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'SCHEDULED', ?9, ?10, ?10)`).bind(
-    id, input.channelId, input.purpose, input.title, input.scheduledStartAt, input.bookedMinutes, LIMIT_MINUTES[input.purpose],
+    id, input.channelId, input.purpose, input.title, input.scheduledStartAt, input.bookedMinutes, limit,
     RECORDING_FOR[input.purpose](input), caller.userId, ctx.now,
   ).run();
   return view(await visible(ctx, caller, id), ctx.now);

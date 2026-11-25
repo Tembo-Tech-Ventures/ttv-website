@@ -105,6 +105,8 @@ jobs:
       # SAM login (web/src/lib/sam-login/README.md): the staging environment's own variables, never any other environment's.
       CLOUDFLARE_SAM_LOGIN_PROJECT_ID: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_PROJECT_ID || '' }}
       CLOUDFLARE_SAM_LOGIN_USER_IDS: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_USER_IDS || '' }}
+      # Test calls (web/docs/meetings-testing.md): "on" in the staging environment's variables opens them there; never elsewhere.
+      CLOUDFLARE_MEETINGS_TEST_CALLS: ${{ inputs.environment_name == 'staging' && vars.MEETINGS_TEST_CALLS || '' }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
@@ -289,6 +291,8 @@ jobs:
       # SAM login (web/src/lib/sam-login/README.md): the staging environment's own variables, never any other environment's.
       CLOUDFLARE_SAM_LOGIN_PROJECT_ID: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_PROJECT_ID || '' }}
       CLOUDFLARE_SAM_LOGIN_USER_IDS: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_USER_IDS || '' }}
+      # Test calls (web/docs/meetings-testing.md): "on" in the staging environment's variables opens them there; never elsewhere.
+      CLOUDFLARE_MEETINGS_TEST_CALLS: ${{ inputs.environment_name == 'staging' && vars.MEETINGS_TEST_CALLS || '' }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}

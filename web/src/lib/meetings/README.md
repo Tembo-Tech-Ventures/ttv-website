@@ -252,6 +252,15 @@ takes focus.
 follow-on session; a knock to let late joiners in, which UX-REVIEW §3 dropped (everyone who can
 reach the room may join).
 
+## Testing calls (slice T1)
+
+[`docs/meetings-testing.md`](../../../docs/meetings-testing.md): the shared Playwright set-up with a
+fake camera and microphone and several people in one call (`e2e/calls.ts`), and test calls
+(`test-calls.ts`, the page `/dev/calls/test`): a call starting now, two minutes long unless asked
+otherwise, with the caller as host. `createMeeting`'s `limitMinutes` option exists only for it and only
+shortens a call. The page is a 404 in production whatever is set, and on staging unless
+`MEETINGS_TEST_CALLS` is `on`.
+
 ## The rules (`rules.ts`)
 
 The owner's decisions of 23 November 2026, which override the plan documents' 60 minutes. Each is a

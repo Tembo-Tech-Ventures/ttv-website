@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
  *   node scripts/sam-staging-login.mjs --revoke         # end this task's logins, remove its newcomers
  *   node scripts/sam-staging-login.mjs --revoke --all   # the same for every task of your SAM user
  *
- * Personas: newcomer, applicant, student, alumna, community, mentor, institution, admin.
+ * Personas: newcomer, applicant, student, alumna, community, mentor, institution, admin, and the
+ * call personas classmate1 to classmate7 and ta (src/lib/sam-login/personas.ts).
  * The session cookie goes only into a Playwright storage-state file (<out>/<persona>.json,
  * readable by you alone); the script prints where it is, never the cookie itself. Each token
  * signs in once, so ask SAM for a new one per login. SAM_LOGIN_ORIGIN overrides the site.
@@ -21,7 +22,8 @@ export const DEFAULT_ORIGIN = "https://staging.tembotechventures.com";
 export const DEFAULT_OUT_DIR = "/tmp/ttv-sam-login";
 /** The token goes only to staging or a local staging-mode build, never wherever an override points. */
 const ALLOWED_ORIGIN = /^(https:\/\/staging\.tembotechventures\.com|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?)$/;
-const PERSONA = /^[a-z]+$/;
+/** A persona key (src/lib/sam-login/personas.ts): it names the storage-state file, so never a path. */
+const PERSONA = /^[a-z][a-z0-9]*$/;
 
 export function parseArguments(argv) {
   const options = { persona: null, revoke: false, all: false, ttlMinutes: undefined, outDir: DEFAULT_OUT_DIR };

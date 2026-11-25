@@ -1,0 +1,145 @@
+---
+/**
+ * Make a test call (in-app calls T1; docs/meetings-testing.md): a short call starting now, two
+ * minutes unless asked otherwise, in a cohort the caller teaches (a session) or a community channel
+ * they moderate (an event), with the caller as its host. It answers with the call's room. Live checks
+ * use it to fill a room and watch "a call ends on time".
+ *
+ * A plain form that posts here; a script asks for JSON (`Accept: application/json`) and gets
+ * `{ id, roomPath, roomUrl, minutes }` with 201. It exists only where `testCallsEnabled` says so
+ * (`astro dev`, agent previews, staging with MEETINGS_TEST_CALLS=on), never in production, and only
+ * for a signed-in person, in a browser session, with `meetings` on, who hosts somewhere: anything
+ * else, a post from another origin included, is the same 404.
+ */
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { Button, ButtonLink, Card, Notice, PageHeader, SelectField, Sheet, TextField } from "@/components/platform/ui";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { ChannelError } from "@/lib/channels/errors";
+import * as schema from "@/lib/db/schema";
+import { PURPOSE_FLAG } from "@/lib/meetings/calls";
+import { callProviderFor } from "@/lib/meetings/provider";
+import {
+  createTestCall, TEST_CALL_DEFAULT_MINUTES, TEST_CALL_DEFAULT_TITLE, TEST_CALL_MAX_MINUTES, testCallPlaces, testCallsEnabled,
+  type TestCall,
+} from "@/lib/meetings/test-calls";
+import { getFlags } from "@/lib/platform/server/flags";
+import { platformError, platformJson } from "@/lib/platform/server/http";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
+
+const notFound = () => new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+if (!testCallsEnabled(env, { dev: import.meta.env.DEV })) return notFound();
+
+const { method } = Astro.request;
+const { user } = Astro.locals;
+if (!user || Astro.locals.personalAccessToken) return notFound();
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return notFound();
+if (method === "POST" && !hasMatchingRequestOrigin(Astro.request)) return notFound();
+
+const [flags, capabilities] = await Promise.all([
+  getFlags({ db: env.DB, env, user, locals: Astro.locals }),
+  requestCapabilities(drizzle(env.DB, { schema }), Astro.locals),
+]);
+const places = flags.meetings
+  ? (await testCallPlaces(env.DB, capabilities, env)).filter(({ purpose }) => flags[PURPOSE_FLAG[purpose]])
+  : [];
+if (places.length === 0) return notFound();
+
+const wantsJson = (Astro.request.headers.get("Accept") ?? "").includes("application/json");
+let values = { channelId: places[0].channelId, title: TEST_CALL_DEFAULT_TITLE, minutes: String(TEST_CALL_DEFAULT_MINUTES) };
+let made: TestCall | null = null;
+let failure: { message: string; conduct: boolean } | null = null;
+
+if (method === "POST") {
+  const form = await Astro.request.formData();
+  const text = (name: string, fallback: string) => {
+    const value = form.get(name);
+    return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
+  };
+  values = { channelId: text("channelId", values.channelId), title: text("title", values.title), minutes: text("minutes", values.minutes) };
+  try {
+    made = await createTestCall(
+      { db: env.DB, provider: callProviderFor(env), now: Date.now() },
+      { userId: user.id, capabilities, flags },
+      places,
+      { channelId: values.channelId, title: values.title, minutes: Number(values.minutes) },
+    );
+  } catch (error) {
+    if (!(error instanceof ChannelError)) throw error;
+    if (error.status === 404) return notFound();
+    if (wantsJson) return platformError(error.code, error.message, error.status);
+    failure = { message: error.message, conduct: error.code === "conduct_required" };
+    Astro.response.status = error.status;
+  }
+  if (made && wantsJson) {
+    return platformJson({
+      id: made.meeting.id, roomPath: made.roomPath, roomUrl: new URL(made.roomPath, Astro.url).href, minutes: made.meeting.limitMinutes,
+    }, 201);
+  }
+  if (made) Astro.response.status = 201;
+}
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<BaseLayout title="Make a test call | TTV" noIndex>
+  <main class="min-h-screen overflow-x-clip bg-ground pb-24">
+    <div class="mx-auto max-w-3xl px-3 pt-12 sm:px-8 sm:pt-16">
+      <Sheet space="cohort" className="flex flex-col gap-6 px-5 pt-6 pb-8 sm:px-8">
+        <PageHeader title="Make a test call">
+          A short call that starts now, with you as its host. It ends on its own when its time is up, counted
+          from when you open the room. This page exists only for testing, and never on the live site.
+        </PageHeader>
+
+        {made ? (
+          <Notice tone="success" title="Test call made" focusOnLoad>
+            {`“${made.meeting.title}” ends ${made.meeting.limitMinutes === 1 ? "1 minute" : `${made.meeting.limitMinutes} minutes`} after you open the room. Send the room's address to the people joining.`}
+          </Notice>
+        ) : failure ? (
+          <Notice tone="danger" title="We couldn't make the call" focusOnLoad>
+            {failure.message}{" "}
+            {failure.conduct ? <a class="underline underline-offset-4" href={CONDUCT_PATH}>Read how we talk to each other</a> : "Check the form and try again."}
+          </Notice>
+        ) : null}
+
+        {made ? (
+          <Card>
+            <p class="m-0 text-sm text-ink-secondary">The room</p>
+            <p class="mt-1 mb-4 break-all font-mono text-sm text-ink-primary" data-test-call-room>{new URL(made.roomPath, Astro.url).href}</p>
+            <ButtonLink href={made.roomPath} variant="primary">Open the room</ButtonLink>
+          </Card>
+        ) : null}
+
+        <Card>
+          <form method="post" class="flex flex-col gap-6" novalidate data-test-call-form>
+            <SelectField
+              label="Where"
+              name="channelId"
+              options={places.map(({ channelId, label }) => ({ value: channelId, label }))}
+              defaultValue={values.channelId}
+              hint="A session is for that cohort's people; an event in a community channel is for everyone signed in."
+              required
+            />
+            <TextField label="Title" name="title" defaultValue={values.title} maxLength={120} required />
+            <TextField
+              label="Length in minutes"
+              name="minutes"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={TEST_CALL_MAX_MINUTES}
+              defaultValue={values.minutes}
+              hint={`1 to ${TEST_CALL_MAX_MINUTES}. The call ends this long after you open the room.`}
+              className="max-w-48"
+              required
+            />
+            <div>
+              <Button type="submit" variant={made ? "quiet" : "primary"}>{made ? "Make another" : "Make the call"}</Button>
+            </div>
+          </form>
+        </Card>
+      </Sheet>
+    </div>
+  </main>
+</BaseLayout>

@@ -1,9 +1,11 @@
+import { CONDUCT_VERSION } from "@/lib/channels/conduct";
+
 /**
  * The fictional people a SAM agent may sign in as on staging. Each is a synthetic account that
  * only this mechanism creates (ids under SAM_PERSONA_PREFIX, emails under @invalid.ttv); no real
- * account can be chosen. Signing in seeds the persona again, so its roles and cohort status are
- * what the table below says, while what it did in the app (posts, profile edits, onboarding)
- * carries over between logins. `newcomer` is a brand-new account every time.
+ * account can be chosen. Signing in seeds the persona again, so its roles, cohort status and cohort
+ * role are what the table below says, while what it did in the app (posts, profile edits,
+ * onboarding) carries over between logins. `newcomer` is a brand-new account every time.
  */
 export const SAM_PERSONA_PREFIX = "ttv-sam-persona-";
 
@@ -17,18 +19,57 @@ interface PersonaDefinition {
   summary: string;
   role?: Role;
   application?: { cohort: Cohort; status: "PENDING" | "APPROVED" | "COMPLETED" };
+  /** A role in one fictional cohort: a TA hosts that cohort's sessions. */
+  cohortRole?: { cohort: Cohort; name: "TA" };
   intent?: Intent;
+  /** A saved member profile; its bio always begins "Fictional SAM persona." */
+  profile?: { headline: string; bio: string; skills: string[]; goals: string };
+  /**
+   * Agreed to the channels' code of conduct when seeded, so a call or a post isn't held at the
+   * agreement (the call personas, for rooms of up to 15 people). The others agree in the app.
+   */
+  conduct?: true;
 }
+
+/** One of the current cohort's fictional classmates, there to fill a call (in-app calls T1). */
+const classmate = (name: string, headline: string, bio: string, skills: string[]) => ({
+  name,
+  summary: "Accepted into the current cohort; agreed to the code of conduct",
+  application: { cohort: "current", status: "APPROVED" },
+  intent: "MEMBER",
+  profile: { headline, bio: `Fictional SAM persona. ${bio}`, skills, goals: "A first developer role" },
+  conduct: true,
+}) as const satisfies PersonaDefinition;
 
 export const SAM_PERSONAS = {
   newcomer: { name: "Brian Kiprono", summary: "A brand-new account that has not finished onboarding" },
   applicant: { name: "Njeri Wambui", summary: "Applied to the next cohort; waiting for a decision", application: { cohort: "next", status: "PENDING" }, intent: "MEMBER" },
   student: { name: "Wanjiku Mwangi", summary: "Accepted into the current cohort", application: { cohort: "current", status: "APPROVED" }, intent: "MEMBER" },
-  alumna: { name: "Achieng Otieno", summary: "Completed a past cohort, with a saved profile", application: { cohort: "past", status: "COMPLETED" }, intent: "MEMBER" },
+  alumna: {
+    name: "Achieng Otieno", summary: "Completed a past cohort, with a saved profile", application: { cohort: "past", status: "COMPLETED" }, intent: "MEMBER",
+    profile: { headline: "Backend builder", bio: "Fictional SAM persona. I build payment and ledger tools for small groups.", skills: ["TypeScript", "SQL"], goals: "A backend developer role" },
+  },
   community: { name: "Lucy Chebet", summary: "A community member who is not in a cohort", intent: "MEMBER" },
   mentor: { name: "David Kamau", summary: "An approved, listed mentor", role: "MENTOR", intent: "MENTOR" },
   institution: { name: "Joseph Mutua", summary: "An approved institution account", role: "INSTITUTION", intent: "INSTITUTION" },
   admin: { name: "Amina Hassan", summary: "A staging admin", role: "ADMIN" },
+  // The call personas (in-app calls T1): with `student`, `ta` and `admin`, ten people who all read
+  // the current cohort's channel; with everyone else signed in, a full community room of 15 and one more.
+  classmate1: classmate("Mwende Kilonzo", "Frontend builder", "I make forms that work on slow phones.", ["HTML", "CSS"]),
+  classmate2: classmate("Onyango Okoth", "Backend builder", "I write small APIs for shop inventories.", ["Node.js", "SQL"]),
+  classmate3: classmate("Chepkoech Rotich", "Mobile builder", "I build offline-first apps for farm records.", ["Kotlin"]),
+  classmate4: classmate("Nyambura Gitau", "Data builder", "I clean and chart savings group data.", ["Python", "SQL"]),
+  classmate5: classmate("Wekesa Barasa", "Full-stack builder", "I build booking pages for small clinics.", ["TypeScript", "React"]),
+  classmate6: classmate("Akinyi Owino", "Frontend builder", "I care about pages that read well on any screen.", ["React", "Accessibility"]),
+  classmate7: classmate("Mutiso Ndambuki", "Backend builder", "I build SMS reminders for chama contributions.", ["Go", "SQL"]),
+  ta: {
+    name: "Zawadi Njoroge",
+    summary: "A TA in the current cohort, who hosts its sessions; agreed to the code of conduct",
+    cohortRole: { cohort: "current", name: "TA" },
+    intent: "MEMBER",
+    profile: { headline: "Teaching assistant", bio: "Fictional SAM persona. I help the current cohort with reviews and pairing.", skills: ["TypeScript", "Testing"], goals: "Mentoring new developers" },
+    conduct: true,
+  },
 } as const satisfies Record<string, PersonaDefinition>;
 
 export type SamPersona = keyof typeof SAM_PERSONAS;
@@ -105,9 +146,24 @@ export function samPersonaStatements(db: D1Database, persona: SamPersona, userId
     ).bind(`${userId}-application`, COHORTS[cohort].id, userId, status, submission,
       status === "COMPLETED" ? now + COHORTS[cohort].end * DAY : null, now, now));
   }
-  if (persona === "alumna") {
+  // Cohort roles are reset on every login too, like the global roles above.
+  statements.push(db.prepare(`DELETE FROM programRole WHERE userId=?`).bind(userId));
+  if (definition.cohortRole) {
+    statements.push(db.prepare(`INSERT INTO programRole (id,programId,userId,name,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`)
+      .bind(`${userId}-cohort-role`, COHORTS[definition.cohortRole.cohort].id, userId, definition.cohortRole.name, now, now));
+  }
+  if (definition.profile) {
+    // Seeded once and then the persona's own: profile edits carry over between logins.
+    const { headline, bio, skills, goals } = definition.profile;
     statements.push(db.prepare(`INSERT INTO studentProfile (id,userId,handle,headline,bio,skills,opportunityGoals,contentVersion,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,1,?,?) ON CONFLICT(userId) DO NOTHING`)
-      .bind(`${userId}-profile`, userId, `sam-${userId.slice(-24)}`, "Backend builder", "Fictional SAM persona. I build payment and ledger tools for small groups.", JSON.stringify(["TypeScript", "SQL"]), "A backend developer role", now, now));
+      .bind(`${userId}-profile`, userId, `sam-persona-${persona}`, headline, bio, JSON.stringify(skills), goals, now, now));
+  }
+  if (definition.conduct) {
+    // An agreement never moves backwards, and keeps its date unless the version is newer (channels/conduct.ts).
+    statements.push(db.prepare(`INSERT INTO channel_conduct (userId,version,acknowledgedAt) VALUES (?,?,?)
+       ON CONFLICT(userId) DO UPDATE SET
+         acknowledgedAt = CASE WHEN excluded.version > version THEN excluded.acknowledgedAt ELSE acknowledgedAt END,
+         version = max(version, excluded.version)`).bind(userId, CONDUCT_VERSION, nowMs));
   }
   if (persona === "mentor") {
     statements.push(db.prepare(`INSERT INTO mentor_profile (userId,headline,bio,areas,formats,monthlyCapacity,paused,createdAt,updatedAt) VALUES (?,?,?,?,?,3,0,?,?) ON CONFLICT(userId) DO NOTHING`)

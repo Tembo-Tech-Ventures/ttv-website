@@ -14,6 +14,8 @@ declare namespace Cloudflare {
     /** SAM login (src/lib/sam-login/README.md): staging only, and only with both set. */
     SAM_LOGIN_PROJECT_ID?: string;
     SAM_LOGIN_USER_IDS?: string;
+    /** Test calls (src/lib/meetings/test-calls.ts): "on" opens them on staging; ignored everywhere else. */
+    MEETINGS_TEST_CALLS?: string;
     SAM_ALERT_WEBHOOK_URL?: string;
     SAM_ALERT_WEBHOOK_TOKEN?: string;
   }

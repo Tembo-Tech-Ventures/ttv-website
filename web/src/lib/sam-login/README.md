@@ -1,7 +1,7 @@
 # SAM login: agents sign in to staging as fictional personas
 
 A SAM agent proves who it is with SAM's OIDC token and gets a short-lived browser session on
-staging as one of eight fictional personas. It never needs a GitHub account, a shared password or
+staging as one of sixteen fictional personas. It never needs a GitHub account, a shared password or
 a long-lived secret, and it can never become a real person.
 
 Production never has it: the Worker variables that switch it on reach only the canonical staging
@@ -46,17 +46,30 @@ traces, which also contain the cookie.
 | `mentor` | An approved, listed mentor | Mentoring |
 | `institution` | An approved institution account | Discover |
 | `admin` | A staging admin | Cohort, with the Admin space |
+| `classmate1` … `classmate7` | Accepted into the current cohort; agreed to the code of conduct | Cohort |
+| `ta` | A TA in the current cohort, who hosts its sessions; agreed to the code of conduct | Cohort |
+
+**The call personas** (`classmate1` to `classmate7` and `ta`, in-app calls T1) are there to fill a
+call: Mwende Kilonzo, Onyango Okoth, Chepkoech Rotich, Nyambura Gitau, Wekesa Barasa, Akinyi Owino,
+Mutiso Ndambuki and Zawadi Njoroge, each with a saved profile whose bio starts "Fictional SAM
+persona". Their agreement to the channels' code of conduct is seeded, so a call or a post isn't held
+at it; the other personas agree in the app once, as anyone does. With `student`, `ta` and `admin`,
+ten personas read the current cohort's channel, so a cohort session can hold ten (`ta` and `admin`
+host it). Every signed-in person can join an event in a community channel, so the fifteen fixed
+personas fill a room of 15 (with `admin` or `mentor` hosting) and a `newcomer` is the one refused.
+Make the call with the test-call page (`docs/meetings-testing.md`).
 
 The cohorts are three fictional programs ("Cohort 90/91/92 (fictional)") whose dates are moved on
-each login so that past, current and next stay true. Every login puts the persona's roles and
-cohort status back to what the table says. Everything else it did in the app (posts, profile edits,
-onboarding, mentor requests) carries over to the next login, so start a `newcomer` for a clean slate.
+each login so that past, current and next stay true. Every login puts the persona's roles, cohort
+status and cohort roles (a TA, an instructor) back to what the table says. Everything else it did in
+the app (posts, profile edits, onboarding, mentor requests) carries over to the next login, so start
+a `newcomer` for a clean slate.
 Nothing resets a fixed persona's content: to undo what one posted or changed, sign in as `admin`
 and use the app's own moderation and admin pages, as you would for anyone.
 
 Everyone on staging sees the personas, as they would see real members: the open "Cohort 92
-(fictional)" on the homepage and the apply form, David Kamau in the mentor directory, and the
-personas' posts in community channels. The fictional cohort numbers also move channel
+(fictional)" on the homepage and the apply form, David Kamau in the mentor directory, the saved
+profiles in Members, and the personas' posts in community channels. The fictional cohort numbers also move channel
 auto-numbering on, so a later staging program with no number in its name gets `cohort-93` or above.
 
 ## Turning it on (owner)

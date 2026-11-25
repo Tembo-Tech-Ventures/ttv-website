@@ -20,11 +20,17 @@ describe("parseArguments", () => {
     expect(parseArguments(["mentor", "--ttl=30", "--out=/tmp/x"])).toEqual({ persona: "mentor", revoke: false, all: false, ttlMinutes: 30, outDir: "/tmp/x" });
   });
 
+  it("reads a numbered call persona", () => {
+    expect(parseArguments(["classmate7"]).persona).toBe("classmate7");
+  });
+
   it.each([
     [[], /one persona/],
     [["mentor", "admin"], /Unknown argument/],
     [["mentor", "--revoke"], /one persona/],
     [["../etc"], /Not a persona/],
+    [["7classmate"], /Not a persona/],
+    [["class-mate"], /Not a persona/],
     [["mentor", "--ttl=soon"], /whole number/],
     [["--force"], /Unknown argument/],
     [["mentor", "--all"], /goes with --revoke/],
