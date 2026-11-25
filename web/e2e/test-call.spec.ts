@@ -25,8 +25,9 @@ test("two people join a one-minute test call, and it ends on time for both", asy
 
   await openCall(host.page, id);
   await expect(host.page.locator("[data-call-join]")).toHaveText("Start session");
+  // Before the host presses Start: the server opens the room, and starts its minute, after this.
+  const beforeOpening = Date.now();
   await joinCall(host.page);
-  const opened = Date.now();
 
   await openCall(member.page, id);
   await joinCall(member.page);
@@ -36,6 +37,11 @@ test("two people join a one-minute test call, and it ends on time for both", asy
     await expect(page.getByRole("heading", { level: 1, name: `${title} has ended` })).toBeFocused({ timeout: 100_000 });
     await expect(page.getByText("It reached its 1-minute limit and ended.", { exact: false })).toBeVisible();
   }
-  // Never before its minute was up: the server ends it, not the page.
-  expect(Date.now() - opened).toBeGreaterThanOrEqual(60_000);
+  // Never before its minute was up: the server ends it, not the page, and says so.
+  expect(Date.now() - beforeOpening).toBeGreaterThanOrEqual(60_000);
+  const call = await host.context.request.get(`/api/meetings/${id}`);
+  expect(call.status()).toBe(200);
+  const { state, endReason, openedAt, endedAt, limitMinutes } = await call.json() as Record<string, unknown>;
+  expect({ state, endReason, limitMinutes }).toEqual({ state: "ENDED", endReason: "LIMIT", limitMinutes: 1 });
+  expect((endedAt as number) - (openedAt as number)).toBeGreaterThanOrEqual(60_000);
 });
