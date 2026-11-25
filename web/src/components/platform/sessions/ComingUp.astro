@@ -9,7 +9,8 @@ import { ButtonLink, Card, Chip, CONFIRM_PARAM, DataList, DataListItem, EmptySta
 import type { UpcomingSession } from "@/lib/meetings/sessions";
 import { lengthLabel } from "@/lib/meetings/session-times";
 import { MAX_PEOPLE_PER_CALL, SEATS_KEPT_FOR_HOST } from "@/lib/meetings/rules";
-import { sessionCalendarPath, sessionDatePath } from "@/lib/platform/server/space-routes";
+import { ROOM_OPENS_EARLY_MINUTES } from "@/lib/meetings/room-model";
+import { callPath, sessionCalendarPath, sessionDatePath } from "@/lib/platform/server/space-routes";
 import SessionTime from "./SessionTime.astro";
 
 interface Props {
@@ -24,6 +25,10 @@ const { sessions, now, hosts } = Astro.props;
 const severalCohorts = new Set(sessions.map(({ programId }) => programId)).size > 1;
 const hostsAny = hosts || sessions.some(({ access }) => access.canHost);
 const places = `Up to ${MAX_PEOPLE_PER_CALL} people can join a session, with ${SEATS_KEPT_FOR_HOST === 1 ? "one place" : `${SEATS_KEPT_FOR_HOST} places`} kept for a host.`;
+// The call opens from ROOM_OPENS_EARLY_MINUTES before its start (in-app calls P5): a host starts it, everyone else
+// joins, or waits on its page for a host. Each opens in its own tab, so the call outlives this page.
+const opensBy = now + ROOM_OPENS_EARLY_MINUTES * 60_000;
+const callOpen = ({ state, scheduledStartAt }: UpcomingSession) => state === "LIVE" || opensBy >= scheduledStartAt;
 const channels = [...new Set(sessions.filter(({ access }) => access.canHost).map(({ channel }) => `#${channel.slug}`))];
 ---
 
@@ -50,6 +55,12 @@ const channels = [...new Set(sessions.filter(({ access }) => access.canHost).map
               {severalCohorts ? ` · ${session.cohortName}` : ""}
             </Fragment>
             <Fragment slot="actions">
+              {callOpen(session) ? (
+                <ButtonLink variant="quiet" size="sm" href={callPath(session.id)} target="_blank" rel="noopener" data-call-link>
+                  {session.access.canHost && session.state === "SCHEDULED" ? "Start session" : "Join session"}
+                  <span class="sr-only">{`: ${session.title} (opens in a new tab)`}</span>
+                </ButtonLink>
+              ) : null}
               <ButtonLink variant="quiet" size="sm" href={sessionCalendarPath(session.id)} download data-add-to-calendar>
                 Add to calendar
               </ButtonLink>

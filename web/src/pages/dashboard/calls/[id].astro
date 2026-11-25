@@ -1,0 +1,32 @@
+---
+/**
+ * A call (in-app calls P5; src/lib/meetings/README.md, "The room"): the page before joining, the call
+ * itself and the pages after it, all in the CallRoom island so the call keeps its media between them.
+ * It takes the whole screen in the space's tone, as the post editor does, and sits outside the space
+ * router, so resolveCallRoom checks the `meetings` flag and the caller's access itself: everyone else
+ * gets the same 404 as every meeting route. Calls need a browser's camera and microphone, so without
+ * JavaScript the page says what the call is and that it needs a script to join.
+ */
+import { env } from "cloudflare:workers";
+import CallRoom from "@/components/calls/CallRoom";
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
+import { Notice } from "@/components/platform/ui";
+import { resolveCallRoom } from "@/lib/meetings/room";
+
+const room = await resolveCallRoom(Astro, env);
+if (room instanceof Response) return room;
+// The page names who is in the call: never cached anywhere.
+Astro.response.headers.set("Cache-Control", "private, no-store");
+const space = room.meeting.purpose === "SESSION" ? "cohort" : "community";
+---
+
+<ImmersiveLayout title={`${room.meeting.title} | TTV`} space={space}>
+  <CallRoom client:load {...room} />
+  <noscript>
+    <div class="mx-auto w-full max-w-3xl px-4 pb-6 sm:px-6">
+      <Notice tone="warning" title="Calls need JavaScript">
+        Turn JavaScript on in your browser to use your camera and microphone and join.
+      </Notice>
+    </div>
+  </noscript>
+</ImmersiveLayout>

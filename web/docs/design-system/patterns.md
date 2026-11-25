@@ -40,8 +40,9 @@ first visit, are Maven h2s as on any page. (Decision D3, 2026-11-08;
 ## The immersive editor
 
 Writing a post gives the whole screen to the post (`/dashboard/me/writing/new`,
-`/dashboard/me/writing/[id]`). It is the one signed-in page outside the spaces
-frame, and it keeps these rules instead (decision D4, 2026-11-08):
+`/dashboard/me/writing/[id]`). With the call room (below), it is one of two
+signed-in pages outside the spaces frame, and it keeps these rules instead
+(decision D4, 2026-11-08):
 
 - `ImmersiveLayout` with `space="profile"`: no tabs or sidebar, but the
   viewport in the Profile sheet's tone, so the author is still in their space.
@@ -57,6 +58,26 @@ frame, and it keeps these rules instead (decision D4, 2026-11-08):
   built from kit fields, never a modal that hides the post.
 - Without JavaScript, a plain kit form replaces the canvas, with the same
   actions and a `ConfirmStep` before a draft is deleted.
+
+## The call room
+
+A call takes the whole screen too (`/dashboard/calls/[id]`, in-app calls), in
+`ImmersiveLayout` with its space's tone, as one island: the page before joining,
+the call, and the pages after it.
+
+- Before joining: the call's name as the Mattone h1, what is recorded in a
+  `Notice` before Join, and Join as the one primary, with why it is off written
+  beside it (`aria-describedby`). On a phone, Join and the notice come first and
+  the device choices fold into a `Disclosure`.
+- In the call: a visually hidden h1 (the call's name), then a "Skip to call
+  controls" link, the top bar, the stage, the controls and one side panel, in
+  that reading order. The controls are one `toolbar` of kit `Button`s (the
+  arrows move in it), each toggle named by what it will do; on a phone their
+  words are read but not shown, and the panel covers the stage. A question is a
+  `Dialog`; every change is said through the island's `LiveAnnouncer`; when the
+  call ends is a `Countdown`. No primary in the room: leaving is `danger`.
+- After it (ended, removed, full, left): a page whose h1 takes focus, and one
+  next step.
 
 ## Forms
 

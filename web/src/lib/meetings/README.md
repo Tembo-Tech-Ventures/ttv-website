@@ -5,10 +5,11 @@ events. The plan is in the SAM Library (`/plans/in-app-calls-2026-11-23/`: ARCHI
 UX-REVIEW); it is built one slice at a time, every slice dark behind the flags below.
 
 What exists so far is the foundation: the tables, the flags (OFF), the values in the contracts and
-the recording policy's channel rule (slice P3a, migration 0043); and who may join, the provider
-interface with a fake, the seats, the state machine and the API routes (slice P3b). Nothing a person
-sees has changed outside the scheduling pages below: no page uses the routes yet (the room is slice
-P5), and every route is 404 while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice P4.
+the recording policy's channel rule (slice P3a, migration 0043); who may join, the provider interface
+with a fake, the seats, the state machine and the API routes (slice P3b); scheduling cohort sessions
+(slice P8); and the call room on the fake provider (slice P5, below). Every page and route is 404
+while `meetings` is off. The real provider, RealtimeKit, and the every-minute clock arrive in slice
+P4; its browser client in P6.
 
 ## Scheduling cohort sessions (slice P8)
 
@@ -48,6 +49,67 @@ see) the session, whatever the reason.
 - **The calendar file** (`ics.ts`, RFC 5545): UTC times, so no VTIMEZONE; the call's id as its UID
   and a SEQUENCE that rises with each change, so adding a moved date again replaces the old entry.
   There are no email reminders.
+
+## The room (slice P5)
+
+`/dashboard/calls/:id` (`callPath`) is one call: the page before joining, the call, and the pages
+after it, all in the `CallRoom` island (`components/calls/`) so the call keeps its media between
+them. It takes the whole screen in the space's tone (`ImmersiveLayout`, as the post editor does), sits
+outside the space router, and checks its own flag and access (`room.ts`, `resolveCallRoom`): anyone
+the call isn't for gets the same 404. Its server read is one round trip beside the flags (the
+channel, cohort, card, recording, hosts and the caller's conduct), then the call as the API reads it:
+6 queries, 2 deep. "Coming up" on Sessions links to it, in its own tab, from
+`ROOM_OPENS_EARLY_MINUTES` before a session starts.
+
+**The boundary.** The island talks to the provider only through `RoomClient` (`room-client.ts`):
+join with the join route's token and the person's media choices, leave (which releases every track
+and subscription), microphone, camera, screen share, a host's mute and stop-share, a state stream
+(the connection, everyone in the call with their tracks, the recording) and notices (muted or
+stopped by a host, removed, ended, joined from another tab). `loadRoomClient(kind)` imports the
+client for the token's provider when someone presses Join, so no SDK is in the island's chunk.
+Removing someone and ending the call are TTV routes, never provider calls from a browser, and a
+participant is known by their TTV user id; the page tells the island who hosts the call.
+
+- `FakeRoomClient` (`fake-room-client.ts`) serves wherever the server's provider is the fake (local
+  runs, tests, previews): the person's own camera, microphone and screen are real browser tracks, and
+  who else is in the call comes from TTV's seats (`GET /api/meetings/:id/presence`, `fake-presence.ts`,
+  which exists only on the fake provider and only for someone with a seat in the live call). Other
+  people's media can't travel without a media server, so they show with no video. Its `simulate*`
+  methods (and `window.__ttvFakeRoom`) drive what only a provider causes: a dropped connection, a
+  failed recording, a host muting you.
+- The RealtimeKit client is slice P6: it implements `RoomClient` with the Core SDK; its participants'
+  custom ids must be TTV user ids (P4's `addParticipant`). Until then a `realtimekit` token can't
+  connect, and the room gives the seat back and says so.
+
+**Before joining** (`PreJoin.tsx`): the call's name, what is recorded (`recordingNotice`, before
+Join, with "since 18:04 EAT" for someone late), Join (`Start session` for a host, held until
+`ROOM_OPENS_EARLY_MINUTES` before the booked start; off for a member until a host opens it, the page
+asking every `WAITING_POLL_MS` and saying when it opens), joining with the microphone or camera off,
+or audio only for low data, and a device check with the browser's own camera and microphone
+(`devices.ts`): a preview, a level, the device choices and a test sound, and for a blocked, missing
+or busy device what happened and a way to join without it. A browser that can't make calls says so.
+
+**In the call** (`Room.tsx`, `room-hooks.ts`): a shared screen first, with everyone in a strip under
+it; otherwise everyone's tiles. One side panel, People (a host mutes, stops a share or removes a
+member, after a `Dialog`) or Chat (a link to the call's thread, in a new tab); on a phone it covers
+the stage. The controls are one toolbar (arrows, Home, End), each toggle named by what it will do,
+and fixed at the bottom; on a phone their words are read but not shown. A phone that can't share a
+screen says so when Share is pressed. A host's way out is a `Dialog`: End for everyone, Just leave
+(only while another host is in) or Keep going. The room asks the server about the call every
+`ROOM_POLL_MS` (its end, the caller's seat, the clock's offset); leaving the page asks first, and
+gives the seat back if the person goes. Nothing in the browser ends a call: the server does.
+
+**What is said** (the island's `LiveAnnouncer`, UX-REVIEW §5): the recording starting (to the host
+who opened the room), stopping or failing, at once; a lost connection at once and its return
+politely; people joining and leaving, gathered, politely, unless turned off in People; a host muting
+you or stopping your share, at once; no host (at once, then at 1 minute, with a countdown);
+the call's own 15-minute and 1-minute warnings (`Countdown`); and each page after a call (ended, with
+why and where the recording will be; removed; full, with Try again; left; joined elsewhere), whose h1
+takes focus.
+
+**Not here yet:** recording consent and Stop recording for calls between two people (P11); the
+session card, "live" in Attention and a follow-on session (P9); a knock to let late joiners in, which
+UX-REVIEW §3 dropped (everyone who can reach the room may join).
 
 ## The rules (`rules.ts`)
 
@@ -225,6 +287,7 @@ one.
 | `POST /api/meetings/:id/leave` | anyone with a seat | releases it; idempotent |
 | `POST /api/meetings/:id/remove` | a host | removes a member (`{ userId }`), who can't rejoin; idempotent |
 | `POST /api/meetings/:id/end` | a host | ends a live call for everyone, or cancels a scheduled one; idempotent |
+| `GET /api/meetings/:id/presence` | someone with a seat in the live call | who holds a seat, for the fake room client only; 404 on any other provider (not a contract route) |
 
 Every answer is `Cache-Control: no-store`, the join's token above all. Every refusal is the same
 404 with the same body: `meetings` (or the purpose's own flag) off for the caller, no session, a

@@ -66,6 +66,9 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   // from "Coming up", so it is skipped where nothing is scheduled.
   { path: "/dashboard/cohort/sessions/schedule", persona: "staff" },
   { path: "/dashboard/cohort/sessions/upcoming/[id]", persona: "staff", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/cohort/sessions/upcoming") } },
+  // The call room (in-app calls P5, flag `meetings`): the page before joining, reached from "Coming up" while a
+  // session is live or about to start, so it is skipped where none is. e2e/call-room.spec.ts checks the room itself.
+  { path: "/dashboard/calls/[id]", persona: "staff", detail: { from: "/dashboard/cohort/sessions", link: ID("/dashboard/calls") } },
   { path: "/dashboard/cohort/ask", persona: "student", namedH1: true },
   { path: "/dashboard/cohort/apply", persona: "community" },
   { path: "/dashboard/cohort/application/[id]", persona: "applicant", detail: { from: "/dashboard/cohort", link: /^\/dashboard\/(?:cohort\/)?application\/[^/]+$/ } },

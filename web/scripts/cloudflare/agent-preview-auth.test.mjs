@@ -4,6 +4,7 @@ import {
   AGENT_PREVIEW_SESSION_MARKER,
   AGENT_PREVIEW_PERSONAS,
   AGENT_PREVIEW_USER_ID,
+  PREVIEW_CONDUCT_VERSION,
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
   deriveAgentPreviewPersonaToken,
@@ -368,6 +369,21 @@ describe("seedAgentPreviewFixtures", () => {
       if (/^(DELETE|UPDATE)\b/.test(call[1].trimStart())) continue;
       expect(call[1]).toContain("ON CONFLICT");
     }
+  });
+
+  it("has the call room's two preview people agree to the current code of conduct, only on an agent preview", async () => {
+    const { CONDUCT_VERSION } = await import("../../src/lib/channels/conduct.ts");
+    expect(PREVIEW_CONDUCT_VERSION).toBe(CONDUCT_VERSION);
+    const conductCalls = async (options) => {
+      const executeQuery = vi.fn().mockResolvedValue([]);
+      await seedAgentPreviewFixtures({ databaseId: "db-fixture-test", executeQuery, now: new Date("2026-07-14T12:00:00.000Z"), ...options });
+      return executeQuery.mock.calls.filter((call) => call[1].includes('INSERT INTO "channel_conduct"'));
+    };
+    expect(await conductCalls({})).toEqual([]);
+    const [call, ...more] = await conductCalls({ environmentName: "agent-pr-55", previewSecret: "p".repeat(32), runId: "github-123-1" });
+    expect(more).toEqual([]);
+    expect(call[1]).toContain('ON CONFLICT("userId") DO UPDATE SET "version" = max("version", excluded."version")');
+    expect(call[2]).toEqual([CONDUCT_VERSION, Date.parse("2026-07-14T12:00:00.000Z"), AGENT_PREVIEW_USER_ID, AGENT_PREVIEW_PERSONAS.acceptedStudent.userId]);
   });
 
   it("seeds expiring bearer sessions for journey personas when configured", async () => {

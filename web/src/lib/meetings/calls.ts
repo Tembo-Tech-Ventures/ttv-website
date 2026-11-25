@@ -6,11 +6,13 @@ import type { ChannelAccessTarget, PlatformCapabilities } from "@/lib/platform/s
 import type { Flags } from "@/lib/platform/server/flags";
 import { meetingAccessFor, type MeetingAccess } from "./access";
 import { advanceMeeting, cancelMeeting, endMeeting, openMeeting, type CallContext } from "./clock";
+import { presenceRecording, type FakePresence } from "./fake-presence";
 import { CallProviderError } from "./provider";
 import { abandonClaim, attachParticipant, claimSeat, revokeParticipants, vacateSeat } from "./seats";
 import {
   CALL_LIMIT_MINUTES, CHECKIN_LIMIT_MINUTES,
-  type MeetingEndReason, type MeetingPurpose, type MeetingRecordingPolicy, type MeetingSeatRole, type MeetingSeatState, type MeetingState,
+  type MeetingEndReason, type MeetingPurpose, type MeetingRecordingPolicy, type MeetingRecordingState, type MeetingSeatRole,
+  type MeetingSeatState, type MeetingState,
 } from "./rules";
 
 /**
@@ -230,4 +232,31 @@ export async function endMeetingAsHost(ctx: CallContext, caller: Caller, meeting
   if (target.state === "SCHEDULED") await cancelMeeting(ctx, meetingId);
   if (target.state === "LIVE") await endMeeting(ctx, meetingId, "HOST_ENDED");
   return view(await visible(ctx, caller, meetingId), ctx.now);
+}
+
+/**
+ * Who holds a seat in a call, for the fake room client only (fake-presence.ts): where calls run on
+ * any other provider, and for anyone without a seat in a live call, it is the same 404; a call that is
+ * over says only that. A real provider tells its own client who is in the room.
+ */
+export async function meetingPresence(ctx: CallContext, caller: Caller, meetingId: string): Promise<FakePresence> {
+  if (ctx.provider?.kind !== "fake") throw notFound();
+  const { target } = await current(ctx, caller, meetingId);
+  // Who is in a live call is for the people in it. That a call is over, anyone who sees it may read (its seats are gone by then).
+  if (target.state !== "LIVE") {
+    return { state: target.state, you: target.seatState, recording: "off", people: [] };
+  }
+  if (!target.seatState) throw notFound();
+  const [people, recordings] = await ctx.db.batch<Record<string, unknown>>([
+    ctx.db.prepare(`SELECT s.userId, coalesce(u.name, '') AS name FROM meeting_seat s JOIN "user" u ON u.id = s.userId
+      WHERE s.meetingId = ?1 AND s.state = 'HELD' ORDER BY s.createdAt, s.userId`).bind(meetingId),
+    ctx.db.prepare("SELECT state FROM meeting_recording WHERE meetingId = ?1").bind(meetingId),
+  ]);
+  const recording = (recordings.results[0]?.state ?? null) as MeetingRecordingState | null;
+  return {
+    state: target.state,
+    you: target.seatState,
+    recording: presenceRecording(target.recordingPolicy, target.state, recording),
+    people: people.results.map(({ userId, name }) => ({ userId: String(userId), name: String(name) })),
+  };
 }

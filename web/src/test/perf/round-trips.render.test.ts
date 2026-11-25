@@ -92,6 +92,9 @@ const PAGES = {
   "cohort sessions, a host": { path: () => "/dashboard/cohort/sessions", page: () => import("@/pages/dashboard/sessions/index.astro"), user: ADMIN },
   "schedule a session": { path: () => "/dashboard/cohort/sessions/schedule", page: () => import("@/pages/dashboard/cohort/sessions/schedule.astro"), user: ADMIN },
   "edit a session": { path: () => "/dashboard/cohort/sessions/upcoming/session", page: () => import("@/pages/dashboard/cohort/sessions/upcoming/[id].astro"), user: ADMIN, id: "session" },
+  // The call room (in-app calls P5): outside the spaces, so no frame; its own page in the space's tone.
+  "call room": { path: () => "/dashboard/calls/session", page: () => import("@/pages/dashboard/calls/[id].astro"), user: STUDENT, id: "session", immersive: true },
+  "call room, a host": { path: () => "/dashboard/calls/session", page: () => import("@/pages/dashboard/calls/[id].astro"), user: ADMIN, id: "session", immersive: true },
   "session viewer": { path: () => "/dashboard/cohort/sessions/recording", page: () => import("@/pages/dashboard/sessions/[id].astro"), user: STUDENT, id: "recording" },
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
@@ -218,6 +221,10 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "schedule a session": { d1: 12, depth: 3 },
   // The session with its channel and cohort, one read once the space context says `meetings` is on.
   "edit a session": { d1: 12, depth: 3 },
+  // The flags, the caller's capabilities and the call's facts (its channel, cohort, card, recording, hosts and
+  // the caller's conduct) together; then the call as the meetings API reads it (a live call also asks the clock).
+  "call room": { d1: 6, depth: 2 },
+  "call room, a host": { d1: 6, depth: 2 },
   // The recording and its transcript are one read, started beside the space context; the access check
   // reuses the request's capabilities. The same before the style-guide rollout, where the router's own
   // reads already set the floor.
@@ -353,7 +360,8 @@ describe("D1 round trips per page (PERF-2)", () => {
       for (const query of summary.queries ?? []) console.log(`  ${query.depth} ${query.phase} ${query.sql.slice(0, 120)}`);
     }
     expect({ status, start: status === 200 ? "" : body.slice(0, 300) }).toEqual({ status: 200, start: "" });
-    expect(body).toContain("data-space");
+    // A page outside the spaces draws its own frame instead of the spaces shell.
+    expect(body).toContain("immersive" in PAGES[name] ? "data-call-prejoin" : "data-space");
     // No read twice: the same statement in one request would be a duplicate round trip (PERF-2 step 6).
     const statements = (summary.queries ?? []).map((query) => query.statement);
     expect(statements.filter((sql, index) => statements.indexOf(sql) !== index)).toEqual([]);

@@ -10,6 +10,12 @@ const PREVIEW_PERSONA_TOKEN_CONTEXT = "ttv-agent-preview-persona-token";
 export const AGENT_PREVIEW_USER_ID = "ttv-agent-preview-user";
 export const AGENT_PREVIEW_SESSION_ID = "ttv-agent-preview-session";
 export const AGENT_PREVIEW_SESSION_MARKER = "ttv-agent:isolated-preview";
+/**
+ * The channels' code of conduct version (CONDUCT_VERSION in src/lib/channels/conduct.ts; a test keeps
+ * them equal) the preview's call room people have agreed to.
+ */
+export const PREVIEW_CONDUCT_VERSION = 1;
+
 export const AGENT_PREVIEW_PERSONAS = {
   newStudent: {
     userId: "ttv-fixture-user-journey-new",
@@ -595,6 +601,20 @@ export async function seedAgentPreviewFixtures({
     if (environmentName && previewSecret) {
       await upsertPersonaSession(fixture);
     }
+  }
+
+  // The call room's browser checks (e2e/call-room.spec.ts, in-app calls P5) join one cohort session
+  // as its host (the preview agent, an admin) and a member (the accepted student). Taking a seat needs
+  // the channels' code of conduct, and both sessions are an agent's, which may read the habits but
+  // never agree for a person: so these two fictional people have agreed here, at the current version.
+  if (environmentName && previewSecret) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "channel_conduct" ("userId", "version", "acknowledgedAt")
+       SELECT "id", ?, ? FROM "user" WHERE "id" IN (?, ?)
+       ON CONFLICT("userId") DO UPDATE SET "version" = max("version", excluded."version")`,
+      [PREVIEW_CONDUCT_VERSION, createdAt * 1_000, AGENT_PREVIEW_USER_ID, AGENT_PREVIEW_PERSONAS.acceptedStudent.userId]
+    );
   }
 
   // Global-role personas for the spaces suites. Each holds exactly one global

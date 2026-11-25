@@ -114,6 +114,14 @@ export function sessionDateRoute(pathname: string): { id: string; calendar: bool
 export const sessionDatePath = (id: string) => `${UPCOMING_SESSIONS_PATH}/${encodeURIComponent(id)}`;
 export const sessionCalendarPath = (id: string) => `${sessionDatePath(id)}/calendar.ics`;
 
+/**
+ * The call room (in-app calls P5): the pre-join page and the call itself, for any call. Outside the
+ * spaces, like the post editor (it takes the whole screen), so the router passes it through and the
+ * page checks its own flag and access.
+ */
+export const CALLS_PATH = "/dashboard/calls";
+export const callPath = (id: string) => `${CALLS_PATH}/${encodeURIComponent(id)}`;
+
 export function isSessionPlanPath(pathname: string): boolean {
   return normalizeSpacePath(pathname) === SESSION_SCHEDULE_PATH || sessionDateRoute(pathname) !== null;
 }
