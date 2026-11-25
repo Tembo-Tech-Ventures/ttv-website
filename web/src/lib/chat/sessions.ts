@@ -92,6 +92,25 @@ export interface ChatExchange {
 }
 
 /**
+ * A follow-up answer in an existing conversation. Tembo was given the earlier answers as history, so
+ * this one may restate any of them without a tool reading anything: it is saved carrying a read trace
+ * (stored-sources.ts) of every recording an earlier answer in the conversation named, read in the same
+ * statement, so hiding one of those recordings withholds this answer too. Its own citations come
+ * first, in their order. ?1 id, ?2 conversation, ?3 owner, ?4 answer, ?5 its citations (JSON).
+ */
+const insertFollowUp = (db: D1Database) => db.prepare(
+  `INSERT INTO "chat_message" ("id", "sessionId", "userId", "role", "content", "citations")
+   SELECT ?1, ?2, ?3, 'assistant', ?4, (SELECT json_group_array(json(entry)) FROM (
+       SELECT 0 AS part, CAST(own.key AS INTEGER) AS position, own.value AS entry FROM json_each(?5) own
+       UNION ALL SELECT 1, 0, json_object('type', 'read', 'recordingId', earlier.recordingId) FROM (
+         SELECT DISTINCT json_extract(named.value, '$.recordingId') AS recordingId
+         FROM "chat_message" previous, json_each(CASE WHEN json_valid(previous."citations") THEN previous."citations" ELSE '[]' END) named
+         WHERE previous."sessionId" = ?2 AND previous."userId" = ?3 AND previous."role" = 'assistant'
+           AND json_type(named.value, '$.recordingId') = 'text') earlier
+       ORDER BY part, position))`
+);
+
+/**
  * Saves one answered question in a single D1 batch (one transaction), so a new
  * conversation never exists without its messages and a request that fails
  * before this point leaves nothing behind. Saving a new conversation also
@@ -112,14 +131,9 @@ export async function saveChatExchange(
   );
   const messages = [
     insertMessage.bind(createId(), target.id, userId, "user", exchange.question, null),
-    insertMessage.bind(
-      createId(),
-      target.id,
-      userId,
-      "assistant",
-      exchange.answer,
-      JSON.stringify(exchange.citations)
-    ),
+    target.kind === "existing"
+      ? insertFollowUp(db).bind(createId(), target.id, userId, exchange.answer, JSON.stringify(exchange.citations))
+      : insertMessage.bind(createId(), target.id, userId, "assistant", exchange.answer, JSON.stringify(exchange.citations)),
   ];
 
   if (target.kind === "existing") {

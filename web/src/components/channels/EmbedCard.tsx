@@ -185,7 +185,7 @@ export function sessionCardLine(card: MeetingCardView): string {
     case "notRecorded": return card.notRecordedReason === "limit" ? "This session wasn't recorded: TTV had reached its recording limit for the month."
       : card.notRecordedReason === "short" ? "This session wasn't recorded: it was too short to keep." : "This session wasn't recorded.";
     case "failed": return "The recording failed, so there's nothing to watch. Ask your instructor if you need this session.";
-    case "ended": return "This session has ended. Its recording isn't available.";
+    case "ended": return "This session has ended. Its recording isn't available to the cohort.";
     case "cancelled": return "This session was cancelled.";
   }
 }

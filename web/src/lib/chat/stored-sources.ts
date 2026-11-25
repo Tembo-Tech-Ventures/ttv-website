@@ -9,8 +9,10 @@ import type { TranscriptSource } from "./tools";
  *
  * What an answer drew on is in `chat_message.citations`, a JSON array: the citations the reader sees
  * (one per transcript range, from search_transcripts), then one trace entry `{ type: "read",
- * recordingId }` for every recording whose transcript a tool read (search_transcripts or
- * get_recording_details), cited or not. Trace entries are only for this check and never leave the
+ * recordingId }` for every recording a tool returned anything of (search_transcripts' sources, and
+ * what list_recordings and get_recording_details named), cited or not; a follow-up answer also
+ * carries a trace of every recording an earlier answer in its conversation named, since Tembo had
+ * those answers as history (sessions.ts). Trace entries are only for this check and never leave the
  * server. Answers saved before the traces existed carry only their citations, so a transcript such an
  * answer read through get_recording_details without citing it can't be traced.
  */

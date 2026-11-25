@@ -96,20 +96,23 @@ statement that reads it, so hiding, deleting or moving a recording takes its wor
 - **Ask Tembo's conversation history** (`lib/chat/stored-sources.ts`), for the conversation's owner
   as they are now (`capabilitiesFor`): `chat_message.citations` holds the citations shown (each
   source's title and up to 240 characters of transcript), then a trace entry
-  `{ type: "read", recordingId }` for every recording whose transcript a tool read for that answer
-  (`search_transcripts`' sources and `get_recording_details`, cited or not). An answer that drew on
-  a recording the owner may no longer read, or whose transcript is no longer complete, is replaced
-  by one neutral line, and that recording's citations are dropped; trace entries never leave the
-  server. `getChatMessages` checks each message and `listChatSessions` each preview, inside their
-  own statements. Titles that `list_recordings` named are not traced: they are not transcript text.
+  `{ type: "read", recordingId }` for every recording a tool returned anything of for that answer
+  (`search_transcripts`' sources, and what `list_recordings` and `get_recording_details` named,
+  cited or not). A follow-up in an existing conversation also carries a trace of every recording an
+  earlier answer there named, written in the same statement (`sessions.ts`), because Tembo had those
+  answers as history and may restate them without a tool. An answer that drew on a recording the
+  owner may no longer read, or whose transcript isn't complete, is replaced by one neutral line, and
+  that recording's citations are dropped; trace entries never leave the server. `getChatMessages`
+  checks each message and `listChatSessions` each preview, inside their own statements.
 - **Tembo's answers in channels** (`lib/channels/messages.ts`, `sessionsGoneSql`): Tembo read a
   cohort's sessions as the whole cohort, and every reader of the channel sees its answer, so an
   answer is checked as `cohortAudienceSql` for the channel's program, with a complete transcript,
   as clips are. While any `sessionClip` citation fails, every reader (hosts and admins too) gets
   `TEMBO_SESSION_GONE` instead of the body, and that citation is dropped. Message search
   (`lib/search/messages.ts`) leaves such an answer out, so its words don't come back as an excerpt.
-  Whoever hides, restores or deletes a recording calls `touchAnswersCiting` (`lib/channels/
-  mutations.ts`) after the change, so open channels pick the change up on their next poll.
+  Whoever hides, restores or deletes a recording calls `touchMessagesShowing` (`lib/channels/
+  mutations.ts`) after the change, which moves those answers and every message sharing a clip of it,
+  so open channels pick the change up on their next poll.
 
 Known limits: an answer saved before the traces existed carries only its citations, so a transcript
 it read through `get_recording_details` without citing it can't be traced; and Ask Tembo's

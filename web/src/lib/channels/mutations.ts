@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  CallEmbed, MessageEmbed, type Channel, type EditMessage, type MeetingEmbed, type Message, type MessageEmbed as StoredEmbed,
+  CallEmbed, MeetingEmbed, MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed,
   type MessageReactions, type PostMessage, type ReactToMessage,
 } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
@@ -121,8 +121,19 @@ function storedRefs(text: string) {
   return embeds.success ? embeds.data.map(refOf) : null;
 }
 
-/** Whether a stored message carries a call's card (lib/meetings/cards.ts). */
-export const carriesCallCard = (text: string) => storedList(text)?.some((value) => CallEmbed.safeParse(value).success) ?? false;
+/** Whether a stored message carries a meeting's card (lib/meetings/cards.ts). */
+const carriesMeetingCard = (text: string) => storedList(text)?.some((value) => MeetingEmbed.safeParse(value).success) ?? false;
+
+/**
+ * Whether this message is a session's card, the message `meeting.messageId` names: its thread is the
+ * session's chat and the card is how the channel finds the session and its recording, so its author
+ * can neither delete it nor change its words (UX review, screen 04). Read only for a message that
+ * carries a meeting card at all.
+ */
+async function isSessionCard(ctx: ReadContext, target: MessageTarget): Promise<boolean> {
+  if (!carriesMeetingCard(target.embeds)) return false;
+  return await ctx.db.prepare("SELECT 1 FROM meeting WHERE messageId = ?1").bind(target.id).first() !== null;
+}
 
 /**
  * The message this author already sent with this nonce, when the request repeats it: same channel,
@@ -311,6 +322,9 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
   }
   if (!ctx.channel.capabilities.canPost) throw cannotPost();
   if (input.body === target.body) return loaded(ctx, target.id);
+  if (await isSessionCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a session's card, so its words stay as they are.", 409);
+  }
 
   const now = ctx.now ?? Date.now();
   const { findings, textKey } = await screen(ctx, input.body, target.parentId, "edit");
@@ -343,13 +357,12 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
  * DELETE /api/messages/:id: the author removes their message from a channel they can still read,
  * even one they can no longer post in. It keeps its place as an empty placeholder, so its replies
  * stay in their thread, and loses its reactions. Deleting again returns the same placeholder. A
- * message carrying a call's card is never deleted (409): its thread is the call's chat, and the card
- * is how the channel finds the call and its recording (UX review, screen 04). Its words can be edited.
+ * session's card is never deleted (409, isSessionCard).
  */
 export async function deleteMessage(ctx: WriteContext, target: MessageTarget): Promise<Message> {
   requireAuthor(ctx, target, "delete");
-  if (target.deletedAt === null && carriesCallCard(target.embeds)) {
-    throw new ChannelError("conflict", "This message holds a session's card, so it can't be deleted. You can edit its words.", 409);
+  if (target.deletedAt === null && await isSessionCard(ctx, target)) {
+    throw new ChannelError("conflict", "This message holds a session's card, so it can't be deleted.", 409);
   }
   if (target.deletedAt === null) {
     const now = ctx.now ?? Date.now();
@@ -429,16 +442,21 @@ export function visibleTo(target: MessageTarget, userId: string, channel: Pick<C
 }
 
 /**
- * Moves every Tembo answer that cites recording `recordingId` on for pollers, so an open channel
- * learns at once that the answer is withheld, or shown again, when the recording is hidden, restored
- * or deleted (messages.ts TEMBO_SESSION_GONE). Whoever changes a recording's audience calls it after
- * that change. One read of Tembo's answers, then one touch per answer in one batch; returns how many.
+ * Moves every message that shows recording `recordingId` on for pollers: Tembo's answers that cite it
+ * (withheld while it is gone, messages.ts TEMBO_SESSION_GONE) and people's messages that share a clip
+ * of it (an "unavailable" card while it is gone, embeds.ts). So an open channel learns at once when
+ * the recording is hidden, restored or deleted. Whoever changes a recording's audience calls it after
+ * that change. One read, then one touch per message in one batch; returns how many it moved.
+ *
+ * The read scans every live message's citations and embeds with json_each (nothing indexes a JSON
+ * field): fine for an action as rare as hiding a recording, not for a hot path.
  */
-export async function touchAnswersCiting(db: D1Database, recordingId: string): Promise<number> {
+export async function touchMessagesShowing(db: D1Database, recordingId: string): Promise<number> {
   const { results } = await db.prepare(`SELECT DISTINCT m.id, m.channelId FROM channel_message m
-    CROSS JOIN json_each(CASE WHEN json_valid(m.citations) THEN m.citations ELSE '[]' END) cite
-    WHERE m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
-      AND json_extract(cite.value, '$.type') = 'sessionClip' AND json_extract(cite.value, '$.recordingId') = ?1`)
+    CROSS JOIN json_each(CASE WHEN m.authorKind = 'TEMBO' AND json_valid(m.citations) THEN m.citations
+      WHEN m.authorKind = 'USER' AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) shown
+    WHERE m.deletedAt IS NULL
+      AND json_extract(shown.value, '$.type') = 'sessionClip' AND json_extract(shown.value, '$.recordingId') = ?1`)
     .bind(recordingId).all<{ id: string; channelId: string }>();
   if (results.length > 0) await db.batch(results.map(({ id, channelId }) => db.prepare(touch("?2")).bind(channelId, id)));
   return results.length;

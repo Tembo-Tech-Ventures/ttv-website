@@ -62,6 +62,16 @@ describe("chat tool access boundaries", () => {
       expect(captured).toEqual([]);
     });
 
+    it("traces every recording it lists, so an answer naming one is checked again later", async () => {
+      const { db } = createSelectDatabase([
+        { id: "rec-1", title: "Webhooks", durationSeconds: 60, recordedAt: null, programId: "program-a" },
+        { id: "rec-2", title: "Retries", durationSeconds: 60, recordedAt: null, programId: "program-a" },
+      ]);
+      const read = new Set<string>();
+      await executeTool("list_recordings", {}, createContext({ db, capabilities: caps({ cohortIds: ["program-a"] }), read }));
+      expect(read).toEqual(new Set(["rec-1", "rec-2"]));
+    });
+
     it("constrains the query to the user's cohorts' recordings, complete ones only", async () => {
       const { db, captured } = createSelectDatabase([]);
       const ctx = createContext({ db, capabilities: caps({ cohortIds: ["program-a"] }) });
@@ -117,15 +127,16 @@ describe("chat tool access boundaries", () => {
       expect(await details(cohortRecording({ processingStatus: "transcribing" }))).toMatchObject({ id: "rec-1", transcript: null });
     });
 
-    it("traces a recording whose transcript it returned, so the saved answer can be checked again later", async () => {
+    it("traces every recording it returned anything of, so the saved answer can be checked again later", async () => {
       const read = new Set<string>();
       const capabilities = caps({ cohortIds: ["program-a"] });
       const run = (recording: unknown) => executeTool("get_recording_details", { recording_id: "rec-1" },
         createContext({ db: createRecordingDatabase(recording), capabilities, read }));
-      await run(cohortRecording({ processingStatus: "transcribing" }));
+      // Refused: nothing was returned, so nothing is traced.
       await run(cohortRecording({ programId: "program-b" }));
       expect(read).toEqual(new Set());
-      await run(cohortRecording());
+      // Its title and description, before the transcript is ready, name it too.
+      await run(cohortRecording({ processingStatus: "transcribing" }));
       expect(read).toEqual(new Set(["rec-1"]));
     });
   });

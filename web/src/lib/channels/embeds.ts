@@ -268,7 +268,9 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * message's own channel, with how its recording stands. The recording is read as the channel's whole
  * audience (cohortAudienceSql: the cohort's own, neither deleted nor hidden), as clips are, so a hidden
  * recording leaves every reader's card at once; `linked` says one exists at all, so a hidden one is
- * never called "not recorded". `meeting` is the call's id and `program` the channel's program, as SQL.
+ * never called "not recorded". Only the call's own card message (`meeting.messageId`) shows it, so a
+ * second card a race posted shows nothing. `meeting` is the call's id and `program` the channel's
+ * program, as SQL.
  */
 const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_object('title', mt.title, 'state', mt.state,
       'scheduledStartAt', mt.scheduledStartAt, 'bookedMinutes', mt.bookedMinutes, 'openedAt', mt.openedAt, 'endedAt', mt.endedAt,
@@ -276,7 +278,7 @@ const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_ob
       'linked', EXISTS (SELECT 1 FROM recording lr WHERE lr.meetingId = mt.id),
       'recording', (SELECT json_array(r.id, r.r2VideoKey IS NOT NULL, ${transcriptReadySql("r")}, r.processingStatus = 'failed') FROM recording r
         WHERE r.meetingId = mt.id AND ${cohortAudienceSql("r", program)} ORDER BY coalesce(r.recordedAt, r.createdAt) DESC, r.id LIMIT 1))
-    FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId)`;
+    FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId AND mt.messageId = m.id)`;
 
 /**
  * Per stored embed, whether this reader may still see it, in one correlated column of the page's

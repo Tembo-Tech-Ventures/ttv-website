@@ -71,10 +71,23 @@ export async function ensureSessionCard(ctx: CardContext, author: CardAuthor, me
     if (error instanceof ChannelError) return null;
     throw error;
   }
-  if (posted.created) ctx.afterNote?.(posted.message, { id: target.channelId, kind: target.kind });
-  // Two hosts opening at once could both post: only the first card is the session's.
-  if (await attachCard(ctx.db, meetingId, posted.message.id)) return posted.message.id;
-  return (await ctx.db.prepare("SELECT messageId FROM meeting WHERE id = ?1").bind(meetingId).first<{ messageId: string | null }>())?.messageId ?? null;
+  if (await attachCard(ctx.db, meetingId, posted.message.id)) {
+    if (posted.created) ctx.afterNote?.(posted.message, { id: target.channelId, kind: target.kind });
+    return posted.message.id;
+  }
+  // Two hosts joining at once can both post: the first attached is the session's card. A card that
+  // isn't its session's shows nothing (embeds.ts), and this host's duplicate is taken back as its
+  // author would delete it, leaving a placeholder, so the channel isn't told twice.
+  const card = await ctx.db.prepare("SELECT messageId FROM meeting WHERE id = ?1").bind(meetingId).first<{ messageId: string | null }>();
+  if (posted.created && card?.messageId !== posted.message.id) await withdrawCard(ctx, target.channelId, posted.message.id, author.userId);
+  return card?.messageId ?? null;
+}
+
+/** Deletes a duplicate card this request posted, as deleteMessage would for its author (no replies yet). */
+async function withdrawCard(ctx: CardContext, channelId: string, messageId: string, authorId: string): Promise<void> {
+  await ctx.db.prepare(`UPDATE channel_message SET body = '', embeds = '[]', citations = '[]', deletedAt = ?4,
+      changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1)
+    WHERE id = ?2 AND channelId = ?1 AND authorId = ?3 AND deletedAt IS NULL`).bind(channelId, messageId, authorId, ctx.now).run();
 }
 
 /** Moves a session's card for open pages, as one statement for a batch or on its own. */

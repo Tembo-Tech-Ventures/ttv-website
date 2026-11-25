@@ -23,7 +23,11 @@ const toCohortPeople = (where: string) => `SELECT m.id, m.scheduledStartAt, a.us
 
 const subject = (meetingId: string) => ({ kind: "meeting" as const, id: meetingId, href: callPath(meetingId), label: "Cohort session" });
 
-/** A cohort session opened by a host: "live" to everyone else in the cohort, naming the host who opened it. */
+/**
+ * A host in a live cohort session: "live" to everyone else in the cohort, naming the host whose join
+ * first wrote it. Run on every host's join; each person's item is written once (its key), and only
+ * while the session is live.
+ */
 export function meetingLiveAttention(context: AttentionProducerContext, meetingId: string, hostId: string, now = Date.now()) {
   return bestEffort(async () => {
     const audience = await audienceFor(context, "meetings");

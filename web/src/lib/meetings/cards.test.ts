@@ -6,7 +6,7 @@ import { channelRequest } from "@/lib/channels/http";
 import { MessageList, type Message, type MeetingCardView } from "@/lib/platform/contracts";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { touchRecordingCard } from "./card-state";
-import { openedCardBody } from "./cards";
+import { cardNonce, ensureSessionCard, openedCardBody } from "./cards";
 import { MINUTE_MS } from "./clock";
 import { scheduleSessions } from "./sessions";
 import { meetingDatabase, PEOPLE, T0, type MeetingFixture } from "./test-support";
@@ -182,3 +182,78 @@ describe("a cohort session's card in an open channel page", () => {
     expect(state(page.cards())).toEqual(["cancelled"]);
   });
 });
+
+describe("a session's card, when hosts race and refuse", () => {
+  it("keeps one card when two hosts join at once: the other request's duplicate is deleted and shows no card", async () => {
+    const s = meetingDatabase();
+    const id = s.meeting();
+    const host = async (userId: string) => ({ userId, capabilities: await capabilitiesFor(s.db, { id: userId }) });
+    const [faith, amina] = await Promise.all([host(PEOPLE.faith), host(PEOPLE.amina)]);
+    s.database.prepare("UPDATE meeting SET state = 'LIVE', openedAt = ?2, hardEndAt = ?3, providerMeetingId = 'fake-race' WHERE id = ?1")
+      .run(id, T0, T0 + 90 * MINUTE_MS);
+    const posted = await Promise.all([ensureSessionCard({ db: s.d1, now: s.now() }, faith, id), ensureSessionCard({ db: s.d1, now: s.now() }, amina, id)]);
+    const card = s.row(id).messageId as string;
+    expect(posted).toEqual([card, card]);
+    const page = await openPage(s);
+    expect(page.cards()).toHaveLength(1);
+    const cards = s.database.prepare("SELECT id, deletedAt IS NOT NULL AS deleted FROM channel_message WHERE clientNonce = ?").all(cardNonce(id)) as { id: string; deleted: number }[];
+    // Both posted (the race happened), and only the session's card is left standing.
+    expect(cards).toHaveLength(2);
+    expect(cards.filter(({ deleted }) => deleted === 0).map(({ id: kept }) => kept)).toEqual([card]);
+  });
+
+  it("shows a card only on its session's own message, and lets its author delete a message that isn't the session's card", async () => {
+    const s = meetingDatabase();
+    const id = await scheduleOne(s);
+    const stray = s.message("cohort-04", { author: "synthetic-faith", body: "Started it again" });
+    s.database.prepare("UPDATE channel_message SET embeds = json_array(json_object('type', 'meeting', 'meetingId', ?)) WHERE id = ?").run(id, stray);
+    const page = await openPage(s);
+    expect(page.cards().map(({ meetingId }) => meetingId)).toEqual([id]);
+    expect(page.message(stray)?.embeds).toEqual([]);
+    expect((await removeMessage(s, stray, PEOPLE.faith)).status).toBe(200);
+  });
+
+  it("keeps the session's card message's words as they are", async () => {
+    const s = meetingDatabase();
+    const id = await scheduleOne(s);
+    const card = s.row(id).messageId as string;
+    const request = new Request(`${ORIGIN}/api/messages/${card}`, { method: "PATCH", headers: { Origin: ORIGIN }, body: JSON.stringify({ body: "Something else" }) });
+    const locals = { user: { id: PEOPLE.faith }, personalAccessToken: null } as unknown as App.Locals;
+    const response = await channelRequest("editMessage", { request, locals, params: { id: card } } as Pick<APIContext, "request" | "locals" | "params">,
+      { DB: s.d1, PLATFORM_FLAGS_OVERRIDE: "all" } as Parameters<typeof channelRequest>[2]);
+    expect(response.status).toBe(409);
+    expect((s.database.prepare("SELECT body FROM channel_message WHERE id = ?").get(card) as { body: string }).body).toMatch(/^Scheduled a session/);
+  });
+
+  it("posts no card for a host whose join was refused (the room was full)", async () => {
+    const s = meetingDatabase({ extra: 15 });
+    const id = s.meeting({ state: "LIVE" });
+    for (let n = 1; n <= 15; n++) {
+      s.database.prepare("INSERT INTO meeting_seat(meetingId, userId, role, state, lastSeenAt, createdAt, updatedAt) VALUES (?, ?, 'MEMBER', 'HELD', ?, ?, ?)")
+        .run(id, `synthetic-member-${n}`, T0, T0, T0);
+    }
+    expect((await s.call("joinMeeting", { id, user: PEOPLE.faith })).status).toBe(409);
+    expect(s.row(id).messageId).toBeNull();
+    expect(s.database.prepare("SELECT count(*) AS n FROM attention_item WHERE kind = 'meeting_live'").get()).toEqual({ n: 0 });
+  });
+
+  it("tells the cohort it is live when a later host joins, if the join that opened it never did", async () => {
+    const s = meetingDatabase();
+    const id = s.meeting({ state: "LIVE" });
+    expect((await s.call("joinMeeting", { id, user: PEOPLE.amina })).status).toBe(200);
+    const live = s.database.prepare("SELECT userId, actorId FROM attention_item WHERE kind = 'meeting_live' ORDER BY userId").all() as { userId: string; actorId: string }[];
+    expect(live.map(({ userId }) => userId)).toEqual([PEOPLE.achieng, PEOPLE.faith, PEOPLE.joseph, PEOPLE.otieno].toSorted());
+    expect(new Set(live.map(({ actorId }) => actorId))).toEqual(new Set([PEOPLE.amina]));
+    // Faith joining too writes nothing twice.
+    expect((await s.call("joinMeeting", { id, user: PEOPLE.faith })).status).toBe(200);
+    expect(s.database.prepare("SELECT count(*) AS n FROM attention_item WHERE kind = 'meeting_live'").get()).toEqual({ n: live.length });
+  });
+});
+
+/** A DELETE of a message as `user`, through the real route. */
+async function removeMessage(s: MeetingFixture, messageId: string, user: string) {
+  const request = new Request(`${ORIGIN}/api/messages/${messageId}`, { method: "DELETE", headers: { Origin: ORIGIN } });
+  const locals = { user: { id: user }, personalAccessToken: null } as unknown as App.Locals;
+  return channelRequest("deleteMessage", { request, locals, params: { id: messageId } } as Pick<APIContext, "request" | "locals" | "params">,
+    { DB: s.d1, PLATFORM_FLAGS_OVERRIDE: "all" } as Parameters<typeof channelRequest>[2]);
+}

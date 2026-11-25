@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { listMessages, readMessage, TEMBO_SESSION_GONE, type ReadContext } from "./messages";
-import { touchAnswersCiting } from "./mutations";
+import { touchMessagesShowing } from "./mutations";
 import { channelDatabase, type ChannelFixture } from "./test-support";
 
 /*
@@ -81,7 +81,7 @@ describe("Tembo's answers that quote a session", () => {
     expect((await readMessage(s.ctx(), id))?.body).toBe("Session changed was good");
   });
 
-  it("reach an open thread when a recording is hidden and restored, through touchAnswersCiting", async () => {
+  it("reach an open thread when a recording is hidden and restored, through touchMessagesShowing", async () => {
     const s = setup();
     const cited = s.answer(["changed"]);
     const other = s.answer(["shown"]);
@@ -90,20 +90,36 @@ describe("Tembo's answers that quote a session", () => {
     expect(first.items.find(({ id }) => id === cited)?.body).toBe(WORDS);
 
     s.database.exec("UPDATE recording SET hiddenAt = 1 WHERE id = 'changed'");
-    await expect(touchAnswersCiting(s.d1, "changed")).resolves.toBe(1);
+    await expect(touchMessagesShowing(s.d1, "changed")).resolves.toBe(1);
     const hidden = await listMessages(s.ctx(), { thread, since: first.sinceCursor });
     expect(hidden.items.map(({ id, body }) => [id, body])).toEqual([[cited, TEMBO_SESSION_GONE]]);
 
     s.database.exec("UPDATE recording SET hiddenAt = NULL WHERE id = 'changed'");
-    await touchAnswersCiting(s.d1, "changed");
+    await touchMessagesShowing(s.d1, "changed");
     const restored = await listMessages(s.ctx(), { thread, since: hidden.sinceCursor });
     expect(restored.items.map(({ id, body }) => [id, body])).toEqual([[cited, WORDS]]);
     expect(restored.items.some(({ id }) => id === other)).toBe(false);
   });
 
-  it("are left alone by touchAnswersCiting when nothing cites the recording", async () => {
+  it("move a person's message sharing a clip of the session too, so its card turns unavailable in an open page", async () => {
+    const s = setup();
+    const shared = s.message("cohort-04", { author: "synthetic-otieno", body: "Worth a watch" });
+    s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
+      type: "sessionClip", recordingId: "changed", title: "Session changed", startSeconds: 0, durationSeconds: 30, quote: "Retries",
+    }]), shared);
+    s.database.prepare("INSERT INTO transcript_segment(id,recordingId,startTime,endTime,speaker,text) VALUES ('segment','changed',0,4,'TA','Retries')").run();
+    const first = await listMessages(s.ctx(), {});
+    expect(first.items.find(({ id }) => id === shared)?.embeds.map(({ type }) => type)).toEqual(["sessionClip"]);
+
+    s.database.exec("UPDATE recording SET hiddenAt = 1 WHERE id = 'changed'");
+    await expect(touchMessagesShowing(s.d1, "changed")).resolves.toBe(1);
+    const hidden = await listMessages(s.ctx(), { since: first.sinceCursor });
+    expect(hidden.items.find(({ id }) => id === shared)?.embeds).toEqual([{ type: "unavailable", was: "sessionClip" }]);
+  });
+
+  it("are left alone by touchMessagesShowing when nothing cites the recording", async () => {
     const s = setup();
     s.answer(["shown"]);
-    await expect(touchAnswersCiting(s.d1, "changed")).resolves.toBe(0);
+    await expect(touchMessagesShowing(s.d1, "changed")).resolves.toBe(0);
   });
 });

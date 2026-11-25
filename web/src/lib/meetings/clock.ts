@@ -21,10 +21,11 @@ export interface CallContext {
   provider: CallProvider | null;
   now: number;
   /**
-   * What follows a host joining a live call, `opened` when their join opened it (http.ts: the
-   * session's card, and "live" in Attention, slice P9). Best effort: it never fails the join.
+   * What follows a host taking their seat in a live call (http.ts: the session's card, and "live" in
+   * Attention, slice P9), after the response where the request can wait for it. Best effort: it never
+   * fails the join.
    */
-  afterHostJoin?: (meetingId: string, hostId: string, opened: boolean) => Promise<void>;
+  afterHostJoin?: (meetingId: string, hostId: string) => Promise<void>;
 }
 
 /** Purposes with hosts distinct from members: they end when no host has been in for a while. */

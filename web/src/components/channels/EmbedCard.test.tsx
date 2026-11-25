@@ -130,7 +130,7 @@ describe("a cohort session's card (in-app calls P9)", () => {
     expect(said({ ...session, state: "notRecorded", notRecordedReason: "limit" })).toContain("TTV had reached its recording limit for the month");
     expect(said({ ...session, state: "notRecorded", notRecordedReason: "short" })).toContain("it was too short to keep");
     expect(said({ ...session, state: "failed" })).toContain("Recording failed");
-    expect(said({ ...session, state: "ended" })).toContain("Its recording isn't available.");
+    expect(said({ ...session, state: "ended" })).toContain("Its recording isn't available to the cohort.");
     expect(sessionCardLine({ ...session, state: "processing" })).toBe("The recording will be on this card when it's ready.");
   });
 });

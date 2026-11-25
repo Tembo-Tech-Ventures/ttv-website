@@ -1,4 +1,4 @@
-import { touchAnswersCiting } from "@/lib/channels/mutations";
+import { touchMessagesShowing } from "@/lib/channels/mutations";
 import { touchRecordingCard } from "@/lib/meetings/card-state";
 import type { RecordingAccessTarget, RecordingViewer } from "./access";
 
@@ -24,13 +24,15 @@ export function mayHideRecording(viewer: RecordingViewer, recording: Pick<Record
  * hidden), change with it in every open channel page. Returns whether the recording is now as asked.
  */
 export async function setRecordingHidden(db: D1Database, recordingId: string, hidden: boolean, now: number): Promise<boolean> {
-  // hiddenAt and updatedAt are whole seconds, as Drizzle's timestamp columns store them.
-  const seconds = Math.floor(now / 1000);
-  const row = await db.prepare(`UPDATE recording SET hiddenAt = CASE WHEN ?2 THEN coalesce(hiddenAt, ?3) END, updatedAt = ?3
-    WHERE id = ?1 AND accessScope = 'COHORT' AND deletedAt IS NULL AND programId IS NOT NULL RETURNING hiddenAt`)
-    .bind(recordingId, hidden ? 1 : 0, seconds).first<{ hiddenAt: number | null }>();
-  if (!row) return false;
+  const eligible = "id = ?1 AND accessScope = 'COHORT' AND deletedAt IS NULL AND programId IS NOT NULL";
+  // hiddenAt and updatedAt are whole seconds, as Drizzle's timestamp columns store them. Only a change writes.
+  const changed = await db.prepare(`UPDATE recording SET hiddenAt = CASE WHEN ?2 THEN ?3 END, updatedAt = ?3
+    WHERE ${eligible} AND (hiddenAt IS NULL) = ?2 RETURNING id`).bind(recordingId, hidden ? 1 : 0, Math.floor(now / 1000)).first();
+  if (changed === null) {
+    // Already as asked (a second press), or no longer a cohort's recording to hide.
+    return await db.prepare(`SELECT 1 FROM recording WHERE ${eligible} AND (hiddenAt IS NOT NULL) = ?2`).bind(recordingId, hidden ? 1 : 0).first() !== null;
+  }
   await touchRecordingCard(db, recordingId);
-  await touchAnswersCiting(db, recordingId);
-  return (row.hiddenAt !== null) === hidden;
+  await touchMessagesShowing(db, recordingId);
+  return true;
 }

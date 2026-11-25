@@ -43,6 +43,7 @@ const { recordingReadyAttention } = await import("@/lib/attention/producers");
 const { listAttention } = await import("@/lib/attention/service");
 const { capabilitiesFor, channelAccessFor } = await import("@/lib/platform/server/capabilities");
 const { GET: chatHistory } = await import("@/pages/api/chat/sessions/[id]");
+const { saveChatExchange } = await import("@/lib/chat/sessions");
 const { GET: chatSessions } = await import("@/pages/api/chat/sessions/index");
 const { WITHHELD_ANSWER } = await import("@/lib/chat/stored-sources");
 const { readMessage, TEMBO_SESSION_GONE } = await import("@/lib/channels/messages");
@@ -311,6 +312,20 @@ describe.each(PEOPLE)("recording access for $id", (person) => {
     }
   });
 
+  it("Ask Tembo's follow-up that restates an earlier answer, with no tool read, carries its sessions and is withheld with it", async () => {
+    // A follow-up in the conversation whose answer cites the hidden session, saved the way /api/chat saves it.
+    await saveChatExchange(d1, person.id, { kind: "existing", id: `preview-${person.id}` }, {
+      question: "And what did they say next?", answer: `${STORED_WORDS} (follow-up)`, citations: [],
+    });
+    const response = await chatHistory(apiContext(person, { id: `preview-${person.id}` }));
+    const { messages } = await response.json() as { messages: { role: string; content: string }[] };
+    const answers = messages.filter(({ role }) => role === "assistant").map(({ content }) => content);
+    const readable = readsTranscripts(person).includes("a-hidden");
+    expect(answers).toEqual(readable
+      ? [`${STORED_WORDS} (preview)`, `${STORED_WORDS} (follow-up)`] : [WITHHELD_ANSWER, WITHHELD_ANSWER]);
+    sqlite.prepare("DELETE FROM chat_message WHERE sessionId = ? AND id <> ?").run(`preview-${person.id}`, `preview-${person.id}-latest`);
+  });
+
   it("Ask Tembo's conversation list never previews an answer from a session they may no longer read", async () => {
     const { sessions } = await (await chatSessions(apiContext(person))).json() as { sessions: { id: string; latestMessage: string | null }[] };
     const preview = sessions.find(({ id }) => id === `preview-${person.id}`)?.latestMessage;
@@ -364,7 +379,7 @@ describe("recordings read for a whole cohort channel, whoever asks", () => {
   it("a stored clip stays visible to a cohort channel's readers only while its recording is the cohort's, visible and complete", async () => {
     const embeds = JSON.stringify(RECORDINGS.map((id) => ({ type: "sessionClip", recordingId: id, title: TITLES[id], startSeconds: 0, durationSeconds: 30, quote: "Webhook" })));
     const access = (programId: string) => {
-      const row = sqlite.prepare(`SELECT ${embedAccessColumn("?1")} FROM (SELECT NULL AS deletedAt, ?2 AS embeds, 'synthetic-approved' AS authorId, NULL AS channelId) m`)
+      const row = sqlite.prepare(`SELECT ${embedAccessColumn("?1")} FROM (SELECT NULL AS deletedAt, ?2 AS embeds, 'synthetic-approved' AS authorId, NULL AS channelId, NULL AS id) m`)
         .get(programId, embeds) as { embedAccess: string };
       return (JSON.parse(row.embedAccess) as unknown[]).flatMap((check, i) => check === null ? [] : [RECORDINGS[i]]);
     };

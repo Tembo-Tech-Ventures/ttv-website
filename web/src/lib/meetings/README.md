@@ -72,7 +72,9 @@ on every read from the call and its recording (`embedAccessColumn` in `channels/
   acted. A single date's scheduling note carries its card. A weekly series' note does not (five cards
   at once, UX review M6): each date gets its card when a host first joins its room, posted by that
   host ("Started “…”. Chat in this thread…"), as `postMessage` posts anything (the code of conduct, the
-  rate limits). A refused card is tried again when a host next joins.
+  rate limits). A refused card is tried again when a host next joins. Two hosts joining at once may
+  both post: the first attached is the card, only it shows the card (`mt.messageId = m.id`), and the
+  other request deletes its duplicate, as its author would.
 - **Open pages follow it.** Every change of what a card says moves its message's `changeSeq`
   (`touchMeetingCard`): opening, ending and cancelling (`clock.ts`), moving or renaming a date
   (`sessions.ts`), the recording finishing or failing (`recordings/pipeline.ts`; slice P7 calls
@@ -81,18 +83,19 @@ on every read from the call and its recording (`embedAccessColumn` in `channels/
   recording" through the messages API).
 - **Read as the channel.** The recording on a card is read as the whole channel's audience
   (`cohortAudienceSql`), as clips are: hosts see the same card as members.
-- **Kept.** A message carrying a card can't be deleted (409): its thread is the chat, and the card is
-  how the channel finds the recording. Its words can be edited.
+- **Kept.** A session's card message (the one `meeting.messageId` names) can't be deleted or edited
+  (409): its thread is the chat, and the card is how the channel finds the recording.
 
 **Attention** (`lib/attention/meeting-producers.ts`; there are no email reminders). "Starting soon"
 (`meeting_soon`) reaches the cohort's people (members and alumni, its instructors, TAs and invited
-mentors) from `STARTING_SOON_MINUTES` before a session starts; "Live" (`meeting_live`) when a host's
-join opens it, naming that host, to everyone else. Each shows only while it is true (`attentionAccess`):
+mentors) from `STARTING_SOON_MINUTES` before a session starts; "Live" (`meeting_live`) once a host is in,
+naming that host, to everyone else. Each shows only while it is true (`attentionAccess`):
 "soon" while the session still waits for a host at the very time it announced and its booked time
 hasn't passed, "live" while it is live, so both leave the bell when it opens, ends, moves or is
 cancelled; a moved date is announced again at its new time. Neither copies the title. Nothing in this
 slice runs on a clock: `remindSessionsStartingSoon(context, now)` is the hook slice P4's every-minute
-clock calls. "Live" is written by the join route (`afterHostJoin` in `http.ts`), best effort.
+clock calls. "Live" is written after each host's join has its seat (`afterHostJoin` in `http.ts`,
+after the response through `waitUntil`), best effort and once per person, while the session is live.
 
 **The cohort Overview** (`NextSession.astro`) shows the live session, or else the next one, with
 "Join session" (the page's one peach action while it is live), or "Add to calendar", or for a host

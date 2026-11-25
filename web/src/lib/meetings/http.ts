@@ -114,21 +114,28 @@ async function handle(operation: MeetingOperation, { request, params }: Context,
 }
 
 /**
- * What follows a host joining a cohort session (slice P9): its card in the channel, when it has none
- * yet, posted by that host, and when their join opened it, "live" in Attention for the rest of the
- * cohort. Neither fails the join: a card that couldn't be posted (a rate limit) is tried again when a
- * host next joins, and is logged.
+ * What follows a host taking their seat in a cohort session (slice P9), after the response where the
+ * request has waitUntil (inline otherwise, as in tests): its card in the channel, when it has none
+ * yet, posted by that host; and "live" in Attention for the rest of the cohort while the session is
+ * live, written once per person (its key), so a join that opened the room and failed afterwards is
+ * made good by the next host's. Neither fails the join: a card that couldn't be posted (a rate limit)
+ * is tried again when a host next joins, and is logged.
  */
 function hostJoined(context: Context, env: Env, caller: Caller, now: number): NonNullable<CallContext["afterHostJoin"]> {
-  return async (meetingId, hostId, opened) => {
-    try {
-      await ensureSessionCard({ db: env.DB, now }, caller, meetingId);
-    } catch (error) {
-      recordErrorInBackground(context.locals.cfContext, env.DB, {
-        source: "request", route: ROUTES.joinMeeting.path, error, version: env.DEPLOYMENT_VERSION, level: "warning",
-      });
-    }
-    if (opened) await meetingLiveAttention({ db: env.DB, env }, meetingId, hostId, now);
+  return async (meetingId, hostId) => {
+    const work = (async () => {
+      try {
+        await ensureSessionCard({ db: env.DB, now }, caller, meetingId);
+      } catch (error) {
+        recordErrorInBackground(context.locals.cfContext, env.DB, {
+          source: "request", route: ROUTES.joinMeeting.path, error, version: env.DEPLOYMENT_VERSION, level: "warning",
+        });
+      }
+      await meetingLiveAttention({ db: env.DB, env }, meetingId, hostId, now);
+    })();
+    const waitUntil = context.locals.cfContext?.waitUntil.bind(context.locals.cfContext);
+    if (waitUntil) waitUntil(work);
+    else await work;
   };
 }
 
