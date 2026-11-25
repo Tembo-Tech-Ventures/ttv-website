@@ -129,8 +129,8 @@ Astro.response.headers.set("Cache-Control", "no-store");
                   <input type="hidden" name="answer" value="pick" />
                   <input type="hidden" name="at" value={String(at)} />
                   <input type="hidden" name="from" value="proposal" />
-                  <Button type="submit" variant="quiet" data-pick-time={at}>
-                    <span class="sr-only">Pick </span><SessionTime startAt={at} minutes={proposal.bookedMinutes} now={now} />
+                  <Button type="submit" variant="quiet" className="h-auto w-full justify-start py-2.5 sm:w-auto" data-pick-time={at}>
+                    <span class="min-w-0 text-left whitespace-normal"><span class="sr-only">Pick </span><SessionTime startAt={at} minutes={proposal.bookedMinutes} now={now} /></span>
                   </Button>
                 </form>
               </li>

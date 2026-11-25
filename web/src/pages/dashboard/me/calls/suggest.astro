@@ -278,10 +278,6 @@ Astro.response.headers.set("Cache-Control", "no-store");
 </SpacePage>
 
 <script>
-  // The suggester's own time zone: offered, and chosen, where the device keeps another than Nairobi's.
-  const select = document.querySelector<HTMLSelectElement>("[data-suggest-form] select[name=zone]");
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (select && zone && ![...select.options].some((option) => option.value === zone)) {
-    select.add(new Option(`Your time (${zone.replaceAll("_", " ")})`, zone, true, true));
-  }
+  import { offerDeviceZone } from "@/components/platform/calls/zone-choice";
+  offerDeviceZone();
 </script>

@@ -373,8 +373,9 @@ function ProposalTimes({ card, pickable }: { card: CallProposalCardView; pickabl
       {pickable.map((at) => (
         <li key={at}>
           <AnswerForm card={card} answer="pick" at={at}>
-            <Button type="submit" variant="ghost" size="sm" className="w-full justify-start text-left" data-pick-time={at}>
-              <span className="sr-only">Pick </span><ProposedTime at={at} minutes={card.bookedMinutes} />
+            <Button type="submit" variant="ghost" size="sm" className="h-auto w-full justify-start py-1.5" data-pick-time={at}>
+              {/* The time wraps, left aligned, inside the kit's single-line button. */}
+              <span className="min-w-0 text-left whitespace-normal"><span className="sr-only">Pick </span><ProposedTime at={at} minutes={card.bookedMinutes} /></span>
             </Button>
           </AnswerForm>
         </li>
