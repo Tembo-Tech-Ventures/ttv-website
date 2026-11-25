@@ -87,7 +87,7 @@ function TemboContent({ message, names }: { message: Message; names: readonly st
   );
 }
 
-function MemberContent({ message, names, compact }: { message: Message; names: readonly string[]; compact: boolean }) {
+function MemberContent({ message, names, compact, viewerId }: { message: Message; names: readonly string[]; compact: boolean; viewerId: string | null }) {
   const hidden = message.moderation?.state === "HIDDEN";
   return (
     <div className={cx(hidden && "channel-message__hidden")}>
@@ -98,6 +98,8 @@ function MemberContent({ message, names, compact }: { message: Message; names: r
             : embed.type === "sessionClip" ? `c-${embed.recordingId}-${embed.startSeconds}` : `u-${index}`}
           embed={embed}
           compact={compact}
+          viewerId={viewerId}
+          channelId={message.channelId}
         />
       ))}
     </div>
@@ -181,10 +183,10 @@ function MessageMeta({ message, nameId, now, withDay, children }: {
   );
 }
 
-function MessageContent({ message, names, compact }: { message: Message; names: readonly string[]; compact: boolean }) {
+function MessageContent({ message, names, compact, viewerId }: { message: Message; names: readonly string[]; compact: boolean; viewerId: string | null }) {
   if (message.deleted) return <p className="channel-body text-ink-muted italic">This message was deleted.</p>;
   if (message.authorKind === "TEMBO") return <TemboContent message={message} names={names} />;
-  return <MemberContent message={message} names={names} compact={compact} />;
+  return <MemberContent message={message} names={names} compact={compact} viewerId={viewerId} />;
 }
 
 /** Who may do what to a message, from the viewer, the message and the available actions. */
@@ -308,7 +310,7 @@ function MessageItem({
         {mode === "edit" && !message.deleted ? (
           <EditForm initial={message.body} onSave={save} onCancel={backToMenu} />
         ) : (
-          <MessageContent message={message} names={names} compact={variant === "parent"} />
+          <MessageContent message={message} names={names} compact={variant === "parent"} viewerId={viewerId} />
         )}
 
         {/*

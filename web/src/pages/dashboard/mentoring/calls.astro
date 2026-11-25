@@ -1,0 +1,40 @@
+---
+/**
+ * Mentoring → Calls (in-app calls P10, src/lib/meetings/README.md, "Calls between two people"): every
+ * call between two people the mentor is in, in the Mentoring space: the same list as Profile → Calls
+ * (a mentor is a member too, so their calls are never split by role). Only while
+ * `meeting_checkins` is on for the reader; otherwise the same 404 as any page that isn't there.
+ */
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import CallsList from "@/components/platform/calls/CallsList.astro";
+import { callerFor, callPageResponse } from "@/components/platform/calls/call-page";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { Notice, PageHeader } from "@/components/platform/ui";
+import * as schema from "@/lib/db/schema";
+import { listCalls } from "@/lib/meetings/proposals";
+import { takeFlash } from "@/lib/platform/server/flash";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+
+const now = Date.now();
+const db = drizzle(env.DB, { schema });
+// The calls are read beside the space context, once it says calls between two people are on.
+const resolved = await resolveSpacePageWith(Astro.locals, "mentoringCalls", async (me) =>
+  me.flags.meeting_checkins ? listCalls(env.DB, callerFor(me, await requestCapabilities(db, Astro.locals)), now) : null);
+if (!resolved || !resolved[1]) return callPageResponse(404);
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return callPageResponse(405);
+const [context, list] = resolved;
+const flash = takeFlash(Astro);
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title="Calls">
+  <div class="flex max-w-4xl flex-col gap-6">
+    <PageHeader title="Calls">
+      Only you and the other person can see these. Suggest a call from any of your conversations.
+    </PageHeader>
+    {flash ? <Notice tone={flash.tone} title={flash.title} announce="polite">{flash.message}</Notice> : null}
+    <CallsList list={list} now={now} />
+  </div>
+</SpacePage>

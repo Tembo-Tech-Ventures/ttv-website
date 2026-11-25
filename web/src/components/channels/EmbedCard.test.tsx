@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { MeetingCardView, ProjectEmbed } from "@/lib/platform/contracts";
+import type { CallProposalCardView, MeetingCardView, ProjectEmbed } from "@/lib/platform/contracts";
 import { people, projects, sessionClip } from "@/lib/platform/fixtures";
 import EmbedCard, { ASK_TEMBO_HREF, clipHref, confirmationText, sessionCardLine, shownConfirmations } from "./EmbedCard";
 
@@ -103,7 +103,7 @@ describe("work that is no longer available", () => {
 
 describe("a cohort session's card (in-app calls P9)", () => {
   const session: MeetingCardView = {
-    type: "meeting", meetingId: "week-9", title: "Testing payment callbacks", state: "scheduled",
+    type: "meeting", meetingId: "week-9", purpose: "SESSION", title: "Testing payment callbacks", state: "scheduled",
     scheduledStartAt: Date.parse("2026-11-26T15:00:00Z"), bookedMinutes: 45, openedAt: null, endedAt: null,
     recordingId: null, transcriptReady: false, notRecordedReason: null,
   };
@@ -132,5 +132,66 @@ describe("a cohort session's card (in-app calls P9)", () => {
     expect(said({ ...session, state: "failed" })).toContain("Recording failed");
     expect(said({ ...session, state: "ended" })).toContain("Its recording isn't available to the cohort.");
     expect(sessionCardLine({ ...session, state: "processing" })).toBe("The recording will be on this card when it's ready.");
+  });
+});
+
+describe("a call between two people (in-app calls P10)", () => {
+  const times = [Date.parse("2099-11-25T08:00:00Z"), Date.parse("2099-11-25T11:00:00Z"), Date.parse("2099-11-26T08:00:00Z")];
+  const proposal: CallProposalCardView = {
+    type: "callProposal", proposalId: "suggestion", purpose: "CALL", state: "open", proposedBy: people.david.id, times,
+    bookedMinutes: 30, askToRecord: false, work: null, call: null, moves: false,
+  };
+  const as = (viewerId: string, card: CallProposalCardView = proposal) => html(<EmbedCard embed={card} viewerId={viewerId} channelId="conversation" />);
+  const forms = (markup: string) => [...markup.matchAll(/<form [^>]*action="([^"]+)"[^>]*>(.*?)<\/form>/g)]
+    .map(([, action, inner]) => [action, [...inner!.matchAll(/name="([^"]+)" value="([^"]+)"/g)].map(([, name, value]) => `${name}=${value}`).join("&")]);
+
+  it("offers the other person every time, other times and Not now, as plain forms to the suggestion's page", () => {
+    const markup = as(people.wanjiku.id);
+    expect(forms(markup)).toEqual([
+      ...times.map((at) => ["/dashboard/me/calls/suggested/suggestion", `answer=pick&at=${at}&from=conversation`]),
+      ["/dashboard/me/calls/suggested/suggestion", "answer=notNow&from=conversation"],
+    ]);
+    expect(markup).toContain('href="/dashboard/me/calls/suggest?conversation=conversation&amp;instead=suggestion"');
+    expect(markup).not.toContain("Withdraw");
+  });
+
+  it("offers the person who suggested it only Withdraw", () => {
+    const markup = as(people.david.id);
+    expect(forms(markup)).toEqual([["/dashboard/me/calls/suggested/suggestion", "answer=withdraw&from=conversation"]]);
+    expect(text(<EmbedCard embed={proposal} viewerId={people.david.id} channelId="conversation" />)).toContain("Waiting for an answer.");
+  });
+
+  it("offers nothing to act on once it is answered or its times have passed, only new times or the booked call", () => {
+    for (const state of ["declined", "withdrawn", "expired", "countered", "accepted", "cancelled"] as const) {
+      const card = { ...proposal, state, call: state === "accepted" ? { meetingId: "suggestion", state: "SCHEDULED" as const, scheduledStartAt: times[1]! } : null };
+      expect(forms(as(people.wanjiku.id, card))).toEqual([]);
+    }
+    expect(text(<EmbedCard embed={{ ...proposal, state: "expired" }} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("These times have passed.");
+    // New times for a call that was cancelled say so, rather than that their suggester took them back.
+    const closed = { ...proposal, state: "cancelled" as const, moves: true, call: { meetingId: "booked", state: "CANCELLED" as const, scheduledStartAt: times[0]! } };
+    expect(text(<EmbedCard embed={closed} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("Call cancelled");
+    expect(text(<EmbedCard embed={closed} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("The call was cancelled, so these times closed.");
+    expect(as(people.wanjiku.id, { ...proposal, state: "accepted", call: { meetingId: "suggestion", state: "SCHEDULED", scheduledStartAt: times[1]! } }))
+      .toContain('href="/dashboard/me/calls/suggestion"');
+  });
+
+  it("says a check-in's work and revision, its 30 minutes, and that recording is asked of both on the day", () => {
+    const said = text(<EmbedCard embed={{ ...proposal, purpose: "CHECKIN", askToRecord: true, work: { title: "Bus fare splitter", version: 4 } }}
+      viewerId={people.wanjiku.id} channelId="conversation" />);
+    expect(said).toContain("Project check-in");
+    expect(said).toContain("Bus fare splitter, revision 4");
+    expect(said).toContain("Up to 30 minutes. Asked to record: you'll both be asked on the day, and it's recorded only if you both say yes.");
+  });
+
+  it("gives a booked call its own calendar file and page, and Join call while it is open", () => {
+    const call: MeetingCardView = {
+      type: "meeting", meetingId: "booked", purpose: "CALL", title: "Mentoring call", state: "scheduled", scheduledStartAt: times[0]!,
+      bookedMinutes: 30, openedAt: null, endedAt: null, recordingId: null, transcriptReady: false, notRecordedReason: null,
+    };
+    const markup = html(<EmbedCard embed={call} />);
+    expect(markup).toContain('href="/dashboard/me/calls/booked/calendar.ics"');
+    expect(markup).toContain('href="/dashboard/me/calls/booked"');
+    expect(text(<EmbedCard embed={{ ...call, state: "live", openedAt: times[0]! }} />)).toContain("Join call");
+    expect(text(<EmbedCard embed={{ ...call, state: "notRecorded", openedAt: times[0]!, endedAt: times[0]! + 60_000 }} />)).toContain("This call wasn't recorded.");
   });
 });

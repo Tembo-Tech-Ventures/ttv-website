@@ -10,11 +10,12 @@
  * read this" opens to what TTV admins can see. When the request was asked and
  * accepted is its own line, apart from what was asked for (QA4-16, QA4-17).
  * On a phone it keeps to a few short lines (channels.css), so the first
- * message shows.
+ * message shows. While calls between two people are on (in-app calls P10),
+ * it offers "Suggest a call", the form whose card comes back to this conversation.
  */
-import { PiCaretDown, PiLockSimple } from "react-icons/pi";
+import { PiCaretDown, PiLockSimple, PiPhoneCall } from "react-icons/pi";
 import type { MentorRequest, PersonSummary } from "@/lib/platform/contracts";
-import { Avatar, FOCUS_RING, buttonClass } from "@/components/platform/ui";
+import { Avatar, ButtonLink, FOCUS_RING, buttonClass } from "@/components/platform/ui";
 import {
   CONVERSATION_ADMIN_NOTE, CONVERSATION_READERS_HREF, conversationReaders, conversationTimeline,
 } from "@/components/channels/conversation-privacy";
@@ -29,9 +30,11 @@ interface Props {
   /** The conversation's own name, for when the other account is gone. */
   fallbackName: string;
   now: number;
+  /** Where to suggest a call here, while calls between two people are on for the reader; otherwise none is offered. */
+  suggestCallHref?: string | null;
 }
 
-const { counterpart, request, viewerId, fallbackName, now } = Astro.props;
+const { counterpart, request, viewerId, fallbackName, now, suggestCallHref = null } = Astro.props;
 const name = counterpart?.name ?? fallbackName;
 const mentor = counterpart?.roleBadges.some((badge) => badge.kind === "MENTOR") ?? false;
 const badges = counterpart?.roleBadges.filter((badge) => badge.kind !== "AI").map((badge) => badge.label) ?? [];
@@ -70,15 +73,23 @@ const iso = (timestamp: number) => new Date(timestamp).toISOString();
       }
     </div>
   </div>
-  <details data-conversation-privacy class="group min-w-0 sm:max-w-xs">
-    <summary class={buttonClass({ variant: "quiet", size: "sm", className: "cursor-pointer list-none [&::-webkit-details-marker]:hidden" })}>
-      <PiLockSimple aria-hidden className="size-4 shrink-0" />
-      {conversationReaders(counterpart?.name ?? null)}
-      <PiCaretDown aria-hidden className="size-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
-    </summary>
-    <p class="mt-2 text-[0.8125rem] leading-snug text-ink-secondary" data-conversation-admins>
-      {CONVERSATION_ADMIN_NOTE}{" "}
-      <a href={CONVERSATION_READERS_HREF} class:list={["font-semibold text-peach-ink underline underline-offset-2", FOCUS_RING]}>Who reads what</a>
-    </p>
-  </details>
+  <div class="flex min-w-0 flex-col items-start gap-2 sm:items-end">
+    {suggestCallHref && (
+      <ButtonLink variant="quiet" size="sm" href={suggestCallHref} data-suggest-call>
+        <PiPhoneCall aria-hidden className="size-4 shrink-0" />
+        Suggest a call
+      </ButtonLink>
+    )}
+    <details data-conversation-privacy class="group min-w-0 sm:max-w-xs">
+      <summary class={buttonClass({ variant: "quiet", size: "sm", className: "cursor-pointer list-none [&::-webkit-details-marker]:hidden" })}>
+        <PiLockSimple aria-hidden className="size-4 shrink-0" />
+        {conversationReaders(counterpart?.name ?? null)}
+        <PiCaretDown aria-hidden className="size-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+      </summary>
+      <p class="mt-2 text-[0.8125rem] leading-snug text-ink-secondary" data-conversation-admins>
+        {CONVERSATION_ADMIN_NOTE}{" "}
+        <a href={CONVERSATION_READERS_HREF} class:list={["font-semibold text-peach-ink underline underline-offset-2", FOCUS_RING]}>Who reads what</a>
+      </p>
+    </details>
+  </div>
 </header>

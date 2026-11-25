@@ -1,5 +1,5 @@
 import { MeetingCardView, type MeetingCardState, type MeetingNotRecordedReason } from "@/lib/platform/contracts";
-import type { MeetingRecordingState, MeetingState } from "./rules";
+import type { MeetingPurpose, MeetingRecordingState, MeetingState } from "./rules";
 
 /**
  * A call's card as its channel's readers see it (README.md beside this file, "The session card"): the
@@ -10,6 +10,7 @@ import type { MeetingRecordingState, MeetingState } from "./rules";
 
 /** What meetingCardColumn reads for one card, or null when its call is gone or in another channel. */
 interface CardCheck {
+  purpose: MeetingPurpose;
   title: string;
   state: MeetingState;
   scheduledStartAt: number;
@@ -73,7 +74,7 @@ export function meetingCard(meetingId: string, check: unknown): MeetingCardView 
   const after = facts.state === "ENDED" ? afterTheCall(facts)
     : { state: CALL_STATE[facts.state], recordingId: null, transcriptReady: false, reason: null };
   const card = MeetingCardView.safeParse({
-    type: "meeting", meetingId, title: facts.title, state: after.state,
+    type: "meeting", meetingId, purpose: facts.purpose, title: facts.title, state: after.state,
     scheduledStartAt: facts.scheduledStartAt, bookedMinutes: facts.bookedMinutes, openedAt: facts.openedAt, endedAt: facts.endedAt,
     recordingId: after.recordingId, transcriptReady: after.transcriptReady, notRecordedReason: after.reason,
   });

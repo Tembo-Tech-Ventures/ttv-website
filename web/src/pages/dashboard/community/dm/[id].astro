@@ -13,6 +13,7 @@ import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import ConversationHeader from "@/components/platform/mentors/ConversationHeader.astro";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
 import { mentorsServer } from "@/components/platform/mentors/server";
+import { suggestCallPath } from "@/lib/platform/server/space-routes";
 
 const now = Date.now();
 // The other member, and the accepted request that opened it (staff-opened ones have none), read beside the
@@ -28,10 +29,12 @@ const conversation = page.header;
 const counterpart = conversation?.counterpart ?? null;
 const request = mentorRequestsOpen(page.context.me) ? conversation?.request ?? null : null;
 const viewerId = page.context.me.user.id;
+// Calls between two people (in-app calls P10): either member may suggest times, while the flag is on and the conversation is open.
+const suggestCallHref = page.context.me.flags.meeting_checkins && page.channel.archivedAt === null ? suggestCallPath(page.channel.id) : null;
 ---
 
 <SpacePage context={page.context} title={page.channel.name} channels={page.readable} channelId={page.channel.id} fill={page.agreed}>
   <ChannelPageBody page={page}>
-    <ConversationHeader slot="header" counterpart={counterpart} request={request} viewerId={viewerId} fallbackName={page.channel.name} now={now} />
+    <ConversationHeader slot="header" counterpart={counterpart} request={request} viewerId={viewerId} fallbackName={page.channel.name} now={now} suggestCallHref={suggestCallHref} />
   </ChannelPageBody>
 </SpacePage>

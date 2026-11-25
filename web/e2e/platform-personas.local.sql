@@ -218,6 +218,17 @@ INSERT OR REPLACE INTO mentor_request (id,requesterId,mentorId,status,format,not
   'Fictional note held for a check: could we talk about my ledger''s reconciliation job?',1793600000000,1793600000000);
 INSERT OR REPLACE INTO mentor_request_case (requestId,state,clefReasons,openedAt,createdAt,updatedAt) VALUES
  ('ttv-local-mentor-held','OPEN','["Harassment"]',1793600000000,1793600000000,1793600000000);
+-- e2e/style-compliance.spec.ts (in-app calls P10): Achieng and Samuel's conversation, with a call booked from his
+-- suggestion and new times he suggested for another, so the Calls pages, a call and a suggestion open. Cleared with
+-- the conversations above (their calls and suggestions go with them), so a re-seed starts over.
+INSERT INTO channel (id,kind,slug,name) VALUES ('ttv-local-calls-conversation','DIRECT','conversation','Samuel Otieno');
+INSERT INTO channel_member (channelId,userId) VALUES
+ ('ttv-local-calls-conversation','ttv-local-persona-alumna'),('ttv-local-calls-conversation','ttv-local-persona-mentor-two');
+INSERT INTO meeting (id,channelId,purpose,title,scheduledStartAt,bookedMinutes,limitMinutes,recordingPolicy,state,createdBy,createdAt,updatedAt) VALUES
+ ('ttv-local-call-booked','ttv-local-calls-conversation','CALL','Mentoring call',4102000000000,30,90,'NONE','SCHEDULED','ttv-local-persona-alumna',1793600000000,1793600000000);
+INSERT INTO call_proposal (id,channelId,proposedBy,purpose,times,bookedMinutes,state,meetingId,decidedAt,createdAt,updatedAt) VALUES
+ ('ttv-local-call-booked','ttv-local-calls-conversation','ttv-local-persona-mentor-two','CALL','[4102000000000]',30,'ACCEPTED','ttv-local-call-booked',1793600000000,1793600000000,1793600000000),
+ ('ttv-local-call-suggested','ttv-local-calls-conversation','ttv-local-persona-mentor-two','CALL','[4102100000000,4102200000000]',30,'OPEN',NULL,NULL,1793600000001,1793600000001);
 -- e2e/platform-admin-space.spec.ts (T14): one feedback note in one theme, and one client project, so their admin detail pages open.
 INSERT OR REPLACE INTO feedback_theme (id,title,summary,kind,status,createdAt,updatedAt) VALUES
  ('ttv-local-persona-theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',1793400000,1793400000);

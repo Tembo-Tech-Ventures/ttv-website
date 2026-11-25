@@ -1,7 +1,7 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
 import {
-  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, meeting, mentorRequest, mentorRequestCase, mentorRequestReport,
-  moderationCase, profileContact, programApplication, recording, studentProfile, type Database,
+  accessRequest, attentionItem, callProposal, channel, channelMember, channelMessage, communityJourney, meeting, mentorRequest, mentorRequestCase,
+  mentorRequestReport, moderationCase, profileContact, programApplication, recording, studentProfile, type Database,
 } from "@/lib/db/schema";
 import { HELD, MENTOR_SEES } from "@/lib/mentoring/visibility";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
@@ -23,6 +23,9 @@ import { recordingScopeSql } from "@/lib/recordings/access";
  * Cohort sessions (in-app calls P9): to a reader of the session's cohort, "live" while it is live, and
  * "starting soon" while it still waits for a host at the time the item announced and its booked time
  * hasn't passed (`now`), so both leave the bell once it opens, ends, moves or is cancelled.
+ * Calls between two people (P10), only to a member of their conversation: a suggestion's notice to the
+ * other person while it is open with a time still to come; "booked" while the call waits at the very
+ * time it announced and that time hasn't passed; "cancelled" while it is.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities, now = Date.now()) {
   return and(
@@ -80,14 +83,31 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
         ))))),
       and(eq(attentionItem.subjectKind, "meeting"), exists(db.select({ id: meeting.id }).from(meeting)
         .innerJoin(channel, eq(channel.id, meeting.channelId))
-        .where(and(eq(meeting.id, attentionItem.subjectId), eq(meeting.purpose, "SESSION"), eq(channel.kind, "COHORT"),
-          capabilities.isAdmin ? sql`1` : sql`${channel.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`,
-          or(
-            and(eq(attentionItem.kind, "meeting_live"), eq(meeting.state, "LIVE")),
-            and(eq(attentionItem.kind, "meeting_soon"), eq(meeting.state, "SCHEDULED"),
-              sql`json_extract(${attentionItem.eventKey}, '$[2]') = ${meeting.scheduledStartAt}`,
-              sql`${meeting.scheduledStartAt} + ${meeting.bookedMinutes} * 60000 > ${now}`),
-          ))))),
+        .where(and(eq(meeting.id, attentionItem.subjectId), or(
+          and(eq(meeting.purpose, "SESSION"), eq(channel.kind, "COHORT"),
+            capabilities.isAdmin ? sql`1` : sql`${channel.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`,
+            or(
+              and(eq(attentionItem.kind, "meeting_live"), eq(meeting.state, "LIVE")),
+              and(eq(attentionItem.kind, "meeting_soon"), eq(meeting.state, "SCHEDULED"),
+                sql`json_extract(${attentionItem.eventKey}, '$[2]') = ${meeting.scheduledStartAt}`,
+                sql`${meeting.scheduledStartAt} + ${meeting.bookedMinutes} * 60000 > ${now}`),
+            )),
+          and(inArray(meeting.purpose, ["CALL", "CHECKIN"]), eq(channel.kind, "DIRECT"), exists(db.select({ id: channelMember.userId }).from(channelMember)
+            .where(and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId)))),
+            or(
+              and(eq(attentionItem.kind, "call_booked"), eq(meeting.state, "SCHEDULED"),
+                sql`json_extract(${attentionItem.eventKey}, '$[2]') = ${meeting.scheduledStartAt}`,
+                sql`${meeting.scheduledStartAt} + ${meeting.bookedMinutes} * 60000 > ${now}`),
+              and(eq(attentionItem.kind, "call_cancelled"), eq(meeting.state, "CANCELLED")),
+            )),
+        ))))),
+      and(eq(attentionItem.subjectKind, "callProposal"), inArray(attentionItem.kind, ["call_proposed", "call_countered"]),
+        exists(db.select({ id: callProposal.id }).from(callProposal).innerJoin(channel, eq(channel.id, callProposal.channelId))
+          .where(and(eq(callProposal.id, attentionItem.subjectId), eq(channel.kind, "DIRECT"), eq(callProposal.state, "OPEN"),
+            sql`${callProposal.proposedBy} <> ${userId}`,
+            sql`EXISTS (SELECT 1 FROM json_each(${callProposal.times}) WHERE value > ${now})`,
+            exists(db.select({ id: channelMember.userId }).from(channelMember)
+              .where(and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId)))))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)
         .where(and(eq(accessRequest.id, attentionItem.subjectId), or(
           and(eq(attentionItem.kind, "access_decided"), eq(accessRequest.userId, userId)),

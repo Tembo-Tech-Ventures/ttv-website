@@ -87,6 +87,10 @@ export const CALL_PROPOSAL_PURPOSES = ["CHECKIN", "CALL"] as const satisfies rea
 export type CallProposalPurpose = (typeof CALL_PROPOSAL_PURPOSES)[number];
 /** The most times one suggestion offers. */
 export const MAX_PROPOSED_TIMES = 3;
+/** How far ahead a call between two people may be suggested, in days. */
+export const CALL_BOOK_AHEAD_DAYS = 90;
+/** The most calls one person may suggest in a day (a rolling 24 hours), new times for a booked call and other times included. */
+export const CALL_PROPOSALS_PER_DAY = 10;
 
 /** Which provider minted a join token, so the room loads the matching client (provider.ts). */
 export const CALL_PROVIDER_KINDS = ["fake", "realtimekit"] as const;

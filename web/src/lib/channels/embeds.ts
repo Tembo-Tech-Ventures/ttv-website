@@ -2,8 +2,9 @@ import { memberEligibility, postedWorkEligibility } from "@/lib/community/eligib
 import { memberWorkHref } from "@/lib/members/links";
 import { cohortAudience, cohortAudienceSql, recordingAccessFor, transcriptReady, transcriptReadySql } from "@/lib/recordings/access";
 import { meetingCard } from "@/lib/meetings/card-state";
+import { proposalCard } from "@/lib/meetings/proposal-card";
 import {
-  ExternalLink, MeetingEmbed, MessageEmbed,
+  CallProposalEmbed, ExternalLink, MeetingEmbed, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
   type ProjectEmbedRef, type SessionClipEmbed, type ShareablesQuery,
 } from "@/lib/platform/contracts";
@@ -269,33 +270,65 @@ export async function resolveOwnProject(db: D1Database, ownerId: string, ref: Pr
  * audience (cohortAudienceSql: the cohort's own, neither deleted nor hidden), as clips are, so a hidden
  * recording leaves every reader's card at once; `linked` says one exists at all, so a hidden one is
  * never called "not recorded". Only the call's own card message (`meeting.messageId`) shows it, so a
- * second card a race posted shows nothing. `meeting` is the call's id and `program` the channel's
- * program, as SQL.
+ * second card a race posted shows nothing. A call between two people's card shows only to the two of
+ * them (in-app calls P10): an admin reading a case from their conversation gets no card. `meeting` is
+ * the call's id, `program` the channel's program and `viewer` the reader, as SQL.
  */
-const meetingCardColumn = (meeting: string, program: string) => `(SELECT json_object('title', mt.title, 'state', mt.state,
+const meetingCardColumn = (meeting: string, program: string, viewer: string) => `(SELECT json_object('purpose', mt.purpose, 'title', mt.title, 'state', mt.state,
       'scheduledStartAt', mt.scheduledStartAt, 'bookedMinutes', mt.bookedMinutes, 'openedAt', mt.openedAt, 'endedAt', mt.endedAt,
       'capture', (SELECT mr.state FROM meeting_recording mr WHERE mr.meetingId = mt.id),
       'linked', EXISTS (SELECT 1 FROM recording lr WHERE lr.meetingId = mt.id),
       'recording', (SELECT json_array(r.id, r.r2VideoKey IS NOT NULL, ${transcriptReadySql("r")}, r.processingStatus = 'failed') FROM recording r
         WHERE r.meetingId = mt.id AND ${cohortAudienceSql("r", program)} ORDER BY coalesce(r.recordedAt, r.createdAt) DESC, r.id LIMIT 1))
-    FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId AND mt.messageId = m.id)`;
+    FROM meeting mt WHERE mt.id = ${meeting} AND mt.channelId = m.channelId AND mt.messageId = m.id
+      AND (mt.purpose NOT IN ('CALL', 'CHECKIN') OR ${conversationMember("mt.channelId", viewer)}))`;
+
+/**
+ * Whether `viewer` is one of the members of the direct conversation `channel` (both SQL). A card about a
+ * call between two people shows only to them: never to an admin reading a reported or flagged message
+ * from the conversation in the moderation queue, so a "Not now" and its times stay in the conversation.
+ */
+const conversationMember = (channel: string, viewer: string) =>
+  `EXISTS (SELECT 1 FROM channel_member cm WHERE cm.channelId = ${channel} AND cm.userId = ${viewer})`;
+
+/**
+ * A suggested call's card as its conversation reads it (lib/meetings/proposals.ts, proposal-card.ts):
+ * the suggestion, in the message's own channel and only on its own card message, with the call it
+ * booked or would move. A check-in's work is named only while it is still posted. "countered" is a
+ * declined suggestion the other person answered with times of their own, in the same write: their
+ * suggestion was made at the very moment this one was declined (proposals.ts suggestCall). Only the
+ * conversation's two members get it (`conversationMember`). `proposal` is the suggestion's id and
+ * `viewer` the reader, as SQL.
+ */
+const proposalCardColumn = (proposal: string, viewer: string) => `(SELECT json_object('purpose', cp.purpose, 'state', cp.state,
+      'proposedBy', cp.proposedBy, 'times', json(cp.times), 'bookedMinutes', cp.bookedMinutes, 'askToRecord', cp.askToRecord,
+      'countered', cp.state = 'DECLINED' AND EXISTS (SELECT 1 FROM call_proposal n WHERE n.channelId = cp.channelId
+        AND n.createdAt = cp.decidedAt AND n.proposedBy <> cp.proposedBy),
+      'work', (SELECT json_array(j.title, cp.journeyVersion) FROM communityJourney j
+        WHERE j.id = cp.journeyId AND ${postedWorkEligibility("j", true)}),
+      'call', (SELECT json_array(mt.id, mt.state, mt.scheduledStartAt) FROM meeting mt WHERE mt.id = cp.meetingId AND mt.channelId = cp.channelId))
+    FROM call_proposal cp WHERE cp.id = ${proposal} AND cp.channelId = m.channelId AND cp.messageId = m.id
+      AND ${conversationMember("cp.channelId", viewer)})`;
 
 /**
  * Per stored embed, whether this reader may still see it, in one correlated column of the page's
  * own statement: a JSON array with null where the work is gone, and otherwise, for a project, its
- * confirmations at or before the shared revision. ?3 is the channel's program. A project must still
+ * confirmations at or before the shared revision. `program` is the channel's program and `viewer`
+ * the reader, as SQL. A project must still
  * exist, belong to the message's author and be published; a recording must still be complete, and one
  * every reader of this cohort channel may see (the recording access policy's cohort audience: the
  * cohort's own, neither deleted nor hidden), so the channel decides for all of them. Deleted messages carry no embeds and cost nothing here. A project's
  * author handle comes only while the Members directory lists them: staff-shared work has no member page.
+ * A call between two people's card, and a suggested call's, reach only the conversation's members.
  */
-export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
+export const embedAccessColumn = (program: string, viewer: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
     WHEN 'project' THEN (SELECT json_object('confirmations', json(${confirmationsOf("j.id", "json_extract(e.value, '$.version')")}),
         'handle', (SELECT p.handle FROM studentProfile p WHERE p.userId = j.userId AND ${memberEligibility("p.userId")})) FROM communityJourney j
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND ${postedWorkEligibility("j", true)})
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
       WHERE r.id = json_extract(e.value, '$.recordingId') AND ${cohortAudienceSql("r", program)} AND ${transcriptReadySql("r")})
-    WHEN 'meeting' THEN ${meetingCardColumn("json_extract(e.value, '$.meetingId')", program)}
+    WHEN 'meeting' THEN ${meetingCardColumn("json_extract(e.value, '$.meetingId')", program, viewer)}
+    WHEN 'callProposal' THEN ${proposalCardColumn("json_extract(e.value, '$.proposalId')", viewer)}
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**
@@ -324,6 +357,11 @@ export function embedsForReader(stored: unknown[], access: string | null): Messa
     const card = MeetingEmbed.safeParse(value);
     if (card.success) {
       const view = meetingCard(card.data.meetingId, jsonValue(checks[i]));
+      return view ? [view] : [];
+    }
+    const proposal = CallProposalEmbed.safeParse(value);
+    if (proposal.success) {
+      const view = proposalCard(proposal.data.proposalId, jsonValue(checks[i]));
       return view ? [view] : [];
     }
     const embed = MessageEmbed.safeParse(value);

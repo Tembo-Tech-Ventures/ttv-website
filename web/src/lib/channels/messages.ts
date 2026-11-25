@@ -157,7 +157,7 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
   CASE WHEN m.authorKind = 'USER' AND m.authorId = ?2 THEN EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id) END AS temboAsked,
   ${CITATIONS_GONE},
   CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL THEN ${sessionsGoneSql("m", program)} END AS sessionsGone,
-  ${embedAccessColumn(program)}`;
+  ${embedAccessColumn(program, "?2")}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
 /** Hidden messages reach only their author and the channel's moderators. ?2 viewer, ?4 canModerate. */

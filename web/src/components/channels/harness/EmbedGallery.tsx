@@ -5,7 +5,7 @@
  * they are composed here from the fixtures.
  */
 import { people, projects, sessionClip } from "@/lib/platform/fixtures";
-import type { MeetingCardView, MessageEmbedView } from "@/lib/platform/contracts";
+import type { CallProposalCardView, MeetingCardView, MessageEmbedView } from "@/lib/platform/contracts";
 import EmbedCard from "../EmbedCard";
 import { served } from "./fixture-pages";
 import "../channels.css";
@@ -16,9 +16,16 @@ const fare = served(projects.fareSplitter);
 
 /** A fictional cohort session's card (in-app calls P9): Thursday 26 November 2026, 18:00 EAT, 45 minutes. */
 const session: MeetingCardView = {
-  type: "meeting", meetingId: "fixture-session", title: "Testing payment callbacks", state: "scheduled",
+  type: "meeting", meetingId: "fixture-session", purpose: "SESSION", title: "Testing payment callbacks", state: "scheduled",
   scheduledStartAt: Date.parse("2026-11-26T15:00:00Z"), bookedMinutes: 45, openedAt: null, endedAt: null,
   recordingId: null, transcriptReady: false, notRecordedReason: null,
+};
+
+/** A fictional suggested call (in-app calls P10): three times from Wednesday 25 November 2026, 30 minutes. */
+const proposal: CallProposalCardView = {
+  type: "callProposal", proposalId: "fixture-proposal", purpose: "CALL", state: "open", proposedBy: people.david.id,
+  times: [Date.parse("2026-11-25T08:00:00Z"), Date.parse("2026-11-25T11:00:00Z"), Date.parse("2026-11-26T08:00:00Z")],
+  bookedMinutes: 30, askToRecord: false, work: null, call: null, moves: false,
 };
 
 export const EMBED_SCENES: readonly { key: string; title: string; embed: MessageEmbedView; compact?: boolean }[] = [
@@ -46,6 +53,11 @@ export const EMBED_SCENES: readonly { key: string; title: string; embed: Message
   { key: "session-processing", title: "Once it ends, with the recording on its way", embed: { ...session, state: "processing", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000 } },
   { key: "session-ready", title: "With its recording ready to watch", embed: { ...session, state: "ready", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000, recordingId: "fixture-recording", transcriptReady: true } },
   { key: "session-not-recorded", title: "A session that wasn't recorded, and why", embed: { ...session, state: "notRecorded", openedAt: session.scheduledStartAt, endedAt: session.scheduledStartAt + 2_700_000, notRecordedReason: "limit" } },
+  { key: "call-suggested", title: "Times suggested for a call, as the other person sees them", embed: proposal },
+  { key: "checkin-suggested", title: "A project check-in, asked to record", embed: { ...proposal, purpose: "CHECKIN", askToRecord: true, work: { title: "Bus fare splitter", version: 4 } } },
+  { key: "call-booked", title: "Once a time is picked", embed: { ...proposal, state: "accepted", call: { meetingId: "fixture-proposal", state: "SCHEDULED", scheduledStartAt: proposal.times[1]! } } },
+  { key: "call-not-now", title: "After Not now", embed: { ...proposal, state: "declined" } },
+  { key: "call-expired", title: "When every time has passed", embed: { ...proposal, state: "expired" } },
 ];
 
 export default function EmbedGallery() {

@@ -83,6 +83,15 @@ announced (its event key) and its booked time hasn't passed, "live" while it is 
 of that cohort only. `remindSessionsStartingSoon` is the hook the every-minute meeting clock (slice P4)
 calls; `listAttention` and `getAttentionCount` take the request's `now`.
 
+Calls between two people (in-app calls P10, `call-producers.ts`; src/lib/meetings/README.md, "Calls
+between two people"), in Profile, following the narrowest of `spaces`, `channels`, `mentor_requests`,
+`meetings` and `meeting_checkins`, and only to a member of the conversation: `call_proposed` (Requests)
+and `call_countered` (Updates, other times for theirs) to the other person, with a `callProposal`
+subject shown only while the suggestion is open with a time still to come; `call_booked` (Updates) to the
+person who suggested it, a `meeting` subject shown while the call still waits at the time its key names
+and that time hasn't passed; `call_cancelled` (Updates) to the other person, while the call is cancelled.
+"Not now" and withdrawing write nothing: the suggestion's notice simply leaves the bell.
+
 Mentor requests (B-4.1, `mentor-producers.ts`; src/lib/mentoring/README.md,
 "Attention"): `mentor_request` and `mentor_withdrawn` to the mentor,
 `mentor_accepted`, `mentor_redirected`, `mentor_declined` and `mentor_checked`

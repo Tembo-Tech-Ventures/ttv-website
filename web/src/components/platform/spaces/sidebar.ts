@@ -1,5 +1,5 @@
 import type { AccessRole, Channel, Me, SpaceId } from "@/lib/platform/contracts";
-import { CONDUCT_PATH, MEMBERS_PATH, SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
+import { CALLS_PAGE_PATH, CONDUCT_PATH, MEMBERS_PATH, MENTORING_CALLS_PATH, SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/account-actions";
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
@@ -44,6 +44,8 @@ export type SpacePageKey =
   | "mentorRequests"
   | "mentorAvailability"
   | "conversation"
+  | "calls"
+  | "mentoringCalls"
   | AdminSpacePageKey;
 
 /**
@@ -116,7 +118,8 @@ export type SidebarIcon =
   | "channel"
   | "cohortChannel"
   | "conduct"
-  | "conversation";
+  | "conversation"
+  | "calls";
 
 export interface SidebarItem {
   key: string;
@@ -208,6 +211,9 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   mentorRequests: ["mentoring"],
   mentorAvailability: ["mentoring"],
   conversation: ["community"],
+  // Calls between two people (in-app calls P10): one list for everyone in Profile, and the same list in a mentor's Mentoring.
+  calls: ["profile"],
+  mentoringCalls: ["mentoring"],
   ...byAdminPage((): readonly SpaceId[] => ["admin"]),
 };
 
@@ -239,6 +245,9 @@ export const SPACE_PAGE_PATHS = {
   mentorAvailability: MENTOR_AVAILABILITY_PATH,
   // A conversation page is one of many under this prefix; its own path is conversationPath(channel.id).
   conversation: CONVERSATIONS_PREFIX,
+  // The list; a call, a suggestion and the suggest form under it mark this entry current too.
+  calls: CALLS_PAGE_PATH,
+  mentoringCalls: MENTORING_CALLS_PATH,
   ...byAdminPage((key) => ADMIN_PAGE_HREFS[key]),
 } as const satisfies Record<SpacePageKey, string>;
 
@@ -407,6 +416,8 @@ function mentoring(facts: SidebarFacts): SidebarModel {
         { key: "mentoring", page: "mentoring", label: "Overview", icon: "overview" },
         { key: "requests", page: "mentorRequests", label: "Requests", icon: "requests" },
         confirm,
+        // Calls between two people (flag meeting_checkins): the same list as Profile's, where a mentor's calls are.
+        facts.me.flags.meeting_checkins && { key: "calls", page: "mentoringCalls", label: "Calls", icon: "calls" },
         { key: "availability", page: "mentorAvailability", label: "Availability", icon: "availability" },
       ]),
     };
@@ -499,6 +510,8 @@ function profile(facts: SidebarFacts): SidebarModel {
       ...group(facts, undefined, [
         { key: "overview", page: "profile", label: "Overview", icon: "overview" },
         { key: "portfolio", page: "portfolio", label: "Edit profile", icon: "profile" },
+        // Calls between two people (flag meeting_checkins): booked, waiting for an answer, and past.
+        facts.me.flags.meeting_checkins && { key: "calls", page: "calls", label: "Calls", icon: "calls" },
         visible.has("writing") && { key: "writing", page: "writing", label: "Writing", icon: "writing" },
         visible.has("opportunities") && { key: "opportunities", page: "opportunities", label: "Opportunities", icon: "opportunities" },
         visible.has("leads") && {

@@ -1,0 +1,184 @@
+---
+/**
+ * Calls → one suggested call (in-app calls P10, src/lib/meetings/README.md, "Calls between two
+ * people"): its times in Nairobi time and the reader's own, and what the reader can do with it, as on
+ * its card in the conversation. The card's buttons post here, so answering works without JavaScript:
+ * the other person picks a time (which books the call), suggests other times, or says "Not now"; the
+ * person who suggested it withdraws it. A suggestion answered, or whose times have all passed, offers
+ * nothing to act on. After an answer from the card, the reader goes back to the conversation.
+ *
+ * Only for one of the conversation's two members, while `meeting_checkins` is on for them: anything
+ * else, an admin outside the conversation included, is the same 404.
+ */
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import { answeredHref, callerFor, callPageResponse, callsContext, conversationHref, hiddenRefusal } from "@/components/platform/calls/call-page";
+import SessionTime from "@/components/platform/sessions/SessionTime.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
+import { BackLink, Button, ButtonLink, Card, Chip, DescriptionItem, DescriptionList, Notice, PageHeader } from "@/components/platform/ui";
+import { proposalCardLine } from "@/components/channels/EmbedCard";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { ChannelError } from "@/lib/channels/errors";
+import * as schema from "@/lib/db/schema";
+import { pickableTimes } from "@/lib/meetings/proposal-card";
+import { answerProposal, readProposal, type CallProposal, type ProposalAnswer } from "@/lib/meetings/proposals";
+import { CHECKIN_LIMIT_MINUTES } from "@/lib/meetings/rules";
+import { lengthLabel } from "@/lib/meetings/session-times";
+import { redirectWithFlash, takeFlash } from "@/lib/platform/server/flash";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { bookedCallPath, CALLS_PAGE_PATH, CONDUCT_PATH, proposalPath, suggestCallPath } from "@/lib/platform/server/space-routes";
+
+const { method } = Astro.request;
+const { id } = Astro.params;
+if (!id) return callPageResponse(404);
+const db = drizzle(env.DB, { schema });
+const now = Date.now();
+
+const resolved = await resolveSpacePageWith(Astro.locals, "calls", async (me) => {
+  if (!me.flags.meeting_checkins) return null;
+  const caller = callerFor(me, await requestCapabilities(db, Astro.locals));
+  try {
+    return { caller, proposal: await readProposal(env.DB, caller, id, now) };
+  } catch (error) {
+    if (error instanceof ChannelError && error.status === 404) return null;
+    throw error;
+  }
+});
+if (!resolved || !resolved[1]) return callPageResponse(404);
+if (method !== "GET" && method !== "HEAD" && method !== "POST") return callPageResponse(405);
+if (method === "POST" && !hasMatchingRequestOrigin(Astro.request)) return callPageResponse(404);
+const [context, { caller }] = resolved;
+let proposal: CallProposal = resolved[1].proposal;
+let failure: { message: string; conduct: boolean } | null = null;
+
+if (method === "POST") {
+  const form = await Astro.request.formData();
+  const kind = form.get("answer");
+  const from = String(form.get("from") ?? "");
+  const answer: ProposalAnswer | null = kind === "pick" ? { kind: "pick", at: Number(form.get("at")) }
+    : kind === "notNow" ? { kind: "notNow" } : kind === "withdraw" ? { kind: "withdraw" } : null;
+  if (!answer) return callPageResponse(404);
+  try {
+    const answered = await answerProposal(callsContext(env, Astro.locals.cfContext, proposalPath(id), now), caller, id, answer);
+    const back = answeredHref(from, proposal.channelId, id);
+    // From the card, the conversation shows what changed; elsewhere a flash says it.
+    if (from === "conversation") return Astro.redirect(back, 303);
+    const title = answer.kind === "pick" ? "Call booked" : answer.kind === "notNow" ? "You said Not now" : "Suggestion withdrawn";
+    return redirectWithFlash(Astro, back === CALLS_PAGE_PATH ? CALLS_PAGE_PATH : proposalPath(id), {
+      tone: answered.card === "not_posted" ? "warning" : "success", title,
+      message: answered.card === "not_posted" ? `The call's card didn't post in your conversation, so tell ${proposal.counterpart.name.split(/\s+/u)[0]} there.` : undefined,
+    });
+  } catch (error) {
+    const hidden = hiddenRefusal(error);
+    if (hidden) return hidden;
+    const refusal = error as ChannelError;
+    failure = { message: refusal.message, conduct: refusal.code === "conduct_required" };
+    Astro.response.status = refusal.status;
+    proposal = await readProposal(env.DB, caller, id, now);
+  }
+}
+
+const other = proposal.counterpart.name;
+const firstName = other.split(/\s+/u)[0] || other;
+const moves = proposal.call !== null && proposal.call.id !== proposal.id;
+const open = proposal.state === "open";
+const pickable = open && !proposal.mine ? pickableTimes(proposal.times, now) : [];
+const kindLabel = moves ? "New times for your call" : proposal.purpose === "CHECKIN" ? "Project check-in" : "Call";
+const title = `${kindLabel} with ${other}`;
+const STATE = {
+  open: proposal.mine ? `Waiting for ${firstName}` : "Waiting for you", accepted: "Booked", countered: "Other times suggested",
+  declined: "Not now", withdrawn: "Withdrawn", expired: "Times passed", cancelled: "Call cancelled",
+} as const;
+const flash = method === "GET" ? takeFlash(Astro) : null;
+const card = {
+  type: "callProposal" as const, proposalId: proposal.id, purpose: proposal.purpose, state: proposal.state, proposedBy: proposal.proposedBy,
+  times: proposal.times, bookedMinutes: proposal.bookedMinutes, askToRecord: proposal.askToRecord,
+  work: proposal.work?.title ? { title: proposal.work.title, version: proposal.work.version } : null,
+  call: proposal.call ? { meetingId: proposal.call.id, state: proposal.call.state, scheduledStartAt: proposal.call.scheduledStartAt } : null, moves,
+};
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title={title} titlePrefix={failure ? "Error: " : ""}>
+  <div class="flex max-w-3xl flex-col gap-6">
+    <BackLink href={CALLS_PAGE_PATH}>Calls</BackLink>
+    <PageHeader title={title}>{proposalCardLine(card, proposal.mine)}</PageHeader>
+    {failure ? (
+      <Notice tone="danger" title="That didn't go through" focusOnLoad>
+        {failure.message}{" "}
+        {failure.conduct ? <a class="underline underline-offset-4" href={CONDUCT_PATH}>Read how we talk to each other</a> : null}
+      </Notice>
+    ) : flash ? <Notice tone={flash.tone} title={flash.title} announce="polite">{flash.message}</Notice> : null}
+
+    <Card>
+      <div class="flex flex-col gap-5" data-proposal data-proposal-state={proposal.state}>
+        <div class="flex flex-wrap items-center gap-2">
+          <Chip tone={open && !proposal.mine ? "ring" : "neutral"}>{STATE[proposal.state]}</Chip>
+        </div>
+        {proposal.work?.title ? <p class="m-0 font-semibold text-ink-primary">{`${proposal.work.title}, revision ${proposal.work.version}`}</p> : null}
+        {moves && proposal.call && proposal.state !== "accepted" ? (
+          <p class="m-0 text-ink-secondary">Booked now: <SessionTime startAt={proposal.call.scheduledStartAt} minutes={proposal.call.bookedMinutes} now={now} /></p>
+        ) : null}
+
+        {pickable.length > 0 ? (
+          <ul class="m-0 flex list-none flex-col gap-2 p-0" aria-label="Pick a time">
+            {pickable.map((at) => (
+              <li>
+                <form method="post" class="m-0 flex flex-wrap items-center gap-3">
+                  <input type="hidden" name="answer" value="pick" />
+                  <input type="hidden" name="at" value={String(at)} />
+                  <input type="hidden" name="from" value="proposal" />
+                  <Button type="submit" variant="quiet" className="h-auto w-full justify-start py-2.5 sm:w-auto" data-pick-time={at}>
+                    <span class="min-w-0 text-left whitespace-normal"><span class="sr-only">Pick </span><SessionTime startAt={at} minutes={proposal.bookedMinutes} now={now} /></span>
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul class="m-0 flex list-none flex-col gap-1 p-0 text-ink-secondary">
+            {(proposal.state === "accepted" && proposal.call ? [proposal.call.scheduledStartAt] : proposal.times).map((at) => (
+              <li><SessionTime startAt={at} minutes={proposal.bookedMinutes} now={now} /></li>
+            ))}
+          </ul>
+        )}
+
+        <DescriptionList>
+          <DescriptionItem term="Length">{proposal.purpose === "CHECKIN" ? `Up to ${CHECKIN_LIMIT_MINUTES} minutes` : lengthLabel(proposal.bookedMinutes)}</DescriptionItem>
+          <DescriptionItem term="Recording">
+            {proposal.askToRecord
+              ? "Asked to record. You'll both be asked on the day, and it's recorded only if you both say yes."
+              : "Not recorded"}
+          </DescriptionItem>
+          <DescriptionItem term="Who can join">{`You and ${other}. Nobody else, staff included.`}</DescriptionItem>
+        </DescriptionList>
+
+        <div class="flex flex-wrap gap-2">
+          {open && !proposal.mine ? (
+            <>
+              <ButtonLink variant="quiet" href={suggestCallPath(proposal.channelId, { instead: proposal.id })}>Suggest other times</ButtonLink>
+              <form method="post" class="m-0">
+                <input type="hidden" name="answer" value="notNow" />
+                <input type="hidden" name="from" value="proposal" />
+                <Button type="submit" variant="ghost" data-not-now>Not now</Button>
+              </form>
+            </>
+          ) : null}
+          {open && proposal.mine ? (
+            <form method="post" class="m-0">
+              <input type="hidden" name="answer" value="withdraw" />
+              <input type="hidden" name="from" value="proposal" />
+              <Button type="submit" variant="ghost" data-withdraw>Withdraw</Button>
+            </form>
+          ) : null}
+          {proposal.state === "accepted" && proposal.call ? <ButtonLink variant="quiet" href={bookedCallPath(proposal.call.id)}>See the call</ButtonLink> : null}
+          {!open && proposal.state !== "accepted" && proposal.state !== "countered" && !moves ? (
+            <ButtonLink variant="quiet" href={suggestCallPath(proposal.channelId)}>Suggest new times</ButtonLink>
+          ) : null}
+          <ButtonLink variant="ghost" href={conversationHref(proposal.channelId)}>{`Conversation with ${firstName}`}</ButtonLink>
+        </div>
+      </div>
+    </Card>
+  </div>
+</SpacePage>

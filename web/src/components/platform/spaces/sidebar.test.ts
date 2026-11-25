@@ -245,15 +245,19 @@ describe("space sidebars", () => {
 
   it("show the profile's pages as the journey unlocks them, with visitor messages counted", () => {
     const newcomer = spaceSidebar("profile", facts(meByPersona.lucy, "portfolio", { visibleLinkIds: NEW_SIGN_IN }));
-    expect(labels(newcomer)).toEqual(["Overview", "Edit profile", "Account", "Your feedback"]);
+    expect(labels(newcomer)).toEqual(["Overview", "Edit profile", "Calls", "Account", "Your feedback"]);
     expect(current(newcomer)).toEqual(["Edit profile"]);
+    // Calls between two people (in-app calls P10) are listed only while meeting_checkins is on.
+    const noCalls = { ...meByPersona.lucy, flags: { ...meByPersona.lucy.flags, meeting_checkins: false } };
+    expect(labels(spaceSidebar("profile", facts(noCalls, "portfolio", { visibleLinkIds: NEW_SIGN_IN })))).not.toContain("Calls");
+    expect(current(spaceSidebar("profile", facts(meByPersona.lucy, "calls", { visibleLinkIds: NEW_SIGN_IN })))).toEqual(["Calls"]);
 
     const alumna = spaceSidebar("profile", facts(meByPersona.achieng, "leads", {
       unreadLeadCount: 3,
       certificates: [{ id: "application-2", programName: "Cohort 02" }],
     }));
     expect(alumna.groups.map((group) => group.label)).toEqual([undefined, "Certificates", "Settings"]);
-    expect(labels(alumna)).toEqual(["Overview", "Edit profile", "Writing", "Opportunities", "Visitor messages", "Cohort 02", "Account", "Your feedback"]);
+    expect(labels(alumna)).toEqual(["Overview", "Edit profile", "Calls", "Writing", "Opportunities", "Visitor messages", "Cohort 02", "Account", "Your feedback"]);
     expect(alumna.groups[0]!.items.find((item) => item.key === "leads")).toMatchObject({ count: 3, current: true });
     expect(hrefs(alumna)).toContain("/certificate/application-2");
 
@@ -485,9 +489,13 @@ describe("space sidebars", () => {
         { label: "Overview", href: "/dashboard/mentoring", note: undefined },
         { label: "Requests", href: "/dashboard/mentoring/requests", note: undefined },
         { label: "Confirm work", href: "/dashboard/mentoring/confirm", note: undefined },
+        { label: "Calls", href: "/dashboard/mentoring/calls", note: undefined },
         { label: "Availability", href: "/dashboard/mentoring/availability", note: undefined },
       ]);
       expect(current(model)).toEqual(["Requests"]);
+      expect(current(spaceSidebar("mentoring", facts(meByPersona.david, "mentoringCalls")))).toEqual(["Calls"]);
+      const noCalls = { ...meByPersona.david, flags: { ...meByPersona.david.flags, meeting_checkins: false } };
+      expect(labels(spaceSidebar("mentoring", facts(noCalls, "mentorRequests")))).not.toContain("Calls");
       expect(current(spaceSidebar("mentoring", facts(meByPersona.david, "mentorAvailability")))).toEqual(["Availability"]);
     });
 

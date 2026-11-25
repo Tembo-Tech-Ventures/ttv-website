@@ -29,6 +29,7 @@ const STUDENT = "synthetic-wanjiku";
 const ADMIN = "synthetic-amina";
 const MENTOR = "synthetic-david";
 const DIRECT = "synthetic-direct";
+const CALLS = "synthetic-calls";
 const BUILDER = "synthetic-achieng";
 const INSTITUTION = "synthetic-joseph";
 const databases: { close(): void }[] = [];
@@ -78,6 +79,15 @@ function seeded() {
   // One cohort session still to come, for "Coming up" and its edit page.
   sqlite.exec(`INSERT INTO meeting (id, channelId, purpose, title, scheduledStartAt, bookedMinutes, limitMinutes, recordingPolicy, state, createdAt, updatedAt)
     VALUES ('session', '${cohortChannel.id}', 'SESSION', 'Week 4: Deploying', 4102000000000, 60, 90, 'ALWAYS', 'SCHEDULED', 0, 0);`);
+  // Calls between two people (in-app calls P10): the student and the mentor's conversation, with a call
+  // booked from a suggestion and new times the mentor suggested for another.
+  sqlite.exec(`INSERT INTO channel(id,kind,slug,name) VALUES ('${CALLS}','DIRECT','dm','David Kamau');
+    INSERT INTO channel_member(channelId,userId) VALUES ('${CALLS}','${STUDENT}'),('${CALLS}','${MENTOR}');
+    INSERT INTO meeting (id, channelId, purpose, title, scheduledStartAt, bookedMinutes, limitMinutes, recordingPolicy, state, createdBy, createdAt, updatedAt)
+      VALUES ('call', '${CALLS}', 'CALL', 'Mentoring call', 4102000000000, 30, 90, 'NONE', 'SCHEDULED', '${STUDENT}', 0, 0);
+    INSERT INTO call_proposal (id, channelId, proposedBy, purpose, times, bookedMinutes, state, meetingId, decidedAt, createdAt, updatedAt) VALUES
+      ('call', '${CALLS}', '${MENTOR}', 'CALL', '[4102000000000]', 30, 'ACCEPTED', 'call', 1, 0, 1),
+      ('proposal', '${CALLS}', '${MENTOR}', 'CALL', '[4102100000000,4102200000000]', 30, 'OPEN', NULL, NULL, 2, 2);`);
   return { db: withRoundTrips(withRaw(sqlite, db)), cohortChannel: cohortChannel.slug };
 }
 
@@ -99,6 +109,12 @@ const PAGES = {
   "cohort channel": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: STUDENT },
   "cohort channel, first visit": { path: (slug: string) => `/dashboard/cohort/c/${slug}`, page: () => import("@/pages/dashboard/cohort/c/[slug].astro"), user: ADMIN },
   conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
+  // Calls between two people (in-app calls P10).
+  calls: { path: () => "/dashboard/me/calls", page: () => import("@/pages/dashboard/me/calls/index.astro"), user: STUDENT },
+  "mentoring calls": { path: () => "/dashboard/mentoring/calls", page: () => import("@/pages/dashboard/mentoring/calls.astro"), user: MENTOR },
+  "suggest a call": { path: () => `/dashboard/me/calls/suggest?conversation=${CALLS}`, page: () => import("@/pages/dashboard/me/calls/suggest.astro"), user: STUDENT },
+  "a suggested call": { path: () => "/dashboard/me/calls/suggested/proposal", page: () => import("@/pages/dashboard/me/calls/suggested/[id].astro"), user: STUDENT, id: "proposal" },
+  "a booked call": { path: () => "/dashboard/me/calls/call", page: () => import("@/pages/dashboard/me/calls/[id].astro"), user: STUDENT, id: "call" },
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
   conduct: { path: () => "/dashboard/community/conduct", page: () => import("@/pages/dashboard/community/conduct.astro"), user: ADMIN },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
@@ -238,6 +254,14 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "cohort channel": { d1: 20, depth: 3 },
   "cohort channel, first visit": { d1: 17, depth: 3 },
   conversation: { d1: 23, depth: 3 },
+  // Calls between two people (in-app calls P10). Each reads its own rows in one round trip once the space
+  // context says `meeting_checkins` is on: the calls and the suggestions waiting (one batch), the conversation
+  // with its work and any suggestion waiting (one batch), one suggestion, or one call, each with the other person.
+  calls: { d1: 15, depth: 3 },
+  "mentoring calls": { d1: 12, depth: 3 },
+  "suggest a call": { d1: 15, depth: 3 },
+  "a suggested call": { d1: 15, depth: 3 },
+  "a booked call": { d1: 15, depth: 3 },
   // Two more than PERF-2 measured: the journey's profile and entries, read with the page since PERF-3
   // (#330) in place of three API calls after hydration, each with its own middleware and auth reads.
   // One more since the style-guide rollout: a journey's confirmations are read beside its entries, not

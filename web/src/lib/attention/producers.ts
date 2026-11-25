@@ -27,6 +27,8 @@ const ATTENTION_CATEGORY: Record<AttentionKind, Exclude<AttentionFilter, "all">>
   opportunity_match: "updates", moderation_pending: "updates", message_hidden: "updates", access_decided: "updates",
   moderation_decided: "updates", meeting_soon: "updates", meeting_live: "updates", recording_deleted: "updates",
   recording_spend_alert: "updates",
+  // Calls between two people (lib/meetings/proposals.ts): a new suggestion asks for an answer; the rest say what changed.
+  call_proposed: "requests", call_countered: "updates", call_booked: "updates", call_cancelled: "updates",
 };
 
 /** The flags an item about each feature needs, all of them, for its recipient. */
@@ -37,6 +39,8 @@ const AUDIENCE_FLAGS = {
   mentor_requests: ["spaces", "channels", "mentor_requests"],
   // Calls need channels and spaces too (flags.ts REQUIRES).
   meetings: ["spaces", "channels", "meetings"],
+  // Calls between two people need meetings and mentor requests too.
+  meeting_checkins: ["spaces", "channels", "mentor_requests", "meetings", "meeting_checkins"],
 } as const satisfies Partial<Record<FlagKey, readonly FlagKey[]>>;
 
 /**

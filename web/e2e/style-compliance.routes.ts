@@ -87,6 +87,8 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/mentoring/requests", persona: "mentor" },
   { path: "/dashboard/mentoring/availability", persona: "mentor" },
   { path: "/dashboard/mentoring/confirm", persona: "mentor", browserOnly: true },
+  // Calls between two people (in-app calls P10, flag `meeting_checkins`): the same list as Profile's.
+  { path: "/dashboard/mentoring/calls", persona: "mentor" },
 
   // Discover
   { path: "/dashboard/discover", persona: "institution" },
@@ -98,6 +100,12 @@ export const STYLE_ROUTES: readonly StyleRoute[] = [
   { path: "/dashboard/me/writing/new", persona: "alumna", namedH1: true },
   { path: "/dashboard/me/opportunities", persona: "alumna" },
   { path: "/dashboard/me/leads", persona: "alumna" },
+  // Calls between two people (in-app calls P10, flag `meeting_checkins`). The local seed gives Achieng a call
+  // booked with Samuel and new times he suggested; where nobody has a call, the pages under the list are skipped.
+  { path: "/dashboard/me/calls", persona: "alumna" },
+  { path: "/dashboard/me/calls/[id]", persona: "alumna", detail: { from: "/dashboard/me/calls", link: ID("/dashboard/me/calls") } },
+  { path: "/dashboard/me/calls/suggested/[id]", persona: "alumna", detail: { from: "/dashboard/me/calls", link: ID("/dashboard/me/calls/suggested") } },
+  { path: "/dashboard/me/calls/suggest", persona: "alumna", detail: { from: "/dashboard/me/calls", link: /^\/dashboard\/me\/calls\/suggest\?/ } },
   { path: "/dashboard/account", persona: "alumna" },
 
   // Outside the spaces

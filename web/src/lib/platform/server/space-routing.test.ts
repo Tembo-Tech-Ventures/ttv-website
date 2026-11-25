@@ -236,6 +236,7 @@ describe("onboarding routing (B-O.4)", () => {
     return { response, next, location: response.headers.get("Location") };
   };
 
+  // One database per role, every migration applied to each: about 3.5 s locally, and past the default 5 s on CI runners.
   it("flag-OFF snapshot: /dashboard is unchanged, whatever onboarding rows exist", async () => {
     const rows: string[] = [];
     // STAFF is off for everyone but admins, for whom onboarding is on.
@@ -300,7 +301,7 @@ describe("onboarding routing (B-O.4)", () => {
       STAFF multi-cohort roles deduplicated: /dashboard/cohort /dashboard/community /dashboard/cohort /dashboard/me
       STAFF global staff labels do not grant cohort scope: /dashboard/community /dashboard/community /dashboard/community /dashboard/me"
     `);
-  });
+  }, 30_000);
 
   it.each(["OFF", "STAFF"])("flag-OFF snapshot: spaces %s keeps /dashboard on the legacy page even with onboarding ALL", async spaces => {
     setup();
