@@ -88,7 +88,7 @@ const kindLabel = moves ? "New times for your call" : proposal.purpose === "CHEC
 const title = `${kindLabel} with ${other}`;
 const STATE = {
   open: proposal.mine ? `Waiting for ${firstName}` : "Waiting for you", accepted: "Booked", countered: "Other times suggested",
-  declined: "Not now", withdrawn: "Withdrawn", expired: "Times passed",
+  declined: "Not now", withdrawn: "Withdrawn", expired: "Times passed", cancelled: "Call cancelled",
 } as const;
 const flash = method === "GET" ? takeFlash(Astro) : null;
 const card = {

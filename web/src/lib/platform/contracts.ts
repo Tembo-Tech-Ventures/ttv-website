@@ -310,9 +310,10 @@ export type CallProposalEmbed = z.infer<typeof CallProposalEmbed>;
 /**
  * Where a suggested call stands for its conversation, worked out on every read: waiting for an
  * answer (open); a time picked (accepted); answered with other times, which a new card carries
- * (countered); "Not now" (declined); taken back (withdrawn); or every time has passed (expired).
+ * (countered); "Not now" (declined); taken back (withdrawn); every time has passed (expired); or new
+ * times for a booked call that was cancelled (cancelled), which closed them.
  */
-export const CallProposalCardState = z.enum(["open", "accepted", "countered", "declined", "withdrawn", "expired"]);
+export const CallProposalCardState = z.enum(["open", "accepted", "countered", "declined", "withdrawn", "expired", "cancelled"]);
 export type CallProposalCardState = z.infer<typeof CallProposalCardState>;
 export const CallProposalCardView = z.object({
   type: z.literal("callProposal"), proposalId: Id, purpose: CallProposalPurpose, state: CallProposalCardState,

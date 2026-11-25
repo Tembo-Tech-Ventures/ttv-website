@@ -52,7 +52,7 @@ const resolved = await resolveSpacePageWith(Astro.locals, "calls", async (me) =>
     const [conversation, instead, change] = await Promise.all([
       callConversation(env.DB, caller, conversationId, now),
       insteadId ? readProposal(env.DB, caller, insteadId, now) : null,
-      changeId ? readBookedCall(env.DB, caller, changeId) : null,
+      changeId ? readBookedCall(env.DB, caller, changeId, now) : null,
     ]);
     // The suggestion or call must be this conversation's; another's is the same 404.
     if ((instead && instead.channelId !== conversation.channel.id) || (change && change.channelId !== conversation.channel.id)) return null;

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { callBookedAttention, callCancelledAttention, callProposedAttention } from "@/lib/attention/call-producers";
 import { listAttention } from "@/lib/attention/service";
 import { channelRequest } from "@/lib/channels/http";
+import { listModerationQueue } from "@/lib/channels/moderation/queue";
 import { ORIGIN } from "@/lib/channels/test-support";
 import { MessageList, type CallProposalCardView, type MeetingCardView } from "@/lib/platform/contracts";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
@@ -323,16 +324,32 @@ describe("changing and cancelling a booked call", () => {
     expect(lines(s, s.conversation).at(-1)?.body).toBe(
       "Suggested new times for our call on Wed 25 Nov at 11:00 EAT: Fri 27 Nov at 11:00 EAT. It stays booked until one is picked.");
     expect(s.row(meetingId)).toMatchObject({ scheduledStartAt: TIMES[0], state: "SCHEDULED" });
-    expect((await readBookedCall(s.d1, await caller(s, PEOPLE.wanjiku), meetingId)).pendingChange).toBe(round.proposalId);
+    expect((await readBookedCall(s.d1, await caller(s, PEOPLE.wanjiku), meetingId, s.now())).pendingChange).toBe(round.proposalId);
     const [, change] = await proposalCards(s, PEOPLE.wanjiku);
     expect(change).toMatchObject({ moves: true, state: "open", call: { meetingId, scheduledStartAt: TIMES[0] } });
 
     s.advance(1);
     await answerProposal(context(s), await caller(s, PEOPLE.wanjiku), round.proposalId, { kind: "pick", at: T0 + 3 * DAY });
-    expect(s.row(meetingId)).toMatchObject({ scheduledStartAt: T0 + 3 * DAY, bookedMinutes: 45, state: "SCHEDULED" });
+    expect(s.row(meetingId)).toMatchObject({ scheduledStartAt: T0 + 3 * DAY, bookedMinutes: 45, state: "SCHEDULED", recordingPolicy: "NONE" });
     expect(s.row(meetingId).updatedAt as number).toBeGreaterThanOrEqual(before + 1000);
     const meetingCard = (await cards(s)).find((card): card is MeetingCardView => card.type === "meeting");
     expect(meetingCard).toMatchObject({ scheduledStartAt: T0 + 3 * DAY, bookedMinutes: 45 });
+  });
+
+  it("takes the round's Ask to record with its time, and offers Change time again once a round's times have passed", async () => {
+    const s = setup();
+    const meetingId = await booked(s);
+    const round = await suggest(s, PEOPLE.david, { change: meetingId, times: [T0 + 2 * HOUR], askToRecord: true });
+    const wanjiku = await caller(s, PEOPLE.wanjiku);
+    expect((await readBookedCall(s.d1, wanjiku, meetingId, s.now())).pendingChange).toBe(round.proposalId);
+    // Its only time passes: the round can't be answered, so it no longer holds the call's page back.
+    s.advance(3 * 60);
+    expect((await readBookedCall(s.d1, wanjiku, meetingId, s.now())).pendingChange).toBeNull();
+
+    const next = await suggest(s, PEOPLE.david, { change: meetingId, times: [T0 + 3 * DAY], askToRecord: true });
+    s.advance(1);
+    await answerProposal(context(s), wanjiku, next.proposalId, { kind: "pick", at: T0 + 3 * DAY });
+    expect(s.row(meetingId)).toMatchObject({ scheduledStartAt: T0 + 3 * DAY, recordingPolicy: "BOTH_AGREE" });
   });
 
   it("keeps the booked time when the other person says Not now to new times", async () => {
@@ -352,6 +369,9 @@ describe("changing and cancelling a booked call", () => {
     expect([call.state, note]).toEqual(["CANCELLED", "posted"]);
     expect(events).toEqual([{ kind: "cancelled", meetingId, byUserId: PEOPLE.wanjiku }]);
     expect(proposals(s).find(({ id }) => id === round.proposalId)?.state).toBe("WITHDRAWN");
+    // Its card says the call was cancelled, not that David took his times back.
+    expect((await proposalCards(s, PEOPLE.david)).find((card) => card.proposalId === round.proposalId)?.state).toBe("cancelled");
+    expect((await readProposal(s.d1, await caller(s, PEOPLE.david), round.proposalId, s.now())).state).toBe("cancelled");
     expect(lines(s, s.conversation).at(-1)).toMatchObject({ authorId: PEOPLE.wanjiku,
       body: "Cancelled our call on Wed 25 Nov at 11:00 EAT. If you added it to your calendar, remove it there." });
     expect((await cards(s)).find((card) => card.type === "meeting")?.state).toBe("cancelled");
@@ -382,7 +402,7 @@ describe("who sees calls between two people", () => {
       const refusals = [
         callConversation(s.d1, outsider, s.conversation, s.now()),
         readProposal(s.d1, outsider, open, s.now()),
-        readBookedCall(s.d1, outsider, proposalId),
+        readBookedCall(s.d1, outsider, proposalId, s.now()),
         suggestCall(context(s), outsider, input(s)),
         answerProposal(context(s), outsider, open, { kind: "notNow" }),
         answerProposal(context(s), outsider, open, { kind: "withdraw" }),
@@ -391,10 +411,20 @@ describe("who sees calls between two people", () => {
       for (const refusal of refusals) await expect(refusal).rejects.toMatchObject({ status: 404, code: "not_found", message: "Not found." });
     }
     expect((await listCalls(s.d1, await caller(s, PEOPLE.amina), s.now()))).toEqual({ comingUp: [], waiting: [], past: [] });
+    // A flagged card reaches the admins' queue as its message alone: neither the call's card nor the suggestion's.
+    const cardsMessages = s.database.prepare(`SELECT messageId FROM meeting WHERE id = ?1 UNION ALL SELECT messageId FROM call_proposal WHERE id = ?2`)
+      .all(proposalId, open) as { messageId: string }[];
+    for (const [index, { messageId }] of cardsMessages.entries()) {
+      s.database.prepare(`INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt)
+        VALUES (?, ?, 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', ?)`).run(`flag-${index}`, messageId, s.now());
+    }
+    const queue = await listModerationQueue(s.d1, { user: { id: PEOPLE.amina }, capabilities: await capabilitiesFor(s.db, { id: PEOPLE.amina }) }, {});
+    expect(queue.items.map((item) => [item.message.id, item.message.embeds]).toSorted())
+      .toEqual(cardsMessages.map(({ messageId }) => [messageId, []]).toSorted());
     expect(await bell(s, PEOPLE.amina)).toEqual([]);
     // A cohort session is not a call between two people.
     const session = s.meeting();
-    await expect(readBookedCall(s.d1, await caller(s, PEOPLE.wanjiku), session)).rejects.toMatchObject({ status: 404 });
+    await expect(readBookedCall(s.d1, await caller(s, PEOPLE.wanjiku), session, s.now())).rejects.toMatchObject({ status: 404 });
   });
 });
 

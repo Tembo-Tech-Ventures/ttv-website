@@ -43,13 +43,19 @@ export const hasExpired = (times: readonly number[], now: number) => times.every
 /** The times of an open suggestion that can still be picked: those still to start. */
 export const pickableTimes = (times: readonly number[], now: number) => times.filter((time) => time > now);
 
-/** Where a suggestion stands, as its card says: an open one whose times have all passed is expired, whatever is stored. */
-export function proposalCardState(state: CallProposalState, times: readonly number[], countered: boolean, now: number): CallProposalCardState {
+/**
+ * Where a suggestion stands, as its card says: an open one whose times have all passed is expired,
+ * whatever is stored, and new times for a call that was cancelled say so (cancelling closes them)
+ * rather than read as taken back.
+ */
+export function proposalCardState(
+  state: CallProposalState, times: readonly number[], countered: boolean, now: number, callCancelled = false,
+): CallProposalCardState {
   switch (state) {
     case "OPEN": return hasExpired(times, now) ? "expired" : "open";
     case "ACCEPTED": return "accepted";
     case "DECLINED": return countered ? "countered" : "declined";
-    case "WITHDRAWN": return "withdrawn";
+    case "WITHDRAWN": return callCancelled ? "cancelled" : "withdrawn";
     case "EXPIRED": return "expired";
   }
 }
@@ -73,13 +79,14 @@ export function proposalCard(proposalId: string, check: unknown, now = Date.now(
   const row = facts as ProposalCheck;
   const times = proposedTimes(row.times);
   const call = callOf(row.call);
+  // A booking's call takes the suggestion's own id (proposals.ts), so a call by any other id is one these times move.
+  const moves = call !== null && call.meetingId !== proposalId;
   const card = CallProposalCardView.safeParse({
     type: "callProposal", proposalId, purpose: row.purpose,
-    state: proposalCardState(row.state, times, row.countered === 1, now),
+    state: proposalCardState(row.state, times, row.countered === 1, now, moves && call.state === "CANCELLED"),
     proposedBy: row.proposedBy, times, bookedMinutes: row.bookedMinutes, askToRecord: row.askToRecord === 1,
     work: workOf(row.work), call,
-    // A booking's call takes the suggestion's own id (proposals.ts), so a call by any other id is one these times move.
-    moves: call !== null && call.meetingId !== proposalId,
+    moves,
   });
   return card.success ? card.data : null;
 }

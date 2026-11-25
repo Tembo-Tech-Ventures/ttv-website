@@ -40,7 +40,7 @@ const resolved = await resolveSpacePageWith(Astro.locals, "calls", async (me) =>
   if (!me.flags.meeting_checkins) return null;
   const caller = callerFor(me, await requestCapabilities(db, Astro.locals));
   try {
-    return { caller, call: await readBookedCall(env.DB, caller, id) };
+    return { caller, call: await readBookedCall(env.DB, caller, id, now) };
   } catch (error) {
     if (error instanceof ChannelError && error.status === 404) return null;
     throw error;
@@ -69,7 +69,7 @@ if (method === "POST") {
     if (hidden) return hidden;
     failure = (error as ChannelError).message;
     Astro.response.status = (error as ChannelError).status;
-    call = await readBookedCall(env.DB, caller, id);
+    call = await readBookedCall(env.DB, caller, id, now);
   }
 }
 

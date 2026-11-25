@@ -135,7 +135,7 @@ The conversation's header offers "Suggest a call" while the flag is on.
 
 **States.** `OPEN` until it is answered: `ACCEPTED` (a time picked: the call is booked, its id the
 suggestion's own, in the same batch), `DECLINED` ("Not now"), `WITHDRAWN` (its suggester took it back,
-or the booked call it would move was cancelled) or `EXPIRED` (every time has started; written when the
+or the booked call it would move was cancelled, when its card says "Call cancelled") or `EXPIRED` (every time has started; written when the
 conversation's next suggestion or an answer finds it, and shown as expired on every read before then).
 "Countered" is a declined suggestion the other person answered with times of their own: one batch declines
 it and makes theirs at the same moment (`n.createdAt = cp.decidedAt`), which is how its card says "other
@@ -154,10 +154,12 @@ card offers new times.
 - **A per-person limit**: `CALL_PROPOSALS_PER_DAY` suggestions in a rolling day, new times included
   (429 `rate_limited`), beside the channel's own post limits on the cards.
 - **Changing a booked call** is a new round of times with `meetingId` set: the booked time stands until
-  one is picked, which moves the call (raising `updatedAt` by at least a second) and both cards; "Not now"
-  or withdrawing leaves it as it is. **Cancelling** asks first, then marks the call `CANCELLED`, closes
-  any round of new times, and posts one line by the person who cancelled ("Cancelled our call on …"). A
-  call that has started can be neither: it is ended from the call.
+  one is picked, which moves the call with the round's length and "Ask to record" (raising `updatedAt`
+  by at least a second) and both cards; "Not now" or withdrawing leaves it as it is. A round whose times
+  have all passed no longer holds back "Change time". **Cancelling** asks first, then marks the call
+  `CANCELLED`, closes any round of new times, and posts one line by the person who cancelled
+  ("Cancelled our call on …"). A call that has opened (`LIVE`) can be neither: it is ended from the
+  call. A `SCHEDULED` call whose time has passed without opening can still be moved or cancelled.
 - **"Ask to record" only asks** (`recordingPolicy` `BOTH_AGREE`, else `NONE`): both people are asked on
   the day, and only both saying yes records it (slice P11). No call between two people is recorded yet,
   so a past one says "Not recorded".
@@ -169,10 +171,19 @@ card offers new times.
 **Cards** (`proposal-card.ts`, `channels/embeds.ts` `proposalCardColumn`). A suggestion's card is posted
 by its suggester and read on every read of the message, never stored: the times, the work at its
 revision while it is still posted, "Ask to record", the booked call, and the state. Every change moves
-the message's `changeSeq` (`touchProposalCard`), so open pages redraw it. The booked call's own card is a
+the message's `changeSeq` (`touchProposalCard`), so open pages redraw it. Both cards about a call
+between two people reach only the conversation's two members (`conversationMember` in `embeds.ts`): an
+admin reading a reported or flagged card message in the moderation queue (the API or MCP) gets the
+message's words and no card, so a "Not now", its times and its work never leave the conversation. The booked call's own card is a
 `MeetingEmbed` posted by the person who picked the time; `MeetingCardView.purpose` lets it say "Call" or
 "Project check-in", link to its own page and calendar file, and offer "Join call" while it is open.
 Neither card's message can be deleted or edited (409, `isCallCard`).
+
+**Known limits.** The cards' and lines' nonces are derived (`call-proposal-<id>`, `call-booked-<id>`,
+`call-cancelled-<id>`), as the session notes' are: a person could post a message with such a nonce
+first and keep their own card from posting (the page then says to tell the other person). "Countered"
+reads a decline and the other person's suggestion made in the same millisecond, which two requests can't
+share in practice. A mentor who loses the MENTOR role keeps their conversations, and so their calls.
 
 **Attention** (`lib/attention/call-producers.ts`, in Profile, beside the Calls page): `call_proposed`
 (Requests) to the other person while the suggestion is open with a time to come; `call_countered`

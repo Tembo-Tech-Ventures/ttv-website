@@ -287,6 +287,7 @@ const PROPOSAL_CHIP: Record<CallProposalCardState, { label: string; tone: ChipTo
   declined: { label: "Not now", tone: "neutral" },
   withdrawn: { label: "Withdrawn", tone: "neutral" },
   expired: { label: "Times passed", tone: "neutral" },
+  cancelled: { label: "Call cancelled", tone: "neutral" },
 };
 
 /** A suggested time in Nairobi time, with the reader's own written once mounted (so the server's HTML and the first render agree). */
@@ -314,6 +315,7 @@ export function proposalCardLine(card: CallProposalCardView, mine: boolean): str
     case "declined": return card.moves ? "Not now. The booked time stays as it is." : "Not now. Either of you can suggest a call again.";
     case "withdrawn": return "This suggestion was withdrawn.";
     case "expired": return "These times have passed.";
+    case "cancelled": return "The call was cancelled, so these times closed.";
   }
 }
 

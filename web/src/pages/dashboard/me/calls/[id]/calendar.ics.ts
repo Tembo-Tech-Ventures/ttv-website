@@ -28,7 +28,7 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
   ]);
   let call;
   try {
-    call = await readBookedCall(env.DB, { userId: user.id, capabilities, checkins: flags.meeting_checkins }, id);
+    call = await readBookedCall(env.DB, { userId: user.id, capabilities, checkins: flags.meeting_checkins }, id, Date.now());
   } catch (error) {
     if (error instanceof ChannelError && error.status === 404) return callPageResponse(404);
     throw error;

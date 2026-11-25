@@ -310,9 +310,11 @@ async function readProposalRow(db: D1Database, caller: CallCaller, proposalId: s
   const times = proposedTimes(row.times);
   const stored = row.state as CallProposalState;
   const call = parsedJson(row.call);
+  const moved = Array.isArray(call) && call[0] !== row.id ? call : null;
   return {
     proposal: {
-      id: row.id as string, channelId: channel.id, purpose, state: proposalCardState(stored, times, row.countered === 1, now),
+      id: row.id as string, channelId: channel.id, purpose,
+      state: proposalCardState(stored, times, row.countered === 1, now, moved?.[1] === "CANCELLED"),
       proposedBy: row.proposedBy as string, mine: row.proposedBy === caller.userId, times, bookedMinutes: row.bookedMinutes as number,
       askToRecord: row.askToRecord === 1,
       work: row.journeyVersion === null ? null
@@ -331,15 +333,20 @@ export async function readProposal(db: D1Database, caller: CallCaller, proposalI
   return (await readProposalRow(db, caller, proposalId, now)).proposal;
 }
 
-/** One booked call between two people the caller is in, or the same 404 for anything else (a cohort session included). */
-export async function readBookedCall(db: D1Database, caller: CallCaller, meetingId: string): Promise<BookedCall> {
+/**
+ * One booked call between two people the caller is in, or the same 404 for anything else (a cohort
+ * session included). `pendingChange` is a round of new times for it that can still be answered: open,
+ * with a time still to come at `now`.
+ */
+export async function readBookedCall(db: D1Database, caller: CallCaller, meetingId: string, now: number): Promise<BookedCall> {
   if (!caller.checkins) throw notFound();
   const row = await db.prepare(`SELECT m.id, m.channelId, m.purpose, m.title, m.state, m.scheduledStartAt, m.bookedMinutes, m.limitMinutes,
       m.recordingPolicy, m.journeyVersion, m.createdAt, m.updatedAt, c.kind, c.programId, c.postingPolicy, c.archivedAt,
       EXISTS (SELECT 1 FROM channel_member WHERE channelId = c.id AND userId = ?2) AS isMember,
       ${counterpartColumn("c.id", "?2")} AS counterpart,
-      (SELECT p.id FROM call_proposal p WHERE p.meetingId = m.id AND p.state = 'OPEN' AND p.id <> m.id) AS pendingChange
-    FROM meeting m JOIN channel c ON c.id = m.channelId WHERE m.id = ?1`).bind(meetingId, caller.userId).first<Record<string, unknown>>();
+      (SELECT p.id FROM call_proposal p WHERE p.meetingId = m.id AND p.state = 'OPEN' AND p.id <> m.id
+        AND EXISTS (SELECT 1 FROM json_each(p.times) WHERE value > ?3)) AS pendingChange
+    FROM meeting m JOIN channel c ON c.id = m.channelId WHERE m.id = ?1`).bind(meetingId, caller.userId, now).first<Record<string, unknown>>();
   if (!row || (row.purpose !== "CALL" && row.purpose !== "CHECKIN")) throw notFound();
   const channel = targetOf(row);
   const purpose = row.purpose as CallProposalPurpose;
@@ -821,9 +828,9 @@ async function bookCall(ctx: CallsContext, caller: CallCaller, before: ProposalR
 }
 
 /**
- * The picked time of a round of new times moves the booked call, while it still hasn't started: one
- * batch moves it (raising updatedAt by at least a second, so its calendar file's SEQUENCE rises), marks
- * the round answered and moves both cards for open pages.
+ * The picked time of a round of new times moves the booked call, while it still hasn't opened: one
+ * batch moves it, with the round's length and "Ask to record" (raising updatedAt by at least a second,
+ * so its calendar file's SEQUENCE rises), marks the round answered and moves both cards for open pages.
  */
 async function moveBookedCall(ctx: CallsContext, caller: CallCaller, before: ProposalRow, at: number): Promise<Answered> {
   const { db, now } = ctx;
@@ -832,6 +839,7 @@ async function moveBookedCall(ctx: CallsContext, caller: CallCaller, before: Pro
   // ?1 the suggestion, ?2 the call, ?3 the caller, ?4 now, ?5 the picked time.
   const results = await db.batch([
     db.prepare(`UPDATE meeting SET scheduledStartAt = ?5, bookedMinutes = (SELECT bookedMinutes FROM call_proposal WHERE id = ?1),
+        recordingPolicy = (SELECT CASE WHEN askToRecord = 1 THEN 'BOTH_AGREE' ELSE 'NONE' END FROM call_proposal WHERE id = ?1),
         updatedAt = max(?4, updatedAt + 1000)
       WHERE id = ?2 AND state = 'SCHEDULED' AND EXISTS (SELECT 1 FROM call_proposal p WHERE p.id = ?1 AND p.state = 'OPEN' AND p.meetingId = ?2
         AND p.proposedBy <> ?3 AND ?5 > ?4 AND EXISTS (SELECT 1 FROM json_each(p.times) WHERE value = ?5))`)
@@ -861,7 +869,7 @@ export async function cancelBookedCall(
   ctx: CallsContext, caller: CallCaller, meetingId: string, { known }: { known?: BookedCall } = {},
 ): Promise<{ call: BookedCall; note: NoteOutcome | null }> {
   const { db, now } = ctx;
-  const before = known?.id === meetingId && caller.checkins ? known : await readBookedCall(db, caller, meetingId);
+  const before = known?.id === meetingId && caller.checkins ? known : await readBookedCall(db, caller, meetingId, now);
   if (!before.access.canHost) throw notFound();
   if (before.state === "CANCELLED") return { call: before, note: null };
   if (before.state !== "SCHEDULED") throw conflict("This call has already started, so it can't be cancelled. End it from the call instead.");
@@ -878,7 +886,7 @@ export async function cancelBookedCall(
   ]);
   const row = cancelled.results[0] as { state: MeetingState; updatedAt: number } | undefined;
   if (!row) {
-    const after = await readBookedCall(db, caller, meetingId);
+    const after = await readBookedCall(db, caller, meetingId, now);
     if (after.state === "CANCELLED") return { call: after, note: null };
     throw conflict("This call has already started, so it can't be cancelled. End it from the call instead.");
   }

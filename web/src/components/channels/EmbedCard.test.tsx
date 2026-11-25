@@ -162,11 +162,15 @@ describe("a call between two people (in-app calls P10)", () => {
   });
 
   it("offers nothing to act on once it is answered or its times have passed, only new times or the booked call", () => {
-    for (const state of ["declined", "withdrawn", "expired", "countered", "accepted"] as const) {
+    for (const state of ["declined", "withdrawn", "expired", "countered", "accepted", "cancelled"] as const) {
       const card = { ...proposal, state, call: state === "accepted" ? { meetingId: "suggestion", state: "SCHEDULED" as const, scheduledStartAt: times[1]! } : null };
       expect(forms(as(people.wanjiku.id, card))).toEqual([]);
     }
     expect(text(<EmbedCard embed={{ ...proposal, state: "expired" }} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("These times have passed.");
+    // New times for a call that was cancelled say so, rather than that their suggester took them back.
+    const closed = { ...proposal, state: "cancelled" as const, moves: true, call: { meetingId: "booked", state: "CANCELLED" as const, scheduledStartAt: times[0]! } };
+    expect(text(<EmbedCard embed={closed} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("Call cancelled");
+    expect(text(<EmbedCard embed={closed} viewerId={people.wanjiku.id} channelId="conversation" />)).toContain("The call was cancelled, so these times closed.");
     expect(as(people.wanjiku.id, { ...proposal, state: "accepted", call: { meetingId: "suggestion", state: "SCHEDULED", scheduledStartAt: times[1]! } }))
       .toContain('href="/dashboard/me/calls/suggestion"');
   });
