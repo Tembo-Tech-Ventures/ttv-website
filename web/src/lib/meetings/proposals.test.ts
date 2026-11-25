@@ -251,6 +251,33 @@ describe("answering a suggestion", () => {
   });
 });
 
+describe("open pages", () => {
+  it("see every answer at once: each moves the card's message, so a since poll carries it", async () => {
+    const s = setup();
+    const changeSeq = (id: string) => (s.database.prepare("SELECT changeSeq FROM channel_message WHERE id = (SELECT messageId FROM call_proposal WHERE id = ?)")
+      .get(id) as { changeSeq: number }).changeSeq;
+    const one = await suggest(s);
+    let seen = changeSeq(one.proposalId);
+    await answerProposal(context(s), await caller(s, PEOPLE.david), one.proposalId, { kind: "notNow" });
+    expect(changeSeq(one.proposalId)).toBeGreaterThan(seen);
+
+    const two = await suggest(s);
+    seen = changeSeq(two.proposalId);
+    await answerProposal(context(s), await caller(s, PEOPLE.wanjiku), two.proposalId, { kind: "withdraw" });
+    expect(changeSeq(two.proposalId)).toBeGreaterThan(seen);
+
+    const three = await suggest(s);
+    seen = changeSeq(three.proposalId);
+    s.advance(1);
+    const counter = await suggestCall(context(s), await caller(s, PEOPLE.david), input(s, { instead: three.proposalId }));
+    expect(changeSeq(three.proposalId)).toBeGreaterThan(seen);
+
+    seen = changeSeq(counter.proposalId);
+    await answerProposal(context(s), await caller(s, PEOPLE.wanjiku), counter.proposalId, { kind: "pick", at: TIMES[0]! });
+    expect(changeSeq(counter.proposalId)).toBeGreaterThan(seen);
+  });
+});
+
 describe("saying Not now", () => {
   it("leaves no trace outside the conversation: the profile, Discover, the assessment and the other person's bell read as before", async () => {
     const s = setup();
