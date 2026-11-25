@@ -116,6 +116,18 @@ describe("chat tool access boundaries", () => {
       expect((await details(cohortRecording())).transcript).toBe("hello");
       expect(await details(cohortRecording({ processingStatus: "transcribing" }))).toMatchObject({ id: "rec-1", transcript: null });
     });
+
+    it("traces a recording whose transcript it returned, so the saved answer can be checked again later", async () => {
+      const read = new Set<string>();
+      const capabilities = caps({ cohortIds: ["program-a"] });
+      const run = (recording: unknown) => executeTool("get_recording_details", { recording_id: "rec-1" },
+        createContext({ db: createRecordingDatabase(recording), capabilities, read }));
+      await run(cohortRecording({ processingStatus: "transcribing" }));
+      await run(cohortRecording({ programId: "program-b" }));
+      expect(read).toEqual(new Set());
+      await run(cohortRecording());
+      expect(read).toEqual(new Set(["rec-1"]));
+    });
   });
 
   describe("get_program_info", () => {

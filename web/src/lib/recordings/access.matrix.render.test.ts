@@ -42,6 +42,10 @@ const { embedAccessColumn, listShareables, resolveEmbeds } = await import("@/lib
 const { recordingReadyAttention } = await import("@/lib/attention/producers");
 const { listAttention } = await import("@/lib/attention/service");
 const { capabilitiesFor, channelAccessFor } = await import("@/lib/platform/server/capabilities");
+const { GET: chatHistory } = await import("@/pages/api/chat/sessions/[id]");
+const { GET: chatSessions } = await import("@/pages/api/chat/sessions/index");
+const { WITHHELD_ANSWER } = await import("@/lib/chat/stored-sources");
+const { readMessage, TEMBO_SESSION_GONE } = await import("@/lib/channels/messages");
 
 const RECORDINGS = ["a-ready", "a-working", "b-ready", "loose", "a-hidden", "a-deleted", "direct", "community"] as const;
 type RecordingId = (typeof RECORDINGS)[number];
@@ -85,6 +89,12 @@ const TITLES: Record<RecordingId, string> = {
   direct: "Wanjiku and Juma's check-in", community: "Open hours",
 };
 const idOfTitle = (title: string) => RECORDINGS.find((id) => TITLES[id] === title);
+/** Transcript words an answer stored when Tembo read them. */
+const STORED_WORDS = "Webhook retries need idempotency keys";
+/** An Ask Tembo citation as pages/api/chat.ts stores it. */
+const citationOf = (id: RecordingId) => ({
+  sourceNumber: 1, recordingId: id, title: TITLES[id], startTime: 0, endTime: 30, url: `/dashboard/sessions/${id}?t=0`, text: STORED_WORDS,
+});
 const sorted = (ids: readonly (string | undefined)[]) => [...ids].toSorted();
 
 let sqlite: DatabaseSync;
@@ -129,6 +139,32 @@ beforeAll(async () => {
   Object.assign(mocks.env, { DB: d1, BUCKET: bucket, DEPLOYMENT_ENVIRONMENT: "production" });
   channels = Object.fromEntries(["cohort-a", "cohort-b"].map((programId) => [programId,
     (sqlite.prepare("SELECT id FROM channel WHERE seedKey = ?").get(`cohort:${programId}:main`) as { id: string }).id])) as typeof channels;
+
+  // Stored copies of transcript words: each person's Ask Tembo history holds one answer per recording,
+  // citing it as Tembo read it, one that read cohort A's hidden session without citing it, and a
+  // conversation whose latest answer cites that hidden session. Cohort A's channel holds one Tembo
+  // answer per recording, quoting it, in the thread of a question.
+  const saveMessage = sqlite.prepare(`INSERT INTO chat_message(id,sessionId,userId,role,content,citations,createdAt) VALUES (?,?,?,'assistant',?,?,?)`);
+  for (const person of PEOPLE) {
+    sqlite.prepare("INSERT INTO chat_session(id,userId,title) VALUES (?,?,'Webhooks'), (?,?,'Hidden')")
+      .run(`history-${person.id}`, person.id, `preview-${person.id}`, person.id);
+    for (const [i, id] of RECORDINGS.entries()) {
+      saveMessage.run(`history-${person.id}-${id}`, `history-${person.id}`, person.id, `${STORED_WORDS} (${id})`,
+        JSON.stringify([citationOf(id), { type: "read", recordingId: id }]), 1_000 + i);
+    }
+    saveMessage.run(`history-${person.id}-traced`, `history-${person.id}`, person.id, `${STORED_WORDS} (traced)`,
+      JSON.stringify([{ type: "read", recordingId: "a-hidden" }]), 2_000);
+    saveMessage.run(`preview-${person.id}-latest`, `preview-${person.id}`, person.id, `${STORED_WORDS} (preview)`,
+      JSON.stringify([citationOf("a-hidden"), { type: "read", recordingId: "a-hidden" }]), 3_000);
+  }
+  const post = sqlite.prepare(`INSERT INTO channel_message(id,channelId,parentId,seq,changeSeq,authorKind,authorId,body,citations,createdAt)
+    SELECT ?1, ?2, ?3, n.next, n.next, ?4, ?5, ?6, ?7, 1 FROM (SELECT coalesce(MAX(changeSeq), 0) + 1 AS next FROM channel_message WHERE channelId = ?2) n`);
+  post.run("tembo-question", channels["cohort-a"], null, "USER", "synthetic-approved", "@tembo what about webhooks?", "[]");
+  for (const id of RECORDINGS) {
+    post.run(`tembo-${id}`, channels["cohort-a"], "tembo-question", "TEMBO", null, `${STORED_WORDS} [1]`, JSON.stringify([{
+      type: "sessionClip", recordingId: id, startSeconds: 0, title: `${TITLES[id]} at 0:00`, href: `/dashboard/sessions/${id}?t=0`,
+    }]));
+  }
 
   // Every notice goes out once, while the revoked person still held their place.
   for (const id of RECORDINGS) await recordingReadyAttention({ db: d1, env: mocks.env as never }, id);
@@ -258,6 +294,46 @@ describe.each(PEOPLE)("recording access for $id", (person) => {
     const { items } = await listAttention(db, person.id, {}, await capabilitiesFor(db, { id: person.id }));
     const shown = items.filter((item) => item.subject.kind === "recording").map((item) => item.subject.id);
     expect(sorted(shown)).toEqual(sorted(person.watches));
+  });
+
+  it("Ask Tembo's history keeps an answer's words only while they may still read every session it drew on", async () => {
+    const response = await chatHistory(apiContext(person, { id: `history-${person.id}` }));
+    expect(response.status).toBe(200);
+    const { messages } = await response.json() as { messages: { id: string; content: string; citations: { type?: string }[] }[] };
+    const readable = readsTranscripts(person);
+    const kept = messages.filter(({ content }) => content !== WITHHELD_ANSWER).map(({ id }) => id.replace(`history-${person.id}-`, ""));
+    // The traced answer read the hidden session without citing it.
+    expect(sorted(kept)).toEqual(sorted([...readable, ...readable.includes("a-hidden") ? ["traced"] : []]));
+    for (const message of messages) {
+      expect(message.citations.some(({ type }) => type === "read")).toBe(false);
+      if (message.content === WITHHELD_ANSWER) expect(message.citations).toEqual([]);
+      else expect(message.content).toContain(STORED_WORDS);
+    }
+  });
+
+  it("Ask Tembo's conversation list never previews an answer from a session they may no longer read", async () => {
+    const { sessions } = await (await chatSessions(apiContext(person))).json() as { sessions: { id: string; latestMessage: string | null }[] };
+    const preview = sessions.find(({ id }) => id === `preview-${person.id}`)?.latestMessage;
+    expect(preview).toBe(readsTranscripts(person).includes("a-hidden") ? `${STORED_WORDS} (preview)` : WITHHELD_ANSWER);
+  });
+
+  it("Tembo's answers in cohort A's channel keep a session's words only while the whole cohort may read it, for every reader", async () => {
+    const ctx = await channelFor(person, "cohort-a");
+    if (!ctx.channel.capabilities.canRead) return;
+    for (const id of RECORDINGS) {
+      const answer = await readMessage(ctx, `tembo-${id}`);
+      // Read as the cohort: its hosts and admins see a hidden session's answer withheld too.
+      const shown = id === "a-ready";
+      expect(answer?.body).toBe(shown ? `${STORED_WORDS} [1]` : TEMBO_SESSION_GONE);
+      expect(answer?.citations.map((citation) => citation.type)).toEqual(shown ? ["sessionClip"] : []);
+    }
+  });
+
+  it("message search finds a Tembo answer's words only while the whole cohort may read its session", async () => {
+    const { messages } = await searchPlatform(d1, person.id, { q: "idempotency", scope: "messages" }, { messages: true });
+    const tembo = messages.filter(({ author }) => author.name === "Tembo").map(({ id }) => id);
+    const reads = (await channelFor(person, "cohort-a")).channel.capabilities.canRead;
+    expect(tembo).toEqual(reads ? ["tembo-a-ready"] : []);
   });
 });
 

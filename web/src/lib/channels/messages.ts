@@ -4,6 +4,7 @@ import {
   type AuthorSummary, type Channel, type Message, type MessageList, type MessageListQuery,
   type ModerationState, type Reaction, type RoleBadge,
 } from "@/lib/platform/contracts";
+import { cohortAudienceSql, transcriptReadySql } from "@/lib/recordings/access";
 import { CursorExpiredError, decodeCursor, encodeCursor } from "./cursor";
 import { embedAccessColumn, embedsForReader } from "./embeds";
 import { ChannelError } from "./errors";
@@ -55,6 +56,8 @@ export interface MessageRow {
   temboAsked: number | null;
   /** On a Tembo answer, a JSON array of the cited message ids whose words its titles may no longer show. */
   citationsGone: string | null;
+  /** On a Tembo answer, a JSON array of the cited sessions the channel's readers may no longer read (SESSIONS_GONE). */
+  sessionsGone: string | null;
 }
 
 /**
@@ -80,6 +83,35 @@ const CITATIONS_GONE = `CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
         AND (cited.editedAt IS NULL OR cited.editedAt <= coalesce((SELECT a.claimedAt FROM tembo_ask a WHERE a.answerId = m.id), m.createdAt))
         AND NOT EXISTS (SELECT 1 FROM channel_message root WHERE root.id = cited.parentId AND root.moderationState = 'HIDDEN'))
   ) END AS citationsGone`;
+
+/**
+ * What a Tembo answer says instead while a session it cited is one the channel's readers may no
+ * longer see (hidden from the cohort, deleted, moved out of it, or no longer complete).
+ */
+export const TEMBO_SESSION_GONE = "This answer used a session that isn't available here any more, so it isn't shown.";
+
+/** The FROM and WHERE of `message`'s session citations that `program`'s cohort may no longer read, under the alias `cite`. */
+const goneSessionCitations = (message: string, program: string) => `FROM json_each(CASE WHEN json_valid(${message}.citations) THEN ${message}.citations ELSE '[]' END) cite
+    WHERE json_extract(cite.value, '$.type') = 'sessionClip' AND NOT EXISTS (SELECT 1 FROM recording cited_recording
+      WHERE cited_recording.id = json_extract(cite.value, '$.recordingId')
+        AND ${cohortAudienceSql("cited_recording", program)} AND ${transcriptReadySql("cited_recording")})`;
+
+/**
+ * The recordings a Tembo answer `message` cites (its "sessionClip" citations) that the readers of its
+ * channel may no longer read, as a JSON array ('[]' when none). Tembo read the session as the whole
+ * cohort, and every reader of the channel sees its answer, so the answer is checked as the cohort
+ * audience of `program` (the channel's program, as SQL), with a complete transcript, as clips are
+ * (embeds.ts embedAccessColumn). Outside a cohort channel no session is readable. Primary-key reads.
+ */
+export const sessionsGoneSql = (message: string, program: string) => `(SELECT json_group_array(json_extract(cite.value, '$.recordingId'))
+    ${goneSessionCitations(message, program)})`;
+
+/**
+ * Whether Tembo answer `message` cites a session its channel's readers may no longer read: its words
+ * are then kept out of everything readers get (the page, search).
+ */
+export const temboSessionGone = (message: string, program: string) =>
+  `(${message}.authorKind = 'TEMBO' AND EXISTS (SELECT 1 ${goneSessionCitations(message, program)}))`;
 
 /**
  * An admin's hide of message `m` since it was hidden, from the audit trail, which a later signal
@@ -124,6 +156,7 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
     THEN (SELECT tf.kind FROM tembo_feedback tf WHERE tf.messageId = m.id AND tf.userId = ?2) END AS temboFeedback,
   CASE WHEN m.authorKind = 'USER' AND m.authorId = ?2 THEN EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id) END AS temboAsked,
   ${CITATIONS_GONE},
+  CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL THEN ${sessionsGoneSql("m", program)} END AS sessionsGone,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -215,13 +248,17 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
   const privileged = own || ctx.channel.capabilities.canModerate;
   const deleted = row.deletedAt !== null;
   const reasons = parsedArray(NonBlank, row.moderationReasons);
+  // A Tembo answer that used a session its readers may no longer see keeps none of its words.
+  const sessionsGone = strings(row.sessionsGone);
+  const withheld = !deleted && row.authorKind === "TEMBO" && sessionsGone.size > 0;
   return {
     id: row.id, channelId: row.channelId, parentId: row.parentId,
     clientNonce: own ? row.clientNonce : null,
     authorKind: row.authorKind, author: author(row, ctx.channel.programId),
-    body: deleted ? "" : bodyForReader({ body: row.body, moderationState: row.moderationState, reasons }, privileged),
+    body: deleted ? "" : withheld ? TEMBO_SESSION_GONE : bodyForReader({ body: row.body, moderationState: row.moderationState, reasons }, privileged),
     embeds: deleted ? [] : embedsForReader(jsonArray(row.embeds), row.embedAccess),
-    citations: deleted ? [] : citationsForReader(parsedArray(Citation, row.citations), row.citationsGone),
+    citations: deleted ? [] : citationsForReader(parsedArray(Citation, row.citations), row.citationsGone)
+      .filter((citation) => citation.type !== "sessionClip" || !sessionsGone.has(citation.recordingId)),
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,
     moderation: privileged

@@ -70,22 +70,36 @@ previews have applied it), so scopes fail closed:
 0043 also added `channelId` (a DIRECT or COMMUNITY recording's channel, `SET NULL` with it, which
 then admits nobody) and `meetingId` (the call it came from); see `src/lib/meetings/README.md`.
 
-## Known gap: stored copies of transcript text
+## Stored copies of transcript text
 
-The policy guards every read of `recording` and `transcript_segment`. Copies of transcript text
-stored elsewhere when they were read are not re-checked on read:
+The policy guards every read of `recording` and `transcript_segment`. Two places keep a copy of
+transcript words from when they were read, and each is checked again on every read, in the
+statement that reads it, so hiding, deleting or moving a recording takes its words out of them too:
 
-- Ask Tembo's conversation history: `chat_message.citations` (each source's title and up to 240
-  characters of transcript) and the answer text, returned by `lib/chat/sessions.ts`
-  (`getChatMessages`) to the conversation's owner;
-- Tembo's answers in channels: the answer body and its `session` citations (title and moment),
-  stored on the `channel_message` (`CITATIONS_GONE` in `lib/channels/messages.ts` re-checks only
-  `message` citations).
+- **Ask Tembo's conversation history** (`lib/chat/stored-sources.ts`), for the conversation's owner
+  as they are now (`capabilitiesFor`): `chat_message.citations` holds the citations shown (each
+  source's title and up to 240 characters of transcript), then a trace entry
+  `{ type: "read", recordingId }` for every recording whose transcript a tool read for that answer
+  (`search_transcripts`' sources and `get_recording_details`, cited or not). An answer that drew on
+  a recording the owner may no longer read, or whose transcript is no longer complete, is replaced
+  by one neutral line, and that recording's citations are dropped; trace entries never leave the
+  server. `getChatMessages` checks each message and `listChatSessions` each preview, inside their
+  own statements. Titles that `list_recordings` named are not traced: they are not transcript text.
+- **Tembo's answers in channels** (`lib/channels/messages.ts`, `sessionsGoneSql`): Tembo read a
+  cohort's sessions as the whole cohort, and every reader of the channel sees its answer, so an
+  answer is checked as `cohortAudienceSql` for the channel's program, with a complete transcript,
+  as clips are. While any `sessionClip` citation fails, every reader (hosts and admins too) gets
+  `TEMBO_SESSION_GONE` instead of the body, and that citation is dropped. Message search
+  (`lib/search/messages.ts`) leaves such an answer out, so its words don't come back as an excerpt.
+  Whoever hides, restores or deletes a recording calls `touchAnswersCiting` (`lib/channels/
+  mutations.ts`) after the change, so open channels pick the change up on their next poll.
 
-Today this is harmless: each copy was readable by its reader when it was written, and nothing yet
-hides or deletes a recording. **Before any UI or API sets `hiddenAt` or `deletedAt`, these copies
-must be re-checked on read through the policy** (drop or blank a citation whose recording the
-reader may no longer see, as `embedAccessColumn` does for clips), with tests.
+Known limits: an answer saved before the traces existed carries only its citations, so a transcript
+it read through `get_recording_details` without citing it can't be traced; and Ask Tembo's
+follow-up questions send the earlier conversation from the browser, so a tab left open since before
+a recording was hidden can still send that answer's words back as context.
 
-The admin recording pages (`/admin/recordings`) list every recording, deleted ones included; they
-need the same decision once deletion exists.
+Attention items carry no transcript text (their summaries are fixed sentences), and their reads
+check the policy (`attentionAccess`). The admin recording pages (`/admin/recordings`) list every
+recording, deleted ones included; admins may watch hidden recordings, but they need a decision once
+deletion exists.

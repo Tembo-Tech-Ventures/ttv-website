@@ -428,6 +428,22 @@ export function visibleTo(target: MessageTarget, userId: string, channel: Pick<C
   return target.moderationState !== "HIDDEN" || target.authorId === userId || channel.capabilities.canModerate;
 }
 
+/**
+ * Moves every Tembo answer that cites recording `recordingId` on for pollers, so an open channel
+ * learns at once that the answer is withheld, or shown again, when the recording is hidden, restored
+ * or deleted (messages.ts TEMBO_SESSION_GONE). Whoever changes a recording's audience calls it after
+ * that change. One read of Tembo's answers, then one touch per answer in one batch; returns how many.
+ */
+export async function touchAnswersCiting(db: D1Database, recordingId: string): Promise<number> {
+  const { results } = await db.prepare(`SELECT DISTINCT m.id, m.channelId FROM channel_message m
+    CROSS JOIN json_each(CASE WHEN json_valid(m.citations) THEN m.citations ELSE '[]' END) cite
+    WHERE m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
+      AND json_extract(cite.value, '$.type') = 'sessionClip' AND json_extract(cite.value, '$.recordingId') = ?1`)
+    .bind(recordingId).all<{ id: string; channelId: string }>();
+  if (results.length > 0) await db.batch(results.map(({ id, channelId }) => db.prepare(touch("?2")).bind(channelId, id)));
+  return results.length;
+}
+
 /** The message a /api/messages/:id route names, before any access decision. One primary-key read. */
 export async function findMessageTarget(db: D1Database, messageId: string): Promise<MessageTarget | null> {
   return db.prepare(`SELECT id, channelId, parentId, authorKind, authorId, body, moderationState, deletedAt, hiddenBy, embeds

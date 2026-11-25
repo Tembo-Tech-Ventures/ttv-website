@@ -6,6 +6,7 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { resolveOwnedChatSession, saveChatExchange } from "@/lib/chat/sessions";
+import { storedCitations } from "@/lib/chat/stored-sources";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { privateAskPrompt, privateAskScope, readsRecordings } from "@/lib/tembo/private-ask";
 import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
@@ -88,6 +89,7 @@ const handleChat: APIRoute = async ({ request, locals }) => {
     userName: user.name,
     capabilities,
     sources: [],
+    read: new Set(),
   };
 
   const tools = hasRecordings ? TOOL_DEFINITIONS : TOOL_DEFINITIONS.filter(
@@ -145,7 +147,12 @@ const handleChat: APIRoute = async ({ request, locals }) => {
 
   const citations = buildCitations(toolCtx.sources);
 
-  await saveChatExchange(env.DB, user.id, session, { question: message, answer, citations });
+  // Saved with a trace of every recording the answer read, so reading it later can check them again.
+  await saveChatExchange(env.DB, user.id, session, {
+    question: message,
+    answer,
+    citations: storedCitations(citations, toolCtx.sources, toolCtx.read ?? []),
+  });
 
   return Response.json({ sessionId: session.id, answer, citations });
 };

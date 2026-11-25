@@ -1,4 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
+import type { RecordingViewer } from "@/lib/recordings/access";
+import { goneRecordings, goneRecordingsSql, messageForReader } from "./stored-sources";
 
 export interface ChatSessionSummary {
   id: string;
@@ -155,7 +157,39 @@ export async function saveChatExchange(
   ]);
 }
 
-export async function listChatSessions(db: D1Database, userId: string) {
+
+/**
+ * A conversation's latest message, for its preview: [content, role, the recordings it drew on that the
+ * owner may no longer read]. `where` picks the conversation's messages under the alias `latest`.
+ */
+const latestOf = (viewer: RecordingViewer, userId: string, where: string) => `(
+           SELECT json_array(latest."content", latest."role", ${goneRecordingsSql(viewer, userId, `latest."citations"`)})
+           FROM "chat_message" latest
+           WHERE ${where}
+           ORDER BY latest."createdAt" DESC
+           LIMIT 1
+         )`;
+
+/** latestOf's preview, withheld as getChatMessages withholds the message itself. */
+function previewOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const [content, role, gone] = JSON.parse(value) as unknown[];
+    if (typeof content !== "string" || typeof role !== "string") return null;
+    const recordings = goneRecordings(gone);
+    // goneRecordingsSql names only recordings this very message drew on.
+    return messageForReader({ role, content, citations: [...recordings].map((recordingId) => ({ recordingId })) }, recordings).content;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The owner's conversations, newest first, each previewed by its latest message. `viewer` is the
+ * owner's recording access (capabilitiesFor): an answer that drew on a recording they may no longer
+ * read is never previewed (stored-sources.ts).
+ */
+export async function listChatSessions(db: D1Database, userId: string, viewer: RecordingViewer) {
   const result = await db
     .prepare(
       `SELECT
@@ -164,13 +198,7 @@ export async function listChatSessions(db: D1Database, userId: string) {
          cs."createdAt",
          cs."updatedAt",
          COUNT(cm."id") AS "messageCount",
-         (
-           SELECT cm2."content"
-           FROM "chat_message" cm2
-           WHERE cm2."sessionId" = cs."id"
-           ORDER BY cm2."createdAt" DESC
-           LIMIT 1
-         ) AS "latestMessage"
+         ${latestOf(viewer, userId, `latest."sessionId" = cs."id"`)} AS "latestMessage"
        FROM "chat_session" cs
        -- An inner join: a conversation without messages is one a failed request
        -- left behind, and there is nothing in it to show.
@@ -189,7 +217,7 @@ export async function listChatSessions(db: D1Database, userId: string) {
     createdAt: normalizeSqliteTimestamp(row.createdAt),
     updatedAt: normalizeSqliteTimestamp(row.updatedAt),
     messageCount: Number(row.messageCount ?? 0),
-    latestMessage: typeof row.latestMessage === "string" ? row.latestMessage : null,
+    latestMessage: previewOf(row.latestMessage),
   }));
 
   const legacy = await db
@@ -197,13 +225,7 @@ export async function listChatSessions(db: D1Database, userId: string) {
       `SELECT
          COUNT(*) AS "messageCount",
          MAX("createdAt") AS "updatedAt",
-         (
-           SELECT "content"
-           FROM "chat_message"
-           WHERE "userId" = ? AND "sessionId" IS NULL
-           ORDER BY "createdAt" DESC
-           LIMIT 1
-         ) AS "latestMessage"
+         ${latestOf(viewer, userId, `latest."userId" = ? AND latest."sessionId" IS NULL`)} AS "latestMessage"
        FROM "chat_message"
        WHERE "userId" = ? AND "sessionId" IS NULL`
     )
@@ -217,18 +239,23 @@ export async function listChatSessions(db: D1Database, userId: string) {
       createdAt: normalizeSqliteTimestamp(legacy.updatedAt),
       updatedAt: normalizeSqliteTimestamp(legacy.updatedAt),
       messageCount: Number(legacy.messageCount ?? 0),
-      latestMessage:
-        typeof legacy.latestMessage === "string" ? legacy.latestMessage : null,
+      latestMessage: previewOf(legacy.latestMessage),
     });
   }
 
   return sessions satisfies ChatSessionSummary[];
 }
 
+/**
+ * An owned conversation's messages, oldest first, or null when it isn't the owner's. Each answer is
+ * checked again against `viewer`, the owner's recording access (capabilitiesFor), in the same
+ * statement: one that drew on a recording they may no longer read is withheld (stored-sources.ts).
+ */
 export async function getChatMessages(
   db: D1Database,
   userId: string,
-  sessionId: string
+  sessionId: string,
+  viewer: RecordingViewer
 ) {
   if (sessionId !== "legacy") {
     const session = await db
@@ -248,7 +275,8 @@ export async function getChatMessages(
       ? `"userId" = ? AND "sessionId" IS NULL`
       : `"userId" = ? AND "sessionId" = ?`;
   const statement = db.prepare(
-    `SELECT "id", "role", "content", "citations", "createdAt"
+    `SELECT "id", "role", "content", "citations", "createdAt",
+       CASE WHEN "role" = 'assistant' THEN ${goneRecordingsSql(viewer, userId, `"chat_message"."citations"`)} END AS "goneRecordings"
      FROM "chat_message"
      WHERE ${whereClause}
      ORDER BY "createdAt" ASC
@@ -261,11 +289,11 @@ export async function getChatMessages(
 
   return (result.results ?? [])
     .filter((row) => row.role === "user" || row.role === "assistant")
-    .map((row) => ({
+    .map((row) => messageForReader({
       id: String(row.id),
       role: row.role as "user" | "assistant",
       content: String(row.content ?? ""),
       citations: safeParseCitations(row.citations),
       createdAt: normalizeSqliteTimestamp(row.createdAt),
-    })) satisfies StoredChatMessage[];
+    }, goneRecordings(row.goneRecordings))) satisfies StoredChatMessage[];
 }

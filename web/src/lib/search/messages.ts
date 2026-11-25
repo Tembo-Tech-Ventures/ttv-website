@@ -1,5 +1,5 @@
 import { readableChannelRefs, type ChannelRef } from "@/lib/channels/access";
-import { DELETED_AUTHOR, TEMBO_AUTHOR } from "@/lib/channels/messages";
+import { DELETED_AUTHOR, TEMBO_AUTHOR, temboSessionGone } from "@/lib/channels/messages";
 import { bodyForReader, masksContactDetails } from "@/lib/channels/moderation/mask";
 import type { Database } from "@/lib/db/schema";
 import { MASKED_CONTACT, WebLink, type AuthorSummary, type ChannelKind, type SearchMessage, type SearchQuery, type Visibility } from "@/lib/platform/contracts";
@@ -115,7 +115,8 @@ interface MessageHit {
  * The newest messages matching every term (first indexed first; an edit keeps a message's place),
  * at most `limit`. The index drives the read: FTS5 yields matches newest first, each joins its
  * message by primary key, and the read stops at `limit` readable ones. Excerpts are plain text cut
- * from the indexed body, so no embed snapshot and no hidden or deleted text can appear; a flagged
+ * from the indexed body, so no embed snapshot and no hidden or deleted text can appear, nor a Tembo
+ * answer quoting a session the cohort may no longer read (temboSessionGone); a flagged
  * message's body comes along so its contact details can be masked (maskedHit).
  */
 export const MESSAGE_SEARCH = `SELECT m.id, m.channelId, m.parentId, m.createdAt, m.authorKind, m.authorId,
@@ -131,6 +132,7 @@ export const MESSAGE_SEARCH = `SELECT m.id, m.channelId, m.parentId, m.createdAt
     AND m.deletedAt IS NULL AND m.moderationState <> 'HIDDEN'
     AND NOT EXISTS (SELECT 1 FROM channel_message p
       WHERE p.channelId = m.channelId AND p.id = m.parentId AND p.moderationState = 'HIDDEN')
+    AND NOT ${temboSessionGone("m", "(SELECT programId FROM channel WHERE id = m.channelId)")}
   ORDER BY f.rowid DESC LIMIT ?3`;
 
 /** The excerpt this reader sees, or null when the hit matched only details masked for them. */

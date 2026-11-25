@@ -112,7 +112,9 @@ the caller (read from the same request's flags, so it costs no statement); off,
   the match, at most 24 words and 280 characters. A message flagged for
   contact details that the caller sees masked (channels README, "Masked
   contact details") is kept only when every term matches its masked text, and
-  its excerpt is cut from that text. Authors are names and
+  its excerpt is cut from that text. A Tembo answer that quotes a session
+  the cohort may no longer read is left out (`temboSessionGone`), so its
+  words never come back as an excerpt. Authors are names and
   avatars without channel badges (Tembo and "Deleted user" as in channels).
   `href` opens the channel at the message (`?message=`), or its thread
   (`?thread=<root>&message=`). Visibility reads `#slug · only this cohort` or

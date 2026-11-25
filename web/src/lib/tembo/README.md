@@ -171,7 +171,11 @@ after the sentence they support, and the matching `Citation`s are stored with
 the message (the card links each `[n]` to `citations[n - 1]` and numbers its
 chips to match, QA3-02): `message`, `sessionClip`,
 `project` or `profile` (a signed-in member profile). Answers stop at
-2,000 characters, at a whole sentence.
+2,000 characters, at a whole sentence. An answer quotes its sessions, so each
+read checks every `sessionClip` citation again as the cohort reads it: while
+one is hidden, deleted, moved out of the cohort or no longer complete, readers
+get a neutral line instead of the answer and that citation is dropped
+(`lib/recordings/README.md`, "Stored copies of transcript text").
 
 ### Posting
 

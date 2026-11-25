@@ -26,6 +26,11 @@ export interface ToolContext {
   allowedTools?: ReadonlySet<string>;
   /** Accumulates sources across tool calls for citation building. */
   sources: TranscriptSource[];
+  /**
+   * Recordings whose whole transcript a tool returned (get_recording_details), cited or not. Saved
+   * with the answer, so a later read can withhold it once the recording is gone (stored-sources.ts).
+   */
+  read?: Set<string>;
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -365,6 +370,7 @@ async function getRecordingDetails(recordingId: string, ctx: ToolContext): Promi
       ? `${rec.transcriptText.slice(0, 12_000)}… [truncated]`
       : rec.transcriptText
     : null;
+  if (transcript !== null) ctx.read?.add(rec.id);
 
   return JSON.stringify({
     id: rec.id,
