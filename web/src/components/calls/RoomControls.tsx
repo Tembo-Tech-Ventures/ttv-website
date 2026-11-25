@@ -7,8 +7,8 @@ import { Button } from "@/components/platform/ui";
 /**
  * The call's controls, one toolbar (UX-REVIEW §5): Tab reaches it once and the arrows, Home and End
  * move inside it. Each toggle says what pressing it will do ("Mute", "Unmute"), so it carries no
- * pressed state as well. Below 64rem the words are read but not shown, and every button stays a 44px
- * target, so six fit a 320px screen.
+ * pressed state as well. Below 64rem the words are read but not shown, and every button is a 44px
+ * square, so six fit a 320px screen with room to spare.
  */
 
 export type Control = "microphone" | "camera" | "share" | "people" | "chat" | "leave";
@@ -34,20 +34,26 @@ export interface RoomControlsProps {
 export const controlFor = (panel: Panel) => document.querySelector<HTMLElement>(`#call-controls [data-control="${panel}"]`);
 
 export default function RoomControls(props: RoomControlsProps) {
-  const [active, setActive] = useState<Control>("microphone");
+  // A control that is off (the camera, for low data) can't take focus, so the arrows and Tab pass it by.
+  const controls = CONTROLS.filter((control) => !(control === "camera" && props.audioOnly));
+  const [chosen, setActive] = useState<Control>("microphone");
+  const active = controls.includes(chosen) ? chosen : controls[0]!;
   const toolbar = useRef<HTMLDivElement>(null);
   const words = "max-lg:sr-only";
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const index = CONTROLS.indexOf(active);
-    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: CONTROLS.length - 1 }[event.key];
+    const index = controls.indexOf(active);
+    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: controls.length - 1 }[event.key];
     if (next === undefined) return;
     event.preventDefault();
-    const control = CONTROLS[(next + CONTROLS.length) % CONTROLS.length]!;
+    const control = controls[(next + controls.length) % controls.length]!;
     setActive(control);
     toolbar.current?.querySelector<HTMLElement>(`[data-control="${control}"]`)?.focus();
   }
-  const stop = (control: Control) => ({ tabIndex: active === control ? 0 : -1, onFocus: () => setActive(control), "data-control": control });
+  // Below 64rem each control is a 44px square with its words read but not shown: six fit in 304px.
+  const stop = (control: Control) => ({
+    tabIndex: active === control ? 0 : -1, onFocus: () => setActive(control), "data-control": control, className: "max-lg:w-11 max-lg:px-0",
+  });
   const panelButton = (panel: Panel) => ({ ...stop(panel), "aria-expanded": props.panel === panel, "aria-controls": "call-panel", onClick: () => props.onPanel(panel) });
 
   return (

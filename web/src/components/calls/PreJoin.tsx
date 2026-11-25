@@ -229,10 +229,13 @@ export default function PreJoin({ room, screen, joining, failure, conductNeeded,
   const [devices, setDevices] = useState<Record<DeviceKind, DeviceOption[]>>({ microphone: [], camera: [] });
   const browser = useBrowserSupport();
   const preparing = canPrepare && browser === "ready";
+  // The preview lets the devices go while joining, so the call can open them (some systems give a
+  // device to one stream at a time), and opens them again if the join fails.
+  const previewing = preparing && !joining;
   const cameraWanted = !choices.cameraOff && !choices.audioOnly;
 
-  const microphone = useDevice("microphone", microphoneId, preparing);
-  const camera = useDevice("camera", cameraId, preparing && cameraWanted);
+  const microphone = useDevice("microphone", microphoneId, previewing);
+  const camera = useDevice("camera", cameraId, previewing && cameraWanted);
   const level = useLevel(microphone.stream);
 
   // Devices are named once one is allowed: read the list again then.
@@ -246,7 +249,9 @@ export default function PreJoin({ room, screen, joining, failure, conductNeeded,
   const unsupported = browser === "unsupported";
 
   function join() {
-    // The preview's streams are released by their effects as this page goes; the room opens its own.
+    // Released now, before the call asks for the same devices, not when the page next renders.
+    stopStream(microphone.stream);
+    stopStream(camera.stream);
     onJoin({
       microphoneId, cameraId,
       microphoneOn: !choices.microphoneOff && !microphone.problem,

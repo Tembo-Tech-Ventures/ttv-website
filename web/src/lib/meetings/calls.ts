@@ -247,6 +247,8 @@ export async function meetingPresence(ctx: CallContext, caller: Caller, meetingI
     return { state: target.state, you: target.seatState, recording: "off", people: [] };
   }
   if (!target.seatState) throw notFound();
+  // Someone removed, or who left, learns only that: who is still in is for the people in it.
+  if (target.seatState !== "HELD") return { state: target.state, you: target.seatState, recording: "off", people: [] };
   const [people, recordings] = await ctx.db.batch<Record<string, unknown>>([
     ctx.db.prepare(`SELECT s.userId, coalesce(u.name, '') AS name FROM meeting_seat s JOIN "user" u ON u.id = s.userId
       WHERE s.meetingId = ?1 AND s.state = 'HELD' ORDER BY s.createdAt, s.userId`).bind(meetingId),

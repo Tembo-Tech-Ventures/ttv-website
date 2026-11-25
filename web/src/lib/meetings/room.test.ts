@@ -49,15 +49,17 @@ describe("GET /api/meetings/:id/presence (the fake room client's view of who is 
     });
   });
 
-  it("tells a removed person they were removed, and drops them from the list", async () => {
+  it("tells a removed person, or one who left, only that, and lists nobody to them", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     const id = s.meeting();
     await s.call("joinMeeting", { id });
     await s.call("joinMeeting", { id, user: PEOPLE.otieno });
     expect((await s.call("removeFromMeeting", { id, body: { userId: PEOPLE.otieno } })).status).toBe(200);
-    const removed = await presence(s, id, { user: PEOPLE.otieno });
-    expect(removed.body.you).toBe("REMOVED");
-    expect(removed.body.people.map(({ userId }) => userId)).toEqual([VIEWER]);
+    expect((await presence(s, id, { user: PEOPLE.otieno })).body).toEqual({ state: "LIVE", you: "REMOVED", recording: "off", people: [] });
+    expect((await presence(s, id)).body.people.map(({ userId }) => userId)).toEqual([VIEWER]);
+    // Someone who left learns only that, too.
+    await s.call("leaveMeeting", { id });
+    expect((await presence(s, id)).body).toEqual({ state: "LIVE", you: "RELEASED", recording: "off", people: [] });
   });
 
   it("says the call ended once it has, at its limit", async () => {

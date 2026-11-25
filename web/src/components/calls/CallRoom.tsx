@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, LiveAnnouncer, useAnnouncer } from "@/components/platform/ui";
 import type { Meeting } from "@/lib/platform/contracts";
 import { roomApi } from "@/lib/meetings/room-api";
@@ -94,27 +94,64 @@ function CallRoomBody(props: CallRoomProps) {
     return () => clearTimeout(timer);
   }, [opensAt]);
 
+  // A join under way when the page goes (closed, navigated away, the island unmounted): whatever it
+  // opened is released and its seat given back, now and again if the server's answer arrives later.
+  const pending = useRef<{ client: RoomClient | null } | null>(null);
+  const meetingId = meeting.id;
+  useEffect(() => {
+    const abandon = () => {
+      const joining = pending.current;
+      if (!joining) return;
+      pending.current = null;
+      void joining.client?.leave();
+      void roomApi.leaveOnExit(meetingId).catch(() => {});
+    };
+    window.addEventListener("pagehide", abandon);
+    return () => {
+      window.removeEventListener("pagehide", abandon);
+      abandon();
+    };
+  }, [meetingId]);
+
   async function join(choice: MediaChoice) {
+    const joining: { client: RoomClient | null } = { client: null };
+    pending.current = joining;
+    const abandoned = () => pending.current !== joining;
     setPhase({ kind: "joining" });
     setFailure(null);
     const answer = await roomApi.join(meeting.id);
-    if (!answer.ok) return refused(answer.kind);
+    if (abandoned()) {
+      // The page went while the server was answering: give back the seat it may just have given.
+      if (answer.ok) void roomApi.leaveOnExit(meeting.id).catch(() => {});
+      return;
+    }
+    if (!answer.ok) {
+      pending.current = null;
+      return refused(answer.kind);
+    }
     setConductNeeded(false);
-    let joined: RoomClient | null = null;
     try {
-      joined = await loadRoomClient(answer.value.provider, { meetingId: meeting.id });
-      await joined.join({ token: answer.value.token, self: { userId: props.self.userId, name: props.self.name }, media: choice });
+      joining.client = await loadRoomClient(answer.value.provider, { meetingId: meeting.id });
+      await joining.client.join({ token: answer.value.token, self: { userId: props.self.userId, name: props.self.name }, media: choice });
     } catch {
+      if (abandoned()) return;
+      pending.current = null;
       // A failed start releases every track it opened, and gives the seat back.
-      await joined?.leave();
+      await joining.client?.leave();
       await roomApi.leave(meeting.id);
       setFailure(CONNECT_FAILED);
       voice?.say(`${CONNECT_FAILED.title}. ${CONNECT_FAILED.body}`, { priority: "assertive" });
       return setPhase({ kind: "gate" });
     }
+    if (abandoned()) {
+      await joining.client.leave();
+      void roomApi.leaveOnExit(meeting.id).catch(() => {});
+      return;
+    }
+    pending.current = null;
     setMeeting(answer.value.meeting);
     setClockOffset(answer.value.meeting.now - Date.now());
-    setPhase({ kind: "room", client: joined, audioOnly: choice.audioOnly, opened: meeting.state === "SCHEDULED" });
+    setPhase({ kind: "room", client: joining.client, audioOnly: choice.audioOnly, opened: meeting.state === "SCHEDULED" });
   }
 
   async function refused(kind: "missing" | "conflict" | "conduct" | "unavailable") {

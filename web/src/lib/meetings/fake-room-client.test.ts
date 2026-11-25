@@ -136,6 +136,43 @@ describe("the fake room client", () => {
     await client.leave();
   });
 
+  it("opens each device once however fast it is pressed, so no second track leaks", async () => {
+    const { client, media, opened, levels } = setup();
+    await client.join({ token: "t", self: SELF, media: { ...CHOICE, microphoneOn: false, cameraOn: false } });
+    await Promise.all([client.setCamera(true), client.setCamera(true), client.setMicrophone(true), client.setMicrophone(true)]);
+    expect(media.getUserMedia).toHaveBeenCalledTimes(2);
+    await Promise.all([client.startScreenShare(), client.startScreenShare()]);
+    expect(media.getDisplayMedia).toHaveBeenCalledOnce();
+    await client.startScreenShare();
+    expect(media.getDisplayMedia).toHaveBeenCalledOnce();
+    expect(opened).toHaveLength(3);
+    await client.leave();
+    expect(opened.every(({ stopped }) => stopped)).toBe(true);
+    expect(levels.close).toHaveBeenCalledOnce();
+  });
+
+  it("ends off when on and off are pressed quickly, and releases a device that opens after leaving", async () => {
+    const { client, media, opened } = setup();
+    await client.join({ token: "t", self: SELF, media: { ...CHOICE, microphoneOn: false, cameraOn: false } });
+    await Promise.all([client.setCamera(true), client.setCamera(false)]);
+    expect(client.getState().participants[0]!.cameraOn).toBe(false);
+    expect(opened[0]!.stopped).toBe(true);
+    let open!: () => void;
+    media.getUserMedia.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { open = resolve; });
+      const late = track("audio");
+      opened.push(late);
+      return stream([late]);
+    });
+    const opening = client.setMicrophone(true);
+    await vi.advanceTimersByTimeAsync(0);
+    await client.leave();
+    open();
+    await opening;
+    expect(opened.at(-1)!.stopped).toBe(true);
+    expect(client.released).toBe(true);
+  });
+
   it("tells the room what the server says: removed, ended, joined somewhere else", async () => {
     const removed = setup({ presence: [live([SELF]), live([], { you: "REMOVED" })] });
     await removed.client.join({ token: "t", self: SELF, media: CHOICE });

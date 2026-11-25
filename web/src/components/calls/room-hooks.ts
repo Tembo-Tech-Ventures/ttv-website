@@ -137,7 +137,11 @@ export function useMeetingPoll(meetingId: string, onMeeting: (meeting: Meeting, 
 /** Leaving the page mid-call asks first; if the person goes anyway, their seat is given back as the page goes. */
 export function useLeaveGuard(meetingId: string) {
   useEffect(() => {
-    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    const ask = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older browsers ask only when a return value is set.
+      event.returnValue = "";
+    };
     const gone = () => void roomApi.leaveOnExit(meetingId).catch(() => {});
     window.addEventListener("beforeunload", ask);
     window.addEventListener("pagehide", gone);

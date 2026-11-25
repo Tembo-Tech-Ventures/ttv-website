@@ -249,10 +249,48 @@ describe("before joining", () => {
     expect(button("Turn camera on")!.disabled).toBe(true);
   });
 
-  it("releases the preview's camera and microphone on Join", async () => {
-    await joinAsMember();
-    expect(opened.length).toBeGreaterThan(0);
-    for (const track of opened) expect(track.stop).toHaveBeenCalled();
+  it("releases the preview's camera and microphone before the call asks for them, and opens them again if the join fails", async () => {
+    let stoppedFirst = false;
+    api.join.mockImplementation(async () => {
+      stoppedFirst = opened.length > 0 && opened.every(({ stop }) => stop.mock.calls.length > 0);
+      return { ok: false, kind: "unavailable" };
+    });
+    await render(props({ meeting: live() }));
+    const before = opened.length;
+    await press($("[data-call-join]"));
+    expect(stoppedFirst).toBe(true);
+    // Back on the page: the preview has its devices again.
+    expect(opened.length).toBeGreaterThan(before);
+  });
+
+  it("releases a join under way when the page goes, and gives back the seat the server gives it later", async () => {
+    let answer!: (value: unknown) => void;
+    api.join.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    await render(props({ meeting: live() }));
+    await press($("[data-call-join]"));
+    act(() => root.unmount());
+    expect(api.leaveOnExit).toHaveBeenCalledWith("call-1");
+    api.leaveOnExit.mockClear();
+    await act(async () => answer(ok({ meeting: live({ you: { seat: "HELD" } }), provider: "fake", token: "t" })));
+    await settle();
+    expect(api.leaveOnExit).toHaveBeenCalledWith("call-1");
+    expect(client.join).not.toHaveBeenCalled();
+    root = createRoot(container);
+  });
+
+  it("releases the client a join was opening when the page is hidden mid-join", async () => {
+    let connect!: () => void;
+    client.join.mockImplementationOnce(() => new Promise<void>((resolve) => { connect = resolve; }));
+    api.join.mockResolvedValue(ok({ meeting: live({ you: { seat: "HELD" } }), provider: "fake", token: "t" }));
+    await render(props({ meeting: live() }));
+    await press($("[data-call-join]"));
+    expect(client.join).toHaveBeenCalledOnce();
+    await act(async () => { window.dispatchEvent(new Event("pagehide")); });
+    expect(client.leave).toHaveBeenCalled();
+    expect(api.leaveOnExit).toHaveBeenCalledWith("call-1");
+    await act(async () => connect());
+    await settle();
+    expect($("[data-call-room]")).toBeNull();
   });
 
   it("says when a browser blocked the camera, and offers joining without it", async () => {
@@ -607,6 +645,25 @@ describe("in the call", () => {
     expect(stops()).toEqual(["Mute"]);
   });
 
+  it("passes by the camera, off for low data, so the toolbar never traps the keyboard", async () => {
+    client.state = { ...client.state, participants: [person(ME, "Wanjiku Mwangi", { self: true })] };
+    api.join.mockResolvedValue(ok({ meeting: live({ you: { seat: "HELD" } }), provider: "fake", token: "t" }));
+    await render(props({ meeting: live() }));
+    await press($("input[name=audioOnly]"));
+    await press($("[data-call-join]"));
+    const toolbar = $("[role=toolbar]")!;
+    const camera = button("Turn camera on")!;
+    expect(camera.disabled).toBe(true);
+    expect(camera.tabIndex).toBe(-1);
+    button("Mute")!.focus();
+    await key(document.activeElement!, "ArrowRight");
+    expect(document.activeElement).toBe(button("Share screen"));
+    await key(document.activeElement!, "ArrowLeft");
+    await key(document.activeElement!, "ArrowLeft");
+    expect(document.activeElement).toBe(button("Leave session"));
+    expect([...toolbar.querySelectorAll("button")].filter((control) => control.tabIndex === 0)).toHaveLength(1);
+  });
+
   it("names each toggle by what pressing it does", async () => {
     await joinAsMember();
     await press(button("Mute"));
@@ -658,8 +715,8 @@ describe("cleanup", () => {
     const event = new Event("beforeunload", { cancelable: true });
     ask(event);
     expect(event.defaultPrevented).toBe(true);
-    const gone = added.mock.calls.find(([type]) => String(type) === "pagehide")![1] as () => void;
-    gone();
+    // The page going: every pagehide listener runs (the join's, idle by now, and the room's).
+    for (const [, listener] of added.mock.calls.filter(([type]) => String(type) === "pagehide")) (listener as () => void)();
     expect(api.leaveOnExit).toHaveBeenCalledWith("call-1");
     act(() => root.unmount());
     expect(client.leave).toHaveBeenCalled();

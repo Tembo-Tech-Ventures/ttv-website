@@ -78,6 +78,8 @@ export class FakeRoomClient implements RoomClient {
   #speaking = false;
   #levels: { level(): number; close(): void } | null = null;
   #timers: ReturnType<typeof setInterval>[] = [];
+  /** A device being opened: a second press waits for it rather than opening (and leaking) another track. */
+  readonly #opening = new Map<"microphone" | "camera" | "screen", Promise<void>>();
   #abort = new AbortController();
   #left = false;
   /** Set by a simulated connection or recording state: polling doesn't override them. */
@@ -114,8 +116,8 @@ export class FakeRoomClient implements RoomClient {
     this.#audioOnly = media.audioOnly;
     try {
       // A device the browser refuses now leaves it off, as a real client joins without it.
-      if (media.microphoneOn) await this.#openMicrophone().catch(() => {});
-      if (media.cameraOn && !media.audioOnly) await this.#openCamera().catch(() => {});
+      if (media.microphoneOn) await this.#once("microphone", () => this.#openMicrophone()).catch(() => {});
+      if (media.cameraOn && !media.audioOnly) await this.#once("camera", () => this.#openCamera()).catch(() => {});
       const presence = await this.#presence(this.#meetingId, this.#abort.signal);
       if (!presence || presence.you !== "HELD") throw new Error("This seat isn't held.");
       this.#applyPresence(presence);
@@ -150,14 +152,17 @@ export class FakeRoomClient implements RoomClient {
   }
 
   async setMicrophone(on: boolean): Promise<void> {
-    if (on && !this.#microphone) await this.#openMicrophone();
+    // Off waits for an open under way, so a quick on-off ends off.
+    if (!on) await this.#opening.get("microphone")?.catch(() => {});
+    if (on && !this.#microphone) await this.#once("microphone", () => this.#openMicrophone());
     if (this.#microphone) this.#microphone.enabled = on;
     this.#publish();
   }
 
   async setCamera(on: boolean): Promise<void> {
     if (this.#audioOnly) return;
-    if (on && !this.#camera) await this.#openCamera();
+    if (!on) await this.#opening.get("camera")?.catch(() => {});
+    if (on && !this.#camera) await this.#once("camera", () => this.#openCamera());
     if (!on && this.#camera) {
       // A camera turned off is released, so its light goes out.
       this.#camera.stop();
@@ -167,6 +172,11 @@ export class FakeRoomClient implements RoomClient {
   }
 
   async startScreenShare(): Promise<void> {
+    if (this.#screen) return;
+    return this.#once("screen", () => this.#share());
+  }
+
+  async #share(): Promise<void> {
     if (!this.canShareScreen || !this.#media?.getDisplayMedia) throw new ScreenShareError("unsupported", "This browser can't share a screen.");
     const sharer = this.#others.find(({ sharing }) => sharing);
     if (sharer) throw new ScreenShareError("taken", `${sharer.name} is sharing.`);
@@ -231,19 +241,31 @@ export class FakeRoomClient implements RoomClient {
     this.#publish();
   }
 
+  /** Runs `open` unless the same device is already being opened, in which case it waits for that. */
+  #once(device: "microphone" | "camera" | "screen", open: () => Promise<void>): Promise<void> {
+    const running = this.#opening.get(device);
+    if (running) return running;
+    const opened = open().finally(() => this.#opening.delete(device));
+    this.#opening.set(device, opened);
+    return opened;
+  }
+
   async #openMicrophone() {
     if (!this.#media) throw new DOMException("No media devices.", "NotFoundError");
     const stream = await this.#media.getUserMedia({ audio: this.#choice?.microphoneId ? { deviceId: { exact: this.#choice.microphoneId } } : true });
-    this.#microphone = stream.getAudioTracks()[0] ?? null;
-    if (this.#left) this.#microphone?.stop();
-    else if (this.#microphone) this.#levels = this.#meter(this.#microphone);
+    const [track] = stream.getAudioTracks();
+    // Opened after leaving: released at once, never kept.
+    if (this.#left) return track?.stop();
+    this.#microphone = track ?? null;
+    if (this.#microphone) this.#levels = this.#meter(this.#microphone);
   }
 
   async #openCamera() {
     if (!this.#media) throw new DOMException("No media devices.", "NotFoundError");
     const stream = await this.#media.getUserMedia({ video: this.#choice?.cameraId ? { deviceId: { exact: this.#choice.cameraId } } : true });
-    this.#camera = stream.getVideoTracks()[0] ?? null;
-    if (this.#left) this.#camera?.stop();
+    const [track] = stream.getVideoTracks();
+    if (this.#left) return track?.stop();
+    this.#camera = track ?? null;
   }
 
   async #poll() {

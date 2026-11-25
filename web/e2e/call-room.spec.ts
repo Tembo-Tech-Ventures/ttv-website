@@ -300,6 +300,18 @@ test("a phone that can't share a screen says so, and a blocked camera offers joi
     await page.locator("[data-call-join]").click();
     await expect(page.locator("[data-call-room]")).toBeVisible();
 
+    // Every control fits on the screen, a 44px target, none cut off at the edges.
+    const controls = await page.locator("#call-controls button").evaluateAll((buttons) => buttons.map((button) => {
+      const box = button.getBoundingClientRect();
+      return { left: box.left, right: box.right, width: box.width, height: box.height };
+    }));
+    expect(controls).toHaveLength(6);
+    for (const box of controls) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(320);
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    }
+
     const share = page.getByRole("button", { name: "Share screen", exact: true });
     await expect(share).toBeVisible();
     await share.click();

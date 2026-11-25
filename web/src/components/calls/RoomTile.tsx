@@ -35,7 +35,7 @@ export default function RoomTile({ person, host, audioOnly, compact = false }: {
       )}
     >
       {video
-        ? <TrackVideo track={video} label={`${name}'s camera`} mirror={person.self} />
+        ? <TrackVideo track={video} label={person.self ? "Your camera" : `${person.name}'s camera`} mirror={person.self} />
         : <Avatar id={person.userId} name={person.name} size={compact ? "md" : "lg"} decorative />}
       <p className="absolute inset-x-1.5 bottom-1.5 m-0 flex min-w-0 items-center gap-1.5 text-xs">
         <span className="flex min-w-0 items-center gap-1.5 rounded-md bg-ground/80 px-2 py-1 text-ink-primary">
