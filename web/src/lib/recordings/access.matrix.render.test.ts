@@ -364,7 +364,7 @@ describe("recordings read for a whole cohort channel, whoever asks", () => {
   it("a stored clip stays visible to a cohort channel's readers only while its recording is the cohort's, visible and complete", async () => {
     const embeds = JSON.stringify(RECORDINGS.map((id) => ({ type: "sessionClip", recordingId: id, title: TITLES[id], startSeconds: 0, durationSeconds: 30, quote: "Webhook" })));
     const access = (programId: string) => {
-      const row = sqlite.prepare(`SELECT ${embedAccessColumn("?1")} FROM (SELECT NULL AS deletedAt, ?2 AS embeds, 'synthetic-approved' AS authorId) m`)
+      const row = sqlite.prepare(`SELECT ${embedAccessColumn("?1")} FROM (SELECT NULL AS deletedAt, ?2 AS embeds, 'synthetic-approved' AS authorId, NULL AS channelId) m`)
         .get(programId, embeds) as { embedAccess: string };
       return (JSON.parse(row.embedAccess) as unknown[]).flatMap((check, i) => check === null ? [] : [RECORDINGS[i]]);
     };

@@ -70,6 +70,23 @@ previews have applied it), so scopes fail closed:
 0043 also added `channelId` (a DIRECT or COMMUNITY recording's channel, `SET NULL` with it, which
 then admits nobody) and `meetingId` (the call it came from); see `src/lib/meetings/README.md`.
 
+## Hiding a recording (in-app calls P9)
+
+Cohort sessions are recorded from start to end with no pause, and reach the cohort as soon as they
+are processed (UX review M9). So a cohort's hosts (its instructors and TAs) and admins can hide one
+of the cohort's recordings from the cohort, and show it again, on the session viewer page
+(`/dashboard/cohort/sessions/:id`): "Hide from the cohort" asks first (`?confirm=hide`, a
+`ConfirmStep` that names what changes), "Show to the cohort" puts it back. Plain forms, while
+`meetings` is on for the person; any other post (a member, another cohort's host, a mentor, another
+site, the flag off) is the same 404 and changes nothing (`hiding.ts`: `mayHideRecording`,
+`setRecordingHidden`).
+
+Hidden sets `hiddenAt`, and the policy does the rest: on every path in the matrix
+(`access.matrix.render.test.ts`) only admins and the cohort's hosts still reach it. Its hosts see it
+in Sessions marked "Hidden from the cohort". The card of the session it came from says it isn't
+available, and Tembo's answers that cite it are withheld (below); both change in open pages at once
+(`touchRecordingCard`, `touchAnswersCiting`). Deleting is not built yet.
+
 ## Stored copies of transcript text
 
 The policy guards every read of `recording` and `transcript_segment`. Two places keep a copy of

@@ -75,6 +75,14 @@ still hidden, or for a decision its case still decided; the case still pending (
 or the mentioned message (or Tembo's answer) still visible in a channel the
 reader can read, their own direct conversations included (B-4.1).
 
+Cohort sessions (in-app calls P9, `meeting-producers.ts`; src/lib/meetings/README.md, "Cohort
+sessions, live and after"): `meeting_soon` before a session and `meeting_live` once a host opens it,
+to the cohort's people, following the narrowest of `spaces`, `channels` and `meetings`. A `meeting`
+subject shows only while it applies: "soon" while the session still waits for a host at the start it
+announced (its event key) and its booked time hasn't passed, "live" while it is live; both to readers
+of that cohort only. `remindSessionsStartingSoon` is the hook the every-minute meeting clock (slice P4)
+calls; `listAttention` and `getAttentionCount` take the request's `now`.
+
 Mentor requests (B-4.1, `mentor-producers.ts`; src/lib/mentoring/README.md,
 "Attention"): `mentor_request` and `mentor_withdrawn` to the mentor,
 `mentor_accepted`, `mentor_redirected`, `mentor_declined` and `mentor_checked`

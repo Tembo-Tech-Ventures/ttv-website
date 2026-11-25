@@ -1,3 +1,4 @@
+import { touchAnswersCiting } from "@/lib/channels/mutations";
 import { touchRecordingCard } from "@/lib/meetings/card-state";
 import type { RecordingAccessTarget, RecordingViewer } from "./access";
 
@@ -19,8 +20,8 @@ export function mayHideRecording(viewer: RecordingViewer, recording: Pick<Record
  * Hides a cohort recording from its cohort (`hidden`), or shows it again. Saying the same twice
  * changes nothing. The write re-checks that it is still a cohort's recording and not deleted, so a
  * stale page can't hide something that has since changed; the caller has checked mayHideRecording.
- * The card of the session it came from changes with it in every open channel page. Returns whether
- * the recording is now as asked.
+ * The card of the session it came from, and Tembo's answers that cite it (withheld while it is
+ * hidden), change with it in every open channel page. Returns whether the recording is now as asked.
  */
 export async function setRecordingHidden(db: D1Database, recordingId: string, hidden: boolean, now: number): Promise<boolean> {
   // hiddenAt and updatedAt are whole seconds, as Drizzle's timestamp columns store them.
@@ -30,5 +31,6 @@ export async function setRecordingHidden(db: D1Database, recordingId: string, hi
     .bind(recordingId, hidden ? 1 : 0, seconds).first<{ hiddenAt: number | null }>();
   if (!row) return false;
   await touchRecordingCard(db, recordingId);
+  await touchAnswersCiting(db, recordingId);
   return (row.hiddenAt !== null) === hidden;
 }

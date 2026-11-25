@@ -571,6 +571,11 @@ the rest.
 
 ### Embeds (B-2.4)
 
+A call's card (in-app calls P9) is an embed too, but never one a person sends: the server attaches
+it (`postMessage`'s `card`), `embedAccessColumn` reads the call's state with it, and the message moves
+whenever that state changes, so polls carry it. See `src/lib/meetings/README.md`, "Cohort sessions,
+live and after". Its message can't be deleted.
+
 `embeds.ts`. A post sends references (`EmbedRef`, at most five, each once);
 the server resolves them in one statement, stores what readers will see in
 `channel_message.embeds`, and checks every one again on each read. Edits

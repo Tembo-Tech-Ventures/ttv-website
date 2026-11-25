@@ -78,7 +78,8 @@ describe("the four space homes", () => {
   const page = (name: string) => readFileSync(join(process.cwd(), "src/pages/dashboard", `${name}.astro`), "utf8");
 
   it.each([
-    ["index", "<ButtonLink variant=\"primary\""],
+    // The next step is the peach action unless a session is live (in-app calls P9).
+    ["index", "<ButtonLink variant={live ? \"quiet\" : \"primary\"}"],
     ["mentorship", "<MentoringOverview"],
     ["community", "<PageHeader"],
     ["discover", "<PageHeader"],
