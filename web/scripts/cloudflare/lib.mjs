@@ -599,6 +599,12 @@ export function createGeneratedWranglerConfig({
   if ((samLoginProjectId || samLoginUserIds) && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
     throw new Error("SAM login is allowed only on the canonical staging deployment.");
   }
+  // Test calls (src/lib/meetings/test-calls.ts) are on in every agent preview by their name alone; on
+  // staging only when this is "on", and nowhere else. The Worker ignores it in production regardless.
+  const meetingsTestCalls = getOptionalEnv("CLOUDFLARE_MEETINGS_TEST_CALLS") === "on";
+  if (meetingsTestCalls && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
+    throw new Error("Test calls are switched on only on the canonical staging deployment.");
+  }
   const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
@@ -651,6 +657,7 @@ export function createGeneratedWranglerConfig({
       ...(retainedProbeEnabled ? { STAGING_RETAINED_READ_PROBE_ENABLED: "true" } : {}),
       ...(demoEnabled ? { STAGING_DEMO_ENABLED: "true" } : {}),
       ...(samLoginEnabled ? { SAM_LOGIN_PROJECT_ID: samLoginProjectId, SAM_LOGIN_USER_IDS: samLoginUserIds } : {}),
+      ...(meetingsTestCalls ? { MEETINGS_TEST_CALLS: "on" } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:

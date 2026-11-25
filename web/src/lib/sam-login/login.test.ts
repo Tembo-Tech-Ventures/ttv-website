@@ -1,9 +1,14 @@
 import { readdirSync } from "node:fs";
+import { drizzle } from "drizzle-orm/d1";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAuth } from "@/lib/auth";
+import { CONDUCT_VERSION } from "@/lib/channels/conduct";
+import * as schema from "@/lib/db/schema";
+import { meetingAccessFor } from "@/lib/meetings/access";
+import { capabilitiesFor, type ChannelAccessTarget } from "@/lib/platform/server/capabilities";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { handleSamLogin, resolveSamLogin, SAM_SESSION_MARKER, SamLoginAccessError, type SamLoginWorkerEnv } from "./login";
-import { SAM_PERSONA_KEYS, type SamPersona } from "./personas";
+import { SAM_PERSONA_KEYS, SAM_PERSONAS, type SamPersona } from "./personas";
 import { createSigner, NOW, ORIGIN, PROJECT_ID, SAM_USER_ID, samClaims, type TestSigner } from "./test-tokens";
 
 const SECRET = "test-better-auth-secret-at-least-32-characters";
@@ -95,8 +100,8 @@ describe("handleSamLogin: signing in", () => {
     const { userId } = await login(persona);
     const user = rows(`SELECT email FROM "user" WHERE id = ?`, userId)[0];
     expect(user?.email).toBe(`${userId}@invalid.ttv`);
-    const expected: Record<SamPersona, string[]> = { newcomer: [], applicant: [], student: [], alumna: [], community: [], mentor: ["MENTOR"], institution: ["INSTITUTION"], admin: ["ADMIN"] };
-    expect(roles(userId)).toEqual(expected[persona]);
+    const expected: Partial<Record<SamPersona, string[]>> = { mentor: ["MENTOR"], institution: ["INSTITUTION"], admin: ["ADMIN"] };
+    expect(roles(userId)).toEqual(expected[persona] ?? []);
     const stage = rows(`SELECT stage FROM member_onboarding WHERE userId = ?`, userId)[0]?.stage;
     expect(stage).toBe(persona === "newcomer" ? "NEW" : "DONE");
   });
@@ -111,6 +116,50 @@ describe("handleSamLogin: signing in", () => {
     ]);
     // Each fictional cohort gets its channels from the program trigger, as a real one does.
     expect(rows(`SELECT count(DISTINCT programId) AS n FROM channel WHERE programId LIKE 'ttv-sam-persona-%'`)[0]?.n).toBe(3);
+  });
+
+  it("defines sixteen fictional people with distinct names, each profile saying it is fictional", () => {
+    expect(SAM_PERSONA_KEYS).toHaveLength(16);
+    const names = SAM_PERSONA_KEYS.map((persona) => SAM_PERSONAS[persona].name);
+    expect(new Set(names).size).toBe(16);
+    for (const persona of SAM_PERSONA_KEYS) {
+      const profile: { bio: string } | undefined = (SAM_PERSONAS[persona] as { profile?: { bio: string } }).profile;
+      if (profile) expect(`${persona}: ${profile.bio}`).toMatch(/^\w+: Fictional SAM persona\. /);
+    }
+  });
+
+  it("fills one current-cohort call: ten readers of its channel, two who host it, the call personas agreed to the code of conduct", async () => {
+    for (const persona of SAM_PERSONA_KEYS) await login(persona);
+    const capabilities = async (userId: string) => capabilitiesFor(drizzle(env.DB, { schema }), { id: userId });
+    const current = "ttv-sam-persona-cohort-current";
+    const channel = rows(`SELECT id, kind, programId, postingPolicy, archivedAt FROM channel WHERE seedKey = ?`, `cohort:${current}:main`)[0] as unknown as ChannelAccessTarget;
+    expect(channel).toBeTruthy();
+    const readers: string[] = [];
+    const hosts: string[] = [];
+    for (const persona of SAM_PERSONA_KEYS.filter((key) => key !== "newcomer")) {
+      const access = meetingAccessFor(await capabilities(`ttv-sam-persona-${persona}`), channel, "SESSION");
+      if (access.canJoin) readers.push(persona);
+      if (access.canHost) hosts.push(persona);
+    }
+    expect(readers.toSorted()).toEqual(["admin", "classmate1", "classmate2", "classmate3", "classmate4", "classmate5", "classmate6", "classmate7", "student", "ta"]);
+    expect(hosts.toSorted()).toEqual(["admin", "ta"]);
+    expect(rows(`SELECT userId FROM channel_conduct WHERE userId LIKE 'ttv-sam-persona-%' ORDER BY userId`).map((row) => row.userId)).toEqual(
+      ["classmate1", "classmate2", "classmate3", "classmate4", "classmate5", "classmate6", "classmate7", "ta"].map((key) => `ttv-sam-persona-${key}`),
+    );
+    expect(rows(`SELECT version FROM channel_conduct WHERE userId = 'ttv-sam-persona-ta'`)).toEqual([{ version: CONDUCT_VERSION }]);
+    expect(rows(`SELECT programId, name FROM programRole WHERE userId = 'ttv-sam-persona-ta'`)).toEqual([{ programId: current, name: "TA" }]);
+  });
+
+  it("keeps a call persona's later agreement and profile edits, and puts its cohort role back", async () => {
+    await login("ta");
+    database.prepare(`UPDATE channel_conduct SET version = 2, acknowledgedAt = 5 WHERE userId = 'ttv-sam-persona-ta'`).run();
+    database.prepare(`UPDATE studentProfile SET headline = 'Edited in the app' WHERE userId = 'ttv-sam-persona-ta'`).run();
+    database.prepare(`INSERT INTO programRole (id, programId, userId, name) VALUES ('extra', 'ttv-sam-persona-cohort-past', 'ttv-sam-persona-ta', 'INSTRUCTOR')`).run();
+    database.prepare(`DELETE FROM programRole WHERE id = 'ttv-sam-persona-ta-cohort-role'`).run();
+    await login("ta");
+    expect(rows(`SELECT version, acknowledgedAt FROM channel_conduct WHERE userId = 'ttv-sam-persona-ta'`)).toEqual([{ version: 2, acknowledgedAt: 5 }]);
+    expect(rows(`SELECT headline FROM studentProfile WHERE userId = 'ttv-sam-persona-ta'`)).toEqual([{ headline: "Edited in the app" }]);
+    expect(rows(`SELECT programId, name FROM programRole WHERE userId = 'ttv-sam-persona-ta'`)).toEqual([{ programId: "ttv-sam-persona-cohort-current", name: "TA" }]);
   });
 
   it("gives a newcomer a fresh account every time", async () => {

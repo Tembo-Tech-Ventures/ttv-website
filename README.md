@@ -209,6 +209,7 @@ and token scopes.
 | The homepage | [web/docs/homepage.md](web/docs/homepage.md) |
 | Spaces, channels and feature flags | [web/docs/platform-spaces-and-channels.md](web/docs/platform-spaces-and-channels.md) |
 | Session recording imports | [docs/session-recording-imports.md](docs/session-recording-imports.md) |
+| Testing calls (fake media, test calls) | [web/docs/meetings-testing.md](web/docs/meetings-testing.md) |
 | Student feedback | [web/docs/student-feedback.md](web/docs/student-feedback.md) |
 | Blogging | [web/docs/blogging.md](web/docs/blogging.md) |
 | Navigation performance | [web/docs/performance.md](web/docs/performance.md) |

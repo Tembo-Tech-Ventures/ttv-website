@@ -156,6 +156,26 @@ describe("createGeneratedWranglerConfig", () => {
     expect(()=>createGeneratedWranglerConfig({...settings,betterAuthUrl:"https://example.com"})).toThrow("canonical staging");
   });
 
+  it("switches test calls on only on the canonical staging deployment, and only when asked", () => {
+    const settings = {workerName:"ttv-staging",containerAppName:"container",d1Name:"db",d1Id:"id",bucketName:"bucket",queueName:"queue",vectorizeIndexName:"index",aiGatewayName:"gateway",primaryDomain:"staging.tembotechventures.com",betterAuthUrl:"https://staging.tembotechventures.com"};
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("MEETINGS_TEST_CALLS");
+    vi.stubEnv("CLOUDFLARE_MEETINGS_TEST_CALLS","true");
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("MEETINGS_TEST_CALLS");
+    vi.stubEnv("CLOUDFLARE_MEETINGS_TEST_CALLS","on");
+    expect(createGeneratedWranglerConfig(settings).vars.MEETINGS_TEST_CALLS).toBe("on");
+    for (const environment of ["production","prod","agent-preview"]) {
+      vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME",environment);
+      expect(()=>createGeneratedWranglerConfig(settings)).toThrow("Test calls are switched on only on the canonical staging deployment.");
+    }
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
+    expect(()=>createGeneratedWranglerConfig({...settings,primaryDomain:"example.com"})).toThrow("canonical staging");
+    // A preview needs no setting: its name opens them in the Worker.
+    vi.stubEnv("CLOUDFLARE_MEETINGS_TEST_CALLS","");
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","agent-preview");
+    expect(createGeneratedWranglerConfig({...settings,primaryDomain:undefined,betterAuthUrl:"https://x.workers.dev"}).vars).not.toHaveProperty("MEETINGS_TEST_CALLS");
+  });
+
   it("passes SAM login settings only to the canonical staging deployment", () => {
     const settings = {workerName:"ttv-staging",containerAppName:"container",d1Name:"db",d1Id:"id",bucketName:"bucket",queueName:"queue",vectorizeIndexName:"index",aiGatewayName:"gateway",primaryDomain:"staging.tembotechventures.com",betterAuthUrl:"https://staging.tembotechventures.com"};
     vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
