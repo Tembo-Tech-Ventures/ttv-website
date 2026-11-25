@@ -13,8 +13,9 @@ import { getFlags } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import {
-  createMeeting, endMeetingAsHost, getMeeting, joinMeeting, leaveMeeting, removeFromMeeting, type Caller,
+  createMeeting, endMeetingAsHost, getMeeting, joinMeeting, leaveMeeting, meetingPresence, removeFromMeeting, type Caller,
 } from "./calls";
+import { FAKE_PRESENCE_PATH } from "./fake-presence";
 import type { CallContext } from "./clock";
 import { callProviderFor, CallProviderError, type CallProvider } from "./provider";
 
@@ -66,10 +67,10 @@ async function readBody(request: Request): Promise<unknown> {
 }
 
 /** Who is asking, how and from where, then the flag. Null when the request may go on. */
-async function admit(operation: MeetingOperation, { locals, request }: Context, env: Env): Promise<Caller | null> {
+async function admit(operation: MeetingOperation | "meetingPresence", { locals, request }: Context, env: Env): Promise<Caller | null> {
   const user = locals.user;
   if (!user || locals.personalAccessToken) return null;
-  if (operation !== "getMeeting" && !hasMatchingRequestOrigin(request)) return null;
+  if (operation !== "getMeeting" && operation !== "meetingPresence" && !hasMatchingRequestOrigin(request)) return null;
   // No isAdmin from locals: STAFF audiences read the ADMIN role from the database.
   const [flags, capabilities] = await Promise.all([
     getFlags({ db: env.DB, env, user, locals }),
@@ -134,5 +135,27 @@ export async function meetingRequest(
       source: "request", route: ROUTES[operation].path, error, version: env.DEPLOYMENT_VERSION,
     });
     return platformError("server", "Could not complete the call request.", 500);
+  }
+}
+
+/**
+ * `GET /api/meetings/:id/presence`: who holds a seat, for the fake room client only
+ * (fake-presence.ts). Not a contract route: it exists only where calls run on the fake provider, and
+ * answers everyone else (production included) with the same 404 as every meeting route.
+ */
+export async function fakePresenceRequest(context: Context, env: Env, options: MeetingRequestOptions = {}): Promise<Response> {
+  try {
+    const caller = await admit("meetingPresence", context, env);
+    const provider = options.provider === undefined ? callProviderFor(env) : options.provider;
+    if (!caller || provider?.kind !== "fake") return NOT_FOUND();
+    const ctx: CallContext = { db: env.DB, provider, now: options.now?.() ?? Date.now() };
+    return platformJson(await meetingPresence(ctx, caller, parse(IdParams, { id: context.params.id }).id));
+  } catch (error) {
+    if (error instanceof Refusal) return error.response;
+    if (error instanceof ChannelError) return error.status === 404 ? NOT_FOUND() : platformError(error.code, error.message, error.status);
+    recordErrorInBackground(context.locals.cfContext, env.DB, {
+      source: "request", route: FAKE_PRESENCE_PATH, error, version: env.DEPLOYMENT_VERSION,
+    });
+    return platformError("server", "Could not read who is in the call.", 500);
   }
 }

@@ -2,8 +2,8 @@
 /**
  * A chrome-free shell for routes that should own the whole viewport.
  *
- * Used by the two routes where the app gets out of the way — Ask Tembo and the
- * post editor. Both put a fixed control strip against the bottom of the screen
+ * Used by the routes where the app gets out of the way: Ask Tembo, the post
+ * editor and the call room. Both put a fixed control strip against the bottom of the screen
  * above a keyboard, which is the whole reason this layout exists.
  *
  * It deliberately does not extend BaseLayout: these pages need a different
@@ -24,12 +24,12 @@ interface Props {
    * The space the page belongs to: the viewport takes that space's sheet tone, so the immersive editor
    * still reads as part of Profile with its tabs out of the way (patterns.md, "Immersive editor").
    */
-  space?: "profile";
+  space?: "profile" | "cohort" | "community";
 }
 
 const { title, space } = Astro.props;
 // Literal classes, so Tailwind sees them.
-const SHEET = { profile: "bg-sheet-profile" } as const;
+const SHEET = { profile: "bg-sheet-profile", cohort: "bg-sheet-cohort", community: "bg-sheet-community" } as const;
 ---
 
 <!doctype html>
